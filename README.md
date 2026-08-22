@@ -30,6 +30,22 @@ The prototype intentionally does **not** deduplicate the visit stream. `import_o
 
 Plain-text JSONL/TSV output is derived data. `visits.jsonl` is the canonical normalized stream and can be fed back to `ingest_history()` to rebuild byte-identical derived index files.
 
+## Storage inspector
+
+`StorageInspector` is the read-only model for an eventual native IB debug screen. It inspects the browser-owned store rather than pretending persistent records are an ordinary tab list.
+
+It separates canonical records, rebuildable indexes, saved snapshots, cache, protected secrets, and unknown files; parses planned `tabs/<id>/tab.txt` manifests; and can show a bounded tail of canonical imported visits. Protected secret files are never opened through the inspector.
+
+The current text harness is useful while the Android UI does not exist yet:
+
+```sh
+python -m ib.inspect state
+python -m ib.inspect state --limit 50
+python -m ib.inspect state --read index/chronology.tsv
+```
+
+The native screen should consume the same `StorageInspector` data and keep destructive maintenance actions separate from inspection. See `docs/storage-inspector.md`.
+
 Run the tests with:
 
 ```sh
