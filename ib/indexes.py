@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import re
 from collections import defaultdict
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterable
@@ -40,7 +40,7 @@ class IndexBuilder:
     """Build cheap in-memory indices without collapsing the visit stream."""
 
     def build(self, entries: Iterable[HistoryEntry]) -> HistoryIndices:
-        rows = list(entries)
+        rows = [replace(entry, import_order=index) for index, entry in enumerate(entries)]
         by_url: dict[str, list[int]] = defaultdict(list)
         by_host: dict[str, list[int]] = defaultdict(list)
         by_source: dict[str, list[int]] = defaultdict(list)
