@@ -1,0 +1,21 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>IB pre-renderer example</title>
+  <style>body { color: red; }</style>
+</head>
+<body>
+  <h1>This appears before the real renderer</h1>
+  <p>The text preview is intentionally boring. It exists so a sleeping tab can show recognizable content without waking Chromium, Servo, WebView, or anything else.</p>
+  <p>The bitmap version is only a tiny monochrome approximation of this text. A real renderer may replace it whenever it becomes available.</p>
+  <script>throw new Error('a pre-renderer must not execute me');</script>
+  <h2>Second screen material</h2>
+  <p>This paragraph is repeated to make scrolling through a rough preview meaningful. The preview can contain one, two, or three phone-sized images and no more.</p>
+  <p>This paragraph is repeated to make scrolling through a rough preview meaningful. The preview can contain one, two, or three phone-sized images and no more.</p>
+  <p>This paragraph is repeated to make scrolling through a rough preview meaningful. The preview can contain one, two, or three phone-sized images and no more.</p>
+  <p>This paragraph is repeated to make scrolling through a rough preview meaningful. The preview can contain one, two, or three phone-sized images and no more.</p>
+  <p>This paragraph is repeated to make scrolling through a rough preview meaningful. The preview can contain one, two, or three phone-sized images and no more.</p>
+  <p>This paragraph is repeated to make scrolling through a rough preview meaningful. The preview can contain one, two, or three phone-sized images and no more.</p>
+</body>
+</html>
