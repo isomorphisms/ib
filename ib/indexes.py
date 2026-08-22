@@ -50,12 +50,15 @@ class IndexBuilder:
 
         for index, entry in enumerate(rows):
             by_url[entry.url].append(index)
-            host = urlparse(entry.url).hostname
+            try:
+                host = urlparse(entry.url).hostname
+            except ValueError:
+                host = None
             if host:
                 by_host[host.lower()].append(index)
             by_source[entry.source].append(index)
             if entry.visited_at:
-                by_day[entry.visited_at.astimezone(timezone.utc).date().isoformat()].append(index)
+                by_day[_utc_time(entry.visited_at).date().isoformat()].append(index)
             if entry.query:
                 by_query[entry.query].append(index)
             for token in _tokens(entry):
@@ -66,8 +69,9 @@ class IndexBuilder:
             range(len(rows)),
             key=lambda i: (
                 rows[i].visited_at is not None,
-                rows[i].visited_at or datetime.min.replace(tzinfo=timezone.utc),
-                rows[i].import_order,
+                _utc_time(rows[i].visited_at)
+                if rows[i].visited_at
+                else datetime.min.replace(tzinfo=timezone.utc),
             ),
             reverse=True,
         )
@@ -84,14 +88,28 @@ class IndexBuilder:
         )
 
 
+def _utc_time(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
+
+
 def _tokens(entry: HistoryEntry) -> set[str]:
-    parsed = urlparse(entry.url)
+    try:
+        parsed = urlparse(entry.url)
+        host = parsed.hostname or ""
+        path = unquote(parsed.path)
+        query = unquote(parsed.query)
+    except ValueError:
+        host = ""
+        path = entry.url
+        query = ""
     text = " ".join(
         part
         for part in (
-            parsed.hostname or "",
-            unquote(parsed.path),
-            unquote(parsed.query),
+            host,
+            path,
+            query,
             entry.title or "",
             entry.query or "",
         )
@@ -114,16 +132,18 @@ def write_plaintext_indices(indices: HistoryIndices, root: str | Path) -> None:
             out.write(json.dumps(entry.as_dict(), ensure_ascii=False, sort_keys=True) + "\n")
 
     with (root / "chronology.tsv").open("w", encoding="utf-8") as out:
-        out.write("index\tvisited_at\tsource\tkind\turl\n")
+        out.write("index\timport_order\tvisited_at\tsource\tkind\turl\n")
         for index in indices.chronology:
             entry = indices.entries[index]
             out.write(
-                f"{index}\t{_safe(entry.visited_at.isoformat() if entry.visited_at else '')}\t"
+                f"{index}\t{entry.import_order}\t{_safe(entry.visited_at.isoformat() if entry.visited_at else '')}\t"
                 f"{_safe(entry.source)}\t{_safe(entry.kind)}\t{_safe(entry.url)}\n"
             )
 
     _write_count_index(root / "urls.tsv", indices.by_url)
     _write_count_index(root / "hosts.tsv", indices.by_host)
+    _write_count_index(root / "sources.tsv", indices.by_source)
+    _write_count_index(root / "days.tsv", indices.by_day)
     _write_count_index(root / "queries.tsv", indices.by_query)
     _write_count_index(root / "terms.tsv", indices.terms)
     (root / "summary.json").write_text(
