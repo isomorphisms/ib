@@ -1,0 +1,19 @@
+name: prototype prerender tests
+
+on:
+  push:
+    branches:
+      - prototype-stupid-prerenderers
+  pull_request:
+    paths:
+      - 'prototype/**'
+      - '.github/workflows/prototype-prerender.yml'
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run reference pre-renderer tests
+        run: python3 prototype/test_prerender.py
