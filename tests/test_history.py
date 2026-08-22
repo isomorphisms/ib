@@ -234,6 +234,20 @@ class HistoryIngestionTests(unittest.TestCase):
             self.assertTrue((Path(directory) / "sources.tsv").exists())
             self.assertTrue((Path(directory) / "days.tsv").exists())
 
+    def test_combined_import_batches_get_one_canonical_order(self):
+        first_batch = ingest_history("https://a.example/1\nhttps://a.example/2\n")
+        second_batch = ingest_history("https://b.example/1\nhttps://b.example/2\n")
+        self.assertEqual([entry.import_order for entry in first_batch + second_batch], [0, 1, 0, 1])
+
+        indices = IndexBuilder().build(first_batch + second_batch)
+        self.assertEqual([entry.import_order for entry in indices.entries], [0, 1, 2, 3])
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "combined"
+            write_plaintext_indices(indices, root)
+            rebuilt = ingest_history(root / "visits.jsonl")
+            self.assertEqual([entry.as_dict() for entry in rebuilt], [entry.as_dict() for entry in indices.entries])
+
     def test_written_visit_stream_rebuilds_identical_indices(self):
         entries = ingest_history(
             [
