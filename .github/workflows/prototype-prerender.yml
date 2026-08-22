@@ -17,3 +17,14 @@ jobs:
       - uses: actions/checkout@v4
       - name: Run reference pre-renderer tests
         run: python3 prototype/test_prerender.py
+      - name: Generate sample first paint
+        run: |
+          python3 prototype/prerender.py prototype/example.html \
+            --source https://example.test/ \
+            --out preview-out
+          ls -lh preview-out
+      - name: Retain sample preview
+        uses: actions/upload-artifact@v4
+        with:
+          name: stupid-prerender-sample
+          path: preview-out/
