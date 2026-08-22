@@ -118,18 +118,31 @@ def _tokens(entry: HistoryEntry) -> set[str]:
     return {token.casefold() for token in _TOKEN.findall(text) if len(token) > 1}
 
 
-def write_plaintext_indices(indices: HistoryIndices, root: str | Path) -> None:
-    """Persist transparent test indices as JSONL/TSV files.
+def write_history_store(indices: HistoryIndices, root: str | Path) -> None:
+    """Persist canonical history separately from rebuildable sibling indexes."""
 
-    These are deliberately derived data. The original HistoryEntry stream remains
-    reconstructable from visits.jsonl, while all other files can be deleted and rebuilt.
-    """
     root = Path(root)
     root.mkdir(parents=True, exist_ok=True)
+    _write_visits(indices, root / "visits.jsonl")
+    _write_derived_indices(indices, root / "indexes")
 
-    with (root / "visits.jsonl").open("w", encoding="utf-8") as out:
-        for entry in indices.entries:
-            out.write(json.dumps(entry.as_dict(), ensure_ascii=False, sort_keys=True) + "\n")
+
+def write_plaintext_indices(indices: HistoryIndices, root: str | Path) -> None:
+    """Persist a self-contained history/index export bundle.
+
+    This compatibility helper keeps the history-ingestion prototype's original
+    flat bundle format. Browser-owned storage should use write_history_store()
+    so canonical visits never live inside a disposable index directory.
+    """
+
+    root = Path(root)
+    root.mkdir(parents=True, exist_ok=True)
+    _write_visits(indices, root / "visits.jsonl")
+    _write_derived_indices(indices, root)
+
+
+def _write_derived_indices(indices: HistoryIndices, root: Path) -> None:
+    root.mkdir(parents=True, exist_ok=True)
 
     with (root / "chronology.tsv").open("w", encoding="utf-8") as out:
         out.write("index\timport_order\tvisited_at\tsource\tkind\turl\n")
@@ -150,6 +163,12 @@ def write_plaintext_indices(indices: HistoryIndices, root: str | Path) -> None:
         json.dumps(indices.summary(), ensure_ascii=False, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
     )
+
+
+def _write_visits(indices: HistoryIndices, path: Path) -> None:
+    with path.open("w", encoding="utf-8") as out:
+        for entry in indices.entries:
+            out.write(json.dumps(entry.as_dict(), ensure_ascii=False, sort_keys=True) + "\n")
 
 
 def _write_count_index(path: Path, mapping: dict[str, list[int]]) -> None:
