@@ -37,6 +37,7 @@ class StorageInspectorTests(unittest.TestCase):
             self.assertEqual(files["tabs/tab-a/tab.txt"], "canonical")
             self.assertEqual(files["tab.txt"], "unknown")
 
+
     def test_history_store_keeps_canonical_visits_out_of_disposable_indexes(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -84,6 +85,17 @@ class StorageInspectorTests(unittest.TestCase):
             self.assertEqual(records[0].tab_id, "01JTEST")
             self.assertEqual(records[0].fields["state"], ("sleeping",))
             self.assertEqual(records[0].fields["label"], ("math", "later"))
+
+    def test_physical_files_can_be_paged_without_materializing_the_whole_tree(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for name in ("a.txt", "b.txt", "c.txt", "d.txt"):
+                (root / name).write_text(name, encoding="utf-8")
+
+            inspector = StorageInspector(root)
+
+            self.assertEqual([row.path for row in inspector.files(limit=2, offset=1)], ["b.txt", "c.txt"])
+            self.assertEqual(inspector.overview()["files"], 4)
 
     def test_tabs_are_bounded_and_overview_does_not_parse_manifests(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

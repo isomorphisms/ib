@@ -88,11 +88,27 @@ class StorageInspector:
     def __init__(self, root: str | Path):
         self.root = Path(root).expanduser().resolve(strict=False)
 
-    def files(self) -> list[StoreFile]:
-        if not self.root.exists():
+    def files(self, limit: int | None = None, offset: int = 0) -> list[StoreFile]:
+        if limit is not None and limit < 0:
+            raise ValueError("limit must be non-negative")
+        if offset < 0:
+            raise ValueError("offset must be non-negative")
+        if limit == 0:
             return []
 
         rows: list[StoreFile] = []
+        for index, row in enumerate(self._iter_files()):
+            if index < offset:
+                continue
+            rows.append(row)
+            if limit is not None and len(rows) >= limit:
+                break
+        return rows
+
+    def _iter_files(self) -> Iterable[StoreFile]:
+        if not self.root.exists():
+            return
+
         stack: list[tuple[Path, Path]] = [(self.root, Path())]
         while stack:
             directory, relative_directory = stack.pop()
@@ -120,25 +136,21 @@ class StorageInspector:
 
                         kind = self.classify(relative)
                         parts = tuple(part.casefold() for part in relative.parts)
-                        rows.append(
-                            StoreFile(
-                                path=relative.as_posix(),
-                                bytes=metadata.st_size,
-                                kind=kind,
-                                file_type=file_type,
-                                readable=(
-                                    file_type == "file"
-                                    and kind != "secret"
-                                    and _is_transparent_text_parts(parts)
-                                ),
-                            )
+                        yield StoreFile(
+                            path=relative.as_posix(),
+                            bytes=metadata.st_size,
+                            kind=kind,
+                            file_type=file_type,
+                            readable=(
+                                file_type == "file"
+                                and kind != "secret"
+                                and _is_transparent_text_parts(parts)
+                            ),
                         )
             except OSError:
                 continue
 
             stack.extend(reversed(directories))
-
-        return sorted(rows, key=lambda row: row.path)
 
     def classify(self, path: str | Path) -> str:
         relative = self._relative_path(path)
@@ -167,14 +179,15 @@ class StorageInspector:
         return "unknown"
 
     def overview(self) -> dict[str, object]:
-        return self._overview_from_files(self.files())
-
-    def _overview_from_files(self, files: list[StoreFile]) -> dict[str, object]:
         bytes_by_kind: dict[str, int] = {}
         files_by_kind: dict[str, int] = {}
         tab_records = 0
+        file_count = 0
+        byte_count = 0
 
-        for row in files:
+        for row in self._iter_files():
+            file_count += 1
+            byte_count += row.bytes
             bytes_by_kind[row.kind] = bytes_by_kind.get(row.kind, 0) + row.bytes
             files_by_kind[row.kind] = files_by_kind.get(row.kind, 0) + 1
             if row.file_type == "file" and _is_tab_manifest_parts(tuple(Path(row.path).parts)):
@@ -182,8 +195,8 @@ class StorageInspector:
 
         return {
             "root": str(self.root),
-            "files": len(files),
-            "bytes": sum(row.bytes for row in files),
+            "files": file_count,
+            "bytes": byte_count,
             "files_by_kind": dict(sorted(files_by_kind.items())),
             "bytes_by_kind": dict(sorted(bytes_by_kind.items())),
             "tab_records": tab_records,
@@ -295,8 +308,8 @@ class StorageInspector:
         if limit < 0:
             raise ValueError("limit must be non-negative")
 
-        files = self.files()
-        overview = self._overview_from_files(files)
+        overview = self.overview()
+        files = self.files(limit=limit)
         indexed_visits = overview["indexed_visits"]
         lines = [
             "IB STORAGE",
@@ -311,7 +324,7 @@ class StorageInspector:
             lines.append(f"{kind} {count} files {size} bytes")
 
         lines.append("")
-        lines.append("FILES")
+        lines.append(f"FILES showing {len(files)} of {overview['files']}")
         for row in files:
             access = "read" if row.readable else "meta"
             file_type = "" if row.file_type == "file" else f" {row.file_type}"
