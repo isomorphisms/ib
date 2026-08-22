@@ -13,7 +13,8 @@ The browser core should own navigation history, sleeping/waking, snapshots, orga
 - YouTube activity/search JSON;
 - Chrome/Chromium `History` SQLite databases;
 - Firefox `places.sqlite` databases;
-- generic JSON containing `url`, `titleUrl`, or `href` fields.
+- generic JSON containing `url`, `titleUrl`, or `href` fields;
+- canonical `visits.jsonl` written by the indexer.
 
 The adapter registry is open: `register_history_adapter(name, adapter)` adds another importer without changing the indexing layer.
 
@@ -25,7 +26,9 @@ indices = IndexBuilder().build(entries)
 write_plaintext_indices(indices, "state/index")
 ```
 
-The prototype intentionally does **not** deduplicate the visit stream. `import_order` is preserved, and derived indices cover timestamp chronology, exact URL, host, source, day, YouTube search query, and searchable terms. Plain-text JSONL/TSV output is derived data and can be thrown away and rebuilt from `visits.jsonl`.
+The prototype intentionally does **not** deduplicate the visit stream. `import_order` is preserved. Derived indices cover newest-first chronology, exact URL, host, source, UTC day, extracted Google/YouTube search query, and searchable terms. Equal timestamps and missing timestamps keep their original import order.
+
+Plain-text JSONL/TSV output is derived data. `visits.jsonl` is the canonical normalized stream and can be fed back to `ingest_history()` to rebuild byte-identical derived index files.
 
 Run the tests with:
 
