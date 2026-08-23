@@ -7,6 +7,7 @@ repository_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 ib_media_require_command busybox
 ib_media_require_command curl
 ib_media_require_command xmlstarlet
+ib_media_require_command pdftohtml
 
 work_directory=$(mktemp -d)
 server_pid=''
@@ -71,9 +72,17 @@ grep -F 'language_model' "$html_output/images.tsv" >/dev/null
 test ! -s "$html_output/unresolved_images.tsv"
 
 pdf_output="$work_directory/pdf"
-fetch_preferred_arxiv_document 'https://arxiv.org/abs/1901.09021' "$pdf_output"
+sh "$repository_root/bin/harvest_arxiv_images.grease" \
+  'https://arxiv.org/abs/1901.09021' "$pdf_output"
 test "$(source_kind_from_harvest_directory "$pdf_output")" = pdf
 test -s "$pdf_output/document.pdf"
 test ! -e "$pdf_output/document.html"
+test "$(wc -l < "$pdf_output/images.tsv" | tr -d ' ')" = 1
+
+test "$(awk -F '\t' 'NR == 1 { print $3 }' "$pdf_output/images.tsv")" = tiny_color_blocks.png
+test "$(awk -F '\t' 'NR == 1 { print $4 }' "$pdf_output/images.tsv")" = caption
+test "$(awk -F '\t' 'NR == 1 { print $5 }' "$pdf_output/images.tsv")" = 'Figure 1. Tiny color blocks'
+test -s "$pdf_output/images/tiny_color_blocks.png"
+test ! -s "$pdf_output/unresolved_images.tsv"
 
 printf 'scientific image harvest tests: ok\n'
