@@ -4,6 +4,8 @@ import IB.History
 import IB.Index
 import IB.Storage
 import IB.Inspect
+import IB.Product
+import IB.VectorIndex
 
 %default total
 
@@ -15,14 +17,26 @@ sample_entries = [
   Entry "https://missing-time.test/c" Nothing Nothing raw_urls visit Nothing 93
   ]
 
+sample_vectors : List VectorRow
+sample_vectors = [
+  VectorRow "p-book" [1.0, 0.0, 0.0],
+  VectorRow "p-tool" [0.0, 1.0, 0.0],
+  VectorRow "p-part" [0.0, 0.0, 1.0]
+  ]
+
 first_or : Nat → List Nat → Nat
 first_or fallback [] = fallback
 first_or fallback (value :: _) = value
+
+match_id : Maybe (String, Float) → String
+match_id Nothing = "none"
+match_id (Just (value, _)) = value
 
 main : IO ()
 main = do
   let raw = ingest_raw_lines ["# ignored", " https://example.test/a ", "https://example.test/a", "https://other.test/b"]
   let indices = build_indices sample_entries
+  let price = Observed "permitted-history-source" "p-book" 1799 "USD" "2026-08-23T13:42:00-04:00"
   let files = [
         FileRow "visits.jsonl" 20 regular_file,
         FileRow "indexes/summary.json" 10 regular_file,
@@ -39,3 +53,6 @@ main = do
   putStrLn ("secret=" ++ storage_kind_text (classify_path "renderer/passwords"))
   putStrLn ("readable-files=" ++ show (readable_file_count files))
   putStrLn ("canonical-files=" ++ show (files_of_kind canonical files))
+  putStrLn ("asin-key=" ++ key_text (ASIN "B000TEST"))
+  putStrLn ("price-minor-units=" ++ show (price_minor_units price))
+  putStrLn ("vector-match=" ++ match_id (best_match [0.9, 0.1, 0.0] sample_vectors))
