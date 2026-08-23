@@ -1,0 +1,12 @@
+#!/bin/sh
+set -eu
+
+repository_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+. "$repository_root/lib/scientific_media.grease"
+
+if test "$#" -ne 2; then
+  printf 'usage: %s DOCUMENT_PATH HARVEST_DIRECTORY\n' "$0" >&2
+  exit 2
+fi
+
+apply_language_model_image_names "$1" "$2"

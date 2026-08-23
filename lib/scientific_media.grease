@@ -1,0 +1,399 @@
+# Grease source.  Keep this layer in the ordinary shell subset: it owns
+# network requests, temporary files, process invocation, and file movement.
+
+ib_media_fail() {
+  printf '%s\n' "$*" >&2
+  return 1
+}
+
+ib_media_require_command() {
+  command -v "$1" >/dev/null 2>&1 || ib_media_fail "missing command: $1"
+}
+
+arxiv_identifier_from_input() {
+  input=$1
+  cleaned=${input%%\#*}
+  cleaned=${cleaned%%\?*}
+  case "$cleaned" in
+    http://arxiv.org/abs/*|https://arxiv.org/abs/*)
+      identifier=${cleaned#*://arxiv.org/abs/}
+      ;;
+    http://arxiv.org/pdf/*|https://arxiv.org/pdf/*)
+      identifier=${cleaned#*://arxiv.org/pdf/}
+      identifier=${identifier%.pdf}
+      ;;
+    http://arxiv.org/html/*|https://arxiv.org/html/*)
+      identifier=${cleaned#*://arxiv.org/html/}
+      ;;
+    arxiv:*)
+      identifier=${cleaned#arxiv:}
+      ;;
+    *)
+      identifier=$cleaned
+      ;;
+  esac
+
+  case "$identifier" in
+    ''|*[!A-Za-z0-9._v/-]*)
+      ib_media_fail "not an arXiv identifier: $input"
+      return 1
+      ;;
+  esac
+  printf '%s\n' "$identifier"
+}
+
+arxiv_html_url() {
+  identifier=$1
+  printf '%s/%s\n' "${IB_ARXIV_HTML_BASE:-https://arxiv.org/html}" "$identifier"
+}
+
+arxiv_pdf_url() {
+  identifier=$1
+  printf '%s/%s\n' "${IB_ARXIV_PDF_BASE:-https://arxiv.org/pdf}" "$identifier"
+}
+
+ib_media_curl() {
+  curl \
+    --fail \
+    --location \
+    --silent \
+    --show-error \
+    --retry 2 \
+    --retry-delay 1 \
+    --connect-timeout 15 \
+    --max-time 120 \
+    --user-agent "${IB_HTTP_USER_AGENT:-IB scientific-media test; https://github.com/isomorphisms/ib}" \
+    "$@"
+}
+
+fetch_preferred_arxiv_document() {
+  input=$1
+  output_directory=$2
+  identifier=$(arxiv_identifier_from_input "$input") || return 1
+  mkdir -p "$output_directory"
+
+  html_source_url=$(arxiv_html_url "$identifier")
+  html_partial_path="$output_directory/.document.html.part"
+  html_effective_url_path="$output_directory/.document.html.url"
+
+  if ib_media_curl \
+      --output "$html_partial_path" \
+      --write-out '%{url_effective}\n' \
+      "$html_source_url" > "$html_effective_url_path" 2>/dev/null &&
+     test -s "$html_partial_path" &&
+     grep -Eiq '<(html|article|main)([[:space:]>])' "$html_partial_path"
+  then
+    mv "$html_partial_path" "$output_directory/document.html"
+    effective_url=$(sed -n '1p' "$html_effective_url_path")
+    rm -f "$html_effective_url_path"
+    printf 'html\t%s\t%s\t%s\n' \
+      "$identifier" "${effective_url:-$html_source_url}" "$output_directory/document.html" \
+      > "$output_directory/source.tsv"
+    return 0
+  fi
+
+  rm -f "$html_partial_path" "$html_effective_url_path"
+
+  pdf_source_url=$(arxiv_pdf_url "$identifier")
+  pdf_partial_path="$output_directory/.document.pdf.part"
+  pdf_effective_url_path="$output_directory/.document.pdf.url"
+  if ! ib_media_curl \
+      --output "$pdf_partial_path" \
+      --write-out '%{url_effective}\n' \
+      "$pdf_source_url" > "$pdf_effective_url_path"
+  then
+    rm -f "$pdf_partial_path" "$pdf_effective_url_path"
+    ib_media_fail "could not fetch arXiv HTML or PDF for $identifier"
+    return 1
+  fi
+
+  test -s "$pdf_partial_path" || {
+    rm -f "$pdf_partial_path" "$pdf_effective_url_path"
+    ib_media_fail "empty arXiv PDF for $identifier"
+    return 1
+  }
+
+  mv "$pdf_partial_path" "$output_directory/document.pdf"
+  effective_url=$(sed -n '1p' "$pdf_effective_url_path")
+  rm -f "$pdf_effective_url_path"
+  printf 'pdf\t%s\t%s\t%s\n' \
+    "$identifier" "${effective_url:-$pdf_source_url}" "$output_directory/document.pdf" \
+    > "$output_directory/source.tsv"
+}
+
+source_kind_from_harvest_directory() {
+  awk -F '\t' 'NR == 1 { print $1 }' "$1/source.tsv"
+}
+
+source_identifier_from_harvest_directory() {
+  awk -F '\t' 'NR == 1 { print $2 }' "$1/source.tsv"
+}
+
+source_url_from_harvest_directory() {
+  awk -F '\t' 'NR == 1 { print $3 }' "$1/source.tsv"
+}
+
+source_document_from_harvest_directory() {
+  awk -F '\t' 'NR == 1 { print $4 }' "$1/source.tsv"
+}
+
+html_image_rows() {
+  html_path=$1
+  ib_media_require_command xmlstarlet || return 1
+  separator=$(printf '\037')
+  xmlstarlet fo --html --recover --dropdtd "$html_path" 2>/dev/null |\
+    xmlstarlet sel -T -t \
+      -m '//*[local-name()="img"][@src]' \
+      -v '@src' -o "$separator" \
+      -v 'normalize-space(string((ancestor::*[local-name()="figure"][1]//*[local-name()="figcaption"])[1]))' -o "$separator" \
+      -v 'normalize-space(@alt)' -n -
+}
+
+resolve_image_url() {
+  document_url=$1
+  image_source=$2
+  case "$image_source" in
+    http://*|https://*)
+      printf '%s\n' "$image_source"
+      ;;
+    //*)
+      scheme=${document_url%%://*}
+      printf '%s:%s\n' "$scheme" "$image_source"
+      ;;
+    /*)
+      origin=$(printf '%s\n' "$document_url" | sed -E 's#^(https?://[^/]+).*$#\1#')
+      printf '%s%s\n' "$origin" "$image_source"
+      ;;
+    *)
+      # arXiv serves article resources under the article identifier.  Appending
+      # a slash is intentional even though the public HTML URL itself commonly
+      # appears without one.
+      base=${document_url%/}
+      printf '%s/%s\n' "$base" "$image_source"
+      ;;
+  esac
+}
+
+image_extension_from_url() {
+  url=$1
+  path=${url%%\?*}
+  path=${path%%\#*}
+  last=${path##*/}
+  case "$last" in
+    *.png|*.PNG) printf 'png\n' ;;
+    *.jpg|*.JPG) printf 'jpg\n' ;;
+    *.jpeg|*.JPEG) printf 'jpeg\n' ;;
+    *.svg|*.SVG) printf 'svg\n' ;;
+    *.webp|*.WEBP) printf 'webp\n' ;;
+    *.gif|*.GIF) printf 'gif\n' ;;
+    *.jp2|*.JP2) printf 'jp2\n' ;;
+    *.pbm|*.PBM) printf 'pbm\n' ;;
+    *.pgm|*.PGM) printf 'pgm\n' ;;
+    *.ppm|*.PPM) printf 'ppm\n' ;;
+    *.tif|*.TIF|*.tiff|*.TIFF) printf 'tiff\n' ;;
+    *) printf 'img\n' ;;
+  esac
+}
+
+caption_without_figure_label() {
+  printf '%s\n' "$1" | sed -E \
+    's/^[[:space:]]*((Figure|FIGURE|Fig\.|FIG\.)[[:space:]]*[[:alnum:]_.-]+[[:space:]]*[:.)-]?[[:space:]]*)//'
+}
+
+conceptual_name_slug() {
+  text=$1
+  if command -v iconv >/dev/null 2>&1; then
+    ascii=$(printf '%s\n' "$text" | iconv -c -t ASCII//TRANSLIT 2>/dev/null || printf '%s\n' "$text")
+  else
+    ascii=$text
+  fi
+
+  printf '%s\n' "$ascii" |
+    awk '{ for (i = 1; i <= NF && i <= 20; i++) printf "%s%s", (i == 1 ? "" : " "), $i; printf "\n" }' |
+    tr '[:upper:]' '[:lower:]' |
+    sed -E 's/[^a-z0-9]+/_/g; s/^_+//; s/_+$//; s/_+/_/g' |
+    cut -c 1-120 |
+    sed -E 's/_+$//'
+}
+
+alt_text_is_conceptual() {
+  alt=$1
+  normalized=$(printf '%s\n' "$alt" | tr '[:upper:]' '[:lower:]' | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')
+  case "$normalized" in
+    ''|image|figure|graphic|plot|diagram|photo|photograph|'refer to caption'|'see caption')
+      return 1
+      ;;
+    *)
+      return 0
+      ;;
+  esac
+}
+
+unique_image_file_name() {
+  images_directory=$1
+  stem=$2
+  extension=$3
+  candidate="${stem}.${extension}"
+  suffix=2
+  while test -e "$images_directory/$candidate"; do
+    candidate=$(printf '%s_%02d.%s' "$stem" "$suffix" "$extension")
+    suffix=$((suffix + 1))
+  done
+  printf '%s\n' "$candidate"
+}
+
+download_html_images_in_order() {
+  html_path=$1
+  document_url=$2
+  output_directory=$3
+  images_directory="$output_directory/images"
+  rows_path="$output_directory/.html_image_rows.tsv"
+  manifest_path="$output_directory/images.tsv"
+  unresolved_path="$output_directory/unresolved_images.tsv"
+  mkdir -p "$images_directory"
+  : > "$manifest_path"
+  : > "$unresolved_path"
+
+  html_image_rows "$html_path" > "$rows_path"
+  order=0
+  separator=$(printf '\037')
+  while IFS="$separator" read -r image_source caption_text alt_text; do
+    test -n "$image_source" || continue
+    order=$((order + 1))
+    image_url=$(resolve_image_url "$document_url" "$image_source")
+    extension=$(image_extension_from_url "$image_url")
+    temporary_file_name=$(printf 'temporary_image_%04d.%s' "$order" "$extension")
+    temporary_path="$images_directory/$temporary_file_name"
+
+    ib_media_curl --output "$temporary_path" "$image_url"
+
+    naming_source=temporary
+    final_file_name=$temporary_file_name
+    conceptual_text=''
+    if test -n "$caption_text"; then
+      conceptual_text=$(caption_without_figure_label "$caption_text")
+      naming_source=caption
+    elif alt_text_is_conceptual "$alt_text"; then
+      conceptual_text=$alt_text
+      naming_source=alt_text
+    fi
+
+    if test "$naming_source" != temporary; then
+      stem=$(conceptual_name_slug "$conceptual_text")
+      if test -n "$stem"; then
+        final_file_name=$(unique_image_file_name "$images_directory" "$stem" "$extension")
+        mv "$temporary_path" "$images_directory/$final_file_name"
+      else
+        naming_source=temporary
+        final_file_name=$temporary_file_name
+      fi
+    fi
+
+    printf '%s\t%s\t%s\t%s\t%s\t%s\n' \
+      "$order" "$image_url" "$final_file_name" "$naming_source" "$caption_text" "$alt_text" \
+      >> "$manifest_path"
+
+    if test "$naming_source" = temporary; then
+      printf '%s\t%s\t%s\t%s\n' \
+        "$order" "$final_file_name" "$caption_text" "$alt_text" >> "$unresolved_path"
+    fi
+  done < "$rows_path"
+  rm -f "$rows_path"
+}
+
+record_pdf_images_in_order() {
+  pdf_path=$1
+  output_directory=$2
+  images_directory="$output_directory/images"
+  manifest_path="$output_directory/images.tsv"
+  unresolved_path="$output_directory/unresolved_images.tsv"
+  extraction_directory="$output_directory/.pdfimages"
+  mkdir -p "$images_directory" "$extraction_directory"
+  : > "$manifest_path"
+  : > "$unresolved_path"
+
+  ib_media_require_command pdfimages || return 1
+  pdfimages -all "$pdf_path" "$extraction_directory/image" >/dev/null 2>&1 || return 1
+
+  order=0
+  find "$extraction_directory" -type f -name 'image-*' -print | LC_ALL=C sort | while IFS= read -r extracted_path; do
+    order=$((order + 1))
+    extension=${extracted_path##*.}
+    temporary_file_name=$(printf 'temporary_image_%04d.%s' "$order" "$extension")
+    mv "$extracted_path" "$images_directory/$temporary_file_name"
+    printf '%s\t%s\t%s\ttemporary\t\t\n' \
+      "$order" "pdf-image:$order" "$temporary_file_name" >> "$manifest_path"
+    printf '%s\t%s\t\t\n' "$order" "$temporary_file_name" >> "$unresolved_path"
+  done
+  rm -rf "$extraction_directory"
+}
+
+apply_language_model_image_names() {
+  document_path=$1
+  output_directory=$2
+  naming_command=${IB_IMAGE_NAMER_COMMAND:-}
+  test -n "$naming_command" || return 0
+  test -x "$naming_command" || {
+    ib_media_fail "IB_IMAGE_NAMER_COMMAND is not executable: $naming_command"
+    return 1
+  }
+
+  manifest_path="$output_directory/images.tsv"
+  unresolved_path="$output_directory/unresolved_images.tsv"
+  images_directory="$output_directory/images"
+  plan_path="$output_directory/.language_model_rename_plan.tsv"
+  renames_path="$output_directory/language_model_renames.tsv"
+  test -s "$unresolved_path" || return 0
+  : > "$renames_path"
+
+  niceness=${IB_IMAGE_NAMER_NICENESS:-20}
+  nice -n "$niceness" "$naming_command" "$document_path" "$unresolved_path" > "$plan_path"
+
+  tab=$(printf '\t')
+  while IFS="$tab" read -r order conceptual_name; do
+    test -n "$order" || continue
+    current_file_name=$(awk -F '\t' -v wanted="$order" '$1 == wanted && $4 == "temporary" { print $3; exit }' "$manifest_path")
+    test -n "$current_file_name" || continue
+    stem=$(conceptual_name_slug "$conceptual_name")
+    test -n "$stem" || continue
+    extension=${current_file_name##*.}
+    new_file_name=$(unique_image_file_name "$images_directory" "$stem" "$extension")
+    mv "$images_directory/$current_file_name" "$images_directory/$new_file_name"
+
+    awk -F '\t' -v OFS='\t' -v wanted="$order" -v replacement="$new_file_name" '
+      $1 == wanted && $4 == "temporary" { $3 = replacement; $4 = "language_model" }
+      { print }
+    ' "$manifest_path" > "$manifest_path.tmp"
+    mv "$manifest_path.tmp" "$manifest_path"
+    printf '%s\t%s\t%s\n' "$order" "$current_file_name" "$new_file_name" >> "$renames_path"
+  done < "$plan_path"
+
+  awk -F '\t' '$4 == "temporary" { print $1 "\t" $3 "\t" $5 "\t" $6 }' \
+    "$manifest_path" > "$unresolved_path"
+  rm -f "$plan_path"
+}
+
+harvest_arxiv_images() {
+  input=$1
+  output_directory=$2
+  fetch_preferred_arxiv_document "$input" "$output_directory"
+
+  source_kind=$(source_kind_from_harvest_directory "$output_directory")
+  source_url=$(source_url_from_harvest_directory "$output_directory")
+  document_path=$(source_document_from_harvest_directory "$output_directory")
+
+  case "$source_kind" in
+    html)
+      download_html_images_in_order "$document_path" "$source_url" "$output_directory"
+      ;;
+    pdf)
+      record_pdf_images_in_order "$document_path" "$output_directory"
+      ;;
+    *)
+      ib_media_fail "unknown source kind: $source_kind"
+      return 1
+      ;;
+  esac
+
+  apply_language_model_image_names "$document_path" "$output_directory"
+}

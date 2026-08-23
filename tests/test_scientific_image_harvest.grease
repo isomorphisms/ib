@@ -1,0 +1,68 @@
+#!/bin/sh
+set -eu
+
+repository_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+. "$repository_root/lib/scientific_media.grease"
+
+ib_media_require_command busybox
+ib_media_require_command curl
+ib_media_require_command xmlstarlet
+
+work_directory=$(mktemp -d)
+server_pid=''
+cleanup() {
+  if test -n "$server_pid"; then
+    kill "$server_pid" >/dev/null 2>&1 || true
+  fi
+  rm -rf "$work_directory"
+}
+trap cleanup EXIT HUP INT TERM
+
+port=$((18000 + ($$ % 20000)))
+busybox httpd -f -p "127.0.0.1:$port" -h "$repository_root/tests/fixtures/arxiv_site" &
+server_pid=$!
+sleep 1
+
+export IB_ARXIV_HTML_BASE="http://127.0.0.1:$port/html"
+export IB_ARXIV_PDF_BASE="http://127.0.0.1:$port/pdf"
+
+html_output="$work_directory/html"
+sh "$repository_root/bin/harvest_arxiv_images.grease" \
+  'https://arxiv.org/abs/2203.11355' "$html_output"
+
+test "$(source_kind_from_harvest_directory "$html_output")" = html
+test -s "$html_output/document.html"
+test ! -e "$html_output/document.pdf"
+
+test "$(wc -l < "$html_output/images.tsv" | tr -d ' ')" = 3
+sed -n '1p' "$html_output/images.tsv" | grep -F 'linear_regions_along_a_one_dimensional_input.svg' >/dev/null
+sed -n '1p' "$html_output/images.tsv" | grep -F 'caption' >/dev/null
+sed -n '2p' "$html_output/images.tsv" | grep -F 'activation_space_folding.svg' >/dev/null
+sed -n '2p' "$html_output/images.tsv" | grep -F 'alt_text' >/dev/null
+sed -n '3p' "$html_output/images.tsv" | grep -F 'temporary_image_0003.svg' >/dev/null
+sed -n '3p' "$html_output/images.tsv" | grep -F 'temporary' >/dev/null
+
+test -s "$html_output/images/linear_regions_along_a_one_dimensional_input.svg"
+test -s "$html_output/images/activation_space_folding.svg"
+test -s "$html_output/images/temporary_image_0003.svg"
+
+test "$(wc -l < "$html_output/unresolved_images.tsv" | tr -d ' ')" = 1
+
+export IB_IMAGE_NAMER_COMMAND="$repository_root/tests/fixtures/fake_image_namer.grease"
+export IB_IMAGE_NAMER_NICENESS=20
+sh "$repository_root/bin/rename_harvested_images_with_llm.grease" \
+  "$html_output/document.html" "$html_output"
+unset IB_IMAGE_NAMER_COMMAND
+
+test -s "$html_output/images/polyhedral_cell_decomposition_after_relu_activation.svg"
+test ! -e "$html_output/images/temporary_image_0003.svg"
+grep -F 'language_model' "$html_output/images.tsv" >/dev/null
+test ! -s "$html_output/unresolved_images.tsv"
+
+pdf_output="$work_directory/pdf"
+fetch_preferred_arxiv_document 'https://arxiv.org/abs/1901.09021' "$pdf_output"
+test "$(source_kind_from_harvest_directory "$pdf_output")" = pdf
+test -s "$pdf_output/document.pdf"
+test ! -e "$pdf_output/document.html"
+
+printf 'scientific image harvest tests: ok\n'

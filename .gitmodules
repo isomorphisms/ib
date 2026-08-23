@@ -1,0 +1,3 @@
+[submodule "vendor/harvest-images-from-pdf"]
+	path = vendor/harvest-images-from-pdf
+	url = https://github.com/isomorphisms/harvest-images-from-pdf.git

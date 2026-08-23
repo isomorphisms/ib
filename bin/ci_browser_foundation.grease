@@ -1,0 +1,94 @@
+#!/bin/sh
+set -eu
+
+repository_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+idric_prefix=${IDRIC_PREFIX:-/tmp/idric}
+idric_ref=${IDRIC_REF:-61970be77769f607cca8650bf424c0f0b22ddee7}
+pdf_harvester_ref=${PDF_HARVESTER_REF:-77d85dc6f7e89d109cb9e06f42706bc34f00e4a3}
+
+install_dependencies() {
+  sudo apt-get update
+  sudo apt-get install -y chezscheme curl xmlstarlet busybox poppler-utils
+}
+
+build_idric() {
+  rm -rf /tmp/Idric
+  git init -q /tmp/Idric
+  git -C /tmp/Idric remote add origin https://github.com/isomorphisms/Idric.git
+  git -C /tmp/Idric fetch --depth 1 origin "$idric_ref"
+  git -C /tmp/Idric checkout --detach -q FETCH_HEAD
+  test "$(git -C /tmp/Idric rev-parse HEAD)" = "$idric_ref"
+  make -C /tmp/Idric bootstrap PREFIX="$idric_prefix"
+  make -C /tmp/Idric install PREFIX="$idric_prefix"
+}
+
+verify_pdf_harvester() {
+  test -d "$repository_root/vendor/harvest-images-from-pdf/.git" ||
+    test -f "$repository_root/vendor/harvest-images-from-pdf/.git"
+  test "$(git -C "$repository_root/vendor/harvest-images-from-pdf" rev-parse HEAD)" = "$pdf_harvester_ref"
+  test -f "$repository_root/vendor/harvest-images-from-pdf/src/PDF/Parser.idric"
+  test -f "$repository_root/vendor/harvest-images-from-pdf/src/PDF/Figure.idric"
+}
+
+exercise_core() {
+  cd "$repository_root"
+  "$idric_prefix/bin/idris2" src/Smoke.idric -o ib-smoke 2>&1 | tee /tmp/idric-compile.txt
+  test -x ./build/exec/ib-smoke
+  ! grep -q '^Error:' /tmp/idric-compile.txt
+  ./build/exec/ib-smoke | tee /tmp/ib-smoke.txt
+  grep -Fx 'ingest=3' /tmp/ib-smoke.txt
+  grep -Fx 'duplicate-url-count=2' /tmp/ib-smoke.txt
+  grep -Fx 'newest-order=2' /tmp/ib-smoke.txt
+  grep -Fx 'host-count=2' /tmp/ib-smoke.txt
+  grep -Fx 'canonical=canonical' /tmp/ib-smoke.txt
+  grep -Fx 'cache-fake=cache' /tmp/ib-smoke.txt
+  grep -Fx 'secret=secret' /tmp/ib-smoke.txt
+  grep -Fx 'readable-files=2' /tmp/ib-smoke.txt
+  grep -Fx 'canonical-files=2' /tmp/ib-smoke.txt
+  grep -Fx 'arxiv-html-first=https://arxiv.org/html/2203.11355' /tmp/ib-smoke.txt
+  grep -Fx 'caption-name-basis=caption' /tmp/ib-smoke.txt
+  grep -Fx 'temporary-needs-language-model=True' /tmp/ib-smoke.txt
+}
+
+exercise_workbench() {
+  cd "$repository_root"
+  "$idric_prefix/bin/idris2" src/Workbench.idric -o ib-workbench 2>&1 | tee /tmp/idric-workbench-compile.txt
+  test -x ./build/exec/ib-workbench
+  ! grep -q '^Error:' /tmp/idric-workbench-compile.txt
+  ./build/exec/ib-workbench | tee /tmp/ib-workbench.txt
+  grep -Fx 'fixture-urls=10000' /tmp/ib-workbench.txt
+  grep -Fx 'fixture-42=ib://fixture/42' /tmp/ib-workbench.txt
+  grep -Fx 'logical-tabs=32' /tmp/ib-workbench.txt
+  grep -Fx 'churn-steps=10000' /tmp/ib-workbench.txt
+  grep -Fx 'resident-at-3=3' /tmp/ib-workbench.txt
+  grep -Fx 'resident-at-10=10' /tmp/ib-workbench.txt
+}
+
+exercise_scientific_media() {
+  cd "$repository_root"
+  sh -n lib/scientific_media.grease
+  sh -n bin/harvest_arxiv_images.grease
+  sh -n bin/rename_harvested_images_with_llm.grease
+  sh -n tests/test_scientific_image_harvest.grease
+  sh tests/test_scientific_image_harvest.grease
+}
+
+exercise_live_arxiv() {
+  cd "$repository_root"
+  sh -n tests/live_arxiv_image_harvest.grease
+  sh tests/live_arxiv_image_harvest.grease
+}
+
+case "${1:-}" in
+  install-dependencies) install_dependencies ;;
+  build-idric) build_idric ;;
+  verify-pdf-harvester) verify_pdf_harvester ;;
+  exercise-core) exercise_core ;;
+  exercise-workbench) exercise_workbench ;;
+  exercise-scientific-media) exercise_scientific_media ;;
+  exercise-live-arxiv) exercise_live_arxiv ;;
+  *)
+    printf 'usage: %s {install-dependencies|build-idric|verify-pdf-harvester|exercise-core|exercise-workbench|exercise-scientific-media|exercise-live-arxiv}\n' "$0" >&2
+    exit 2
+    ;;
+esac

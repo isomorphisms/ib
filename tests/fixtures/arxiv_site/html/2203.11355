@@ -1,0 +1,17 @@
+<!doctype html>
+<html>
+  <body>
+    <main>
+      <article>
+        <figure>
+          <img src="/assets/linear_regions.svg" alt="plot">
+          <figcaption>Figure 1. Linear regions along a one dimensional input</figcaption>
+        </figure>
+        <figure>
+          <img src="/assets/activation_folding.svg" alt="Activation space folding">
+        </figure>
+        <img src="/assets/unlabeled.svg" alt="">
+      </article>
+    </main>
+  </body>
+</html>

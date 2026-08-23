@@ -4,7 +4,9 @@ IB should have a developer workbench for exercising browser state, rendering, ca
 
 ## Implementation boundary
 
-The executable workbench is Idriç. Fixture generation, working-set policy, and the regression itself belong in `.idric` source; they do not depend on Python or Ithon. Native and renderer code may provide facilities later, but they do not own the workbench state model.
+The workbench state model is Idriç. Deterministic URL identities, working-set policy, and browser-state regressions belong in `.idric` source.
+
+Grease owns fixture orchestration that actually touches the operating system or network: starting a local fixture server, fetching live scientific pages, arranging temporary directories, invoking renderers/parsers, and collecting process-level measurements. That distinction avoids turning Idriç into a shell while keeping browser policy out of scripts.
 
 ## Fixture universe
 
@@ -98,4 +100,5 @@ If RAM grows approximately with the number of known URLs, IB has accidentally co
 3. Workbench counters for fixture count, state counts, and memory estimates.
 4. Controls for promotion, eviction, cache clearing, and tab thrashing.
 5. Automated regression that holds hot tabs fixed while scaling the fixture universe.
-6. Later, import a sanitized browsing-history backlog as fixture seeds.
+6. Live/recorded scientific-media fixtures through Grease.
+7. Later, import a sanitized browsing-history backlog as fixture seeds.

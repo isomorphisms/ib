@@ -1,0 +1,28 @@
+#!/bin/sh
+set -eu
+
+repository_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+. "$repository_root/lib/scientific_media.grease"
+
+work_directory=$(mktemp -d)
+trap 'rm -rf "$work_directory"' EXIT HUP INT TERM
+
+html_count=0
+processed_count=0
+for identifier in 2203.11355 1901.09021 1606.05336 2305.00241; do
+  output_directory="$work_directory/$(printf '%s' "$identifier" | tr '/' '_')"
+  sh "$repository_root/bin/harvest_arxiv_images.grease" \
+    "https://arxiv.org/abs/$identifier" "$output_directory"
+  kind=$(source_kind_from_harvest_directory "$output_directory")
+  image_count=$(wc -l < "$output_directory/images.tsv" | tr -d ' ')
+  printf '%s\t%s\t%s images\n' "$identifier" "$kind" "$image_count"
+  processed_count=$((processed_count + 1))
+  if test "$kind" = html; then
+    html_count=$((html_count + 1))
+    test "$image_count" -gt 0
+  fi
+done
+
+test "$processed_count" -eq 4
+test "$html_count" -gt 0
+printf 'live arXiv image harvest: %s HTML-first papers out of %s\n' "$html_count" "$processed_count"
