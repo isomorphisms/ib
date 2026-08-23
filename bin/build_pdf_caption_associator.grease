@@ -7,7 +7,9 @@ idric="$idric_prefix/bin/idris2"
 vendor_source="$repository_root/vendor/harvest-images-from-pdf/src"
 bridge_source="$repository_root/src/PDFCaptionAssociate.idric"
 bridge_link="$vendor_source/PDFCaptionAssociate.idric"
-output="$repository_root/src/build/exec/ib-pdf-caption-associate"
+output_directory="$repository_root/src/build/exec"
+output="$output_directory/ib-pdf-caption-associate"
+output_app="$output_directory/ib-pdf-caption-associate_app"
 compile_log=/tmp/idric-pdf-caption-associate-compile.txt
 
 if ! test -x "$idric"; then
@@ -29,7 +31,10 @@ cd "$vendor_source"
 "$idric" PDFCaptionAssociate.idric -o ib-pdf-caption-associate \
   2>&1 | tee "$compile_log"
 test -x build/exec/ib-pdf-caption-associate
+test -d build/exec/ib-pdf-caption-associate_app
 ! grep -q '^Error:' "$compile_log"
 
-mkdir -p "$(dirname -- "$output")"
+mkdir -p "$output_directory"
+rm -rf "$output_app"
 cp build/exec/ib-pdf-caption-associate "$output"
+cp -R build/exec/ib-pdf-caption-associate_app "$output_app"
