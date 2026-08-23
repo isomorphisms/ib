@@ -1,0 +1,84 @@
+module IB.Product
+
+%default total
+
+public export
+data ProductKey
+  = ISBN String
+  | UPC String
+  | GTIN String
+  | ASIN String
+  | SourceKey String String
+
+public export
+key_text : ProductKey → String
+key_text (ISBN value) = "isbn:" ++ value
+key_text (UPC value) = "upc:" ++ value
+key_text (GTIN value) = "gtin:" ++ value
+key_text (ASIN value) = "asin:" ++ value
+key_text (SourceKey source value) = source ++ ":" ++ value
+
+public export
+data Product = Item String (List ProductKey) (List String)
+
+public export
+product_id : Product → String
+product_id (Item value _ _) = value
+
+public export
+product_keys : Product → List ProductKey
+product_keys (Item _ keys _) = keys
+
+public export
+product_terms : Product → List String
+product_terms (Item _ _ terms) = terms
+
+public export
+data PriceObservation = Observed String String Nat String String
+
+public export
+price_source : PriceObservation → String
+price_source (Observed source _ _ _ _) = source
+
+public export
+price_product : PriceObservation → String
+price_product (Observed _ product _ _ _) = product
+
+public export
+price_minor_units : PriceObservation → Nat
+price_minor_units (Observed _ _ amount _ _) = amount
+
+public export
+price_currency : PriceObservation → String
+price_currency (Observed _ _ _ currency _) = currency
+
+public export
+price_observed_at : PriceObservation → String
+price_observed_at (Observed _ _ _ _ observed_at) = observed_at
+
+public export
+data CurrentOffer = Offer String ProductKey Nat String String String
+
+public export
+offer_source : CurrentOffer → String
+offer_source (Offer source _ _ _ _ _) = source
+
+public export
+offer_key : CurrentOffer → ProductKey
+offer_key (Offer _ key _ _ _ _) = key
+
+public export
+offer_minor_units : CurrentOffer → Nat
+offer_minor_units (Offer _ _ amount _ _ _) = amount
+
+public export
+offer_currency : CurrentOffer → String
+offer_currency (Offer _ _ _ currency _ _) = currency
+
+public export
+offer_observed_at : CurrentOffer → String
+offer_observed_at (Offer _ _ _ _ observed_at _) = observed_at
+
+public export
+offer_expires_at : CurrentOffer → String
+offer_expires_at (Offer _ _ _ _ _ expires_at) = expires_at
