@@ -39,11 +39,13 @@ The language model sees the whole HTML/PDF plus the list of extracted images, so
 
 ## PDF fallback and harvest-images-from-pdf
 
-IB pins `isomorphisms/harvest-images-from-pdf` under `vendor/harvest-images-from-pdf`, currently at the figure/caption association line. That repository owns PDF parsing and figure/caption semantics; IB does not fork those data types into a second PDF parser.
+IB pins `isomorphisms/harvest-images-from-pdf` under `vendor/harvest-images-from-pdf`. That repository owns PDF parsing and figure/caption semantics; IB does not fork those data types or association rules into a second PDF parser.
 
-The current Grease bridge uses the operating-system `pdfimages` utility for the raw byte-extraction step because the PDF repository does not yet expose an end-to-end command-line extractor. Those PDF images enter IB as ordered temporary names and therefore naturally go through the second naming pass. When the repository grows its extraction entry point, the Grease bridge should invoke it instead without changing browser policy or stored manifests.
+The vendored repository does not yet expose an end-to-end extraction command. Until it does, the Grease adapter uses Poppler's `pdftohtml -xml` output only for mechanical image extraction and page-layout data. It converts Poppler's top-left rectangles to the bottom-left coordinate convention expected by `PDF.Figure`, then invokes a small compiled Idriç bridge that imports the vendored `PDF.Figure.associate_figure_caption` rule. Grease does not decide whether a text fragment is a caption.
 
-This split is deliberate: PDF semantics stay in Idriç; process execution and file movement stay in Grease.
+When that Idriç rule associates a caption with an extracted image, the caption is written into the same caption field in `images.tsv` used by the HTML path and participates in the existing caption-first naming policy. Images without an identified caption remain temporary and can still go through the low-priority language-model naming pass.
+
+This split is deliberate: PDF figure/caption semantics stay in Idriç; Poppler invocation, coordinate normalization, temporary files, and file movement stay in Grease. The vendored harvester remains narrow and unchanged.
 
 ## Scientific fixtures
 
@@ -54,4 +56,6 @@ The live test uses previously collected scientific arXiv identifiers:
 - `1606.05336` — *On the Expressive Power of Deep Neural Networks*
 - `2305.00241` — *When Deep Learning Meets Polyhedral Theory: A Survey*
 
-The test requires at least one of these to resolve through arXiv HTML and verifies that every HTML image is downloaded in order. PDF fallback is also exercised.
+The deterministic PDF fixture contains one embedded image and the nearby text `Figure 1. Tiny color blocks`; the test requires that the vendored Idriç association rule put that caption into `images.tsv` and that the existing naming path produce `tiny_color_blocks.png`.
+
+The live test requires at least one collected paper to resolve through arXiv HTML and verifies that every HTML image is downloaded in order. PDF fallback is covered deterministically rather than depending on arXiv withholding HTML for a particular paper.
