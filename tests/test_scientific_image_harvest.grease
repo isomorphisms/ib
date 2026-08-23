@@ -39,12 +39,13 @@ sed -n '1p' "$html_output/images.tsv" | grep -F 'linear_regions_along_a_one_dime
 sed -n '1p' "$html_output/images.tsv" | grep -F 'caption' >/dev/null
 sed -n '2p' "$html_output/images.tsv" | grep -F 'activation_space_folding.svg' >/dev/null
 sed -n '2p' "$html_output/images.tsv" | grep -F 'alt_text' >/dev/null
-sed -n '3p' "$html_output/images.tsv" | grep -F 'temporary_image_0003.svg' >/dev/null
+sed -n '3p' "$html_output/images.tsv" | grep -F 'data:image/png;base64' >/dev/null
+sed -n '3p' "$html_output/images.tsv" | grep -F 'temporary_image_0003.png' >/dev/null
 sed -n '3p' "$html_output/images.tsv" | grep -F 'temporary' >/dev/null
 
 test -s "$html_output/images/linear_regions_along_a_one_dimensional_input.svg"
 test -s "$html_output/images/activation_space_folding.svg"
-test -s "$html_output/images/temporary_image_0003.svg"
+test -s "$html_output/images/temporary_image_0003.png"
 
 test "$(wc -l < "$html_output/unresolved_images.tsv" | tr -d ' ')" = 1
 
@@ -54,8 +55,8 @@ sh "$repository_root/bin/rename_harvested_images_with_llm.grease" \
   "$html_output/document.html" "$html_output"
 unset IB_IMAGE_NAMER_COMMAND
 
-test -s "$html_output/images/polyhedral_cell_decomposition_after_relu_activation.svg"
-test ! -e "$html_output/images/temporary_image_0003.svg"
+test -s "$html_output/images/polyhedral_cell_decomposition_after_relu_activation.png"
+test ! -e "$html_output/images/temporary_image_0003.png"
 grep -F 'language_model' "$html_output/images.tsv" >/dev/null
 test ! -s "$html_output/unresolved_images.tsv"
 
