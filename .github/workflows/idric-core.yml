@@ -17,17 +17,14 @@ permissions:
   contents: read
 
 jobs:
-  browser-foundation:
+  idric-core:
     runs-on: ubuntu-latest
     env:
       IDRIS2_CG: chez
       SCHEME: scheme
       IDRIC_REF: 61970be77769f607cca8650bf424c0f0b22ddee7
-      PDF_HARVESTER_REF: 77d85dc6f7e89d109cb9e06f42706bc34f00e4a3
     steps:
       - uses: actions/checkout@v4
-        with:
-          submodules: true
 
       - name: Install system dependencies through Grease
         run: sh bin/ci_browser_foundation.grease install-dependencies
@@ -50,14 +47,26 @@ jobs:
           path: /tmp/idric
           key: idric-${{ runner.os }}-61970be77769f607cca8650bf424c0f0b22ddee7
 
-      - name: Verify PDF harvester pin
-        run: sh bin/ci_browser_foundation.grease verify-pdf-harvester
-
       - name: Exercise browser-owned Idric core
         run: sh bin/ci_browser_foundation.grease exercise-core
 
       - name: Exercise developer workbench
         run: sh bin/ci_browser_foundation.grease exercise-workbench
+
+  scientific-media:
+    runs-on: ubuntu-latest
+    env:
+      PDF_HARVESTER_REF: 77d85dc6f7e89d109cb9e06f42706bc34f00e4a3
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Install system dependencies through Grease
+        run: sh bin/ci_browser_foundation.grease install-dependencies
+
+      - name: Verify PDF harvester pin
+        run: sh bin/ci_browser_foundation.grease verify-pdf-harvester
 
       - name: Exercise deterministic scientific image harvesting
         run: sh bin/ci_browser_foundation.grease exercise-scientific-media
