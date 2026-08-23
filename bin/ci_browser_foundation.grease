@@ -18,8 +18,8 @@ build_idric() {
   git -C /tmp/Idric fetch --depth 1 origin "$idric_ref"
   git -C /tmp/Idric checkout --detach -q FETCH_HEAD
   test "$(git -C /tmp/Idric rev-parse HEAD)" = "$idric_ref"
-  make -C /tmp/Idric bootstrap PREFIX="$idric_prefix"
-  make -C /tmp/Idric install PREFIX="$idric_prefix"
+  SCHEME=chezscheme make -C /tmp/Idric bootstrap PREFIX="$idric_prefix"
+  SCHEME=chezscheme make -C /tmp/Idric install PREFIX="$idric_prefix"
 }
 
 verify_pdf_harvester() {
