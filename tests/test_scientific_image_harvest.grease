@@ -37,15 +37,25 @@ test ! -e "$html_output/document.pdf"
 test "$(wc -l < "$html_output/images.tsv" | tr -d ' ')" = 3
 sed -n '1p' "$html_output/images.tsv" | grep -F 'linear_regions_along_a_one_dimensional_input.svg' >/dev/null
 sed -n '1p' "$html_output/images.tsv" | grep -F 'caption' >/dev/null
+sed -n '1p' "$html_output/images.tsv" | grep -F 'image_tags/image_tag_0001.html' >/dev/null
 sed -n '2p' "$html_output/images.tsv" | grep -F 'activation_space_folding.svg' >/dev/null
 sed -n '2p' "$html_output/images.tsv" | grep -F 'alt_text' >/dev/null
+sed -n '2p' "$html_output/images.tsv" | grep -F 'image_tags/image_tag_0002.html' >/dev/null
 sed -n '3p' "$html_output/images.tsv" | grep -F 'data:image/png;base64' >/dev/null
 sed -n '3p' "$html_output/images.tsv" | grep -F 'temporary_image_0003.png' >/dev/null
 sed -n '3p' "$html_output/images.tsv" | grep -F 'temporary' >/dev/null
+sed -n '3p' "$html_output/images.tsv" | grep -F 'image_tags/image_tag_0003.html' >/dev/null
 
 test -s "$html_output/images/linear_regions_along_a_one_dimensional_input.svg"
 test -s "$html_output/images/activation_space_folding.svg"
 test -s "$html_output/images/temporary_image_0003.png"
+
+test -s "$html_output/image_tags/image_tag_0001.html"
+test -s "$html_output/image_tags/image_tag_0002.html"
+test -s "$html_output/image_tags/image_tag_0003.html"
+grep -F 'src="/assets/linear_regions.svg"' "$html_output/image_tags/image_tag_0001.html" >/dev/null
+grep -F 'alt="Activation space folding"' "$html_output/image_tags/image_tag_0002.html" >/dev/null
+grep -F 'src="data:image/png;base64,' "$html_output/image_tags/image_tag_0003.html" >/dev/null
 
 test "$(wc -l < "$html_output/unresolved_images.tsv" | tr -d ' ')" = 1
 
