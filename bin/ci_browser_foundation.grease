@@ -67,9 +67,12 @@ exercise_workbench() {
 exercise_scientific_media() {
   cd "$repository_root"
   sh -n lib/scientific_media.grease
+  sh -n lib/pdf_figure_captions.grease
   sh -n bin/harvest_arxiv_images.grease
+  sh -n bin/build_pdf_caption_associator.grease
   sh -n bin/rename_harvested_images_with_llm.grease
   sh -n tests/test_scientific_image_harvest.grease
+  sh bin/build_pdf_caption_associator.grease
   sh tests/test_scientific_image_harvest.grease
 }
 
