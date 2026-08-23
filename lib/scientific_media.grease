@@ -175,6 +175,43 @@ resolve_image_url() {
   esac
 }
 
+data_image_extension() {
+  image_source=$1
+  header=${image_source%%,*}
+  media_type=${header#data:image/}
+  media_type=${media_type%%;*}
+  case "$media_type" in
+    png) printf 'png\n' ;;
+    jpeg|jpg) printf 'jpg\n' ;;
+    svg+xml) printf 'svg\n' ;;
+    webp) printf 'webp\n' ;;
+    gif) printf 'gif\n' ;;
+    avif) printf 'avif\n' ;;
+    *) printf 'img\n' ;;
+  esac
+}
+
+embedded_image_reference() {
+  image_source=$1
+  printf '%s\n' "${image_source%%,*}"
+}
+
+write_embedded_data_image() {
+  image_source=$1
+  output_path=$2
+  header=${image_source%%,*}
+  payload=${image_source#*,}
+  case "$header" in
+    data:image/*\;base64)
+      printf '%s' "$payload" | base64 --decode > "$output_path"
+      ;;
+    *)
+      ib_media_fail "unsupported embedded image encoding: $header"
+      return 1
+      ;;
+  esac
+}
+
 image_extension_from_url() {
   url=$1
   path=${url%%\?*}
@@ -261,16 +298,36 @@ download_html_images_in_order() {
   while IFS="$separator" read -r image_source caption_text alt_text; do
     test -n "$image_source" || continue
     order=$((order + 1))
-    image_url=$(resolve_image_url "$document_url" "$image_source")
-    extension=$(image_extension_from_url "$image_url")
+
+    case "$image_source" in
+      data:image/*)
+        extension=$(data_image_extension "$image_source")
+        image_url=$(embedded_image_reference "$image_source")
+        ;;
+      *)
+        image_url=$(resolve_image_url "$document_url" "$image_source")
+        extension=$(image_extension_from_url "$image_url")
+        ;;
+    esac
+
     temporary_file_name=$(printf 'temporary_image_%04d.%s' "$order" "$extension")
     temporary_path="$images_directory/$temporary_file_name"
 
-    if ! ib_media_curl --output "$temporary_path" "$image_url"; then
-      rm -f "$temporary_path"
-      ib_media_fail "image download failed: order=$order src=$image_source resolved=$image_url document=$document_url"
-      return 1
-    fi
+    case "$image_source" in
+      data:image/*)
+        if ! write_embedded_data_image "$image_source" "$temporary_path"; then
+          rm -f "$temporary_path"
+          return 1
+        fi
+        ;;
+      *)
+        if ! ib_media_curl --output "$temporary_path" "$image_url"; then
+          rm -f "$temporary_path"
+          ib_media_fail "image download failed: order=$order src=$image_source resolved=$image_url document=$document_url"
+          return 1
+        fi
+        ;;
+    esac
 
     naming_source=temporary
     final_file_name=$temporary_file_name
