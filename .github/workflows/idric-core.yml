@@ -1,0 +1,43 @@
+name: Idric browser core
+
+on:
+  push:
+    branches:
+      - idric-browser-core
+  pull_request:
+    paths:
+      - 'src/**'
+      - 'docs/idric-implementation.md'
+      - '.github/workflows/idric-core.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  idric:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build Idric compiler
+        run: |
+          git clone --depth 1 https://github.com/isomorphisms/Idric.git /tmp/Idric
+          cd /tmp/Idric
+          ./edric scheme
+          ./edric bootstrap
+
+      - name: Compile IB Idric smoke program
+        run: /tmp/Idric/build/exec/idris2 src/Smoke.idric -o ib-smoke
+
+      - name: Exercise browser-owned core
+        run: |
+          ./build/exec/ib-smoke | tee /tmp/ib-smoke.txt
+          grep -Fx 'ingest=3' /tmp/ib-smoke.txt
+          grep -Fx 'duplicate-url-count=2' /tmp/ib-smoke.txt
+          grep -Fx 'newest-order=2' /tmp/ib-smoke.txt
+          grep -Fx 'host-count=2' /tmp/ib-smoke.txt
+          grep -Fx 'canonical=canonical' /tmp/ib-smoke.txt
+          grep -Fx 'cache-fake=cache' /tmp/ib-smoke.txt
+          grep -Fx 'secret=secret' /tmp/ib-smoke.txt
+          grep -Fx 'readable-files=2' /tmp/ib-smoke.txt
+          grep -Fx 'canonical-files=2' /tmp/ib-smoke.txt

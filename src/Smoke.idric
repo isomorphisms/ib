@@ -1,0 +1,41 @@
+module Smoke
+
+import IB.History
+import IB.Index
+import IB.Storage
+import IB.Inspect
+
+%default total
+
+sample_entries : List HistoryEntry
+sample_entries = [
+  Entry "https://example.test/a" (Just 10) (Just "a1") raw_urls visit Nothing 90,
+  Entry "https://example.test/a" (Just 10) (Just "a2") raw_urls visit Nothing 91,
+  Entry "https://other.test/b" (Just 11) (Just "b") google_activity search (Just "browser") 92,
+  Entry "https://missing-time.test/c" Nothing Nothing raw_urls visit Nothing 93
+  ]
+
+first_or : Nat → List Nat → Nat
+first_or fallback [] = fallback
+first_or fallback (value :: _) = value
+
+main : IO ()
+main = do
+  let raw = ingest_raw_lines ["# ignored", " https://example.test/a ", "https://example.test/a", "https://other.test/b"]
+  let indices = build_indices sample_entries
+  let files = [
+        FileRow "visits.jsonl" 20 regular_file,
+        FileRow "indexes/summary.json" 10 regular_file,
+        FileRow "cache/visits.jsonl" 30 regular_file,
+        FileRow "tabs/T1/tab.txt" 12 symlink_file,
+        FileRow "renderer/passwords" 40 regular_file
+        ]
+  putStrLn ("ingest=" ++ show (length raw))
+  putStrLn ("duplicate-url-count=" ++ show (row_count "https://example.test/a" (url_rows indices)))
+  putStrLn ("newest-order=" ++ show (first_or 99 (index_chronology indices)))
+  putStrLn ("host-count=" ++ show (row_count "example.test" (host_rows indices)))
+  putStrLn ("canonical=" ++ storage_kind_text (classify_path "visits.jsonl"))
+  putStrLn ("cache-fake=" ++ storage_kind_text (classify_path "cache/visits.jsonl"))
+  putStrLn ("secret=" ++ storage_kind_text (classify_path "renderer/passwords"))
+  putStrLn ("readable-files=" ++ show (readable_file_count files))
+  putStrLn ("canonical-files=" ++ show (files_of_kind canonical files))

@@ -1,0 +1,125 @@
+module IB.History
+
+import Data.String
+
+%default total
+
+public export
+choice history_source one_of
+  raw_urls
+  canonical_store
+  google_activity
+  youtube_activity
+  chrome_history
+  firefox_history
+  generic_json
+
+public export
+choice history_kind one_of
+  visit
+  search
+
+public export
+data HistoryEntry = Entry String (Maybe Integer) (Maybe String) history_source history_kind (Maybe String) Nat
+
+public export
+entry_url : HistoryEntry → String
+entry_url (Entry value _ _ _ _ _ _) = value
+
+public export
+entry_time : HistoryEntry → Maybe Integer
+entry_time (Entry _ value _ _ _ _ _) = value
+
+public export
+entry_title : HistoryEntry → Maybe String
+entry_title (Entry _ _ value _ _ _ _) = value
+
+public export
+entry_source : HistoryEntry → history_source
+entry_source (Entry _ _ _ value _ _ _) = value
+
+public export
+entry_kind : HistoryEntry → history_kind
+entry_kind (Entry _ _ _ _ value _ _) = value
+
+public export
+entry_query : HistoryEntry → Maybe String
+entry_query (Entry _ _ _ _ _ value _) = value
+
+public export
+entry_order : HistoryEntry → Nat
+entry_order (Entry _ _ _ _ _ _ value) = value
+
+public export
+set_entry_order : Nat → HistoryEntry → HistoryEntry
+set_entry_order order (Entry url time title source kind query _) =
+  Entry url time title source kind query order
+
+public export
+source_text : history_source → String
+source_text raw_urls = "raw_urls"
+source_text canonical_store = "canonical_store"
+source_text google_activity = "google_activity"
+source_text youtube_activity = "youtube_activity"
+source_text chrome_history = "chrome_history"
+source_text firefox_history = "firefox_history"
+source_text generic_json = "generic_json"
+
+public export
+kind_text : history_kind → String
+kind_text visit = "visit"
+kind_text search = "search"
+
+is_comment : String → Bool
+is_comment text =
+  case unpack text of
+    '#' :: _ ⇒ True
+    _ ⇒ False
+
+public export
+ingest_raw_lines : List String → List HistoryEntry
+ingest_raw_lines = go 0
+  where
+    go : Nat → List String → List HistoryEntry
+    go order [] = []
+    go order (line :: rest) =
+      let cleaned = trim line in
+        if cleaned == "" || is_comment cleaned
+          then go order rest
+          else Entry cleaned Nothing Nothing raw_urls visit Nothing order :: go (S order) rest
+
+public export
+normalize_order : List HistoryEntry → List HistoryEntry
+normalize_order = go 0
+  where
+    go : Nat → List HistoryEntry → List HistoryEntry
+    go order [] = []
+    go order (entry :: rest) = set_entry_order order entry :: go (S order) rest
+
+entry_before : HistoryEntry → HistoryEntry → Bool
+entry_before left right =
+  case (entry_time left, entry_time right) of
+    (Just left_time, Just right_time) ⇒
+      if left_time > right_time
+        then True
+        else if left_time < right_time
+          then False
+          else entry_order left < entry_order right
+    (Just _, Nothing) ⇒ True
+    (Nothing, Just _) ⇒ False
+    (Nothing, Nothing) ⇒ entry_order left < entry_order right
+
+insert_newest : HistoryEntry → List HistoryEntry → List HistoryEntry
+insert_newest entry [] = [entry]
+insert_newest entry (next :: rest) =
+  if entry_before entry next
+    then entry :: next :: rest
+    else next :: insert_newest entry rest
+
+newest_first : List HistoryEntry → List HistoryEntry
+newest_first [] = []
+newest_first (entry :: rest) = insert_newest entry (newest_first rest)
+
+public export
+chronology : List HistoryEntry → List Nat
+chronology entries = map entry_order (newest_first entries)

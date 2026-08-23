@@ -1,0 +1,116 @@
+module IB.Index
+
+import IB.History
+
+%default total
+
+public export
+data IndexRow = Row String (List Nat)
+
+public export
+row_key : IndexRow → String
+row_key (Row key _) = key
+
+public export
+row_entries : IndexRow → List Nat
+row_entries (Row _ entries) = entries
+
+public export
+data HistoryIndices = Indices (List HistoryEntry) (List Nat) (List IndexRow) (List IndexRow) (List IndexRow) (List IndexRow)
+
+public export
+index_entries : HistoryIndices → List HistoryEntry
+index_entries (Indices entries _ _ _ _ _) = entries
+
+public export
+index_chronology : HistoryIndices → List Nat
+index_chronology (Indices _ chronology _ _ _ _) = chronology
+
+public export
+url_rows : HistoryIndices → List IndexRow
+url_rows (Indices _ _ rows _ _ _) = rows
+
+public export
+host_rows : HistoryIndices → List IndexRow
+host_rows (Indices _ _ _ rows _ _) = rows
+
+public export
+source_rows : HistoryIndices → List IndexRow
+source_rows (Indices _ _ _ _ rows _) = rows
+
+public export
+query_rows : HistoryIndices → List IndexRow
+query_rows (Indices _ _ _ _ _ rows) = rows
+
+add_row : String → Nat → List IndexRow → List IndexRow
+add_row key order [] = [Row key [order]]
+add_row key order (Row existing orders :: rest) =
+  if key == existing
+    then Row existing (orders ++ [order]) :: rest
+    else Row existing orders :: add_row key order rest
+
+index_string : (HistoryEntry → String) → List HistoryEntry → List IndexRow
+index_string key_of = go []
+  where
+    go : List IndexRow → List HistoryEntry → List IndexRow
+    go rows [] = rows
+    go rows (entry :: rest) =
+      go (add_row (key_of entry) (entry_order entry) rows) rest
+
+index_maybe_string : (HistoryEntry → Maybe String) → List HistoryEntry → List IndexRow
+index_maybe_string key_of = go []
+  where
+    go : List IndexRow → List HistoryEntry → List IndexRow
+    go rows [] = rows
+    go rows (entry :: rest) =
+      case key_of entry of
+        Nothing ⇒ go rows rest
+        Just key ⇒ go (add_row key (entry_order entry) rows) rest
+
+strip_prefix : List Char → List Char → Maybe (List Char)
+strip_prefix [] value = Just value
+strip_prefix (_ :: _) [] = Nothing
+strip_prefix (wanted :: more_wanted) (actual :: more_actual) =
+  if wanted == actual
+    then strip_prefix more_wanted more_actual
+    else Nothing
+
+remove_scheme : List Char → List Char
+remove_scheme chars =
+  case strip_prefix (unpack "https://") chars of
+    Just rest ⇒ rest
+    Nothing ⇒
+      case strip_prefix (unpack "http://") chars of
+        Just rest ⇒ rest
+        Nothing ⇒ chars
+
+take_host : List Char → List Char
+take_host [] = []
+take_host (char :: rest) =
+  if char == '/' || char == ':' || char == '?' || char == '#'
+    then []
+    else char :: take_host rest
+
+public export
+host_of : HistoryEntry → Maybe String
+host_of entry =
+  let host = pack (take_host (remove_scheme (unpack (entry_url entry)))) in
+    if host == "" then Nothing else Just host
+
+public export
+build_indices : List HistoryEntry → HistoryIndices
+build_indices input =
+  let entries = normalize_order input in
+    Indices
+      entries
+      (chronology entries)
+      (index_string entry_url entries)
+      (index_maybe_string host_of entries)
+      (index_string (source_text . entry_source) entries)
+      (index_maybe_string entry_query entries)
+
+public export
+row_count : String → List IndexRow → Nat
+row_count key [] = 0
+row_count key (Row existing entries :: rest) =
+  if key == existing then length entries else row_count key rest
