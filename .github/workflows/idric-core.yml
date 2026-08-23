@@ -16,15 +16,21 @@ permissions:
 jobs:
   idric:
     runs-on: ubuntu-latest
+    env:
+      IDRIS2_CG: chez
+      SCHEME: scheme
     steps:
       - uses: actions/checkout@v4
+
+      - name: Install Chez Scheme
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y chezscheme
 
       - name: Build Idric compiler
         run: |
           git clone --depth 1 https://github.com/isomorphisms/Idric.git /tmp/Idric
-          cd /tmp/Idric
-          ./edric scheme
-          ./edric bootstrap
+          make -C /tmp/Idric bootstrap
 
       - name: Compile IB Idric smoke program
         run: /tmp/Idric/build/exec/idris2 src/Smoke.idric -o ib-smoke
