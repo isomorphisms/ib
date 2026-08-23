@@ -265,7 +265,11 @@ download_html_images_in_order() {
     temporary_file_name=$(printf 'temporary_image_%04d.%s' "$order" "$extension")
     temporary_path="$images_directory/$temporary_file_name"
 
-    ib_media_curl --output "$temporary_path" "$image_url"
+    if ! ib_media_curl --output "$temporary_path" "$image_url"; then
+      rm -f "$temporary_path"
+      ib_media_fail "image download failed: order=$order src=$image_source resolved=$image_url document=$document_url"
+      return 1
+    fi
 
     naming_source=temporary
     final_file_name=$temporary_file_name
