@@ -31,8 +31,8 @@ verify_pdf_harvester() {
 }
 
 exercise_core() {
-  cd "$repository_root"
-  "$idric_prefix/bin/idris2" src/Smoke.idric -o ib-smoke 2>&1 | tee /tmp/idric-compile.txt
+  cd "$repository_root/src"
+  "$idric_prefix/bin/idris2" Smoke.idric -o ib-smoke 2>&1 | tee /tmp/idric-compile.txt
   test -x ./build/exec/ib-smoke
   ! grep -q '^Error:' /tmp/idric-compile.txt
   ./build/exec/ib-smoke | tee /tmp/ib-smoke.txt
@@ -51,8 +51,8 @@ exercise_core() {
 }
 
 exercise_workbench() {
-  cd "$repository_root"
-  "$idric_prefix/bin/idris2" src/Workbench.idric -o ib-workbench 2>&1 | tee /tmp/idric-workbench-compile.txt
+  cd "$repository_root/src"
+  "$idric_prefix/bin/idris2" Workbench.idric -o ib-workbench 2>&1 | tee /tmp/idric-workbench-compile.txt
   test -x ./build/exec/ib-workbench
   ! grep -q '^Error:' /tmp/idric-workbench-compile.txt
   ./build/exec/ib-workbench | tee /tmp/ib-workbench.txt
