@@ -3,6 +3,7 @@ set -eu
 
 repository_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 . "$repository_root/lib/scientific_media.grease"
+. "$repository_root/lib/pdf_figure_captions.grease"
 
 if test "$#" -ne 2; then
   printf 'usage: %s ARXIV_URL_OR_ID OUTPUT_DIRECTORY\n' "$0" >&2
