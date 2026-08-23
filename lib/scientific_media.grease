@@ -165,11 +165,12 @@ resolve_image_url() {
       printf '%s%s\n' "$origin" "$image_source"
       ;;
     *)
-      # arXiv serves article resources under the article identifier.  Appending
-      # a slash is intentional even though the public HTML URL itself commonly
-      # appears without one.
-      base=${document_url%/}
-      printf '%s/%s\n' "$base" "$image_source"
+      # Resolve relative resources against the directory containing the HTML
+      # document.  For https://arxiv.org/html/2203.11355 and a source such as
+      # 2203.11355v1/figures/x.png, this correctly yields
+      # https://arxiv.org/html/2203.11355v1/figures/x.png.
+      document_directory=${document_url%/*}
+      printf '%s/%s\n' "$document_directory" "$image_source"
       ;;
   esac
 }
