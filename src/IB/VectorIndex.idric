@@ -1,0 +1,39 @@
+module IB.VectorIndex
+
+%default total
+
+public export
+data VectorRow = VectorRow String (List Float)
+
+public export
+vector_id : VectorRow → String
+vector_id (VectorRow value _) = value
+
+public export
+vector_values : VectorRow → List Float
+vector_values (VectorRow _ values) = values
+
+public export
+dot : List Float → List Float → Float
+dot [] _ = 0.0
+dot _ [] = 0.0
+dot (left :: more_left) (right :: more_right) =
+  left * right + dot more_left more_right
+
+public export
+score : List Float → VectorRow → Float
+score query row = dot query (vector_values row)
+
+public export
+best_match : List Float → List VectorRow → Maybe (String, Float)
+best_match query [] = Nothing
+best_match query (first :: rest) =
+  go first (score query first) rest
+  where
+    go : VectorRow → Float → List VectorRow → Maybe (String, Float)
+    go best best_score [] = Just (vector_id best, best_score)
+    go best best_score (candidate :: more) =
+      let candidate_score = score query candidate in
+        if candidate_score > best_score
+          then go candidate candidate_score more
+          else go best best_score more
