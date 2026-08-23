@@ -142,7 +142,7 @@ html_image_rows() {
   ib_media_require_command xmlstarlet || return 1
   separator=$(printf '\037')
   xmlstarlet fo --html --recover --dropdtd "$html_path" 2>/dev/null |\
-    xmlstarlet sel -T -t \
+    xmlstarlet sel -t \
       -m '//*[local-name()="img"][@src]' \
       -v '@src' -o "$separator" \
       -v 'normalize-space(string((ancestor::*[local-name()="figure"][1]//*[local-name()="figcaption"])[1]))' -o "$separator" \
