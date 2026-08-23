@@ -1,9 +1,6 @@
 name: Idric browser core
 
 on:
-  push:
-    branches:
-      - idric-browser-core
   pull_request:
     paths:
       - 'src/**'
@@ -19,6 +16,7 @@ jobs:
     env:
       IDRIS2_CG: chez
       SCHEME: scheme
+      IDRIC_REF: 61970be77769f607cca8650bf424c0f0b22ddee7
     steps:
       - uses: actions/checkout@v4
 
@@ -27,13 +25,34 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y chezscheme
 
-      - name: Build Idric compiler
+      - name: Restore Idric compiler
+        id: idric-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: /tmp/idric
+          key: idric-${{ runner.os }}-61970be77769f607cca8650bf424c0f0b22ddee7
+
+      - name: Build and install Idric compiler
+        if: steps.idric-cache.outputs.cache-hit != 'true'
         run: |
           git clone --depth 1 https://github.com/isomorphisms/Idric.git /tmp/Idric
-          make -C /tmp/Idric bootstrap
+          test "$(git -C /tmp/Idric rev-parse HEAD)" = "$IDRIC_REF"
+          make -C /tmp/Idric bootstrap PREFIX=/tmp/idric
+          make -C /tmp/Idric install PREFIX=/tmp/idric
+
+      - name: Cache Idric compiler
+        if: steps.idric-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: /tmp/idric
+          key: idric-${{ runner.os }}-61970be77769f607cca8650bf424c0f0b22ddee7
 
       - name: Compile IB Idric smoke program
-        run: /tmp/Idric/build/exec/idris2 src/Smoke.idric -o ib-smoke
+        run: |
+          set -o pipefail
+          /tmp/idric/bin/idris2 src/Smoke.idric -o ib-smoke 2>&1 | tee /tmp/idric-compile.txt
+          test -x ./build/exec/ib-smoke
+          ! grep -q '^Error:' /tmp/idric-compile.txt
 
       - name: Exercise browser-owned core
         run: |
