@@ -65,6 +65,12 @@ jobs:
       - name: Install system dependencies through Grease
         run: sh bin/ci_browser_foundation.grease install-dependencies
 
+      - name: Restore Idric compiler for PDF caption bridge
+        uses: actions/cache/restore@v4
+        with:
+          path: /tmp/idric
+          key: idric-${{ runner.os }}-61970be77769f607cca8650bf424c0f0b22ddee7
+
       - name: Verify PDF harvester pin
         run: sh bin/ci_browser_foundation.grease verify-pdf-harvester
 
