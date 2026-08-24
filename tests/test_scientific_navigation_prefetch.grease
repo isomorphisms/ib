@@ -84,13 +84,10 @@ export IB_ARXIV_HTML_BASE="http://127.0.0.1:$port/html"
 export IB_ARXIV_PDF_BASE="http://127.0.0.1:$port/pdf"
 
 cache_directory=$(scientific_navigation_cache_directory "$navigation_url")
-sh "$repository_root/bin/navigation_committed.grease" "$navigation_url"
-
-attempt=0
-while test ! -f "$cache_directory/.complete" && test "$attempt" -lt 100; do
-  sleep 0.1
-  attempt=$((attempt + 1))
-done
+# The foreground path above proves navigation does not wait for its worker.
+# Exercise the built-in worker synchronously here so a failing test cannot leave
+# a long-running curl child behind in the CI step.
+sh "$repository_root/bin/navigation_committed.grease" --scientific-prefetch-worker "$navigation_url"
 
 test -f "$cache_directory/.complete"
 test -s "$cache_directory/document.html"
