@@ -1,0 +1,34 @@
+module ArchiveConsideredTest
+
+import IB.ArchiveConsidered
+
+%default total
+
+bool_text : Bool → String
+bool_text True = "true"
+bool_text False = "false"
+
+paper_a_1 : ConsideredEvent
+paper_a_1 = Considered "math-paper-a" "history-17" "2026-08-24T03:20:00-04:00"
+
+paper_a_2 : ConsideredEvent
+paper_a_2 = Considered "math-paper-a" "history-18" "2026-08-24T03:21:00-04:00"
+
+paper_b : ConsideredEvent
+paper_b = Considered "math-paper-b" "history-19" "2026-08-24T03:22:00-04:00"
+
+main : IO ()
+main = do
+  let before = empty_considered
+  let once = record_considered paper_a_1 before
+  let twice = record_considered paper_a_2 once
+  let two_items = record_considered paper_b twice
+
+  putStrLn ("before-consider-candidates=" ++ show (candidate_count before))
+  putStrLn ("consider-alone-candidates=" ++ show (candidate_count once))
+  putStrLn ("consider-alone-events=" ++ show (event_count once))
+  putStrLn ("consider-alone-known=" ++ bool_text (is_candidate "math-paper-a" once))
+  putStrLn ("repeat-same-item-candidates=" ++ show (candidate_count twice))
+  putStrLn ("repeat-same-item-events=" ++ show (events_for "math-paper-a" twice))
+  putStrLn ("second-item-candidates=" ++ show (candidate_count two_items))
+  putStrLn ("second-item-events=" ++ show (events_for "math-paper-b" two_items))
