@@ -73,15 +73,22 @@ exercise_scientific_media() {
   sh -n lib/pdf_figure_captions.grease
   sh -n lib/prefetch.grease
   sh -n lib/scientific_prefetch.grease
+  sh -n lib/scientific_navigation_prefetch.grease
   sh -n bin/harvest_arxiv_images.grease
   sh -n bin/build_pdf_caption_associator.grease
   sh -n bin/rename_harvested_images_with_llm.grease
   sh -n bin/prefetch_arxiv_reading.grease
+  sh -n bin/navigation_committed.grease
   sh -n tests/test_scientific_image_harvest.grease
   sh -n tests/test_prefetch_reading.grease
+  sh -n tests/test_scientific_navigation_prefetch.grease
   sh bin/build_pdf_caption_associator.grease
+  printf '%s\n' 'scientific-media: image harvest regression'
   sh tests/test_scientific_image_harvest.grease
+  printf '%s\n' 'scientific-media: reading prefetch regression'
   sh tests/test_prefetch_reading.grease
+  printf '%s\n' 'scientific-media: navigation prefetch regression'
+  timeout 30 sh tests/test_scientific_navigation_prefetch.grease
 }
 
 exercise_live_arxiv() {
