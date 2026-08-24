@@ -85,17 +85,17 @@ char_prefix _ [] = False
 char_prefix (wanted :: more_wanted) (actual :: more_actual) =
   wanted == actual && char_prefix more_wanted more_actual
 
-starts_with : String → String → Bool
-starts_with prefix value = char_prefix (unpack prefix) (unpack value)
+has_prefix : String → String → Bool
+has_prefix prefix value = char_prefix (unpack prefix) (unpack value)
 
-ends_with : String → String → Bool
-ends_with suffix value =
+has_suffix : String → String → Bool
+has_suffix suffix value =
   char_prefix (reverse (unpack suffix)) (reverse (unpack value))
 
 vector_text_metadata : List String → Bool
 vector_text_metadata ["indexes", "vectors", _, _, "format.txt"] = True
 vector_text_metadata ["indexes", "vectors", _, _, name] =
-  starts_with "ids-" name && ends_with ".txt" name
+  has_prefix "ids-" name && has_suffix ".txt" name
 vector_text_metadata _ = False
 
 public export

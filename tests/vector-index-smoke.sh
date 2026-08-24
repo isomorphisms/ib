@@ -27,6 +27,16 @@ printf '%s\n' '0.9 0.1 0' |
 sed -n '1s/	.*//p' "$temporary/results.txt" | grep -Fx 'book-page'
 sed -n '2s/	.*//p' "$temporary/results.txt" | grep -Fx 'mixed-page'
 
+cp "$index/format.txt" "$temporary/format-before-failed-build.txt"
+printf '%s\n' 'broken-page	1 0' |
+  if "$program" build "$index" 3 cosine > /dev/null 2> "$temporary/failed-build.txt"; then
+    echo 'wrong-dimension build unexpectedly succeeded' >&2
+    exit 1
+  fi
+cmp "$temporary/format-before-failed-build.txt" "$index/format.txt"
+printf '%s\n' '0.9 0.1 0' |
+  "$program" query "$index" 1 | sed -n '1s/	.*//p' | grep -Fx 'book-page'
+
 vectors=$(sed -n 's/^vectors //p' "$index/format.txt")
 test -n "$vectors"
 test "$(wc -c < "$index/$vectors" | tr -d ' ')" = 36
