@@ -1,0 +1,135 @@
+IB review residue — 2026-08-24
+================================
+
+Purpose
+-------
+
+This is a recovery log for lower-confidence proposals removed from the active
+pull-request queue. Closing a pull request is not deletion: its discussion,
+commits, and named branch remain recoverable. This file keeps the useful
+impulse behind a rejected proposal without asking reviewers to treat the
+proposal as current engineering work.
+
+
+Removed from active review
+--------------------------
+
+PR #9 — Add product price and vector index core
+Branch: product-price-vector-index
+Head: 2eb89ee602334fc5eed9153829bc7e07fba275ca
+
+What the lower-confidence pass proposed:
+
+* Add provider-neutral product identifiers, durable price observations, and
+  disposable current offers.
+* Add an exact dot-product vector index in the same pull request, using Idriç
+  Double values because the pinned compiler did not expose Float32.
+
+Why the idea was understandable:
+
+* Price observations do need a source-neutral durable representation, while
+  expiring merchant offers should stay disposable.
+* At the intended 10,000-URL scale, an exact vector scan is a sensible first
+  implementation and does not yet require HNSW.
+
+Why it was removed from review:
+
+* It combines two unrelated product slices, so neither has a coherent review
+  boundary.
+* The vector half is superseded by PR #17, which has an actual filesystem
+  backend using row-major Float32, generation switching, Idriç command
+  lowering, 10,000 x 384 coverage, and Android cross-builds.
+* The price half is only a set of value types and a design note. It has no
+  acquisition path, parser, persistence path, fixture demonstrating a real
+  observation, or browser surface. Merging those declarations would create an
+  apparent feature with no working flow.
+* Its successful smoke check proves that the small declarations compile; it
+  does not make the combined proposal a reviewable product slice.
+
+Possible salvage:
+
+Reuse the distinction between durable PriceObservation and expiring
+CurrentOffer if a later branch implements one end-to-end price acquisition and
+persistence fixture. Do not revive the bundled Double vector prototype.
+
+
+PR #12 — Archive.org considered-paper corpus hook
+Branch: archive-org-reading-corpus
+Head: fd74423248dce34761591eaa3721393f34dbd7f7
+
+What the lower-confidence pass proposed:
+
+* Treat a user marking an Archive.org paper as "considered" as enough intent
+  to queue that paper for a durable reading corpus.
+* Preserve repeated consideration events while deduplicating acquisition
+  candidates.
+
+Why the idea was understandable:
+
+* "I meant to read this" is useful personal context even when the paper was
+  never opened again.
+* A durable paper corpus should preserve source provenance and remain separate
+  from disposable renderer/prefetch caches.
+
+Why it was removed from review:
+
+* Most of the change is a design document. The executable part is an isolated
+  in-memory list with no connection to browser navigation, durable storage, or
+  the existing history model.
+* It does not normalize Archive.org URLs, fetch item metadata, select a public
+  representation, extract text or figures, persist provenance, or materialize
+  a reading artifact. Those are the feature, not follow-up polish.
+* The head's Idriç workflow is failing.
+* Keeping the placeholder hook open makes a large unimplemented system look
+  like a nearly completed review item.
+
+Possible salvage:
+
+Keep "considered" as a future trigger policy. Reintroduce it only inside a
+branch that can turn a deterministic Archive.org metadata fixture into one
+durable, provenance-bearing paper artifact.
+
+
+Audited but not discarded
+-------------------------
+
+PR #6 — Add native Android storage inspector
+
+This contains a real, green NDK NativeActivity implementation with bounded,
+no-follow, read-only filesystem inspection. It is not trash. It is stacked on
+the closed Python storage-inspector branch, so it needs a clean transplant onto
+the current Idriç filesystem contract before it is reviewable.
+
+Recovery branch: native-storage-inspector at
+0f4bc84bd2b878584b7273ca07f305f43a2af73b
+
+
+PR #8 — Harvest arXiv scientific images HTML first
+
+This contains real HTML-first image harvesting, PDF fallback, caption
+association, deterministic fixtures, and live evidence. It is not trash. The
+open pull request is a conflicted 49-commit stack that absorbed several child
+pull requests, so it needs to be restacked or squashed before review. The later
+visited-arxiv-reading-artifacts branch extends it with durable document text
+and visit-triggered reading artifacts.
+
+Recovery branches:
+
+* arxiv-html-image-harvest at
+  cbf6f7beaa19ef115114ad0595283ebd8b6ffd95
+* visited-arxiv-reading-artifacts at
+  af164c47d6545d30e73bf7d80c57a00144fcbd17
+
+
+Confirmed active work
+---------------------
+
+* PR #15: the Idriç HTML-first information pre-paint slice.
+* PR #16: the tiny phone-visible pre-paint APK, with no WebView or Internet
+  permission; it now also accepts plain text and URL lists.
+* PR #17: the green filesystem Float32 vector backend that supersedes the
+  vector sketch in PR #9.
+* PR #19: the separate ICU search and bounded network pre-decision slice. It
+  keeps dig/traceroute/workbench evidence outside the page paint surface.
+
+These remain implementation/review work and are not residue.
