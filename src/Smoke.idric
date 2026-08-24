@@ -51,6 +51,7 @@ main = do
   putStrLn ("readable-files=" ++ show (readable_file_count files))
   putStrLn ("canonical-files=" ++ show (files_of_kind canonical files))
   putStrLn ("arxiv-html-first=" ++ arxiv_html_url "2203.11355")
+  putStrLn ("arxiv-prefetch=" ++ scientific_resource_prefetch_text arxiv_resource_prefetch)
   putStrLn ("caption-name-basis=" ++ image_name_basis_text (initial_image_name_basis (Just "Figure 1. Regions") Nothing))
   putStrLn ("temporary-needs-language-model=" ++ show (needs_language_model_image_name temporary_image_name))
   putStrLn ("prefetch-bounded=" ++ show (length prefetch))
