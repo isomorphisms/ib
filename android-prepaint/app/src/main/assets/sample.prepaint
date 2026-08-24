@@ -1,24 +1,18 @@
 ib-prepaint	1
 revision	1	partial
-requested-url	https://console.test/deployments
-resolved-url	https://console.test/deployments
-title	Build console
-heading	1	Deployments
-text	Production account
-row	Service	Status
-row	api	healthy
+requested-url	https://example.test/field-notes
+resolved-url	https://example.test/field-notes
+title	Field notes
+heading	1	Small pages first
+text	Useful article text can appear before a site finishes loading everything else.
 end
 revision	2	complete
-requested-url	https://console.test/deployments
-resolved-url	https://console.test/deployments
-title	Build console
-heading	1	Deployments
-text	Production account
-row	Service	Status
-row	api	healthy
-row	worker	queued
-heading	2	Deployment topology
-image	resource:sample_figure	A colored line plot with four marked observations.	The fetched figure is displayed without tinting, inversion, or cropping.
-link	job 42	/jobs/42
-form	Find project	/search
+requested-url	https://example.test/field-notes
+resolved-url	https://example.test/field-notes
+title	Field notes
+heading	1	Small pages first
+text	Useful article text can appear before a site finishes loading everything else.
+text	The pre-paint keeps ordinary paragraphs readable, preserves links, and leaves fetched images in their original colors.
+image	resource:sample_image	An open book below green hills and a blue sky.	A bundled image painted without tint, inversion, or crop.	/full-image
+link	Read the source	/article
 end

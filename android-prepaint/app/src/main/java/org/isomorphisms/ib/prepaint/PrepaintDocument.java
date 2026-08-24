@@ -3,6 +3,7 @@ package org.isomorphisms.ib.prepaint;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.Reader;
+import java.io.StringReader;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -10,14 +11,59 @@ import java.util.List;
 final class PrepaintDocument {
     static final String FORMAT = "ib-prepaint";
     static final String VERSION = "1";
+    static final String ARTIFACT_SOURCE = "artifact";
+    static final String TEXT_SOURCE = "text";
     private static final long MAX_CHARACTERS = 4L * 1024L * 1024L;
     private static final int MAX_REVISIONS = 32;
     private static final int MAX_BLOCKS_PER_REVISION = 4096;
 
     final List<Revision> revisions;
+    final String sourceKind;
 
-    private PrepaintDocument(List<Revision> revisions) {
+    private PrepaintDocument(List<Revision> revisions, String sourceKind) {
         this.revisions = Collections.unmodifiableList(new ArrayList<>(revisions));
+        this.sourceKind = sourceKind;
+    }
+
+    static PrepaintDocument parseOrPlainText(Reader source, String title) throws IOException {
+        String text = readBoundedText(source);
+        if (!text.isEmpty() && text.charAt(0) == '\ufeff') {
+            text = text.substring(1);
+        }
+        rejectNul(text);
+
+        if (startsLikeStructuredArtifact(text)) {
+            return parse(new StringReader(text));
+        }
+        return fromPlainText(text, title);
+    }
+
+    static PrepaintDocument fromPlainText(String text, String title) {
+        String normalized = text.replace("\r\n", "\n").replace('\r', '\n');
+        List<Block> blocks = new ArrayList<>();
+        StringBuilder paragraph = new StringBuilder();
+
+        String[] lines = normalized.split("\n", -1);
+        for (String line : lines) {
+            String trimmed = line.trim();
+            if (trimmed.isEmpty()) {
+                finishParagraph(paragraph, blocks);
+            } else if (UrlRecognition.isAbsoluteHttpUrl(trimmed)) {
+                finishParagraph(paragraph, blocks);
+                blocks.add(Block.of(Block.LINK, trimmed, trimmed));
+            } else {
+                if (paragraph.length() != 0) {
+                    paragraph.append('\n');
+                }
+                paragraph.append(line);
+            }
+        }
+        finishParagraph(paragraph, blocks);
+
+        String visibleTitle = title == null || title.trim().isEmpty()
+                ? "Plain text" : title.trim();
+        Revision revision = new Revision(0, true, "", "", visibleTitle, blocks);
+        return new PrepaintDocument(Collections.singletonList(revision), TEXT_SOURCE);
     }
 
     static PrepaintDocument parse(Reader source) throws IOException {
@@ -109,10 +155,13 @@ final class PrepaintDocument {
                     current.blocks.add(Block.of(Block.FORM, fields.get(1), fields.get(2)));
                     break;
                 case "image":
-                    require(fields.size() == 4, lineNumber,
-                            "image needs source, alternate text, and caption");
-                    current.blocks.add(Block.of(Block.IMAGE,
-                            fields.get(1), fields.get(2), fields.get(3)));
+                    require(fields.size() == 4 || fields.size() == 5, lineNumber,
+                            "image needs source, alternate text, caption, and optional link");
+                    current.blocks.add(fields.size() == 4
+                            ? Block.of(Block.IMAGE,
+                                    fields.get(1), fields.get(2), fields.get(3), "")
+                            : Block.of(Block.IMAGE,
+                                    fields.get(1), fields.get(2), fields.get(3), fields.get(4)));
                     break;
                 default:
                     throw parseError(lineNumber, "unknown record " + record);
@@ -122,7 +171,45 @@ final class PrepaintDocument {
         require(sawHeader, lineNumber, "missing header");
         require(current == null, lineNumber, "unterminated revision");
         require(!revisions.isEmpty(), lineNumber, "no revisions");
-        return new PrepaintDocument(revisions);
+        return new PrepaintDocument(revisions, ARTIFACT_SOURCE);
+    }
+
+    private static void finishParagraph(StringBuilder paragraph, List<Block> blocks) {
+        if (paragraph.length() == 0) {
+            return;
+        }
+        blocks.add(Block.of(Block.TEXT, paragraph.toString()));
+        paragraph.setLength(0);
+    }
+
+    private static String readBoundedText(Reader source) throws IOException {
+        StringBuilder text = new StringBuilder();
+        char[] buffer = new char[8192];
+        long characters = 0;
+        int amount;
+        while ((amount = source.read(buffer)) != -1) {
+            characters += amount;
+            if (characters > MAX_CHARACTERS) {
+                throw new IOException("prepaint exceeds 4 MiB text budget");
+            }
+            text.append(buffer, 0, amount);
+        }
+        return text.toString();
+    }
+
+    private static boolean startsLikeStructuredArtifact(String text) {
+        int lineEnd = text.indexOf('\n');
+        String firstLine = lineEnd < 0 ? text : text.substring(0, lineEnd);
+        if (firstLine.endsWith("\r")) {
+            firstLine = firstLine.substring(0, firstLine.length() - 1);
+        }
+        return firstLine.startsWith(FORMAT);
+    }
+
+    private static void rejectNul(String text) throws IOException {
+        if (text.indexOf('\0') >= 0) {
+            throw new IOException("selected file is not plain UTF-8 text");
+        }
     }
 
     private static long parseSequence(String value, int lineNumber) throws IOException {

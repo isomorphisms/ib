@@ -1,7 +1,10 @@
 package org.isomorphisms.ib.prepaint;
 
 import android.app.Activity;
+import android.content.ClipData;
+import android.content.ClipboardManager;
 import android.content.Intent;
+import android.database.Cursor;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.Drawable;
@@ -10,21 +13,27 @@ import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.provider.OpenableColumns;
+import android.text.InputType;
 import android.util.Base64;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
+import android.view.inputmethod.EditorInfo;
 import android.widget.Button;
+import android.widget.EditText;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
 
 public final class PrepaintActivity extends Activity {
@@ -45,8 +54,10 @@ public final class PrepaintActivity extends Activity {
     private LinearLayout page;
     private ScrollView scroll;
     private TextView status;
+    private EditText searchInput;
     private int revisionIndex;
     private Uri openedDocument;
+    private PrepaintDocument.Revision currentRevision;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -113,7 +124,46 @@ public final class PrepaintActivity extends Activity {
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         root.addView(scroll, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, 0, 1));
+        root.addView(buildSearchBar(), new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         return root;
+    }
+
+    private View buildSearchBar() {
+        LinearLayout bar = new LinearLayout(this);
+        bar.setOrientation(LinearLayout.HORIZONTAL);
+        bar.setGravity(Gravity.CENTER_VERTICAL);
+        bar.setPadding(dp(9), dp(7), dp(9), dp(9));
+        bar.setBackgroundColor(SURFACE);
+
+        searchInput = new EditText(this);
+        searchInput.setSingleLine(true);
+        searchInput.setHint("Search the web");
+        searchInput.setHintTextColor(SECONDARY);
+        searchInput.setTextColor(FOREGROUND);
+        searchInput.setTextSize(14);
+        searchInput.setTypeface(hack);
+        searchInput.setInputType(InputType.TYPE_CLASS_TEXT);
+        searchInput.setImeOptions(EditorInfo.IME_ACTION_SEARCH);
+        searchInput.setPadding(dp(11), dp(8), dp(11), dp(8));
+        searchInput.setBackground(box(BACKGROUND, dp(5)));
+        searchInput.setOnEditorActionListener((view, action, event) -> {
+            if (action == EditorInfo.IME_ACTION_SEARCH) {
+                requestSearch();
+                return true;
+            }
+            return false;
+        });
+        bar.addView(searchInput, new LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+
+        Button search = chromeButton("Search");
+        LinearLayout.LayoutParams searchLayout = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        searchLayout.setMargins(dp(7), 0, 0, 0);
+        search.setOnClickListener(ignored -> requestSearch());
+        bar.addView(search, searchLayout);
+        return bar;
     }
 
     private PrepaintDocument loadSample() throws IOException {
@@ -126,7 +176,7 @@ public final class PrepaintActivity extends Activity {
     private void openPrepaint() {
         Intent request = new Intent(Intent.ACTION_OPEN_DOCUMENT);
         request.addCategory(Intent.CATEGORY_OPENABLE);
-        request.setType("*/*");
+        request.setType("text/*");
         startActivityForResult(request, OPEN_PREPAINT);
     }
 
@@ -144,28 +194,60 @@ public final class PrepaintActivity extends Activity {
         } catch (SecurityException | IllegalArgumentException ignored) {
             // The one-time read grant is enough for this deliberately temporary harness.
         }
-        openedDocument = selected;
-        reloadAndReplay();
+        try {
+            PrepaintDocument selectedDocument = loadDocument(selected, displayName(selected));
+            openedDocument = selected;
+            document = selectedDocument;
+            replayRepaint();
+        } catch (IOException | SecurityException error) {
+            showOpenFailure(error.getMessage());
+        }
     }
 
     private void reloadAndReplay() {
+        if (openedDocument == null) {
+            replayRepaint();
+            return;
+        }
         try {
-            document = openedDocument == null ? loadSample() : loadDocument(openedDocument);
+            document = loadDocument(openedDocument, displayName(openedDocument));
             replayRepaint();
         } catch (IOException | SecurityException error) {
-            showFailure(error.getMessage());
+            showOpenFailure(error.getMessage());
         }
     }
 
-    private PrepaintDocument loadDocument(Uri source) throws IOException {
+    private PrepaintDocument loadDocument(Uri source, String title) throws IOException {
         try (InputStream input = getContentResolver().openInputStream(source)) {
             if (input == null) {
-                throw new IOException("The selected prepaint could not be opened.");
+                throw new IOException("The selected text could not be opened.");
             }
-            try (InputStreamReader reader = new InputStreamReader(input, StandardCharsets.UTF_8)) {
-                return PrepaintDocument.parse(reader);
+            try (InputStreamReader reader = new InputStreamReader(input,
+                    StandardCharsets.UTF_8.newDecoder()
+                            .onMalformedInput(CodingErrorAction.REPORT)
+                            .onUnmappableCharacter(CodingErrorAction.REPORT))) {
+                return PrepaintDocument.parseOrPlainText(reader, title);
             }
         }
+    }
+
+    private String displayName(Uri source) {
+        try (Cursor cursor = getContentResolver().query(source,
+                new String[] {OpenableColumns.DISPLAY_NAME}, null, null, null)) {
+            if (cursor != null && cursor.moveToFirst()) {
+                int column = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME);
+                if (column >= 0) {
+                    String name = cursor.getString(column);
+                    if (name != null && !name.trim().isEmpty()) {
+                        return name;
+                    }
+                }
+            }
+        } catch (RuntimeException ignored) {
+            // A provider is allowed to omit display metadata.
+        }
+        String segment = source.getLastPathSegment();
+        return segment == null || segment.isEmpty() ? "Plain text" : segment;
     }
 
     private void replayRepaint() {
@@ -194,11 +276,16 @@ public final class PrepaintActivity extends Activity {
     }
 
     private void renderRevision(PrepaintDocument.Revision revision) {
+        currentRevision = revision;
         int oldScroll = scroll.getScrollY();
         page.removeAllViews();
-        status.setText("IB PREPAINT  " + (revisionIndex + 1) + "/"
-                + document.revisions.size() + "  ·  "
-                + (revision.complete ? "complete" : "partial"));
+        if (PrepaintDocument.TEXT_SOURCE.equals(document.sourceKind)) {
+            status.setText("IB PREPAINT  ·  plain text");
+        } else {
+            status.setText("IB PREPAINT  " + (revisionIndex + 1) + "/"
+                    + document.revisions.size() + "  ·  "
+                    + (revision.complete ? "complete" : "partial"));
+        }
 
         if (!revision.title.isEmpty()) {
             TextView title = text(revision.title, 25, FOREGROUND);
@@ -234,8 +321,13 @@ public final class PrepaintActivity extends Activity {
                 addBlock(paragraph, 0, 0, 0, 14);
                 break;
             case PrepaintDocument.Block.LINK:
-                TextView link = text(block.values.get(0) + "\n" + block.values.get(1), 14, LINK);
-                link.setTextIsSelectable(true);
+                String label = block.values.get(0);
+                String target = block.values.get(1);
+                TextView link = text(label.equals(target) ? target : label + "\n" + target,
+                        14, LINK);
+                link.setPadding(dp(8), dp(5), dp(8), dp(5));
+                link.setBackground(box(SURFACE, dp(4)));
+                link.setOnClickListener(ignored -> requestLink(target));
                 addBlock(link, 0, 2, 0, 14);
                 break;
             case PrepaintDocument.Block.ROW:
@@ -279,9 +371,14 @@ public final class PrepaintActivity extends Activity {
         String source = block.values.get(0);
         String alternate = block.values.get(1);
         String caption = block.values.get(2);
+        String target = block.values.get(3);
         Drawable drawable = loadDrawable(source);
         if (drawable == null) {
             TextView missing = text("[image] " + alternate, 13, SECONDARY);
+            if (!target.isEmpty()) {
+                missing.setTextColor(LINK);
+                missing.setOnClickListener(ignored -> requestLink(target));
+            }
             addBlock(missing, 0, 3, 0, 12);
             return;
         }
@@ -291,6 +388,11 @@ public final class PrepaintActivity extends Activity {
         image.setScaleType(ImageView.ScaleType.FIT_CENTER);
         image.setContentDescription(alternate);
         image.setImageDrawable(drawable);
+        if (!target.isEmpty()) {
+            image.setClickable(true);
+            image.setFocusable(true);
+            image.setOnClickListener(ignored -> requestLink(target));
+        }
         addBlock(image, 0, 5, 0, caption.isEmpty() ? 14 : 5);
 
         if (!caption.isEmpty()) {
@@ -338,6 +440,50 @@ public final class PrepaintActivity extends Activity {
         TextView failure = text(message == null ? "Could not read prepaint." : message,
                 14, FOREGROUND);
         addBlock(failure, 0, 0, 0, 0);
+    }
+
+    private void showOpenFailure(String message) {
+        String visible = message == null ? "Could not read the selected text." : message;
+        Toast.makeText(this, visible, Toast.LENGTH_LONG).show();
+    }
+
+    private void requestSearch() {
+        String query = searchInput.getText().toString().trim();
+        if (query.isEmpty()) {
+            Toast.makeText(this, "Type a search first.", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        showIcuRequest(UrlRecognition.googleSearchUrl(query), "Search: " + query);
+    }
+
+    private void requestLink(String target) {
+        String base = currentRevision == null ? "" : currentRevision.resolvedUrl;
+        if (base.isEmpty() && currentRevision != null) {
+            base = currentRevision.requestedUrl;
+        }
+        String resolved = UrlRecognition.resolve(base, target);
+        if (!UrlRecognition.isAbsoluteHttpUrl(resolved)) {
+            Toast.makeText(this, "This link has no absolute HTTP target yet.",
+                    Toast.LENGTH_LONG).show();
+            return;
+        }
+        showIcuRequest(resolved, "Link request");
+    }
+
+    private void showIcuRequest(String url, String title) {
+        String command = UrlRecognition.icuGetCommand(url);
+        ClipboardManager clipboard = (ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
+        clipboard.setPrimaryClip(ClipData.newPlainText("IB ICU request", command));
+
+        String preview = "IB will fetch this URL through ICU, not the display APK.\n\n"
+                + url + "\n\n"
+                + command + "\n\n"
+                + "This standalone display harness copied the command. The integrated "
+                + "browser core will replace this request view with the fetched pre-paint.";
+        document = PrepaintDocument.fromPlainText(preview, title);
+        openedDocument = null;
+        replayRepaint();
+        Toast.makeText(this, "ICU request copied.", Toast.LENGTH_SHORT).show();
     }
 
     private TextView text(String value, float sp, int color) {
