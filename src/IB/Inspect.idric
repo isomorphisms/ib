@@ -1,0 +1,70 @@
+module IB.Inspect
+
+import IB.Storage
+
+%default total
+
+public export
+choice physical_kind one_of
+  regular_file
+  symlink_file
+  special_file
+
+public export
+data StoreFile = FileRow String Nat physical_kind
+
+public export
+file_path : StoreFile → String
+file_path (FileRow path _ _) = path
+
+public export
+file_bytes : StoreFile → Nat
+file_bytes (FileRow _ bytes _) = bytes
+
+public export
+file_physical_kind : StoreFile → physical_kind
+file_physical_kind (FileRow _ _ kind) = kind
+
+public export
+same_storage_kind : storage_kind → storage_kind → Bool
+same_storage_kind canonical canonical = True
+same_storage_kind derived derived = True
+same_storage_kind snapshot snapshot = True
+same_storage_kind cache cache = True
+same_storage_kind secret secret = True
+same_storage_kind unknown unknown = True
+same_storage_kind _ _ = False
+
+public export
+file_is_readable : StoreFile → Bool
+file_is_readable (FileRow path _ regular_file) = readable_path path
+file_is_readable _ = False
+
+public export
+file_count : List StoreFile → Nat
+file_count = length
+
+public export
+total_bytes : List StoreFile → Nat
+total_bytes [] = 0
+total_bytes (file :: rest) = file_bytes file + total_bytes rest
+
+public export
+files_of_kind : storage_kind → List StoreFile → Nat
+files_of_kind wanted [] = 0
+files_of_kind wanted (file :: rest) =
+  let here = if same_storage_kind wanted (classify_path (file_path file)) then 1 else 0 in
+    here + files_of_kind wanted rest
+
+public export
+bytes_of_kind : storage_kind → List StoreFile → Nat
+bytes_of_kind wanted [] = 0
+bytes_of_kind wanted (file :: rest) =
+  let here = if same_storage_kind wanted (classify_path (file_path file)) then file_bytes file else 0 in
+    here + bytes_of_kind wanted rest
+
+public export
+readable_file_count : List StoreFile → Nat
+readable_file_count [] = 0
+readable_file_count (file :: rest) =
+  (if file_is_readable file then 1 else 0) + readable_file_count rest

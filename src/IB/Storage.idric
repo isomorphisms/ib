@@ -1,0 +1,111 @@
+module IB.Storage
+
+%default total
+
+public export
+choice storage_kind one_of
+  canonical
+  derived
+  snapshot
+  cache
+  secret
+  unknown
+
+public export
+storage_kind_text : storage_kind → String
+storage_kind_text canonical = "canonical"
+storage_kind_text derived = "derived"
+storage_kind_text snapshot = "snapshot"
+storage_kind_text cache = "cache"
+storage_kind_text secret = "secret"
+storage_kind_text unknown = "unknown"
+
+finish_part : List Char → List String → List String
+finish_part chars parts = pack (reverse chars) :: parts
+
+split_chars : List Char → List Char → List String → List String
+split_chars current [] parts = reverse (finish_part current parts)
+split_chars current ('/' :: rest) parts = split_chars [] rest (finish_part current parts)
+split_chars current (char :: rest) parts = split_chars (char :: current) rest parts
+
+without_empty : List String → List String
+without_empty [] = []
+without_empty ("" :: rest) = without_empty rest
+without_empty (part :: rest) = part :: without_empty rest
+
+public export
+path_parts : String → List String
+path_parts path = without_empty (split_chars [] (unpack path) [])
+
+is_tab_record : List String → Bool
+is_tab_record ["tabs", _, "tab.txt"] = True
+is_tab_record ["tabs", _, "history.log"] = True
+is_tab_record ["tabs", _, "view.txt"] = True
+is_tab_record _ = False
+
+secret_part : String → Bool
+secret_part part = elem part [
+  "auth", "authentication", "cookie", "cookies", "credential", "credentials",
+  "login", "logins", "oauth", "password", "passwords", "secret", "secrets",
+  "session", "sessions", "token", "tokens", "login_data", "web_data"
+  ]
+
+has_secret : List String → Bool
+has_secret [] = False
+has_secret (part :: rest) = secret_part part || has_secret rest
+
+public export
+classify_path : String → storage_kind
+classify_path path =
+  let parts = path_parts path in
+    if parts == ["visits.jsonl"] || is_tab_record parts
+      then canonical
+      else if has_secret parts
+        then secret
+        else case parts of
+          "indexes" :: _ ⇒ derived
+          "snapshots" :: _ ⇒ snapshot
+          "cache" :: _ ⇒ cache
+          "caches" :: _ ⇒ cache
+          "renderer-cache" :: _ ⇒ cache
+          "renderer_cache" :: _ ⇒ cache
+          "scratch" :: _ ⇒ cache
+          "tmp" :: _ ⇒ cache
+          _ ⇒ unknown
+
+transparent_index : String → Bool
+transparent_index name = elem name [
+  "chronology.tsv", "urls.tsv", "hosts.tsv", "sources.tsv", "days.tsv",
+  "queries.tsv", "terms.tsv", "summary.json"
+  ]
+
+public export
+transparent_path : String → Bool
+transparent_path path =
+  let parts = path_parts path in
+    parts == ["visits.jsonl"] || is_tab_record parts ||
+      case parts of
+        ["indexes", name] ⇒ transparent_index name
+        _ ⇒ False
+
+has_parent : List String → Bool
+has_parent [] = False
+has_parent (".." :: _) = True
+has_parent (_ :: rest) = has_parent rest
+
+public export
+safe_relative_path : String → Bool
+safe_relative_path path =
+  case unpack path of
+    [] ⇒ False
+    '/' :: _ ⇒ False
+    _ ⇒ not (has_parent (path_parts path))
+
+is_secret : storage_kind → Bool
+is_secret secret = True
+is_secret _ = False
+
+public export
+readable_path : String → Bool
+readable_path path =
+  safe_relative_path path && transparent_path path && not (is_secret (classify_path path))

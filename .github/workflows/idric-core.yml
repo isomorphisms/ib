@@ -1,0 +1,83 @@
+name: Idric browser core
+
+on:
+  pull_request:
+    paths:
+      - 'src/**'
+      - 'docs/idric-implementation.md'
+      - 'docs/developer-workbench.md'
+      - '.github/workflows/idric-core.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  idric:
+    runs-on: ubuntu-latest
+    env:
+      IDRIS2_CG: chez
+      SCHEME: scheme
+      IDRIC_REF: 61970be77769f607cca8650bf424c0f0b22ddee7
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Chez Scheme
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y chezscheme
+
+      - name: Restore Idric compiler
+        id: idric-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: /tmp/idric
+          key: idric-${{ runner.os }}-61970be77769f607cca8650bf424c0f0b22ddee7
+
+      - name: Build and install Idric compiler
+        if: steps.idric-cache.outputs.cache-hit != 'true'
+        run: |
+          git clone --depth 1 https://github.com/isomorphisms/Idric.git /tmp/Idric
+          test "$(git -C /tmp/Idric rev-parse HEAD)" = "$IDRIC_REF"
+          make -C /tmp/Idric bootstrap PREFIX=/tmp/idric
+          make -C /tmp/Idric install PREFIX=/tmp/idric
+
+      - name: Cache Idric compiler
+        if: steps.idric-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: /tmp/idric
+          key: idric-${{ runner.os }}-61970be77769f607cca8650bf424c0f0b22ddee7
+
+      - name: Exercise developer workbench
+        run: |
+          set -o pipefail
+          /tmp/idric/bin/idris2 --source-dir src src/Workbench.idric -o ib-workbench 2>&1 | tee /tmp/idric-workbench-compile.txt
+          test -x ./build/exec/ib-workbench
+          ! grep -q '^Error:' /tmp/idric-workbench-compile.txt
+          ./build/exec/ib-workbench | tee /tmp/ib-workbench.txt
+          grep -Fx 'fixture-urls=10000' /tmp/ib-workbench.txt
+          grep -Fx 'fixture-42=ib://fixture/42' /tmp/ib-workbench.txt
+          grep -Fx 'logical-tabs=32' /tmp/ib-workbench.txt
+          grep -Fx 'churn-steps=10000' /tmp/ib-workbench.txt
+          grep -Fx 'resident-at-3=3' /tmp/ib-workbench.txt
+          grep -Fx 'resident-at-10=10' /tmp/ib-workbench.txt
+
+      - name: Compile IB Idric smoke program
+        run: |
+          set -o pipefail
+          /tmp/idric/bin/idris2 --source-dir src src/Smoke.idric -o ib-smoke 2>&1 | tee /tmp/idric-compile.txt
+          test -x ./build/exec/ib-smoke
+          ! grep -q '^Error:' /tmp/idric-compile.txt
+
+      - name: Exercise browser-owned core
+        run: |
+          ./build/exec/ib-smoke | tee /tmp/ib-smoke.txt
+          grep -Fx 'ingest=3' /tmp/ib-smoke.txt
+          grep -Fx 'duplicate-url-count=2' /tmp/ib-smoke.txt
+          grep -Fx 'newest-order=2' /tmp/ib-smoke.txt
+          grep -Fx 'host-count=2' /tmp/ib-smoke.txt
+          grep -Fx 'canonical=canonical' /tmp/ib-smoke.txt
+          grep -Fx 'cache-fake=cache' /tmp/ib-smoke.txt
+          grep -Fx 'secret=secret' /tmp/ib-smoke.txt
+          grep -Fx 'readable-files=2' /tmp/ib-smoke.txt
+          grep -Fx 'canonical-files=2' /tmp/ib-smoke.txt
