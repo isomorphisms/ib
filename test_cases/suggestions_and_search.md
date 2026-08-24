@@ -44,7 +44,7 @@ A long URL with tracking parameters and generated slugs consumes index space and
 
 **Desired behavior**
 
-Keep the complete URL in durable history, but build the fast suggestion/search representation from useful fields such as:
+Keep the complete URL in its durable browsing record, but build the fast suggestion/search representation from useful fields such as:
 
 - title
 - hostname
@@ -61,33 +61,33 @@ Show the durable raw URL separately from the normalized/indexed representation.
 
 ---
 
-## Explicitly typed destinations outrank incidental encounters
+## Explicitly chosen destinations outrank incidental encounters
 
 **Negative user story**
 
-I have explicitly typed or selected the same destination many times, but IB ranks a page I merely encountered once through a link or redirect above it.
+I have explicitly typed or selected the same destination many times, but IB ranks a browsing object I merely encountered once through a link or redirect above it.
 
 **Desired behavior**
 
-Distinguish explicit user intent from incidental browsing. Repeated explicit typing/selection is a strong ranking signal. Mere appearance in history is weaker.
+Distinguish explicit user intent from incidental navigation. Repeated explicit typing/selection is a strong ranking signal. A destination merely being encountered is weaker.
 
 **Inspector evidence**
 
-Show counts and recency separately for typed, explicitly selected, linked, redirected, restored, and background-prefetched visits where those distinctions are known.
+Show counts and recency separately for typed, explicitly selected, linked, redirected, restored, and background-prefetched navigation observations where those distinctions are known.
 
 ---
 
-## Learn prefix-to-destination choices without polluting history
+## Learn prefix-to-destination choices without creating junk browsing objects
 
 **Negative user story**
 
-Every intermediate keystroke such as `g`, `gi`, `git`, and `gith` is stored as permanent history, producing junk and making later search worse.
+Every intermediate keystroke such as `g`, `gi`, `git`, and `gith` becomes a permanent browsing record, producing junk and making later search worse.
 
 **Desired behavior**
 
 The partial typing stream is ephemeral. When the user commits to a destination, IB may durably record the useful observation that a particular entered prefix/query led to that chosen target.
 
-For example, repeated choices may teach IB that `gi` usually means a particular GitHub repository without preserving every transient keystroke as a visit or search.
+For example, repeated choices may teach IB that `gi` usually means a particular GitHub repository without preserving every transient keystroke as a navigation event.
 
 **Inspector evidence**
 
@@ -99,7 +99,7 @@ Show the current ephemeral input separately from durable learned choice observat
 
 **Negative user story**
 
-The substring/prefix index is deleted or has not been rebuilt yet, and IB silently stops finding existing history entries.
+The substring/prefix index is deleted or has not been rebuilt yet, and IB silently stops finding existing browsing objects.
 
 **Desired behavior**
 
@@ -115,11 +115,11 @@ Show which search path answered the query: memoized result, hot index, secondary
 
 **Negative user story**
 
-IB repeats the same expensive work for `mer`, `merge`, `merge r`, and other common/repeated query prefixes even when the underlying searchable state has not changed.
+IB repeats the same expensive work for `mer`, `merge`, `merge r`, and other common/repeated query prefixes even when the underlying searchable store has not changed.
 
 **Desired behavior**
 
-IB may memoize query-to-result-ID lists and incrementally narrow previous results where valid. Memoized results contain compact durable-record IDs rather than duplicate full URLs or page text.
+IB may memoize query-to-result-ID lists and incrementally narrow previous results where valid. Memoized results contain compact browsing-object IDs rather than duplicate full URLs or page text.
 
 The memoization layer is optional acceleration, not authoritative state.
 
@@ -133,11 +133,11 @@ Show cache hit/miss, source generation, invalidation reason, candidate count bef
 
 **Negative user story**
 
-A seemingly irrelevant suggestion appears above the page I expected, and there is no way to discover why.
+A seemingly irrelevant suggestion appears above the browsing object I expected, and there is no way to discover why.
 
 **Desired behavior**
 
-The suggestion inspector exposes candidate generation and ranking separately. It should be possible to see signals such as prefix match, interior match, exact identifier, typed-before count, selection count, recency, bookmark status, already-open status, and penalties.
+The suggestion inspector exposes candidate generation and ranking separately. It should be possible to see signals such as prefix match, interior match, exact identifier, typed-before count, selection count, recency, pinned/saved status, currently presented status, and penalties.
 
 **Inspector evidence**
 
@@ -145,16 +145,16 @@ For each candidate, expose a score breakdown rather than only a final score.
 
 ---
 
-## An already-open logical tab should be reusable
+## A browsing object already present in the store should be reusable
 
 **Negative user story**
 
-I search for a page already open in a sleeping or active logical tab, select it, and IB creates an unnecessary duplicate because the suggestion system only knows history URLs.
+I search for a page whose browsing object already exists, select it, and IB creates an unnecessary duplicate because the suggestion system only knows a flat list of past URLs.
 
 **Desired behavior**
 
-Open logical tabs participate in candidate generation. Selecting one may focus/wake that tab instead of creating another visit when appropriate.
+Existing browsing objects participate directly in candidate generation. Selecting one can present or wake that object rather than inventing a second record merely because the renderer was absent.
 
 **Inspector evidence**
 
-Show candidate source as open-tab, sleeping-tab, history, bookmark, learned choice, or other source.
+Show the candidate's browsing-object ID, current renderer residency if any, and the observations/signals that caused it to be suggested.
