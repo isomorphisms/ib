@@ -43,6 +43,23 @@ arxiv_source_candidates identifier = [
   ]
 
 public export
+choice scientific_resource_prefetch one_of
+  no_scientific_resource_prefetch
+  all_html_figures
+
+public export
+scientific_resource_prefetch_text : scientific_resource_prefetch → String
+scientific_resource_prefetch_text no_scientific_resource_prefetch = "none"
+scientific_resource_prefetch_text all_html_figures = "all-html-figures"
+
+-- An arXiv HTML paper is a bounded document resource graph.  Its complete
+-- figure set is therefore eligible for eager prefetch; this is not generic
+-- link lookahead or open-ended spidering.
+public export
+arxiv_resource_prefetch : scientific_resource_prefetch
+arxiv_resource_prefetch = all_html_figures
+
+public export
 choice image_name_basis one_of
   caption_image_name
   alt_text_image_name
