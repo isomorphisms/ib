@@ -98,6 +98,7 @@ test -s "$cache_directory/images.tsv"
 test -s "$cache_directory/images/linear_regions_along_a_one_dimensional_input.svg"
 test -s "$cache_directory/images/activation_space_folding.svg"
 awk -F '\t' 'NR == 1 && $1 == "html" { found = 1 } END { exit !found }' "$cache_directory/source.tsv"
+test "$(awk -F '\t' 'NR == 1 { print $4 }' "$cache_directory/source.tsv")" = "$cache_directory/document.html"
 grep -F 'Linear regions along a one dimensional input' "$cache_directory/images.tsv" >/dev/null
 grep -Fx "navigation_committed${tab}transient_cache${tab}$navigation_url" "$cache_directory/trigger.tsv" >/dev/null
 test ! -e "$IB_READING_DIR"
