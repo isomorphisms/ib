@@ -138,9 +138,9 @@ public final class PrepaintActivity extends Activity {
             return;
         }
         Uri selected = data.getData();
-        int grant = data.getFlags() & Intent.FLAG_GRANT_READ_URI_PERMISSION;
         try {
-            getContentResolver().takePersistableUriPermission(selected, grant);
+            getContentResolver().takePersistableUriPermission(
+                    selected, Intent.FLAG_GRANT_READ_URI_PERMISSION);
         } catch (SecurityException | IllegalArgumentException ignored) {
             // The one-time read grant is enough for this deliberately temporary harness.
         }
