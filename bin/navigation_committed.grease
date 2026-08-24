@@ -4,6 +4,8 @@ set -eu
 repository_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 . "$repository_root/lib/prefetch.grease"
 . "$repository_root/lib/scientific_media.grease"
+. "$repository_root/lib/scientific_text.grease"
+. "$repository_root/lib/scientific_prefetch.grease"
 . "$repository_root/lib/scientific_navigation_prefetch.grease"
 
 if test "${1:-}" = '--scientific-prefetch-worker'; then
@@ -12,7 +14,7 @@ if test "${1:-}" = '--scientific-prefetch-worker'; then
     printf 'usage: %s --scientific-prefetch-worker URL\n' "$0" >&2
     exit 2
   fi
-  prefetch_arxiv_navigation_cache "$1" >/dev/null
+  prefetch_arxiv_navigation_reading "$1" >/dev/null
   exit 0
 fi
 

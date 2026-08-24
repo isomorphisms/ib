@@ -1,6 +1,7 @@
 # Grease source. Navigation policy calls this only for paper URLs that strongly
-# imply the existing scientific-media path. Materialized results live entirely
-# under the ordinary prefetch cache and are therefore clearable.
+# imply the existing scientific-media path. A committed arXiv visit is reading,
+# so the complete artifact bundle belongs in the durable reading corpus. The
+# fetched response bytes also remain in the ordinary clearable prefetch cache.
 
 scientific_navigation_is_arxiv() {
   input=$1
@@ -18,50 +19,10 @@ scientific_navigation_is_arxiv() {
   esac
 }
 
-scientific_navigation_cache_directory() {
-  input=$1
-  identifier=$(arxiv_identifier_from_input "$input") || return 1
-  root=$(ib_prefetch_cache_root) || return 1
-  key=$(ib_prefetch_url_key "arxiv:$identifier") || return 1
-  printf '%s/scientific/arxiv/%s\n' "$root" "$key"
-}
-
-prefetch_arxiv_navigation_cache() {
+prefetch_arxiv_navigation_reading() {
   navigation_input=$1
-  navigation_cache_directory=$(scientific_navigation_cache_directory "$navigation_input") || return 1
-
-  if test -f "$navigation_cache_directory/.complete"; then
-    printf '%s\n' "$navigation_cache_directory"
-    return 0
-  fi
-
-  navigation_cache_parent=$(dirname "$navigation_cache_directory")
-  navigation_partial_directory="${navigation_cache_directory}.partial.$$"
-  mkdir -p "$navigation_cache_parent"
-  rm -rf "$navigation_partial_directory"
-
-  # The existing scientific-media functions use ordinary shell variables such
-  # as output_directory. Keep this caller's state under distinct names because
-  # Grease's shell subset does not provide function-local variables.
-  if harvest_arxiv_images "$navigation_input" "$navigation_partial_directory"; then
-    printf 'navigation_committed\ttransient_cache\t%s\n' "$navigation_input" \
-      > "$navigation_partial_directory/trigger.tsv"
-    rm -rf "$navigation_cache_directory"
-    mv "$navigation_partial_directory" "$navigation_cache_directory"
-
-    # harvest_arxiv_images records an absolute document path. Rewrite that one
-    # field after the atomic directory move before exposing the complete mark.
-    awk -F '\t' -v OFS='\t' -v root="$navigation_cache_directory" '
-      NR == 1 { $4 = root "/document." $1 }
-      { print }
-    ' "$navigation_cache_directory/source.tsv" > "$navigation_cache_directory/source.tsv.tmp"
-    mv "$navigation_cache_directory/source.tsv.tmp" "$navigation_cache_directory/source.tsv"
-    : > "$navigation_cache_directory/.complete"
-
-    printf '%s\n' "$navigation_cache_directory"
-    return 0
-  fi
-
-  rm -rf "$navigation_partial_directory"
-  return 1
+  navigation_reading_directory=$(prefetch_arxiv_to_reading "$navigation_input") || return 1
+  printf 'navigation_committed\treading_corpus\t%s\n' "$navigation_input" \
+    > "$navigation_reading_directory/trigger.tsv"
+  printf '%s\n' "$navigation_reading_directory"
 }

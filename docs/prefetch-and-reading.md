@@ -60,17 +60,22 @@ For an arXiv identifier, the reading layout begins as:
 
 ```text
 ~/reading/arxiv/<identifier>/
-  document.html
+  document.html | document.pdf
+  document.txt
   source.tsv
+  text_source.tsv
   images.tsv
   unresolved_images.tsv
+  trigger.tsv              # when created by a committed visit
   images/
   image_tags/
 ```
 
-The HTML and external figures also remain available in the disposable URL cache. The files under `~/reading` are the semantic corpus: the language model can query the paper text, captions, image manifest, and the figure files without depending on a live renderer cache.
+The HTML and external figures also remain available in the disposable URL cache. `document.txt` contains readable text extracted from HTML, or `pdftotext` output when HTML is unavailable and the paper falls back to PDF. `text_source.tsv` records which representation produced that text. The files under `~/reading` are the semantic corpus: the language model can query the paper text, captions, image manifest, and the figure files without depending on a live renderer cache.
 
 If usable arXiv HTML is unavailable, the existing scientific-media policy may fall back to PDF.
+
+A committed visit to an arXiv paper promotes this bounded paper bundle to `~/reading`; it is not merely a speculative generic fetch. Clearing the disposable prefetch cache must leave the visited paper's HTML or PDF, extracted text, and figures intact.
 
 ## Workbench role
 

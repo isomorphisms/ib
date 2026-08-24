@@ -1,0 +1,110 @@
+#!/bin/sh
+set -eu
+
+repository_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+. "$repository_root/lib/prefetch.grease"
+. "$repository_root/lib/scientific_media.grease"
+
+ib_prefetch_require_command busybox
+ib_prefetch_require_command curl
+ib_prefetch_require_command xmlstarlet
+ib_prefetch_require_command sha256sum
+ib_prefetch_require_command pdftotext
+ib_prefetch_require_command pdfimages
+
+work_directory=$(mktemp -d)
+server_pid=''
+cleanup() {
+  if test -n "$server_pid"; then
+    kill "$server_pid" >/dev/null 2>&1 || true
+  fi
+  rm -rf "$work_directory"
+}
+trap cleanup EXIT HUP INT TERM
+
+export HOME="$work_directory/home"
+export IB_PREFETCH_DIR="$work_directory/prefetch-cache"
+unset IB_READING_DIR
+mkdir -p "$HOME"
+
+reading_root="$HOME/reading"
+test "$(ib_reading_root)" = "$reading_root"
+test ! -e "$reading_root"
+
+port=$((18000 + ($$ % 20000)))
+busybox httpd -f -p "127.0.0.1:$port" -h "$repository_root/tests/fixtures/arxiv_site" &
+server_pid=$!
+sleep 1
+
+export IB_ARXIV_HTML_BASE="http://127.0.0.1:$port/html"
+export IB_ARXIV_PDF_BASE="http://127.0.0.1:$port/pdf"
+
+html_navigation_url='https://arxiv.org/abs/2203.11355'
+sh "$repository_root/bin/navigation_committed.grease" \
+  --scientific-prefetch-worker "$html_navigation_url"
+
+html_reading_directory="$reading_root/arxiv/2203.11355"
+test -d "$reading_root"
+test -d "$html_reading_directory"
+test -s "$html_reading_directory/document.html"
+test -s "$html_reading_directory/document.txt"
+test ! -e "$html_reading_directory/document.pdf"
+test -s "$html_reading_directory/source.tsv"
+test -s "$html_reading_directory/text_source.tsv"
+test -s "$html_reading_directory/images.tsv"
+test -s "$html_reading_directory/trigger.tsv"
+
+test "$(awk -F '\t' 'NR == 1 { print $1 }' "$html_reading_directory/source.tsv")" = html
+test "$(awk -F '\t' 'NR == 1 { print $1 }' "$html_reading_directory/text_source.tsv")" = html
+grep -F 'Piecewise linear networks divide input space into regions' \
+  "$html_reading_directory/document.txt" >/dev/null
+grep -F 'The number and arrangement of these regions' \
+  "$html_reading_directory/document.txt" >/dev/null
+
+test "$(wc -l < "$html_reading_directory/images.tsv" | tr -d ' ')" = 3
+test -s "$html_reading_directory/images/linear_regions_along_a_one_dimensional_input.svg"
+test -s "$html_reading_directory/images/activation_space_folding.svg"
+test -s "$html_reading_directory/images/temporary_image_0003.png"
+
+tab=$(printf '\t')
+grep -Fx "navigation_committed${tab}reading_corpus${tab}$html_navigation_url" \
+  "$html_reading_directory/trigger.tsv" >/dev/null
+
+html_source_url="$IB_ARXIV_HTML_BASE/2203.11355"
+figure_source_url="http://127.0.0.1:$port/assets/linear_regions.svg"
+test -f "$(ib_prefetch_cached_path "$html_source_url")"
+test -f "$(ib_prefetch_cached_path "$figure_source_url")"
+
+pdf_navigation_url='https://arxiv.org/abs/1901.09021'
+sh "$repository_root/bin/navigation_committed.grease" \
+  --scientific-prefetch-worker "$pdf_navigation_url"
+
+pdf_reading_directory="$reading_root/arxiv/1901.09021"
+test -d "$pdf_reading_directory"
+test -s "$pdf_reading_directory/document.pdf"
+test -s "$pdf_reading_directory/document.txt"
+test ! -e "$pdf_reading_directory/document.html"
+test -s "$pdf_reading_directory/source.tsv"
+test -s "$pdf_reading_directory/text_source.tsv"
+test -s "$pdf_reading_directory/images.tsv"
+test -s "$pdf_reading_directory/trigger.tsv"
+
+test "$(awk -F '\t' 'NR == 1 { print $1 }' "$pdf_reading_directory/source.tsv")" = pdf
+test "$(awk -F '\t' 'NR == 1 { print $1 }' "$pdf_reading_directory/text_source.tsv")" = pdf
+grep -F 'Figure 1. Tiny color blocks' "$pdf_reading_directory/document.txt" >/dev/null
+test -s "$pdf_reading_directory/images/temporary_image_0001.png"
+grep -Fx "navigation_committed${tab}reading_corpus${tab}$pdf_navigation_url" \
+  "$pdf_reading_directory/trigger.tsv" >/dev/null
+
+test "$html_reading_directory" != "$pdf_reading_directory"
+test "$(awk -F '\t' 'NR == 1 { print $2 }' "$html_reading_directory/source.tsv")" = 2203.11355
+test "$(awk -F '\t' 'NR == 1 { print $2 }' "$pdf_reading_directory/source.tsv")" = 1901.09021
+
+rm -rf "$IB_PREFETCH_DIR"
+test ! -e "$IB_PREFETCH_DIR"
+test -s "$html_reading_directory/document.txt"
+test -s "$pdf_reading_directory/document.txt"
+test -s "$html_reading_directory/images/linear_regions_along_a_one_dimensional_input.svg"
+test -s "$pdf_reading_directory/images/temporary_image_0001.png"
+
+printf 'visited arXiv reading artifact tests: ok\n'

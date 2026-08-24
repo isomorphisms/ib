@@ -1,0 +1,68 @@
+# Grease source. Convert the preferred scientific document into a plain-text
+# reading artifact. Source discovery remains in scientific_media.grease.
+
+extract_html_readable_text() {
+  html_text_document_path=$1
+  html_text_output_path=$2
+  html_text_partial_path="${html_text_output_path}.part.$$"
+  ib_media_require_command xmlstarlet || return 1
+
+  if ! xmlstarlet fo --html --recover --dropdtd "$html_text_document_path" 2>/dev/null |
+    xmlstarlet sel -t \
+      -m '(//*[local-name()="body"][1] | //*[local-name()="main"][1] | //*[local-name()="article"][1])[1]//text()[normalize-space(.) != "" and not(ancestor::*[local-name()="script"]) and not(ancestor::*[local-name()="style"]) and not(ancestor::*[local-name()="noscript"]) and not(ancestor::*[local-name()="template"])]' \
+      -v 'normalize-space(.)' -n - 2>/dev/null |
+    awk 'NF { print }' > "$html_text_partial_path"
+  then
+    rm -f "$html_text_partial_path"
+    return 1
+  fi
+
+  test -s "$html_text_partial_path" || {
+    rm -f "$html_text_partial_path"
+    ib_media_fail "arXiv HTML produced no readable text: $html_text_document_path"
+    return 1
+  }
+  mv "$html_text_partial_path" "$html_text_output_path"
+}
+
+extract_pdf_readable_text() {
+  pdf_text_document_path=$1
+  pdf_text_output_path=$2
+  pdf_text_partial_path="${pdf_text_output_path}.part.$$"
+  ib_media_require_command pdftotext || return 1
+
+  if ! pdftotext -layout "$pdf_text_document_path" "$pdf_text_partial_path"; then
+    rm -f "$pdf_text_partial_path"
+    return 1
+  fi
+  test -s "$pdf_text_partial_path" || {
+    rm -f "$pdf_text_partial_path"
+    ib_media_fail "arXiv PDF produced no readable text: $pdf_text_document_path"
+    return 1
+  }
+  mv "$pdf_text_partial_path" "$pdf_text_output_path"
+}
+
+extract_harvest_readable_text() {
+  readable_harvest_directory=$1
+  readable_source_kind=$(source_kind_from_harvest_directory "$readable_harvest_directory")
+  readable_source_document=$(source_document_from_harvest_directory "$readable_harvest_directory")
+  readable_text_path="$readable_harvest_directory/document.txt"
+
+  case "$readable_source_kind" in
+    html)
+      extract_html_readable_text "$readable_source_document" "$readable_text_path" || return 1
+      ;;
+    pdf)
+      extract_pdf_readable_text "$readable_source_document" "$readable_text_path" || return 1
+      ;;
+    *)
+      ib_media_fail "unknown readable text source kind: $readable_source_kind"
+      return 1
+      ;;
+  esac
+
+  printf '%s\t%s\t%s\n' \
+    "$readable_source_kind" "$readable_source_document" "$readable_text_path" \
+    > "$readable_harvest_directory/text_source.tsv"
+}

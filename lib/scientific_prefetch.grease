@@ -106,11 +106,13 @@ prefetch_arxiv_to_reading() {
       "$identifier" "$html_source_url" "$document_path" > "$output_directory/source.tsv"
     prefetch_html_images_to_reading "$document_path" "$html_source_url" "$output_directory"
     apply_language_model_image_names "$document_path" "$output_directory"
+    extract_harvest_readable_text "$output_directory"
     printf '%s\n' "$output_directory"
     return 0
   fi
 
   rm -f "$document_path"
   harvest_arxiv_images "$input" "$output_directory"
+  extract_harvest_readable_text "$output_directory"
   printf '%s\n' "$output_directory"
 }

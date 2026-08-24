@@ -70,6 +70,7 @@ exercise_workbench() {
 exercise_scientific_media() {
   cd "$repository_root"
   sh -n lib/scientific_media.grease
+  sh -n lib/scientific_text.grease
   sh -n lib/pdf_figure_captions.grease
   sh -n lib/prefetch.grease
   sh -n lib/scientific_prefetch.grease
@@ -82,6 +83,7 @@ exercise_scientific_media() {
   sh -n tests/test_scientific_image_harvest.grease
   sh -n tests/test_prefetch_reading.grease
   sh -n tests/test_scientific_navigation_prefetch.grease
+  sh -n tests/test_visited_arxiv_reading.grease
   sh bin/build_pdf_caption_associator.grease
   printf '%s\n' 'scientific-media: image harvest regression'
   sh tests/test_scientific_image_harvest.grease
@@ -89,6 +91,8 @@ exercise_scientific_media() {
   sh tests/test_prefetch_reading.grease
   printf '%s\n' 'scientific-media: navigation prefetch regression'
   timeout 30 sh tests/test_scientific_navigation_prefetch.grease
+  printf '%s\n' 'scientific-media: visited arXiv reading artifacts'
+  timeout 30 sh tests/test_visited_arxiv_reading.grease
 }
 
 exercise_live_arxiv() {

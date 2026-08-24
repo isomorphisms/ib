@@ -4,6 +4,7 @@ set -eu
 repository_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 . "$repository_root/lib/prefetch.grease"
 . "$repository_root/lib/scientific_media.grease"
+. "$repository_root/lib/scientific_text.grease"
 . "$repository_root/lib/scientific_prefetch.grease"
 
 if test "$#" -ne 1; then

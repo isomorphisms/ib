@@ -3,6 +3,8 @@
   <body>
     <main>
       <article>
+        <h1>Piecewise linear networks divide input space into regions</h1>
+        <p>The number and arrangement of these regions describe the functions represented by the network.</p>
         <figure>
           <img src="/assets/linear_regions.svg" alt="plot">
           <figcaption>Figure 1. Linear regions along a one dimensional input</figcaption>
