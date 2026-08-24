@@ -45,6 +45,7 @@ export IB_SCIENTIFIC_PREFETCH_NICENESS=0
 export IB_SCIENTIFIC_PREFETCH_TEST_MARKER="$marker"
 export IB_SCIENTIFIC_PREFETCH_TEST_RELEASE="$release"
 
+tab=$(printf '\t')
 navigation_url='https://arxiv.org/abs/2203.11355'
 sh "$repository_root/bin/navigation_committed.grease" "$navigation_url"
 
@@ -54,7 +55,7 @@ while test ! -f "$marker" && test "$attempt" -lt 50; do
   attempt=$((attempt + 1))
 done
 test -f "$marker"
-grep -Fx "started\t$navigation_url" "$marker" >/dev/null
+grep -Fx "started${tab}$navigation_url" "$marker" >/dev/null
 ! grep -q '^done' "$marker"
 
 touch "$release"
@@ -63,7 +64,7 @@ while ! grep -q '^done' "$marker" && test "$attempt" -lt 50; do
   sleep 0.1
   attempt=$((attempt + 1))
 done
-grep -Fx "done\t$navigation_url" "$marker" >/dev/null
+grep -Fx "done${tab}$navigation_url" "$marker" >/dev/null
 
 rm -f "$marker" "$release"
 sh "$repository_root/bin/navigation_committed.grease" 'https://example.com/paper.pdf'
@@ -98,7 +99,7 @@ test -s "$cache_directory/images/linear_regions_along_a_one_dimensional_input.sv
 test -s "$cache_directory/images/activation_space_folding.svg"
 awk -F '\t' 'NR == 1 && $1 == "html" { found = 1 } END { exit !found }' "$cache_directory/source.tsv"
 grep -F 'Linear regions along a one dimensional input' "$cache_directory/images.tsv" >/dev/null
-grep -Fx "navigation_committed\ttransient_cache\t$navigation_url" "$cache_directory/trigger.tsv" >/dev/null
+grep -Fx "navigation_committed${tab}transient_cache${tab}$navigation_url" "$cache_directory/trigger.tsv" >/dev/null
 test ! -e "$IB_READING_DIR"
 
 rm -rf "$IB_PREFETCH_DIR"
