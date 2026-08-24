@@ -19,16 +19,16 @@ sample_entries = [
 
 sample_vectors : List VectorRow
 sample_vectors = [
-  VectorRow "p-book" [1.0, 0.0, 0.0],
-  VectorRow "p-tool" [0.0, 1.0, 0.0],
-  VectorRow "p-part" [0.0, 0.0, 1.0]
+  Row "p-book" [1.0, 0.0, 0.0],
+  Row "p-tool" [0.0, 1.0, 0.0],
+  Row "p-part" [0.0, 0.0, 1.0]
   ]
 
 first_or : Nat → List Nat → Nat
 first_or fallback [] = fallback
 first_or fallback (value :: _) = value
 
-match_id : Maybe (String, Float) → String
+match_id : Maybe (String, Double) → String
 match_id Nothing = "none"
 match_id (Just (value, _)) = value
 
