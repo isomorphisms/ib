@@ -1,0 +1,66 @@
+module IB.ArchiveConsidered
+
+%default total
+
+public export
+data ConsideredEvent = Considered String String String
+
+public export
+event_item : ConsideredEvent → String
+event_item (Considered item _ _) = item
+
+public export
+event_history : ConsideredEvent → String
+event_history (Considered _ history _ ) = history
+
+public export
+event_time : ConsideredEvent → String
+event_time (Considered _ _ time) = time
+
+public export
+data ConsideredState = State (List String) (List ConsideredEvent)
+
+public export
+empty_considered : ConsideredState
+empty_considered = State [] []
+
+contains_item : String → List String → Bool
+contains_item item [] = False
+contains_item item (next :: rest) =
+  if item == next
+    then True
+    else contains_item item rest
+
+queue_once : String → List String → List String
+queue_once item queued =
+  if contains_item item queued
+    then queued
+    else queued ++ [item]
+
+public export
+record_considered : ConsideredEvent → ConsideredState → ConsideredState
+record_considered event (State queued events) =
+  State (queue_once (event_item event) queued) (events ++ [event])
+
+public export
+candidate_count : ConsideredState → Nat
+candidate_count (State queued _) = length queued
+
+public export
+event_count : ConsideredState → Nat
+event_count (State _ events) = length events
+
+public export
+is_candidate : String → ConsideredState → Bool
+is_candidate item (State queued _) = contains_item item queued
+
+public export
+events_for : String → ConsideredState → Nat
+events_for item (State _ events) = count events
+  where
+    count : List ConsideredEvent → Nat
+    count [] = 0
+    count (event :: rest) =
+      if event_item event == item
+        then S (count rest)
+        else count rest
