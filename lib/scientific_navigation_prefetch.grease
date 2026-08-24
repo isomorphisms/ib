@@ -1,0 +1,55 @@
+# Grease source. Navigation policy calls this only for paper URLs that strongly
+# imply the existing scientific-media path. Materialized results live entirely
+# under the ordinary prefetch cache and are therefore clearable.
+
+scientific_navigation_is_arxiv() {
+  input=$1
+  cleaned=${input%%\#*}
+  cleaned=${cleaned%%\?*}
+  case "$cleaned" in
+    http://arxiv.org/abs/*|https://arxiv.org/abs/*|\
+    http://arxiv.org/html/*|https://arxiv.org/html/*|\
+    http://arxiv.org/pdf/*|https://arxiv.org/pdf/*)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+scientific_navigation_cache_directory() {
+  input=$1
+  identifier=$(arxiv_identifier_from_input "$input") || return 1
+  root=$(ib_prefetch_cache_root) || return 1
+  key=$(ib_prefetch_url_key "arxiv:$identifier") || return 1
+  printf '%s/scientific/arxiv/%s\n' "$root" "$key"
+}
+
+prefetch_arxiv_navigation_cache() {
+  input=$1
+  output_directory=$(scientific_navigation_cache_directory "$input") || return 1
+
+  if test -f "$output_directory/.complete"; then
+    printf '%s\n' "$output_directory"
+    return 0
+  fi
+
+  parent_directory=$(dirname "$output_directory")
+  partial_directory="${output_directory}.partial.$$"
+  mkdir -p "$parent_directory"
+  rm -rf "$partial_directory"
+
+  if harvest_arxiv_images "$input" "$partial_directory"; then
+    printf 'navigation_committed\ttransient_cache\t%s\n' "$input" \
+      > "$partial_directory/trigger.tsv"
+    : > "$partial_directory/.complete"
+    rm -rf "$output_directory"
+    mv "$partial_directory" "$output_directory"
+    printf '%s\n' "$output_directory"
+    return 0
+  fi
+
+  rm -rf "$partial_directory"
+  return 1
+}
