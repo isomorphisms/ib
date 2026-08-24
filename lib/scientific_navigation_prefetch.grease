@@ -43,9 +43,18 @@ prefetch_arxiv_navigation_cache() {
   if harvest_arxiv_images "$input" "$partial_directory"; then
     printf 'navigation_committed\ttransient_cache\t%s\n' "$input" \
       > "$partial_directory/trigger.tsv"
-    : > "$partial_directory/.complete"
     rm -rf "$output_directory"
     mv "$partial_directory" "$output_directory"
+
+    # harvest_arxiv_images records an absolute document path. Rewrite that one
+    # field after the atomic directory move before exposing the complete mark.
+    awk -F '\t' -v OFS='\t' -v root="$output_directory" '
+      NR == 1 { $4 = root "/document." $1 }
+      { print }
+    ' "$output_directory/source.tsv" > "$output_directory/source.tsv.tmp"
+    mv "$output_directory/source.tsv.tmp" "$output_directory/source.tsv"
+    : > "$output_directory/.complete"
+
     printf '%s\n' "$output_directory"
     return 0
   fi
