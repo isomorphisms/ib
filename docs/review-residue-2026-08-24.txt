@@ -129,6 +129,9 @@ Confirmed active work
   permission; it now also accepts plain text and URL lists.
 * PR #17: the green filesystem Float32 vector backend that supersedes the
   vector sketch in PR #9.
+* PR #18: the real arXiv HTML-to-progressive-prepaint integration. It is a
+  draft stacked on PR #8 and should follow that branch's eventual restack; it
+  contains page-derived information only, not workspace-inspector diagnostics.
 * PR #19: the separate ICU search and bounded network pre-decision slice. It
   keeps dig/traceroute/workbench evidence outside the page paint surface.
 
