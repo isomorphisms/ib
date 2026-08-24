@@ -66,3 +66,27 @@ jobs:
           grep -Fx 'secret=secret' /tmp/ib-smoke.txt
           grep -Fx 'readable-files=2' /tmp/ib-smoke.txt
           grep -Fx 'canonical-files=2' /tmp/ib-smoke.txt
+
+      - name: Compile HTML-first information renderer smoke program
+        run: |
+          set -o pipefail
+          /tmp/idric/bin/idris2 src/InformationSmoke.idric -o ib-information-smoke 2>&1 | tee /tmp/idric-information-compile.txt
+          test -x ./build/exec/ib-information-smoke
+          ! grep -q '^Error:' /tmp/idric-information-compile.txt
+
+      - name: Exercise HTML-first phone pre-paint
+        run: |
+          ./build/exec/ib-information-smoke | tee /tmp/ib-information-smoke.txt
+          grep -Fx 'information-title=Build console' /tmp/ib-information-smoke.txt
+          grep -Fx 'early-table-header=True' /tmp/ib-information-smoke.txt
+          grep -Fx 'early-table-data=True' /tmp/ib-information-smoke.txt
+          grep -Fx 'full-link=True' /tmp/ib-information-smoke.txt
+          grep -Fx 'full-form=True' /tmp/ib-information-smoke.txt
+          grep -Fx 'script-leaked=False' /tmp/ib-information-smoke.txt
+          grep -Fx 'style-leaked=False' /tmp/ib-information-smoke.txt
+          grep -Fx 'video-leaked=False' /tmp/ib-information-smoke.txt
+          grep -Fx 'html-must-escalate=False' /tmp/ib-information-smoke.txt
+          grep -Fx 'shell-must-escalate=True' /tmp/ib-information-smoke.txt
+          grep -Fx 'phone-api-row=True' /tmp/ib-information-smoke.txt
+          grep -Fx 'phone-lines=8' /tmp/ib-information-smoke.txt
+          grep -Fx 'phone-width-bounded=True' /tmp/ib-information-smoke.txt
