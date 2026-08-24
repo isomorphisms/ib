@@ -66,3 +66,6 @@ jobs:
           grep -Fx 'secret=secret' /tmp/ib-smoke.txt
           grep -Fx 'readable-files=2' /tmp/ib-smoke.txt
           grep -Fx 'canonical-files=2' /tmp/ib-smoke.txt
+          grep -Fx 'copy-label=Copy' /tmp/ib-smoke.txt
+          grep -Fx 'copy-target=code-1' /tmp/ib-smoke.txt
+          grep -Fx 'copy-payload=git status' /tmp/ib-smoke.txt
