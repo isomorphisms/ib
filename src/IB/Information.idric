@@ -1,0 +1,409 @@
+module IB.Information
+
+%default total
+
+public export
+data InformationItem
+  = Heading String
+  | TextBlock String
+  | Link String String
+  | TableRow (List String)
+  | Form String String
+
+public export
+data InformationView = View String String String (List InformationItem)
+
+public export
+view_requested_url : InformationView → String
+view_requested_url (View value _ _ _) = value
+
+public export
+view_resolved_url : InformationView → String
+view_resolved_url (View _ value _ _) = value
+
+public export
+view_title : InformationView → String
+view_title (View _ _ value _) = value
+
+public export
+view_items : InformationView → List InformationItem
+view_items (View _ _ _ value) = value
+
+data HtmlToken = HtmlText String | HtmlTag String
+
+data Capture
+  = NoCapture
+  | CaptureTitle
+  | CaptureHeading String
+  | CaptureText String
+  | CaptureLink String
+  | CaptureForm String
+  | CaptureCell String
+
+data SkipState = NotSkipping | Skipping String Nat
+
+is_space_char : Char → Bool
+is_space_char value =
+  value == ' ' || value == '\n' || value == '\r' || value == '\t'
+
+drop_space_chars : List Char → List Char
+drop_space_chars [] = []
+drop_space_chars (value :: rest) =
+  if is_space_char value then drop_space_chars rest else value :: rest
+
+collapse_space_chars : Bool → List Char → List Char
+collapse_space_chars previous_space [] = []
+collapse_space_chars previous_space (value :: rest) =
+  if is_space_char value
+    then if previous_space
+      then collapse_space_chars True rest
+      else ' ' :: collapse_space_chars True rest
+    else value :: collapse_space_chars False rest
+
+public export
+clean_text : String → String
+clean_text text =
+  let collapsed = collapse_space_chars False (unpack text) in
+  let left_trimmed = drop_space_chars collapsed in
+  pack (reverse (drop_space_chars (reverse left_trimmed)))
+
+finish_text_token : List Char → List HtmlToken → List HtmlToken
+finish_text_token chars tokens =
+  let text = pack (reverse chars) in
+  if text == "" then tokens else HtmlText text :: tokens
+
+finish_tag_token : List Char → List HtmlToken → List HtmlToken
+finish_tag_token chars tokens = HtmlTag (pack (reverse chars)) :: tokens
+
+tokenize_chars : Bool → List Char → List Char → List HtmlToken → List HtmlToken
+tokenize_chars in_tag current [] tokens =
+  reverse (if in_tag then finish_tag_token current tokens else finish_text_token current tokens)
+tokenize_chars False current ('<' :: rest) tokens =
+  tokenize_chars True [] rest (finish_text_token current tokens)
+tokenize_chars False current (value :: rest) tokens =
+  tokenize_chars False (value :: current) rest tokens
+tokenize_chars True current ('>' :: rest) tokens =
+  tokenize_chars False [] rest (finish_tag_token current tokens)
+tokenize_chars True current (value :: rest) tokens =
+  tokenize_chars True (value :: current) rest tokens
+
+tokenize : String → List HtmlToken
+tokenize text = tokenize_chars False [] (unpack text) []
+
+ascii_lower_char : Char → Char
+ascii_lower_char 'A' = 'a'
+ascii_lower_char 'B' = 'b'
+ascii_lower_char 'C' = 'c'
+ascii_lower_char 'D' = 'd'
+ascii_lower_char 'E' = 'e'
+ascii_lower_char 'F' = 'f'
+ascii_lower_char 'G' = 'g'
+ascii_lower_char 'H' = 'h'
+ascii_lower_char 'I' = 'i'
+ascii_lower_char 'J' = 'j'
+ascii_lower_char 'K' = 'k'
+ascii_lower_char 'L' = 'l'
+ascii_lower_char 'M' = 'm'
+ascii_lower_char 'N' = 'n'
+ascii_lower_char 'O' = 'o'
+ascii_lower_char 'P' = 'p'
+ascii_lower_char 'Q' = 'q'
+ascii_lower_char 'R' = 'r'
+ascii_lower_char 'S' = 's'
+ascii_lower_char 'T' = 't'
+ascii_lower_char 'U' = 'u'
+ascii_lower_char 'V' = 'v'
+ascii_lower_char 'W' = 'w'
+ascii_lower_char 'X' = 'x'
+ascii_lower_char 'Y' = 'y'
+ascii_lower_char 'Z' = 'z'
+ascii_lower_char value = value
+
+lower_chars : List Char → List Char
+lower_chars [] = []
+lower_chars (value :: rest) = ascii_lower_char value :: lower_chars rest
+
+is_closing_tag : String → Bool
+is_closing_tag tag =
+  case drop_space_chars (unpack tag) of
+    '/' :: _ ⇒ True
+    _ ⇒ False
+
+tag_name_chars : List Char → List Char
+tag_name_chars [] = []
+tag_name_chars (value :: rest) =
+  if is_space_char value || value == '/' then [] else value :: tag_name_chars rest
+
+public export
+tag_name : String → String
+tag_name tag =
+  case drop_space_chars (unpack tag) of
+    '/' :: rest ⇒ pack (lower_chars (tag_name_chars (drop_space_chars rest)))
+    rest ⇒ pack (lower_chars (tag_name_chars rest))
+
+tag_remainder_chars : List Char → List Char
+tag_remainder_chars [] = []
+tag_remainder_chars (value :: rest) =
+  if is_space_char value
+    then drop_space_chars rest
+    else tag_remainder_chars rest
+
+tag_remainder : String → List Char
+tag_remainder tag =
+  case drop_space_chars (unpack tag) of
+    '/' :: rest ⇒ tag_remainder_chars (drop_space_chars rest)
+    rest ⇒ tag_remainder_chars rest
+
+starts_with_chars : List Char → List Char → Bool
+starts_with_chars [] values = True
+starts_with_chars (_ :: _) [] = False
+starts_with_chars (wanted :: wanted_rest) (value :: rest) =
+  wanted == value && starts_with_chars wanted_rest rest
+
+drop_chars : Nat → List Char → List Char
+drop_chars Z values = values
+drop_chars (S amount) [] = []
+drop_chars (S amount) (_ :: rest) = drop_chars amount rest
+
+read_quoted : Char → List Char → List Char
+read_quoted quote [] = []
+read_quoted quote (value :: rest) =
+  if value == quote then [] else value :: read_quoted quote rest
+
+read_unquoted : List Char → List Char
+read_unquoted [] = []
+read_unquoted (value :: rest) =
+  if is_space_char value then [] else value :: read_unquoted rest
+
+read_attribute_value : List Char → Maybe String
+read_attribute_value chars =
+  case drop_space_chars chars of
+    '=' :: rest ⇒
+      case drop_space_chars rest of
+        '"' :: value ⇒ Just (pack (read_quoted '"' value))
+        '\'' :: value ⇒ Just (pack (read_quoted '\'' value))
+        value ⇒ Just (pack (read_unquoted value))
+    _ ⇒ Nothing
+
+seek_attribute : List Char → List Char → Maybe String
+seek_attribute wanted [] = Nothing
+seek_attribute wanted (value :: rest) =
+  let chars = value :: rest in
+  if starts_with_chars wanted chars
+    then case read_attribute_value (drop_chars (length wanted) chars) of
+      Just value ⇒ Just value
+      Nothing ⇒ seek_attribute wanted rest
+    else seek_attribute wanted rest
+
+public export
+attribute_value : String → String → Maybe String
+attribute_value name tag = seek_attribute (unpack name) (tag_remainder tag)
+
+skipped_tag : String → Bool
+skipped_tag name = elem name ["script", "style", "svg", "canvas", "video", "audio", "template"]
+
+heading_tag : String → Bool
+heading_tag name = elem name ["h1", "h2", "h3", "h4", "h5", "h6"]
+
+capture_target : Capture → String
+capture_target NoCapture = ""
+capture_target CaptureTitle = "title"
+capture_target (CaptureHeading name) = name
+capture_target (CaptureText name) = name
+capture_target (CaptureLink _) = "a"
+capture_target (CaptureForm _) = "form"
+capture_target (CaptureCell name) = name
+
+append_capture_text : String → List Char → List Char
+append_capture_text text chars = reverse (unpack text) ++ (' ' :: chars)
+
+finish_capture : Capture → String → String → List InformationItem → Maybe (List String) →
+  (String, List InformationItem, Maybe (List String))
+finish_capture NoCapture text title items row = (title, items, row)
+finish_capture CaptureTitle text title items row = (text, items, row)
+finish_capture (CaptureHeading _) text title items row =
+  if text == "" then (title, items, row) else (title, Heading text :: items, row)
+finish_capture (CaptureText _) text title items row =
+  if text == "" then (title, items, row) else (title, TextBlock text :: items, row)
+finish_capture (CaptureLink href) text title items row =
+  if text == "" && href == ""
+    then (title, items, row)
+    else (title, Link text href :: items, row)
+finish_capture (CaptureForm action) text title items row =
+  if text == "" && action == ""
+    then (title, items, row)
+    else (title, Form text action :: items, row)
+finish_capture (CaptureCell _) text title items Nothing = (title, items, Nothing)
+finish_capture (CaptureCell _) text title items (Just cells) =
+  if text == "" then (title, items, Just cells) else (title, items, Just (text :: cells))
+
+finish_open_row : Maybe (List String) → List InformationItem → List InformationItem
+finish_open_row Nothing items = items
+finish_open_row (Just []) items = items
+finish_open_row (Just cells) items = TableRow (reverse cells) :: items
+
+add_standalone_text : String → Maybe (List String) → List InformationItem → List InformationItem
+add_standalone_text text (Just _) items = items
+add_standalone_text text Nothing items =
+  let cleaned = clean_text text in
+  if cleaned == "" then items else TextBlock cleaned :: items
+
+update_skip : String → Bool → SkipState → SkipState
+update_skip name closing NotSkipping = NotSkipping
+update_skip name closing (Skipping target depth) =
+  if name == target
+    then if closing
+      then case depth of
+        Z ⇒ NotSkipping
+        S next ⇒ Skipping target next
+      else Skipping target (S depth)
+    else Skipping target depth
+
+collect_information : List HtmlToken → SkipState → Capture → List Char →
+  Maybe (List String) → String → List InformationItem → (String, List InformationItem)
+collect_information [] skip capture chars row title items =
+  let text = clean_text (pack (reverse chars)) in
+  let (final_title, final_items, final_row) = finish_capture capture text title items row in
+  (final_title, reverse (finish_open_row final_row final_items))
+collect_information (HtmlText text :: rest) (Skipping target depth) capture chars row title items =
+  collect_information rest (Skipping target depth) capture chars row title items
+collect_information (HtmlText text :: rest) NotSkipping NoCapture chars row title items =
+  collect_information rest NotSkipping NoCapture [] row title (add_standalone_text text row items)
+collect_information (HtmlText text :: rest) NotSkipping capture chars row title items =
+  collect_information rest NotSkipping capture (append_capture_text text chars) row title items
+collect_information (HtmlTag tag :: rest) skip capture chars row title items =
+  let name = tag_name tag in
+  let closing = is_closing_tag tag in
+  case skip of
+    Skipping target depth ⇒
+      collect_information rest (update_skip name closing (Skipping target depth)) capture chars row title items
+    NotSkipping ⇒
+      case capture of
+        NoCapture ⇒
+          if not closing && skipped_tag name
+            then collect_information rest (Skipping name Z) NoCapture chars row title items
+            else
+              if name == "title" && not closing
+                then collect_information rest NotSkipping CaptureTitle [] row title items
+                else if heading_tag name && not closing
+                  then collect_information rest NotSkipping (CaptureHeading name) [] row title items
+                  else if (name == "p" || name == "li") && not closing
+                    then collect_information rest NotSkipping (CaptureText name) [] row title items
+                    else if name == "a" && not closing
+                      then let href = case attribute_value "href" tag of
+                        Nothing ⇒ ""
+                        Just value ⇒ value in
+                      collect_information rest NotSkipping (CaptureLink href) [] row title items
+                      else if name == "form" && not closing
+                        then let action = case attribute_value "action" tag of
+                          Nothing ⇒ ""
+                          Just value ⇒ value in
+                        collect_information rest NotSkipping (CaptureForm action) [] row title items
+                        else if name == "tr" && not closing
+                          then collect_information rest NotSkipping NoCapture [] (Just []) title (finish_open_row row items)
+                          else if name == "tr" && closing
+                            then collect_information rest NotSkipping NoCapture [] Nothing title (finish_open_row row items)
+                            else if (name == "td" || name == "th") && not closing
+                              then case row of
+                                Nothing ⇒ collect_information rest NotSkipping NoCapture [] row title items
+                                Just _ ⇒ collect_information rest NotSkipping (CaptureCell name) [] row title items
+                              else collect_information rest NotSkipping NoCapture [] row title items
+        _ ⇒
+          if closing && name == capture_target capture
+            then let text = clean_text (pack (reverse chars)) in
+              let (next_title, next_items, next_row) = finish_capture capture text title items row in
+              collect_information rest NotSkipping NoCapture [] next_row next_title next_items
+            else if not closing && skipped_tag name
+              then collect_information rest (Skipping name Z) capture chars row title items
+              else collect_information rest NotSkipping capture chars row title items
+
+public export
+extract_html : String → String → String → InformationView
+extract_html requested_url resolved_url html =
+  let (title, items) = collect_information (tokenize html) NotSkipping NoCapture [] Nothing "" [] in
+  View requested_url resolved_url title items
+
+public export
+has_table_row : List String → InformationView → Bool
+has_table_row wanted (View _ _ _ items) = go items
+  where
+    go : List InformationItem → Bool
+    go [] = False
+    go (TableRow cells :: rest) = cells == wanted || go rest
+    go (_ :: rest) = go rest
+
+public export
+has_link : String → String → InformationView → Bool
+has_link wanted_text wanted_href (View _ _ _ items) = go items
+  where
+    go : List InformationItem → Bool
+    go [] = False
+    go (Link text href :: rest) =
+      (text == wanted_text && href == wanted_href) || go rest
+    go (_ :: rest) = go rest
+
+public export
+has_form : String → InformationView → Bool
+has_form wanted_action (View _ _ _ items) = go items
+  where
+    go : List InformationItem → Bool
+    go [] = False
+    go (Form _ action :: rest) = action == wanted_action || go rest
+    go (_ :: rest) = go rest
+
+item_text : InformationItem → String
+item_text (Heading text) = text
+item_text (TextBlock text) = text
+item_text (Link text href) = text ++ " " ++ href
+item_text (TableRow cells) = join_cells cells
+  where
+    join_cells : List String → String
+    join_cells [] = ""
+    join_cells [value] = value
+    join_cells (value :: rest) = value ++ " " ++ join_cells rest
+item_text (Form text action) = text ++ " " ++ action
+
+public export
+has_exact_item_text : String → InformationView → Bool
+has_exact_item_text wanted (View _ _ _ items) = go items
+  where
+    go : List InformationItem → Bool
+    go [] = False
+    go (item :: rest) = item_text item == wanted || go rest
+
+public export
+must_escalate : InformationView → Bool
+must_escalate (View _ _ _ []) = True
+must_escalate _ = False
+
+take_chars : Nat → List Char → List Char
+take_chars Z values = []
+take_chars (S amount) [] = []
+take_chars (S amount) (value :: rest) = value :: take_chars amount rest
+
+clip_text : Nat → String → String
+clip_text width text = pack (take_chars width (unpack text))
+
+join_with : String → List String → String
+join_with separator [] = ""
+join_with separator [value] = value
+join_with separator (value :: rest) = value ++ separator ++ join_with separator rest
+
+render_item : Nat → InformationItem → String
+render_item width (Heading text) = clip_text width ("# " ++ text)
+render_item width (TextBlock text) = clip_text width text
+render_item width (Link text href) = clip_text width ("link: " ++ text ++ " -> " ++ href)
+render_item width (TableRow cells) = clip_text width ("| " ++ join_with " | " cells ++ " |")
+render_item width (Form text action) = clip_text width ("form: " ++ text ++ " -> " ++ action)
+
+take_items : Nat → List InformationItem → List InformationItem
+take_items Z items = []
+take_items (S amount) [] = []
+take_items (S amount) (item :: rest) = item :: take_items amount rest
+
+public export
+phone_lines : Nat → Nat → InformationView → List String
+phone_lines max_items width (View _ resolved_url title items) =
+  clip_text width ("title: " ++ title) ::
+  clip_text width ("url: " ++ resolved_url) ::
+  map (render_item width) (take_items max_items items)
