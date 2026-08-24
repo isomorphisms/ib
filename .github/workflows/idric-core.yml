@@ -51,7 +51,7 @@ jobs:
       - name: Exercise developer workbench
         run: |
           set -o pipefail
-          /tmp/idric/bin/idris2 src/Workbench.idric -o ib-workbench 2>&1 | tee /tmp/idric-workbench-compile.txt
+          /tmp/idric/bin/idris2 --source-dir src src/Workbench.idric -o ib-workbench 2>&1 | tee /tmp/idric-workbench-compile.txt
           test -x ./build/exec/ib-workbench
           ! grep -q '^Error:' /tmp/idric-workbench-compile.txt
           ./build/exec/ib-workbench | tee /tmp/ib-workbench.txt
@@ -65,7 +65,7 @@ jobs:
       - name: Compile IB Idric smoke program
         run: |
           set -o pipefail
-          /tmp/idric/bin/idris2 src/Smoke.idric -o ib-smoke 2>&1 | tee /tmp/idric-compile.txt
+          /tmp/idric/bin/idris2 --source-dir src src/Smoke.idric -o ib-smoke 2>&1 | tee /tmp/idric-compile.txt
           test -x ./build/exec/ib-smoke
           ! grep -q '^Error:' /tmp/idric-compile.txt
 
