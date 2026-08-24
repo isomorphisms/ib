@@ -28,9 +28,10 @@ niceness=${IB_SCIENTIFIC_PREFETCH_NICENESS:-20}
 worker=${IB_SCIENTIFIC_PREFETCH_WORKER:-}
 
 # navigation_committed must not wait for paper parsing or figure downloads.
-# The worker inherits the low CPU priority and writes only to clearable cache.
+# The worker inherits the low CPU priority, owns no caller stdio, and writes
+# only to clearable cache.
 if test -n "$worker"; then
-  nice -n "$niceness" sh "$worker" "$url" >/dev/null 2>&1 &
+  nice -n "$niceness" sh "$worker" "$url" </dev/null >/dev/null 2>&1 &
 else
-  nice -n "$niceness" sh "$0" --scientific-prefetch-worker "$url" >/dev/null 2>&1 &
+  nice -n "$niceness" sh "$0" --scientific-prefetch-worker "$url" </dev/null >/dev/null 2>&1 &
 fi
