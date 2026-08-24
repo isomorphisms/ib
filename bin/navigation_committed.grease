@@ -1,0 +1,36 @@
+#!/bin/sh
+set -eu
+
+repository_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+. "$repository_root/lib/prefetch.grease"
+. "$repository_root/lib/scientific_media.grease"
+. "$repository_root/lib/scientific_navigation_prefetch.grease"
+
+if test "${1:-}" = '--scientific-prefetch-worker'; then
+  shift
+  if test "$#" -ne 1; then
+    printf 'usage: %s --scientific-prefetch-worker URL\n' "$0" >&2
+    exit 2
+  fi
+  prefetch_arxiv_navigation_cache "$1" >/dev/null
+  exit 0
+fi
+
+if test "$#" -ne 1; then
+  printf 'usage: %s URL\n' "$0" >&2
+  exit 2
+fi
+
+url=$1
+scientific_navigation_is_arxiv "$url" || exit 0
+
+niceness=${IB_SCIENTIFIC_PREFETCH_NICENESS:-20}
+worker=${IB_SCIENTIFIC_PREFETCH_WORKER:-}
+
+# navigation_committed must not wait for paper parsing or figure downloads.
+# The worker inherits the low CPU priority and writes only to clearable cache.
+if test -n "$worker"; then
+  nice -n "$niceness" sh "$worker" "$url" >/dev/null 2>&1 &
+else
+  nice -n "$niceness" sh "$0" --scientific-prefetch-worker "$url" >/dev/null 2>&1 &
+fi
