@@ -48,6 +48,8 @@ exercise_core() {
   grep -Fx 'arxiv-html-first=https://arxiv.org/html/2203.11355' /tmp/ib-smoke.txt
   grep -Fx 'caption-name-basis=caption' /tmp/ib-smoke.txt
   grep -Fx 'temporary-needs-language-model=True' /tmp/ib-smoke.txt
+  grep -Fx 'prefetch-bounded=2' /tmp/ib-smoke.txt
+  grep -Fx 'prefetch-reading=1' /tmp/ib-smoke.txt
 }
 
 exercise_workbench() {
@@ -68,12 +70,17 @@ exercise_scientific_media() {
   cd "$repository_root"
   sh -n lib/scientific_media.grease
   sh -n lib/pdf_figure_captions.grease
+  sh -n lib/prefetch.grease
+  sh -n lib/scientific_prefetch.grease
   sh -n bin/harvest_arxiv_images.grease
   sh -n bin/build_pdf_caption_associator.grease
   sh -n bin/rename_harvested_images_with_llm.grease
+  sh -n bin/prefetch_arxiv_reading.grease
   sh -n tests/test_scientific_image_harvest.grease
+  sh -n tests/test_prefetch_reading.grease
   sh bin/build_pdf_caption_associator.grease
   sh tests/test_scientific_image_harvest.grease
+  sh tests/test_prefetch_reading.grease
 }
 
 exercise_live_arxiv() {
