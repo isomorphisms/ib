@@ -46,6 +46,7 @@ exercise_core() {
   grep -Fx 'readable-files=2' /tmp/ib-smoke.txt
   grep -Fx 'canonical-files=2' /tmp/ib-smoke.txt
   grep -Fx 'arxiv-html-first=https://arxiv.org/html/2203.11355' /tmp/ib-smoke.txt
+  grep -Fx 'arxiv-prefetch=all-html-figures' /tmp/ib-smoke.txt
   grep -Fx 'caption-name-basis=caption' /tmp/ib-smoke.txt
   grep -Fx 'temporary-needs-language-model=True' /tmp/ib-smoke.txt
   grep -Fx 'prefetch-bounded=2' /tmp/ib-smoke.txt
