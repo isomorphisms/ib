@@ -144,9 +144,7 @@ tag_name tag =
 tag_remainder_chars : List Char → List Char
 tag_remainder_chars [] = []
 tag_remainder_chars (value :: rest) =
-  if is_space_char value
-    then drop_space_chars rest
-    else tag_remainder_chars rest
+  if is_space_char value then drop_space_chars rest else tag_remainder_chars rest
 
 tag_remainder : String → List Char
 tag_remainder tag =
@@ -185,19 +183,21 @@ read_attribute_value chars =
         value ⇒ Just (pack (read_unquoted value))
     _ ⇒ Nothing
 
-seek_attribute : List Char → List Char → Maybe String
-seek_attribute wanted [] = Nothing
-seek_attribute wanted (value :: rest) =
-  let chars = value :: rest in
+seek_attribute_fuel : Nat → List Char → List Char → Maybe String
+seek_attribute_fuel Z wanted chars = Nothing
+seek_attribute_fuel (S fuel) wanted [] = Nothing
+seek_attribute_fuel (S fuel) wanted chars@(_ :: rest) =
   if starts_with_chars wanted chars
     then case read_attribute_value (drop_chars (length wanted) chars) of
-      Just value ⇒ Just value
-      Nothing ⇒ seek_attribute wanted rest
-    else seek_attribute wanted rest
+      Just found ⇒ Just found
+      Nothing ⇒ seek_attribute_fuel fuel wanted rest
+    else seek_attribute_fuel fuel wanted rest
 
 public export
 attribute_value : String → String → Maybe String
-attribute_value name tag = seek_attribute (unpack name) (tag_remainder tag)
+attribute_value name tag =
+  let chars = tag_remainder tag in
+  seek_attribute_fuel (length chars) (unpack name) chars
 
 attribute_or_empty : String → String → String
 attribute_or_empty name tag =
@@ -232,13 +232,9 @@ finish_capture (CaptureHeading _) text title items row =
 finish_capture (CaptureText _) text title items row =
   if text == "" then (title, items, row) else (title, TextBlock text :: items, row)
 finish_capture (CaptureLink href) text title items row =
-  if text == "" && href == ""
-    then (title, items, row)
-    else (title, Link text href :: items, row)
+  if text == "" && href == "" then (title, items, row) else (title, Link text href :: items, row)
 finish_capture (CaptureForm action) text title items row =
-  if text == "" && action == ""
-    then (title, items, row)
-    else (title, Form text action :: items, row)
+  if text == "" && action == "" then (title, items, row) else (title, Form text action :: items, row)
 finish_capture (CaptureCell _) text title items Nothing = (title, items, Nothing)
 finish_capture (CaptureCell _) text title items (Just cells) =
   if text == "" then (title, items, Just cells) else (title, items, Just (text :: cells))
@@ -288,28 +284,25 @@ collect_information (HtmlTag tag :: rest) skip capture chars row title items =
         NoCapture ⇒
           if not closing && skipped_tag name
             then collect_information rest (Skipping name Z) NoCapture chars row title items
-            else
-              if name == "title" && not closing
-                then collect_information rest NotSkipping CaptureTitle [] row title items
-                else if heading_tag name && not closing
-                  then collect_information rest NotSkipping (CaptureHeading name) [] row title items
-                  else if (name == "p" || name == "li") && not closing
-                    then collect_information rest NotSkipping (CaptureText name) [] row title items
-                    else if name == "a" && not closing
-                      then let href = attribute_or_empty "href" tag in
-                        collect_information rest NotSkipping (CaptureLink href) [] row title items
-                      else if name == "form" && not closing
-                        then let action = attribute_or_empty "action" tag in
-                          collect_information rest NotSkipping (CaptureForm action) [] row title items
-                        else if name == "tr" && not closing
-                          then collect_information rest NotSkipping NoCapture [] (Just []) title (finish_open_row row items)
-                          else if name == "tr" && closing
-                            then collect_information rest NotSkipping NoCapture [] Nothing title (finish_open_row row items)
-                            else if (name == "td" || name == "th") && not closing
-                              then case row of
-                                Nothing ⇒ collect_information rest NotSkipping NoCapture [] row title items
-                                Just _ ⇒ collect_information rest NotSkipping (CaptureCell name) [] row title items
-                              else collect_information rest NotSkipping NoCapture [] row title items
+            else if name == "title" && not closing
+              then collect_information rest NotSkipping CaptureTitle [] row title items
+              else if heading_tag name && not closing
+                then collect_information rest NotSkipping (CaptureHeading name) [] row title items
+                else if (name == "p" || name == "li") && not closing
+                  then collect_information rest NotSkipping (CaptureText name) [] row title items
+                  else if name == "a" && not closing
+                    then collect_information rest NotSkipping (CaptureLink (attribute_or_empty "href" tag)) [] row title items
+                    else if name == "form" && not closing
+                      then collect_information rest NotSkipping (CaptureForm (attribute_or_empty "action" tag)) [] row title items
+                      else if name == "tr" && not closing
+                        then collect_information rest NotSkipping NoCapture [] (Just []) title (finish_open_row row items)
+                        else if name == "tr" && closing
+                          then collect_information rest NotSkipping NoCapture [] Nothing title (finish_open_row row items)
+                          else if (name == "td" || name == "th") && not closing
+                            then case row of
+                              Nothing ⇒ collect_information rest NotSkipping NoCapture [] row title items
+                              Just _ ⇒ collect_information rest NotSkipping (CaptureCell name) [] row title items
+                            else collect_information rest NotSkipping NoCapture [] row title items
         _ ⇒
           if closing && name == capture_target capture
             then let text = clean_text (pack (reverse chars)) in
@@ -340,8 +333,7 @@ has_link wanted_text wanted_href (View _ _ _ items) = go items
   where
     go : List InformationItem → Bool
     go [] = False
-    go (Link text href :: rest) =
-      (text == wanted_text && href == wanted_href) || go rest
+    go (Link text href :: rest) = (text == wanted_text && href == wanted_href) || go rest
     go (_ :: rest) = go rest
 
 public export
@@ -353,16 +345,16 @@ has_form wanted_action (View _ _ _ items) = go items
     go (Form _ action :: rest) = action == wanted_action || go rest
     go (_ :: rest) = go rest
 
+join_cells : List String → String
+join_cells [] = ""
+join_cells [value] = value
+join_cells (value :: rest) = value ++ " " ++ join_cells rest
+
 item_text : InformationItem → String
 item_text (Heading text) = text
 item_text (TextBlock text) = text
 item_text (Link text href) = text ++ " " ++ href
 item_text (TableRow cells) = join_cells cells
-  where
-    join_cells : List String → String
-    join_cells [] = ""
-    join_cells [value] = value
-    join_cells (value :: rest) = value ++ " " ++ join_cells rest
 item_text (Form text action) = text ++ " " ++ action
 
 public export
