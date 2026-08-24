@@ -48,6 +48,20 @@ jobs:
           path: /tmp/idric
           key: idric-${{ runner.os }}-61970be77769f607cca8650bf424c0f0b22ddee7
 
+      - name: Exercise developer workbench
+        run: |
+          set -o pipefail
+          /tmp/idric/bin/idris2 src/Workbench.idric -o ib-workbench 2>&1 | tee /tmp/idric-workbench-compile.txt
+          test -x ./build/exec/ib-workbench
+          ! grep -q '^Error:' /tmp/idric-workbench-compile.txt
+          ./build/exec/ib-workbench | tee /tmp/ib-workbench.txt
+          grep -Fx 'fixture-urls=10000' /tmp/ib-workbench.txt
+          grep -Fx 'fixture-42=ib://fixture/42' /tmp/ib-workbench.txt
+          grep -Fx 'logical-tabs=32' /tmp/ib-workbench.txt
+          grep -Fx 'churn-steps=10000' /tmp/ib-workbench.txt
+          grep -Fx 'resident-at-3=3' /tmp/ib-workbench.txt
+          grep -Fx 'resident-at-10=10' /tmp/ib-workbench.txt
+
       - name: Compile IB Idric smoke program
         run: |
           set -o pipefail
@@ -67,17 +81,3 @@ jobs:
           grep -Fx 'secret=secret' /tmp/ib-smoke.txt
           grep -Fx 'readable-files=2' /tmp/ib-smoke.txt
           grep -Fx 'canonical-files=2' /tmp/ib-smoke.txt
-
-      - name: Exercise developer workbench
-        run: |
-          set -o pipefail
-          /tmp/idric/bin/idris2 src/Workbench.idric -o ib-workbench 2>&1 | tee /tmp/idric-workbench-compile.txt
-          test -x ./build/exec/ib-workbench
-          ! grep -q '^Error:' /tmp/idric-workbench-compile.txt
-          ./build/exec/ib-workbench | tee /tmp/ib-workbench.txt
-          grep -Fx 'fixture-urls=10000' /tmp/ib-workbench.txt
-          grep -Fx 'fixture-42=ib://fixture/42' /tmp/ib-workbench.txt
-          grep -Fx 'logical-tabs=32' /tmp/ib-workbench.txt
-          grep -Fx 'churn-steps=10000' /tmp/ib-workbench.txt
-          grep -Fx 'resident-at-3=3' /tmp/ib-workbench.txt
-          grep -Fx 'resident-at-10=10' /tmp/ib-workbench.txt
