@@ -1,0 +1,59 @@
+module Workbench
+
+%default total
+
+fixture_target : Nat
+fixture_target = 10000
+
+logical_tab_count : Nat
+logical_tab_count = 32
+
+fixture_url : Nat → String
+fixture_url number = "ib://fixture/" ++ show number
+
+fixture_urls : Nat → List String
+fixture_urls Z = []
+fixture_urls (S remaining) = fixture_url remaining :: fixture_urls remaining
+
+remove_tab : Nat → List Nat → List Nat
+remove_tab wanted [] = []
+remove_tab wanted (tab :: rest) =
+  if wanted == tab
+    then remove_tab wanted rest
+    else tab :: remove_tab wanted rest
+
+keep_resident : Nat → List Nat → List Nat
+keep_resident Z _ = []
+keep_resident (S remaining) [] = []
+keep_resident (S remaining) (tab :: rest) =
+  tab :: keep_resident remaining rest
+
+wake_tab : Nat → Nat → List Nat → List Nat
+wake_tab resident_budget tab residents =
+  keep_resident resident_budget (tab :: remove_tab tab residents)
+
+next_tab : Nat → Nat
+next_tab current =
+  if S current == logical_tab_count
+    then 0
+    else S current
+
+churn : Nat → Nat → Nat → List Nat → List Nat
+churn Z resident_budget next residents = residents
+churn (S remaining) resident_budget next residents =
+  churn remaining resident_budget (next_tab next) (wake_tab resident_budget next residents)
+
+resident_after : Nat → Nat → List Nat
+resident_after steps resident_budget = churn steps resident_budget 0 []
+
+main : IO ()
+main = do
+  let fixtures = fixture_urls fixture_target
+  let resident_at_three = resident_after fixture_target 3
+  let resident_at_ten = resident_after fixture_target 10
+  putStrLn ("fixture-urls=" ++ show (length fixtures))
+  putStrLn ("fixture-42=" ++ fixture_url 42)
+  putStrLn ("logical-tabs=" ++ show logical_tab_count)
+  putStrLn ("churn-steps=" ++ show fixture_target)
+  putStrLn ("resident-at-3=" ++ show (length resident_at_three))
+  putStrLn ("resident-at-10=" ++ show (length resident_at_ten))
