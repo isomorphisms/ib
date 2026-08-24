@@ -27,38 +27,41 @@ scientific_navigation_cache_directory() {
 }
 
 prefetch_arxiv_navigation_cache() {
-  input=$1
-  output_directory=$(scientific_navigation_cache_directory "$input") || return 1
+  navigation_input=$1
+  navigation_cache_directory=$(scientific_navigation_cache_directory "$navigation_input") || return 1
 
-  if test -f "$output_directory/.complete"; then
-    printf '%s\n' "$output_directory"
+  if test -f "$navigation_cache_directory/.complete"; then
+    printf '%s\n' "$navigation_cache_directory"
     return 0
   fi
 
-  parent_directory=$(dirname "$output_directory")
-  partial_directory="${output_directory}.partial.$$"
-  mkdir -p "$parent_directory"
-  rm -rf "$partial_directory"
+  navigation_cache_parent=$(dirname "$navigation_cache_directory")
+  navigation_partial_directory="${navigation_cache_directory}.partial.$$"
+  mkdir -p "$navigation_cache_parent"
+  rm -rf "$navigation_partial_directory"
 
-  if harvest_arxiv_images "$input" "$partial_directory"; then
-    printf 'navigation_committed\ttransient_cache\t%s\n' "$input" \
-      > "$partial_directory/trigger.tsv"
-    rm -rf "$output_directory"
-    mv "$partial_directory" "$output_directory"
+  # The existing scientific-media functions use ordinary shell variables such
+  # as output_directory. Keep this caller's state under distinct names because
+  # Grease's shell subset does not provide function-local variables.
+  if harvest_arxiv_images "$navigation_input" "$navigation_partial_directory"; then
+    printf 'navigation_committed\ttransient_cache\t%s\n' "$navigation_input" \
+      > "$navigation_partial_directory/trigger.tsv"
+    rm -rf "$navigation_cache_directory"
+    mv "$navigation_partial_directory" "$navigation_cache_directory"
 
     # harvest_arxiv_images records an absolute document path. Rewrite that one
     # field after the atomic directory move before exposing the complete mark.
-    awk -F '\t' -v OFS='\t' -v root="$output_directory" '
+    awk -F '\t' -v OFS='\t' -v root="$navigation_cache_directory" '
       NR == 1 { $4 = root "/document." $1 }
       { print }
-    ' "$output_directory/source.tsv" > "$output_directory/source.tsv.tmp"
-    mv "$output_directory/source.tsv.tmp" "$output_directory/source.tsv"
-    : > "$output_directory/.complete"
+    ' "$navigation_cache_directory/source.tsv" > "$navigation_cache_directory/source.tsv.tmp"
+    mv "$navigation_cache_directory/source.tsv.tmp" "$navigation_cache_directory/source.tsv"
+    : > "$navigation_cache_directory/.complete"
 
-    printf '%s\n' "$output_directory"
+    printf '%s\n' "$navigation_cache_directory"
     return 0
   fi
 
-  rm -rf "$partial_directory"
+  rm -rf "$navigation_partial_directory"
   return 1
 }
