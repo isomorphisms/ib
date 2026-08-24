@@ -79,11 +79,30 @@ transparent_index name = elem name [
   "queries.tsv", "terms.tsv", "summary.json"
   ]
 
+char_prefix : List Char → List Char → Bool
+char_prefix [] _ = True
+char_prefix _ [] = False
+char_prefix (wanted :: more_wanted) (actual :: more_actual) =
+  wanted == actual && char_prefix more_wanted more_actual
+
+begins : String → String → Bool
+begins opening value = char_prefix (unpack opening) (unpack value)
+
+finishes : String → String → Bool
+finishes closing value =
+  char_prefix (reverse (unpack closing)) (reverse (unpack value))
+
+vector_text_metadata : List String → Bool
+vector_text_metadata ["indexes", "vectors", _, _, "format.txt"] = True
+vector_text_metadata ["indexes", "vectors", _, _, name] =
+  begins "ids-" name && finishes ".txt" name
+vector_text_metadata _ = False
+
 public export
 transparent_path : String → Bool
 transparent_path path =
   let parts = path_parts path in
-    parts == ["visits.jsonl"] || is_tab_record parts ||
+    parts == ["visits.jsonl"] || is_tab_record parts || vector_text_metadata parts ||
       case parts of
         ["indexes", name] ⇒ transparent_index name
         _ ⇒ False

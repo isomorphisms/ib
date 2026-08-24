@@ -7,6 +7,7 @@ on:
       - 'docs/idric-implementation.md'
       - 'docs/developer-workbench.md'
       - 'docs/storage-model.md'
+      - 'docs/vector-index.md'
       - '.github/workflows/idric-core.yml'
 
 permissions:
@@ -107,3 +108,8 @@ jobs:
           grep -Fx 'copy-label=Copy' /tmp/ib-smoke.txt
           grep -Fx 'copy-target=code-1' /tmp/ib-smoke.txt
           grep -Fx 'copy-payload=git status' /tmp/ib-smoke.txt
+          grep -Fx 'vector-backend=flat-f32-exact' /tmp/ib-smoke.txt
+          grep -Fx 'vector-scalar=f32' /tmp/ib-smoke.txt
+          grep -Fx 'vector-directory=indexes/vectors/pages/test-model' /tmp/ib-smoke.txt
+          grep -Fx 'vector-format-readable=True' /tmp/ib-smoke.txt
+          grep -Fx 'vector-bytes-readable=False' /tmp/ib-smoke.txt

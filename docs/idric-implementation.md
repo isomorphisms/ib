@@ -10,6 +10,7 @@ The initial source modules deliberately keep the executable boundary small:
 - `IB.Index` builds transparent rebuildable list indices without collapsing duplicate visits.
 - `IB.Storage` classifies schema-shaped paths and defines which records may be generically inspected.
 - `IB.FileStore` performs the first real browser-owned file I/O: it creates the store/tab directories, reads and writes tab manifests, appends history records, rejects paths outside the canonical schema, and reports filesystem failures.
+- `IB.VectorIndex` owns the replaceable vector-backend specification and lowers it to the versioned text-stream process contract. The first backend is the filesystem-native exact `float32` tool in `native/vector-index`.
 - `IB.Inspect` summarizes physical rows without following or interpreting renderer state.
 
 The first slice does not embed Python, Ithon, WebView UI, or a renderer. Chrome/Firefox SQLite import and Android filesystem walking are platform adapters to add around this core, not reasons to move the core out of Idriç.
