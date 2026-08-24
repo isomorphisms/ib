@@ -20,7 +20,7 @@ state/
     sleeping
 ```
 
-This is a conceptual layout, not a frozen on-disk schema.
+This layout now has a first executable slice in `IB.FileStore`: store and tab directories, `tab.txt`, and `history.log` are created and accessed by Idriç. The contents remain an evolving schema.
 
 ## `tab.txt`
 
@@ -56,6 +56,8 @@ Example:
 ```
 
 The exact grammar can change, but the important property is that browser history exists independently of the renderer's private session database.
+
+The current file-store slice appends complete caller-supplied records and preserves duplicates and ordering. It does not yet parse or validate the record grammar. It also does not yet provide `fsync`, atomic manifest replacement, or journal recovery; those guarantees require a small native filesystem boundary and fault-injection tests.
 
 ## Snapshots
 

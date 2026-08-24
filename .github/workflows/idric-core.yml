@@ -6,6 +6,7 @@ on:
       - 'src/**'
       - 'docs/idric-implementation.md'
       - 'docs/developer-workbench.md'
+      - 'docs/storage-model.md'
       - '.github/workflows/idric-core.yml'
 
 permissions:
@@ -36,7 +37,10 @@ jobs:
       - name: Build and install Idric compiler
         if: steps.idric-cache.outputs.cache-hit != 'true'
         run: |
-          git clone --depth 1 https://github.com/isomorphisms/Idric.git /tmp/Idric
+          git init /tmp/Idric
+          git -C /tmp/Idric remote add origin https://github.com/isomorphisms/Idric.git
+          git -C /tmp/Idric fetch --depth 1 origin "$IDRIC_REF"
+          git -C /tmp/Idric checkout --detach FETCH_HEAD
           test "$(git -C /tmp/Idric rev-parse HEAD)" = "$IDRIC_REF"
           make -C /tmp/Idric bootstrap PREFIX=/tmp/idric
           make -C /tmp/Idric install PREFIX=/tmp/idric
@@ -68,6 +72,25 @@ jobs:
           /tmp/idric/bin/idris2 --source-dir src src/Smoke.idric -o ib-smoke 2>&1 | tee /tmp/idric-compile.txt
           test -x ./build/exec/ib-smoke
           ! grep -q '^Error:' /tmp/idric-compile.txt
+
+      - name: Compile durable file-store smoke program
+        run: |
+          set -o pipefail
+          /tmp/idric/bin/idris2 --source-dir src src/FileStoreSmoke.idric -o ib-file-store-smoke 2>&1 | tee /tmp/idric-file-store-compile.txt
+          test -x ./build/exec/ib-file-store-smoke
+          ! grep -q '^Error:' /tmp/idric-file-store-compile.txt
+
+      - name: Exercise file store across process restart
+        run: |
+          store_root="$(mktemp -d)/state"
+          ./build/exec/ib-file-store-smoke write "$store_root" | tee /tmp/ib-file-store-write.txt
+          grep -Fx 'write=ok' /tmp/ib-file-store-write.txt
+          grep -Fx 'unsafe-path=rejected' /tmp/ib-file-store-write.txt
+          grep -Fx 'noncanonical-path=rejected' /tmp/ib-file-store-write.txt
+          ./build/exec/ib-file-store-smoke read "$store_root" | tee /tmp/ib-file-store-read.txt
+          grep -Fx 'manifest-survived=True' /tmp/ib-file-store-read.txt
+          grep -Fx 'history-survived=True' /tmp/ib-file-store-read.txt
+          grep -Fx 'history-lines=2' /tmp/ib-file-store-read.txt
 
       - name: Exercise browser-owned core
         run: |
