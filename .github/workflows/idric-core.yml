@@ -35,7 +35,10 @@ jobs:
       - name: Build and install Idric compiler
         if: steps.idric-cache.outputs.cache-hit != 'true'
         run: |
-          git clone --depth 1 https://github.com/isomorphisms/Idric.git /tmp/Idric
+          git init /tmp/Idric
+          git -C /tmp/Idric remote add origin https://github.com/isomorphisms/Idric.git
+          git -C /tmp/Idric fetch --depth 1 origin "$IDRIC_REF"
+          git -C /tmp/Idric checkout --detach FETCH_HEAD
           test "$(git -C /tmp/Idric rev-parse HEAD)" = "$IDRIC_REF"
           make -C /tmp/Idric bootstrap PREFIX=/tmp/idric
           make -C /tmp/Idric install PREFIX=/tmp/idric
@@ -47,36 +50,17 @@ jobs:
           path: /tmp/idric
           key: idric-${{ runner.os }}-61970be77769f607cca8650bf424c0f0b22ddee7
 
-      - name: Compile IB Idric smoke program
-        run: |
-          set -o pipefail
-          /tmp/idric/bin/idris2 src/Smoke.idric -o ib-smoke 2>&1 | tee /tmp/idric-compile.txt
-          test -x ./build/exec/ib-smoke
-          ! grep -q '^Error:' /tmp/idric-compile.txt
-
-      - name: Exercise browser-owned core
-        run: |
-          ./build/exec/ib-smoke | tee /tmp/ib-smoke.txt
-          grep -Fx 'ingest=3' /tmp/ib-smoke.txt
-          grep -Fx 'duplicate-url-count=2' /tmp/ib-smoke.txt
-          grep -Fx 'newest-order=2' /tmp/ib-smoke.txt
-          grep -Fx 'host-count=2' /tmp/ib-smoke.txt
-          grep -Fx 'canonical=canonical' /tmp/ib-smoke.txt
-          grep -Fx 'cache-fake=cache' /tmp/ib-smoke.txt
-          grep -Fx 'secret=secret' /tmp/ib-smoke.txt
-          grep -Fx 'readable-files=2' /tmp/ib-smoke.txt
-          grep -Fx 'canonical-files=2' /tmp/ib-smoke.txt
-
       - name: Compile HTML-first information renderer smoke program
         run: |
           set -o pipefail
-          /tmp/idric/bin/idris2 src/InformationSmoke.idric -o ib-information-smoke 2>&1 | tee /tmp/idric-information-compile.txt
+          cd src
+          /tmp/idric/bin/idris2 InformationSmoke.idric -o ib-information-smoke 2>&1 | tee /tmp/idric-information-compile.txt
           test -x ./build/exec/ib-information-smoke
           ! grep -q '^Error:' /tmp/idric-information-compile.txt
 
       - name: Exercise HTML-first phone pre-paint
         run: |
-          ./build/exec/ib-information-smoke | tee /tmp/ib-information-smoke.txt
+          src/build/exec/ib-information-smoke | tee /tmp/ib-information-smoke.txt
           grep -Fx 'information-title=Build console' /tmp/ib-information-smoke.txt
           grep -Fx 'early-table-header=True' /tmp/ib-information-smoke.txt
           grep -Fx 'early-table-data=True' /tmp/ib-information-smoke.txt
@@ -90,3 +74,24 @@ jobs:
           grep -Fx 'phone-api-row=True' /tmp/ib-information-smoke.txt
           grep -Fx 'phone-lines=8' /tmp/ib-information-smoke.txt
           grep -Fx 'phone-width-bounded=True' /tmp/ib-information-smoke.txt
+
+      - name: Compile IB Idric smoke program
+        run: |
+          set -o pipefail
+          cd src
+          /tmp/idric/bin/idris2 Smoke.idric -o ib-smoke 2>&1 | tee /tmp/idric-compile.txt
+          test -x ./build/exec/ib-smoke
+          ! grep -q '^Error:' /tmp/idric-compile.txt
+
+      - name: Exercise browser-owned core
+        run: |
+          src/build/exec/ib-smoke | tee /tmp/ib-smoke.txt
+          grep -Fx 'ingest=3' /tmp/ib-smoke.txt
+          grep -Fx 'duplicate-url-count=2' /tmp/ib-smoke.txt
+          grep -Fx 'newest-order=2' /tmp/ib-smoke.txt
+          grep -Fx 'host-count=2' /tmp/ib-smoke.txt
+          grep -Fx 'canonical=canonical' /tmp/ib-smoke.txt
+          grep -Fx 'cache-fake=cache' /tmp/ib-smoke.txt
+          grep -Fx 'secret=secret' /tmp/ib-smoke.txt
+          grep -Fx 'readable-files=2' /tmp/ib-smoke.txt
+          grep -Fx 'canonical-files=2' /tmp/ib-smoke.txt
