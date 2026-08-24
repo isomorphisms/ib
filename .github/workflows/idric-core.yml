@@ -66,3 +66,22 @@ jobs:
           grep -Fx 'secret=secret' /tmp/ib-smoke.txt
           grep -Fx 'readable-files=2' /tmp/ib-smoke.txt
           grep -Fx 'canonical-files=2' /tmp/ib-smoke.txt
+
+      - name: Compile considered-hook regression
+        run: |
+          set -o pipefail
+          /tmp/idric/bin/idris2 src/ArchiveConsideredTest.idric -o archive-considered-test 2>&1 | tee /tmp/archive-considered-compile.txt
+          test -x ./build/exec/archive-considered-test
+          ! grep -q '^Error:' /tmp/archive-considered-compile.txt
+
+      - name: Exercise considered-hook policy
+        run: |
+          ./build/exec/archive-considered-test | tee /tmp/archive-considered-test.txt
+          grep -Fx 'before-consider-candidates=0' /tmp/archive-considered-test.txt
+          grep -Fx 'consider-alone-candidates=1' /tmp/archive-considered-test.txt
+          grep -Fx 'consider-alone-events=1' /tmp/archive-considered-test.txt
+          grep -Fx 'consider-alone-known=true' /tmp/archive-considered-test.txt
+          grep -Fx 'repeat-same-item-candidates=1' /tmp/archive-considered-test.txt
+          grep -Fx 'repeat-same-item-events=2' /tmp/archive-considered-test.txt
+          grep -Fx 'second-item-candidates=2' /tmp/archive-considered-test.txt
+          grep -Fx 'second-item-events=1' /tmp/archive-considered-test.txt
