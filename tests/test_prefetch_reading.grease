@@ -1,0 +1,74 @@
+#!/bin/sh
+set -eu
+
+repository_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+. "$repository_root/lib/prefetch.grease"
+. "$repository_root/lib/scientific_media.grease"
+. "$repository_root/lib/scientific_prefetch.grease"
+
+ib_prefetch_require_command busybox
+ib_prefetch_require_command curl
+ib_prefetch_require_command xmlstarlet
+ib_prefetch_require_command sha256sum
+
+work_directory=$(mktemp -d)
+server_pid=''
+cleanup() {
+  if test -n "$server_pid"; then
+    kill "$server_pid" >/dev/null 2>&1 || true
+  fi
+  rm -rf "$work_directory"
+}
+trap cleanup EXIT HUP INT TERM
+
+export HOME="$work_directory/home"
+mkdir -p "$HOME"
+test "$(ib_reading_root)" = "$HOME/reading"
+
+export IB_PREFETCH_DIR="$work_directory/prefetch-cache"
+export IB_READING_DIR="$work_directory/reading"
+
+port=$((18000 + ($$ % 20000)))
+busybox httpd -f -p "127.0.0.1:$port" -h "$repository_root/tests/fixtures/arxiv_site" &
+server_pid=$!
+sleep 1
+
+export IB_ARXIV_HTML_BASE="http://127.0.0.1:$port/html"
+export IB_ARXIV_PDF_BASE="http://127.0.0.1:$port/pdf"
+
+reading_directory=$(sh "$repository_root/bin/prefetch_arxiv_reading.grease" 'https://arxiv.org/abs/2203.11355')
+test "$reading_directory" = "$IB_READING_DIR/arxiv/2203.11355"
+test -s "$reading_directory/document.html"
+test -s "$reading_directory/images/linear_regions_along_a_one_dimensional_input.svg"
+test -s "$reading_directory/images/activation_space_folding.svg"
+test -s "$reading_directory/images.tsv"
+test -s "$reading_directory/source.tsv"
+
+html_url="$IB_ARXIV_HTML_BASE/2203.11355"
+figure_url="http://127.0.0.1:$port/assets/linear_regions.svg"
+test -f "$(ib_prefetch_cached_path "$html_url")"
+test -f "$(ib_prefetch_cached_path "$figure_url")"
+
+materialized=$(ib_prefetch_materialize_reading "$html_url" 'generic/prefetched-document.html')
+test "$materialized" = "$IB_READING_DIR/generic/prefetched-document.html"
+cmp "$materialized" "$reading_directory/document.html"
+
+if ib_prefetch_reading_destination '../escape' >/dev/null 2>&1; then
+  printf 'unsafe reading path was accepted\n' >&2
+  exit 1
+fi
+
+kill "$server_pid" >/dev/null 2>&1 || true
+wait "$server_pid" 2>/dev/null || true
+server_pid=''
+
+rm -rf "$reading_directory"
+reading_directory=$(sh "$repository_root/bin/prefetch_arxiv_reading.grease" '2203.11355')
+test -s "$reading_directory/document.html"
+test -s "$reading_directory/images/linear_regions_along_a_one_dimensional_input.svg"
+test -s "$reading_directory/images/activation_space_folding.svg"
+
+grep -F 'Linear regions along a one-dimensional input' "$reading_directory/document.html" >/dev/null
+grep -F 'caption' "$reading_directory/images.tsv" >/dev/null
+
+printf 'prefetch reading tests: ok\n'
