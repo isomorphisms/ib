@@ -68,3 +68,6 @@ jobs:
           grep -Fx 'secret=secret' /tmp/ib-smoke.txt
           grep -Fx 'readable-files=2' /tmp/ib-smoke.txt
           grep -Fx 'canonical-files=2' /tmp/ib-smoke.txt
+          grep -Fx 'asin-key=asin:B000TEST' /tmp/ib-smoke.txt
+          grep -Fx 'price-minor-units=1799' /tmp/ib-smoke.txt
+          grep -Fx 'vector-match=p-book' /tmp/ib-smoke.txt
