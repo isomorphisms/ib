@@ -1,0 +1,82 @@
+name: Filesystem vector index
+
+on:
+  pull_request:
+    paths:
+      - 'native/vector-index/**'
+      - 'tests/vector-index-smoke.sh'
+      - 'src/IB/VectorIndex.idric'
+      - 'src/IB/Storage.idric'
+      - 'docs/vector-index.md'
+      - '.github/workflows/vector-index.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  host:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compile warning-clean C99 backend
+        run: make -C native/vector-index
+
+      - name: Exercise build, persistence, validation, and exact query
+        run: make -C native/vector-index test
+
+      - name: Exercise the 10,000 URL scale with Float32 storage
+        run: |
+          index_root="$(mktemp -d)/state/indexes/vectors/pages/scale-smoke"
+          awk 'BEGIN {
+            for (row = 0; row < 10000; row++) {
+              printf "url-%d\t", row
+              for (column = 0; column < 384; column++)
+                printf "%s0.01", column == 0 ? "" : " "
+              printf "\n"
+            }
+          }' | native/vector-index/ib-vector-index build "$index_root" 384 cosine | tee /tmp/vector-scale-build.txt
+          grep -Fx 'count=10000' /tmp/vector-scale-build.txt
+          vector_file="$(sed -n 's/^vectors //p' "$index_root/format.txt")"
+          test "$(stat -c %s "$index_root/$vector_file")" = 15360000
+          awk 'BEGIN {
+            for (column = 0; column < 384; column++)
+              printf "%s0.01", column == 0 ? "" : " "
+            printf "\n"
+          }' | native/vector-index/ib-vector-index query "$index_root" 3 > /tmp/vector-scale-query.txt
+          test "$(wc -l < /tmp/vector-scale-query.txt)" = 3
+          sed -n '1s/\t.*//p' /tmp/vector-scale-query.txt | grep -Fx 'url-0'
+
+  android:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - abi: arm64-v8a
+            compiler: aarch64-linux-android24-clang
+            file_architecture: ARM aarch64
+          - abi: armeabi-v7a
+            compiler: armv7a-linux-androideabi24-clang
+            file_architecture: ARM
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install pinned Android NDK
+        run: sdkmanager 'ndk;27.2.12479018'
+
+      - name: Cross-compile small Android executable
+        run: |
+          toolchain="$ANDROID_SDK_ROOT/ndk/27.2.12479018/toolchains/llvm/prebuilt/linux-x86_64/bin"
+          mkdir -p build/android
+          "$toolchain/${{ matrix.compiler }}" \
+            -O2 -Wall -Wextra -Werror -Wpedantic -std=c99 \
+            native/vector-index/ib_vector_index.c -lm \
+            -o build/android/ib-vector-index
+          "$toolchain/llvm-strip" build/android/ib-vector-index
+          file build/android/ib-vector-index | grep -F '${{ matrix.file_architecture }}'
+          test "$(stat -c %s build/android/ib-vector-index)" -lt 100000
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ib-vector-index-android-${{ matrix.abi }}
+          path: build/android/ib-vector-index

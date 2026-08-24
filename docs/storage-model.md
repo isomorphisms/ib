@@ -98,6 +98,8 @@ or
 
 For tens of thousands of tabs, the first implementation can remain intentionally simple. If scans become expensive, an SQLite or custom index can be introduced without changing the canonical tab model.
 
+The first vector implementation follows the same rule without SQLite: inspectable `format.txt` and ID files point to row-major `float32` vector bytes under `indexes/vectors/`. It uses exact scanning at the 10,000-URL scale and exposes a backend-neutral streaming command contract, so an approximate implementation can replace it without changing canonical records. See `vector-index.md`.
+
 ## Sync
 
 Sync should operate on the browser-owned records and snapshots, not on a renderer profile directory. This allows multiple browser front ends or machines to share the same durable browsing corpus while maintaining separate live renderer processes and caches.
