@@ -1,0 +1,24 @@
+ib-prepaint	1
+revision	1	partial
+requested-url	https://console.test/deployments
+resolved-url	https://console.test/deployments
+title	Build console
+heading	1	Deployments
+text	Production account
+row	Service	Status
+row	api	healthy
+end
+revision	2	complete
+requested-url	https://console.test/deployments
+resolved-url	https://console.test/deployments
+title	Build console
+heading	1	Deployments
+text	Production account
+row	Service	Status
+row	api	healthy
+row	worker	queued
+heading	2	Deployment topology
+image	resource:sample_figure	A colored line plot with four marked observations.	The fetched figure is displayed without tinting, inversion, or cropping.
+link	job 42	/jobs/42
+form	Find project	/search
+end

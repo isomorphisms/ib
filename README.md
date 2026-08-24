@@ -12,4 +12,9 @@ Python and Ithon are not implementation layers for IB. A disposable comparison o
 
 Android/native code is a narrow platform boundary for facilities Idriç cannot yet reach directly: NativeActivity/EGL/renderers, kernel-enforced filesystem operations, and similar FFI edges. Those boundaries do not own browser state.
 
+`android-prepaint/` is a deliberately small phone-visible harness for the Idriç
+information prepaint. It uses native Android views rather than `WebView`, applies
+a fixed dark presentation to extracted text, preserves fetched image colors, and
+replaces partial projections with later complete revisions.
+
 The first executable Idriç slice lives on the `idric-browser-core` branch. It covers ordered history values, rebuildable indices, storage classification/read policy, and the renderer-independent inspector model.
