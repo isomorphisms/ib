@@ -4,7 +4,7 @@
 
 **Negative user story**
 
-I need space for photos or another application, press Clear cache, and discover that IB deleted history, tabs, bookmarks, annotations, explicit saved pages, or learned choices that cannot be reconstructed.
+I need space for photos or another application, press Clear cache, and discover that IB deleted browsing objects, navigation observations, bookmarks/collections, annotations, explicit saved pages, or learned choices that cannot be reconstructed.
 
 **Desired behavior**
 
@@ -12,8 +12,8 @@ Every byte classified as cache is safely rebuildable. Clearing all cache may mak
 
 Durable state includes at least:
 
-- ordered history
-- logical tabs and their durable state
+- persistent browsing objects and their durable state
+- navigation/selection observations that IB intentionally retains
 - bookmarks/collections
 - annotations
 - explicit saved pages
@@ -38,7 +38,7 @@ The storage inspector shows durable and reclaimable totals separately and can dr
 
 **Negative user story**
 
-I clear cache and then cannot find pages that are still present in my history until a background rebuild finishes.
+I clear cache and then cannot find browsing objects that are still present in the persistent store until a background rebuild finishes.
 
 **Desired behavior**
 
@@ -133,7 +133,7 @@ A memoized omnibox query stores duplicate copies of long URLs, titles, and page 
 
 **Desired behavior**
 
-Memoized query entries primarily store the query key, compact result identifiers/ranking information, and bookkeeping. Full durable URLs and titles remain in their authoritative records.
+Memoized query entries primarily store the query key, compact browsing-object identifiers/ranking information, and bookkeeping. Full durable URLs and titles remain in their authoritative browsing records.
 
 As an engineering target rather than a contract, a hot-query entry should normally be on the order of hundreds of bytes rather than kilobytes unless it has a specific reason to be larger.
 
@@ -151,7 +151,7 @@ The substring index spends most of its disk budget indexing tracking parameters,
 
 **Desired behavior**
 
-The fast representation favors titles, hosts, human-readable path tokens, short object identifiers, and explicit user-entered text. Long high-entropy URL material can remain in durable raw URLs and be handled by slower exact/raw fallback unless prior user behavior makes it worth promoting.
+The fast representation favors titles, hosts, human-readable path tokens, short object identifiers, and explicit user-entered text. Long high-entropy URL material can remain in durable browsing records and be handled by slower exact/raw fallback unless prior user behavior makes it worth promoting.
 
 **Inspector evidence**
 
@@ -163,7 +163,7 @@ Expose the normalized/indexed representation and its byte cost next to the origi
 
 **Negative user story**
 
-The only way to reclaim IB's speed-up storage is Android's Clear storage/data action, which also destroys the browser's durable state.
+The only way to reclaim IB's speed-up storage is Android's Clear storage/data action, which also destroys the persistent browsing store.
 
 **Desired behavior**
 
@@ -181,9 +181,9 @@ These are sizing test points, not fixed promises. Implementations should measure
 
 Suggested fixtures:
 
-- 50,000 durable history records
-- 500,000 durable history records
-- 1,000,000 durable history records
+- 50,000 durable browsing objects/records
+- 500,000 durable browsing objects/records
+- 1,000,000 durable browsing objects/records
 - 10,000 memoized queries
 - 100,000 memoized queries
 
