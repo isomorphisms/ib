@@ -61,6 +61,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: android-actions/setup-android@v3
+
       - name: Install pinned Android NDK
         run: sdkmanager 'ndk;27.2.12479018'
 
