@@ -4,6 +4,7 @@ import IB.History
 import IB.Index
 import IB.Storage
 import IB.Inspect
+import IB.DisplayRepair
 
 %default total
 
@@ -30,6 +31,7 @@ main = do
         FileRow "tabs/T1/tab.txt" 12 symlink_file,
         FileRow "renderer/passwords" 40 regular_file
         ]
+  let copy_repair = copy_button "code-1" "git status" code_block
   putStrLn ("ingest=" ++ show (length raw))
   putStrLn ("duplicate-url-count=" ++ show (row_count "https://example.test/a" (url_rows indices)))
   putStrLn ("newest-order=" ++ show (first_or 99 (index_chronology indices)))
@@ -39,3 +41,6 @@ main = do
   putStrLn ("secret=" ++ storage_kind_text (classify_path "renderer/passwords"))
   putStrLn ("readable-files=" ++ show (readable_file_count files))
   putStrLn ("canonical-files=" ++ show (files_of_kind canonical files))
+  putStrLn ("copy-label=" ++ repair_label copy_repair)
+  putStrLn ("copy-target=" ++ copy_target_id copy_repair)
+  putStrLn ("copy-payload=" ++ copy_payload copy_repair)
