@@ -68,7 +68,7 @@ test -s "$reading_directory/document.html"
 test -s "$reading_directory/images/linear_regions_along_a_one_dimensional_input.svg"
 test -s "$reading_directory/images/activation_space_folding.svg"
 
-grep -F 'Linear regions along a one-dimensional input' "$reading_directory/document.html" >/dev/null
+grep -F 'Linear regions along a one dimensional input' "$reading_directory/document.html" >/dev/null
 grep -F 'caption' "$reading_directory/images.tsv" >/dev/null
 
 printf 'prefetch reading tests: ok\n'
