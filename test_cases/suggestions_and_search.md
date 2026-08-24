@@ -4,17 +4,19 @@
 
 **Negative user story**
 
-I search for a remembered word or phrase that occurs inside a title, hostname, URL path, or earlier typed query. IB treats the input mostly as a prefix and gives me unrelated items that merely start with the same first letter.
+I was using DuckDuckGo and trying to recover a specific GitLab merge request. I tried searching for `merge request`, `MR`, and eventually the merge-request number because I expected those to distinguish the thing I wanted. Instead, the suggestions behaved like first-letter completion: I could get something like Miles Reed because the first letter matched, while the object I actually wanted was not found by an interior match on `merge request`, `MR`, or its number.
 
-A concrete failure is the DuckDuckGo-style behavior where searching for something like `merge request` does not find the remembered merge-request page, while an unrelated name beginning with an early typed letter is promoted instead.
+The failure is not merely that the ranking was imperfect. The candidate I wanted was effectively absent unless I remembered the beginning of whatever string the completion system happened to index.
 
 **Desired behavior**
 
-After enough input exists to make interior matching useful, IB searches inside indexed title words, hostnames, meaningful URL path components, and prior explicit queries. Prefix matching remains a signal, not the definition of search.
+IB must not define retrieval as prefix completion. Once enough input exists to distinguish a target, it should search inside useful indexed fields: title words, hostnames, meaningful URL path components, explicit user-entered text, and short object identifiers such as merge-request numbers.
+
+`merge request`, `MR`, a project/name fragment, or a short exact identifier should all be capable of surfacing the same browsing object when those clues occur in its searchable representation. Prefix matching can remain a ranking signal, but it must not prevent an interior or exact identifier match from becoming a candidate.
 
 **Inspector evidence**
 
-For every candidate, show which field matched, whether the match was prefix/interior/exact, the matched span, and the ranking contribution.
+For every candidate, show which field matched, whether the match was prefix/interior/exact, the matched span, and the ranking contribution. For excluded candidates that otherwise seem relevant, the inspector should make it possible to see why candidate generation failed.
 
 ---
 
