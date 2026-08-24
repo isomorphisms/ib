@@ -23,18 +23,21 @@ public export
 prefetch_target_retention : PrefetchTarget → prefetch_retention
 prefetch_target_retention (Target _ retention) = retention
 
-remove_target_url : String → List PrefetchTarget → List PrefetchTarget
-remove_target_url wanted [] = []
-remove_target_url wanted (target :: rest) =
-  if prefetch_target_url target == wanted
-    then remove_target_url wanted rest
-    else target :: remove_target_url wanted rest
+seen_url : String → List String → Bool
+seen_url wanted [] = False
+seen_url wanted (url :: rest) = wanted == url || seen_url wanted rest
+
+deduplicate_from : List String → List PrefetchTarget → List PrefetchTarget
+deduplicate_from seen [] = []
+deduplicate_from seen (target :: rest) =
+  let url = prefetch_target_url target in
+    if seen_url url seen
+      then deduplicate_from seen rest
+      else target :: deduplicate_from (url :: seen) rest
 
 public export
 deduplicate_prefetch_targets : List PrefetchTarget → List PrefetchTarget
-deduplicate_prefetch_targets [] = []
-deduplicate_prefetch_targets (target :: rest) =
-  target :: deduplicate_prefetch_targets (remove_target_url (prefetch_target_url target) rest)
+deduplicate_prefetch_targets targets = deduplicate_from [] targets
 
 take_prefetch_targets : Nat → List PrefetchTarget → List PrefetchTarget
 take_prefetch_targets Z _ = []
@@ -54,5 +57,5 @@ reading_target_count : List PrefetchTarget → Nat
 reading_target_count [] = 0
 reading_target_count (target :: rest) =
   case prefetch_target_retention target of
-    transient_cache => reading_target_count rest
-    reading_corpus => S (reading_target_count rest)
+    transient_cache ⇒ reading_target_count rest
+    reading_corpus ⇒ S (reading_target_count rest)
