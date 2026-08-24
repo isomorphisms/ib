@@ -199,6 +199,12 @@ public export
 attribute_value : String → String → Maybe String
 attribute_value name tag = seek_attribute (unpack name) (tag_remainder tag)
 
+attribute_or_empty : String → String → String
+attribute_or_empty name tag =
+  case attribute_value name tag of
+    Nothing ⇒ ""
+    Just value ⇒ value
+
 skipped_tag : String → Bool
 skipped_tag name = elem name ["script", "style", "svg", "canvas", "video", "audio", "template"]
 
@@ -290,15 +296,11 @@ collect_information (HtmlTag tag :: rest) skip capture chars row title items =
                   else if (name == "p" || name == "li") && not closing
                     then collect_information rest NotSkipping (CaptureText name) [] row title items
                     else if name == "a" && not closing
-                      then let href = case attribute_value "href" tag of
-                        Nothing ⇒ ""
-                        Just value ⇒ value in
-                      collect_information rest NotSkipping (CaptureLink href) [] row title items
+                      then let href = attribute_or_empty "href" tag in
+                        collect_information rest NotSkipping (CaptureLink href) [] row title items
                       else if name == "form" && not closing
-                        then let action = case attribute_value "action" tag of
-                          Nothing ⇒ ""
-                          Just value ⇒ value in
-                        collect_information rest NotSkipping (CaptureForm action) [] row title items
+                        then let action = attribute_or_empty "action" tag in
+                          collect_information rest NotSkipping (CaptureForm action) [] row title items
                         else if name == "tr" && not closing
                           then collect_information rest NotSkipping NoCapture [] (Just []) title (finish_open_row row items)
                           else if name == "tr" && closing
