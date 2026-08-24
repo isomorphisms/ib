@@ -89,7 +89,9 @@ state/
         metadata
 ```
 
-The first implementation in `src/IB/VectorIndex.idric` uses `Float` vectors and exact dot-product search. Normalize vectors before insertion when cosine-like ranking is desired. Exact scanning is intentionally simple and gives us a correct baseline. If corpus size makes it necessary, the same rebuildable index can later gain an ANN representation such as HNSW without changing canonical product records.
+The intended scalar for this index is 32-bit `Float`. The Idriç compiler revision currently pinned by IB exposes `Double` but no primitive `Float`, so the first executable baseline uses `Double` inside the rebuildable index. This is deliberately not canonical state: when Idriç gains `Float`, the index can be rebuilt with 32-bit vectors without migrating product or price records.
+
+The baseline uses exact dot-product search. Normalize vectors before insertion when cosine-like ranking is desired. Exact scanning is intentionally simple and gives us a correct reference implementation. If corpus size makes it necessary, the same rebuildable index can later gain an ANN representation such as HNSW without changing canonical product records.
 
 Do not derive the persistent embedding corpus from provider content whose license forbids repurposing, analysis, or long-term storage. Vectorize IB-owned/canonical product text and independently usable metadata instead.
 
