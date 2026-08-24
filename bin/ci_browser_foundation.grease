@@ -83,9 +83,12 @@ exercise_scientific_media() {
   sh -n tests/test_prefetch_reading.grease
   sh -n tests/test_scientific_navigation_prefetch.grease
   sh bin/build_pdf_caption_associator.grease
+  printf '%s\n' 'scientific-media: image harvest regression'
   sh tests/test_scientific_image_harvest.grease
+  printf '%s\n' 'scientific-media: reading prefetch regression'
   sh tests/test_prefetch_reading.grease
-  sh tests/test_scientific_navigation_prefetch.grease
+  printf '%s\n' 'scientific-media: navigation prefetch regression'
+  timeout 30 sh tests/test_scientific_navigation_prefetch.grease
 }
 
 exercise_live_arxiv() {
