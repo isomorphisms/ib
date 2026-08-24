@@ -1,0 +1,116 @@
+# Grease source.  arXiv supplies a bounded document resource graph; this file
+# maps that site policy onto the generic IB prefetch cache and ~/reading corpus.
+
+prefetch_html_images_to_reading() {
+  html_path=$1
+  document_url=$2
+  output_directory=$3
+  images_directory="$output_directory/images"
+  image_tags_directory="$output_directory/image_tags"
+  rows_path="$output_directory/.html_prefetch_rows.tsv"
+  manifest_path="$output_directory/images.tsv"
+  unresolved_path="$output_directory/unresolved_images.tsv"
+  mkdir -p "$images_directory" "$image_tags_directory"
+  : > "$manifest_path"
+  : > "$unresolved_path"
+
+  html_image_rows "$html_path" > "$rows_path"
+  order=0
+  separator=$(printf '\037')
+  while IFS="$separator" read -r image_source caption_text alt_text image_tag; do
+    test -n "$image_source" || continue
+    order=$((order + 1))
+
+    image_tag_file_name=$(printf 'image_tag_%04d.html' "$order")
+    printf '%s\n' "$image_tag" > "$image_tags_directory/$image_tag_file_name"
+
+    case "$image_source" in
+      data:image/*)
+        extension=$(data_image_extension "$image_source")
+        image_url=$(embedded_image_reference "$image_source")
+        ;;
+      *)
+        image_url=$(resolve_image_url "$document_url" "$image_source")
+        extension=$(image_extension_from_url "$image_url")
+        ;;
+    esac
+
+    temporary_file_name=$(printf 'temporary_image_%04d.%s' "$order" "$extension")
+    temporary_path="$images_directory/$temporary_file_name"
+
+    case "$image_source" in
+      data:image/*)
+        write_embedded_data_image "$image_source" "$temporary_path" || {
+          rm -f "$temporary_path"
+          return 1
+        }
+        ;;
+      *)
+        ib_prefetch_fetch "$image_url" "$temporary_path" || {
+          rm -f "$temporary_path"
+          ib_media_fail "figure prefetch failed: order=$order resolved=$image_url document=$document_url"
+          return 1
+        }
+        ;;
+    esac
+
+    naming_source=temporary
+    final_file_name=$temporary_file_name
+    conceptual_text=''
+    if test -n "$caption_text"; then
+      conceptual_text=$(caption_without_figure_label "$caption_text")
+      naming_source=caption
+    elif alt_text_is_conceptual "$alt_text"; then
+      conceptual_text=$alt_text
+      naming_source=alt_text
+    fi
+
+    if test "$naming_source" != temporary; then
+      stem=$(conceptual_name_slug "$conceptual_text")
+      if test -n "$stem"; then
+        final_file_name=$(unique_image_file_name "$images_directory" "$stem" "$extension")
+        mv "$temporary_path" "$images_directory/$final_file_name"
+      else
+        naming_source=temporary
+        final_file_name=$temporary_file_name
+      fi
+    fi
+
+    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+      "$order" "$image_url" "$final_file_name" "$naming_source" "$caption_text" "$alt_text" \
+      "image_tags/$image_tag_file_name" >> "$manifest_path"
+
+    if test "$naming_source" = temporary; then
+      printf '%s\t%s\t%s\t%s\n' \
+        "$order" "$final_file_name" "$caption_text" "$alt_text" >> "$unresolved_path"
+    fi
+  done < "$rows_path"
+  rm -f "$rows_path"
+}
+
+prefetch_arxiv_to_reading() {
+  input=$1
+  identifier=$(arxiv_identifier_from_input "$input") || return 1
+  reading_root=$(ib_reading_root) || return 1
+  output_directory="$reading_root/arxiv/$identifier"
+  mkdir -p "$output_directory"
+
+  html_source_url=$(arxiv_html_url "$identifier")
+  document_path="$output_directory/document.html"
+
+  if ib_prefetch_fetch "$html_source_url" "$document_path" &&
+     test -s "$document_path" &&
+     grep -Eiq '<(html|article|main)([[:space:]>])' "$document_path"
+  then
+    printf 'html\t%s\t%s\t%s\n' \
+      "$identifier" "$html_source_url" "$document_path" > "$output_directory/source.tsv"
+    prefetch_html_images_to_reading "$document_path" "$html_source_url" "$output_directory"
+    apply_language_model_image_names "$document_path" "$output_directory"
+    printf '%s\n' "$output_directory"
+    return 0
+  fi
+
+  rm -f "$document_path"
+  harvest_arxiv_images "$input" "$output_directory"
+  printf '%s\n' "$output_directory"
+}
