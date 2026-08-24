@@ -44,20 +44,27 @@ Provider data with a short legal or technical lifetime is a `CurrentOffer`, not 
 
 This distinction lets IB keep a real price history without pretending that every provider grants a license to archive its API responses.
 
+## Price retrieval
+
+For price data, prefer the ordinary web path over a restricted merchant API: ICU fetches the page and Grease handles the retrieval/extraction workflow. If the useful price value is easy to isolate, a small grep-like extraction is enough. If the page needs structured parsing, feed the ICU-fetched text to a small Idriç parser rather than moving browser policy into shell code.
+
+This rule is specifically about price data. Product metadata, identifiers, outbound links, and other provider integrations may use different adapters when appropriate.
+
+Fetched page bodies are not the durable price ledger. Reduce them to the minimal price fact needed by the core, then apply the existing storage boundary: a permitted durable fact becomes a `PriceObservation`; data that must remain short-lived stays a `CurrentOffer` in disposable cache.
+
 ## Amazon
 
 Amazon is one provider.
 
-The Creators API is useful for live catalog lookup and current offers, but its Program Content has unusually tight use and caching restrictions. The durable model should therefore keep Amazon identifiers such as ASINs while treating Creators API offer data as volatile provider cache.
+Do not make the IB price path depend on Amazon Creators API offer retention. For current Amazon prices, use the ICU + Grease retrieval path above and retain only the minimal parsed price fact according to the source's storage policy.
 
-Do not make the IB canonical price ledger depend on Amazon Creators API response retention.
+Amazon identifiers such as ASINs remain useful durable product keys. An Amazon adapter can still provide non-price catalog metadata or outbound-link behavior without making Amazon the canonical product namespace.
 
 The Amazon adapter should eventually expose roughly:
 
 ```text
 search(query) -> product candidates
 item(asin) -> current metadata
-current_offer(asin) -> expiring offer
 outbound_link(asin, partner_tag) -> Amazon link
 ```
 
