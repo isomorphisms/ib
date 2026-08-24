@@ -2,35 +2,38 @@ module IB.VectorIndex
 
 %default total
 
+-- The pinned Idriç compiler does not yet expose a primitive 32-bit Float.
+-- This index is rebuildable, so using Double here does not affect canonical
+-- browser state and can be replaced by Float without a state migration.
 public export
-data VectorRow = VectorRow String (List Float)
+data VectorRow = Row String (List Double)
 
 public export
 vector_id : VectorRow → String
-vector_id (VectorRow value _) = value
+vector_id (Row value _) = value
 
 public export
-vector_values : VectorRow → List Float
-vector_values (VectorRow _ values) = values
+vector_values : VectorRow → List Double
+vector_values (Row _ values) = values
 
 public export
-dot : List Float → List Float → Float
+dot : List Double → List Double → Double
 dot [] _ = 0.0
 dot _ [] = 0.0
 dot (left :: more_left) (right :: more_right) =
   left * right + dot more_left more_right
 
 public export
-score : List Float → VectorRow → Float
+score : List Double → VectorRow → Double
 score query row = dot query (vector_values row)
 
 public export
-best_match : List Float → List VectorRow → Maybe (String, Float)
+best_match : List Double → List VectorRow → Maybe (String, Double)
 best_match query [] = Nothing
 best_match query (first :: rest) =
   go first (score query first) rest
   where
-    go : VectorRow → Float → List VectorRow → Maybe (String, Float)
+    go : VectorRow → Double → List VectorRow → Maybe (String, Double)
     go best best_score [] = Just (vector_id best, best_score)
     go best best_score (candidate :: more) =
       let candidate_score = score query candidate in
