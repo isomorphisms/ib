@@ -50,12 +50,14 @@ jobs:
       - name: Compile IB Idric smoke program
         run: |
           set -o pipefail
-          /tmp/idric/bin/idris2 src/Smoke.idric -o ib-smoke 2>&1 | tee /tmp/idric-compile.txt
+          cd src
+          /tmp/idric/bin/idris2 Smoke.idric -o ib-smoke 2>&1 | tee /tmp/idric-compile.txt
           test -x ./build/exec/ib-smoke
           ! grep -q '^Error:' /tmp/idric-compile.txt
 
       - name: Exercise browser-owned core
         run: |
+          cd src
           ./build/exec/ib-smoke | tee /tmp/ib-smoke.txt
           grep -Fx 'ingest=3' /tmp/ib-smoke.txt
           grep -Fx 'duplicate-url-count=2' /tmp/ib-smoke.txt
