@@ -1,0 +1,122 @@
+# Grease source.  This layer owns disposable response bytes and filesystem
+# materialization.  Site-specific discovery and crawl policy live elsewhere.
+
+ib_prefetch_fail() {
+  printf '%s\n' "$*" >&2
+  return 1
+}
+
+ib_prefetch_require_command() {
+  command -v "$1" >/dev/null 2>&1 || ib_prefetch_fail "missing command: $1"
+}
+
+ib_prefetch_cache_root() {
+  if test -n "${IB_PREFETCH_DIR:-}"; then
+    printf '%s\n' "$IB_PREFETCH_DIR"
+  elif test -n "${XDG_CACHE_HOME:-}"; then
+    printf '%s/ib/prefetch\n' "$XDG_CACHE_HOME"
+  else
+    test -n "${HOME:-}" || {
+      ib_prefetch_fail 'HOME is not set'
+      return 1
+    }
+    printf '%s/.cache/ib/prefetch\n' "$HOME"
+  fi
+}
+
+ib_reading_root() {
+  if test -n "${IB_READING_DIR:-}"; then
+    printf '%s\n' "$IB_READING_DIR"
+  else
+    test -n "${HOME:-}" || {
+      ib_prefetch_fail 'HOME is not set'
+      return 1
+    }
+    printf '%s/reading\n' "$HOME"
+  fi
+}
+
+ib_prefetch_url_key() {
+  ib_prefetch_require_command sha256sum || return 1
+  printf '%s' "$1" | sha256sum | awk '{ print $1 }'
+}
+
+ib_prefetch_entry_directory() {
+  url=$1
+  root=$(ib_prefetch_cache_root) || return 1
+  key=$(ib_prefetch_url_key "$url") || return 1
+  printf '%s/%s\n' "$root" "$key"
+}
+
+ib_prefetch_cached_path() {
+  entry_directory=$(ib_prefetch_entry_directory "$1") || return 1
+  test -f "$entry_directory/body" || return 1
+  printf '%s/body\n' "$entry_directory"
+}
+
+ib_prefetch_fetch() {
+  url=$1
+  output_path=$2
+  ib_prefetch_require_command curl || return 1
+
+  entry_directory=$(ib_prefetch_entry_directory "$url") || return 1
+  body_path="$entry_directory/body"
+  source_path="$entry_directory/source.tsv"
+  mkdir -p "$entry_directory" "$(dirname "$output_path")"
+
+  if test -f "$body_path"; then
+    cp "$body_path" "$output_path"
+    return 0
+  fi
+
+  body_partial="$entry_directory/.body.$$"
+  source_partial="$entry_directory/.source.$$"
+  rm -f "$body_partial" "$source_partial"
+
+  if ! curl \
+      --fail \
+      --location \
+      --silent \
+      --show-error \
+      --retry 2 \
+      --retry-delay 1 \
+      --connect-timeout 15 \
+      --max-time 120 \
+      --user-agent "${IB_HTTP_USER_AGENT:-IB prefetch; https://github.com/isomorphisms/ib}" \
+      --output "$body_partial" \
+      --write-out '%{url_effective}\t%{http_code}\t%{content_type}\n' \
+      "$url" > "$source_partial"
+  then
+    rm -f "$body_partial" "$source_partial"
+    return 1
+  fi
+
+  mv "$body_partial" "$body_path"
+  mv "$source_partial" "$source_path"
+  cp "$body_path" "$output_path"
+}
+
+ib_prefetch_reading_destination() {
+  relative_path=$1
+  case "$relative_path" in
+    ''|/*|..|../*|*/..|*/../*)
+      ib_prefetch_fail "unsafe reading path: $relative_path"
+      return 1
+      ;;
+  esac
+  root=$(ib_reading_root) || return 1
+  printf '%s/%s\n' "$root" "$relative_path"
+}
+
+ib_prefetch_materialize_reading() {
+  url=$1
+  relative_path=$2
+  cached_path=$(ib_prefetch_cached_path "$url") || {
+    ib_prefetch_fail "resource is not prefetched: $url"
+    return 1
+  }
+  destination=$(ib_prefetch_reading_destination "$relative_path") || return 1
+  mkdir -p "$(dirname "$destination")"
+  cp "$cached_path" "$destination"
+  printf '%s\n' "$destination"
+}

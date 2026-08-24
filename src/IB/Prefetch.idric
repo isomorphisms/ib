@@ -1,0 +1,61 @@
+module IB.Prefetch
+
+%default total
+
+public export
+choice prefetch_retention one_of
+  transient_cache
+  reading_corpus
+
+public export
+prefetch_retention_text : prefetch_retention → String
+prefetch_retention_text transient_cache = "transient"
+prefetch_retention_text reading_corpus = "reading"
+
+public export
+data PrefetchTarget = Target String prefetch_retention
+
+public export
+prefetch_target_url : PrefetchTarget → String
+prefetch_target_url (Target url _) = url
+
+public export
+prefetch_target_retention : PrefetchTarget → prefetch_retention
+prefetch_target_retention (Target _ retention) = retention
+
+seen_url : String → List String → Bool
+seen_url wanted [] = False
+seen_url wanted (url :: rest) = wanted == url || seen_url wanted rest
+
+deduplicate_from : List String → List PrefetchTarget → List PrefetchTarget
+deduplicate_from seen [] = []
+deduplicate_from seen (target :: rest) =
+  let url = prefetch_target_url target in
+    if seen_url url seen
+      then deduplicate_from seen rest
+      else target :: deduplicate_from (url :: seen) rest
+
+public export
+deduplicate_prefetch_targets : List PrefetchTarget → List PrefetchTarget
+deduplicate_prefetch_targets targets = deduplicate_from [] targets
+
+take_prefetch_targets : Nat → List PrefetchTarget → List PrefetchTarget
+take_prefetch_targets Z _ = []
+take_prefetch_targets (S remaining) [] = []
+take_prefetch_targets (S remaining) (target :: rest) =
+  target :: take_prefetch_targets remaining rest
+
+-- Callers supply targets in priority order.  The core removes duplicate URLs
+-- and enforces the caller's resource budget without inventing crawl policy.
+public export
+bounded_prefetch : Nat → List PrefetchTarget → List PrefetchTarget
+bounded_prefetch budget targets =
+  take_prefetch_targets budget (deduplicate_prefetch_targets targets)
+
+public export
+reading_target_count : List PrefetchTarget → Nat
+reading_target_count [] = 0
+reading_target_count (target :: rest) =
+  case prefetch_target_retention target of
+    transient_cache ⇒ reading_target_count rest
+    reading_corpus ⇒ S (reading_target_count rest)
