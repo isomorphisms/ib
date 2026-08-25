@@ -12,7 +12,7 @@ Purpose:
 - permit secondary labels such as documentary/history without changing the primary retrieval bucket.
 
 Important learned boundaries:
-- kids overrides page type;
+- kid-related subject matter is not an automatic override: family-task tabs can be KIDS while a kid-toy product page can still be SHOPPING;
 - shopping is spending/buying, distinct from money/banking/benefits;
 - product pages may classify as home repair or vehicle repair when that is the actual project;
 - blue-collar/trades activity is separate from white-collar/academic job activity;
@@ -20,10 +20,10 @@ Important learned boundaries:
 - sex and morbid curiosity are ordinary non-moralizing retrieval categories;
 - Critical Role can be its own branch instead of generic pop culture;
 - music listening differs from music practice/reference and from writing about music;
-- Problems I Like and the Jacobian visualization are intellectual fun / short reading, not long-form reading;
+- Daniel Litt's Problems I Like and the Jacobian visualization are intellectual fun / short reading, not long-form reading;
 - Benn Peifert is long-form reading / self-education;
 - The Decent One is primarily morbid curiosity here, with documentary/history secondary;
-- Ultimate Library, Charbagh, crux.jp, and the Matthias Weber page remain UNKNOWN because intent was not recovered.
+- Ultimate Library, Charbagh, and the Matthias Weber page remain UNKNOWN because intent was not recovered.
 
 
 ## KIDS
@@ -80,6 +80,7 @@ https://www.dfcufinancial.com/Services/Anywhere-Banking#tab_673
 ## SHOPPING
 https://www.copperleafforest.com/our-plants
 https://www.temu.com/ul/kuiper/un1.html?subj=feed-un&_bg_fs=1&_p_mat1_type=1&_p_jump_id=725&_x_vst_scene=adg&adg_ctx=a-8c568cfc~f-35bd789d&goods_id=601105596055713&_p_rfs=1&_x_ads_channel=twitter&_x_ads_account=18ce55llf8y&_x_ads_set=omylu&_x_ads_id=wo2nl&twclid=28reipnm8cv9j4fuxysqoj61yr&_x_ns_adg_trc=ta-b73c_fefc57210ae7e331c419c56e1f6b66da1fcf59fda063b295c98a92e0937545b6
+https://crux.jp/
 
 ## FOOD / ORDERING
 https://hungryhowies.hungerrush.com/Common/SessionExpired
@@ -177,5 +178,4 @@ https://mvic.sos.state.mi.us/Voter/Index/#registeredVoter
 ## UNKNOWN / CONTEXT LOST
 https://commons.wikimedia.org/wiki/Category:Charbagh
 https://ultimatelibrary.co.uk/
-https://crux.jp/
 https://math.indiana.edu/about/faculty/weber-matthias.html
