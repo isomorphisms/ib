@@ -18,7 +18,7 @@ if grep -Env '^https?://[^[:space:]]+$' "$fixture"; then
   fail 'every fixture row must be one absolute HTTP(S) URL with no whitespace'
 fi
 
-if grep -Eiq '(checkout|SecondaryValidation|SessionExpired|/invitees/|bookwithme|teams\.microsoft\.com|online\.dfcufinancial\.com|pay\.homedepotconsumer\.accountonline\.com|track-mg\.mobilize\.us|ReferralUpdate|campuscommunicator\.com/document/link|checkout\.babylist\.com|myuofmhealth\.org|bellesa\.co|dropbox\.com/scl/fi/|google\.com/url\?|/fast_download/)' "$fixture"; then
+if grep -Eiq '(checkout|SecondaryValidation|SessionExpired|/invitees/|bookwithme|teams\.microsoft\.com|online\.dfcufinancial\.com|pay\.homedepotconsumer\.accountonline\.com|track-mg\.mobilize\.us|ReferralUpdate|campuscommunicator\.com/document/link|checkout\.babylist\.com|myuofmhealth\.org|bellesa\.co|dropbox\.com/scl/fi/|google\.com/url\?|/fast_download/|washtenaw\.my\.salesforce-sites\.com/engage/TargetX_Engage__Engage|schools\.mybrightwheel\.com/sign-up/confirmation|^https?://t\.co/)' "$fixture"; then
   fail 'account, invitation, checkout, opaque redirect, private-share, or direct-download URL leaked into fixture'
 fi
 
@@ -37,7 +37,7 @@ non_playlist_youtube=$(grep -Ec '^https://www\.youtube\.com/' "$fixture" || true
 test "$non_playlist_youtube" -eq "$playlist_count" || fail 'YouTube rows in this fixture must be canonical playlist URLs'
 
 duplicate_groups=$(sort "$fixture" | uniq -d | wc -l | tr -d '[:space:]')
-test "$duplicate_groups" -ge 3 || fail 'history-like duplicate URL rows were accidentally deduplicated'
+test "$duplicate_groups" -ge 4 || fail 'history-like duplicate URL rows were accidentally deduplicated'
 
 printf 'real-world URL fixture: ok (%s rows, %s playlists, %s duplicate groups)\n' \
   "$line_count" "$playlist_count" "$duplicate_groups"
