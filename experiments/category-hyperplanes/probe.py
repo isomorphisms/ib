@@ -11,7 +11,7 @@ import json
 import math
 import platform
 import re
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Iterable
 
@@ -32,6 +32,16 @@ class Label:
     category: str
     polarity: str
     authority: str
+    asserted_at: str
+    assertion_source: str
+    source_artifact_sha256: str
+    source_row: int
+
+
+def label_record(label: Label) -> dict:
+    result = asdict(label)
+    result["id"] = result.pop("row_id")
+    return result
 
 
 def sha256(path: Path) -> str:
@@ -97,11 +107,33 @@ def load_labels(path: Path, known_ids: set[str]) -> list[Label]:
     seen: set[tuple[str, str]] = set()
     with path.open("r", encoding="utf-8", newline="") as stream:
         reader = csv.DictReader(stream, delimiter="\t")
-        expected = ["id", "category", "polarity", "authority"]
+        expected = [
+            "id",
+            "category",
+            "polarity",
+            "authority",
+            "asserted_at",
+            "assertion_source",
+            "source_artifact_sha256",
+            "source_row",
+        ]
         if reader.fieldnames != expected:
             raise ValueError(f"labels header must be {expected!r}")
         for line_number, row in enumerate(reader, start=2):
-            label = Label(row["id"], row["category"], row["polarity"], row["authority"])
+            try:
+                source_row = int(row["source_row"])
+            except ValueError as error:
+                raise ValueError(f"labels line {line_number}: invalid source row") from error
+            label = Label(
+                row["id"],
+                row["category"],
+                row["polarity"],
+                row["authority"],
+                row["asserted_at"],
+                row["assertion_source"],
+                row["source_artifact_sha256"],
+                source_row,
+            )
             if not label.row_id or not label.category:
                 raise ValueError(f"labels line {line_number}: empty id or category")
             if label.row_id not in known_ids:
@@ -110,6 +142,12 @@ def load_labels(path: Path, known_ids: set[str]) -> list[Label]:
                 raise ValueError(f"labels line {line_number}: invalid polarity")
             if label.authority not in ALLOWED_AUTHORITIES:
                 raise ValueError(f"labels line {line_number}: invalid authority")
+            if not label.asserted_at or not label.assertion_source:
+                raise ValueError(f"labels line {line_number}: missing assertion provenance")
+            if not SHA256_PATTERN.fullmatch(label.source_artifact_sha256):
+                raise ValueError(f"labels line {line_number}: invalid source artifact checksum")
+            if label.source_row < 1:
+                raise ValueError(f"labels line {line_number}: invalid source row")
             key = (label.row_id, label.category)
             if key in seen:
                 raise ValueError(f"labels line {line_number}: duplicate category assertion for id")
@@ -377,15 +415,28 @@ def run_probe(args: argparse.Namespace) -> dict:
     allowed = known_dimensions.get(args.model_id)
     if allowed is not None and vectors.shape[1] not in allowed:
         raise ValueError(f"dimension {vectors.shape[1]} is not declared for {args.model_id}")
-    categories = sorted({label.category for label in labels if label.polarity == "positive"})
-    all_fit_categories = {label.category for label in labels}
+    positive_categories = {label.category for label in labels if label.polarity == "positive"}
+    categories = sorted(set(args.category) if args.category else positive_categories)
+    unknown_categories = set(categories) - positive_categories
+    if unknown_categories:
+        raise ValueError(
+            "requested categories lack a fitted positive set: "
+            + ", ".join(sorted(unknown_categories))
+        )
+    all_fit_categories = {
+        label.category
+        for label in labels
+        if not args.category or label.category in categories
+    }
     missing_positive_categories = all_fit_categories - set(categories)
     if missing_positive_categories:
         raise ValueError(
             "fit labels contain categories without a fitted positive set: "
             + ", ".join(sorted(missing_positive_categories))
         )
-    evaluation_categories = {label.category for label in evaluation_labels}
+    evaluation_categories = {
+        label.category for label in evaluation_labels if label.category in categories
+    }
     missing_fit_categories = evaluation_categories - set(categories)
     if missing_fit_categories:
         raise ValueError(
@@ -409,9 +460,23 @@ def run_probe(args: argparse.Namespace) -> dict:
             "encoding": "UTF-8 TSV",
             "input_builder_revision": args.input_builder_revision,
         },
-        "labels": {"path": str(label_path), "sha256": sha256(label_path)},
+        "labels": {
+            "path": str(label_path),
+            "sha256": sha256(label_path),
+            "assertions": [
+                label_record(label) for label in labels if label.category in categories
+            ],
+        },
         "evaluation_labels": (
-            {"path": str(evaluation_path), "sha256": sha256(evaluation_path)}
+            {
+                "path": str(evaluation_path),
+                "sha256": sha256(evaluation_path),
+                "assertions": [
+                    label_record(label)
+                    for label in evaluation_labels
+                    if label.category in categories
+                ],
+            }
             if evaluation_path
             else None
         ),
@@ -485,19 +550,31 @@ def self_test() -> None:
             dtype=np.float32,
         )
     )
+    def label(row_id: str, category: str, polarity: str, authority: str) -> Label:
+        return Label(
+            row_id,
+            category,
+            polarity,
+            authority,
+            "2026-08-25T00:00:00Z",
+            "self-test",
+            "0" * 64,
+            1,
+        )
+
     labels = [
-        Label("a", "A", "positive", "human_assertion"),
-        Label("b", "A", "positive", "human_assertion"),
-        Label("outside", "A", "negative", "human_assertion"),
-        Label("c", "B", "positive", "human_assertion"),
-        Label("d", "B", "positive", "human_assertion"),
-        Label("outside", "B", "negative", "human_assertion"),
+        label("a", "A", "positive", "human_assertion"),
+        label("b", "A", "positive", "human_assertion"),
+        label("outside", "A", "negative", "human_assertion"),
+        label("c", "B", "positive", "human_assertion"),
+        label("d", "B", "positive", "human_assertion"),
+        label("outside", "B", "negative", "human_assertion"),
     ]
     evaluation_labels = [
-        Label("overlap", "A", "positive", "accepted_decision"),
-        Label("overlap", "B", "positive", "accepted_decision"),
-        Label("denied-a", "A", "negative", "accepted_decision"),
-        Label("denied-b", "B", "negative", "accepted_decision"),
+        label("overlap", "A", "positive", "accepted_decision"),
+        label("overlap", "B", "positive", "accepted_decision"),
+        label("denied-a", "A", "negative", "accepted_decision"),
+        label("denied-b", "B", "negative", "accepted_decision"),
     ]
     global_evaluation_indices = {
         ids.index("overlap"),
@@ -568,6 +645,12 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument("--input-texts")
     result.add_argument("--labels")
     result.add_argument("--evaluation-labels")
+    result.add_argument(
+        "--category",
+        action="append",
+        default=[],
+        help="fit only this category; repeat for several independent planes",
+    )
     result.add_argument("--output")
     result.add_argument("--model-id")
     result.add_argument("--model-revision")

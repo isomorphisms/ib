@@ -60,6 +60,14 @@ exercise_workbench() {
   cd "$repository_root"
   sh -n tests/test_real_world_url_fixture.grease
   sh tests/test_real_world_url_fixture.grease
+  python3 -m py_compile \
+    experiments/category-hyperplanes/build_url_inputs.py \
+    experiments/category-hyperplanes/validate_recovered_labels.py
+  python3 experiments/category-hyperplanes/validate_recovered_labels.py
+  python3 experiments/category-hyperplanes/build_url_inputs.py \
+    --source tests/fixtures/real_world_urls.txt \
+    --output /tmp/ib-recovered-inputs.tsv
+  test "$(wc -l < /tmp/ib-recovered-inputs.tsv)" = 220
 
   cd "$repository_root/src"
   "$idric_prefix/bin/idris2" Workbench.idric -o ib-workbench 2>&1 | tee /tmp/idric-workbench-compile.txt

@@ -49,21 +49,48 @@ The probe verifies the ids and records the artifact hash plus the immutable inpu
 The labels file is UTF-8 TSV with this header:
 
 ```text
-id	category	polarity	authority
+id	category	polarity	authority	asserted_at	assertion_source	source_artifact_sha256	source_row
 ```
 
 `polarity` is `positive` or `negative`. `authority` must be `human_assertion` or `accepted_decision`. A missing row is unlabeled, not negative. The same id may have positive membership in several categories. A separate file with the same grammar may be supplied through `--evaluation-labels`; those rows are excluded from fitting and provisional-negative sampling.
 
-The current repository does not contain the complete accepted labels from the conversational 491-row exercise or the earlier 227-row reading/non-reading split. Do not reconstruct them from domain stereotypes. Exact replication begins only when the ordered rows, stable identities, accepted memberships, and explicit corrections are available together.
+Every label retains the user-assertion time and locator plus the checksum and one-based row in the object-source artifact. The report copies this provenance instead of retaining only the label-file checksum. `--category` may be repeated to fit a deliberate subset of categories while preserving one-off assertions separately.
+
+## Recovered prior assertions
+
+The recovery audit did **not** promote either old assistant output to ground truth:
+
+- The 491-row primary-purpose partition was assistant-generated, initially listed only 478 rows, and was later reconciled by adding rows 37–44 and 46–50 to its AbeBooks run. The count repair does not turn the classifications into human assertions.
+- The 227-row reading/non-reading output was also assistant-generated. Conversation evidence establishes its reported 129/98 counts and shows that files named `Reading Links.txt` and `Non Reading Links.txt` existed, but their complete bytes and row-by-row provenance were not recovered.
+- A later 98-row grouped output was assistant-generated too. Only explicit user corrections from its review were recovered as authoritative.
+
+`recovered-authoritative-assertions.tsv` is therefore deliberately small. It contains only explicit user assignments that could be tied to an exact URL: Problems I Like and the Rezchikov visualization as reading and short reading; Benn Peifert as reading and long-form self-education; Haaretz as news/reading; The Decent One as morbid-curiosity reading; the exact AbeBooks basket as reading; Open Syllabus as Black Ball; and `crux.jp` as shopping. Compound statements are retained as overlapping positive memberships. No omitted row becomes a negative, and no assignment is generalized to neighboring URLs on the same domain.
+
+The sanitized fixture has 219 rows, not the complete private 227-row source. Its exact bytes are pinned by SHA-256 in `build_url_inputs.py` and every probe label. Stable ids include the source row so duplicate URLs remain separate. Build the URL-only canonical input artifact with:
+
+```text
+python3 experiments/category-hyperplanes/build_url_inputs.py \
+  --source tests/fixtures/real_world_urls.txt \
+  --output /tmp/ib-recovered-inputs.tsv
+```
+
+Five recovered reading positives occur in that pinned fixture. `recovered-reading-fit.tsv` contains three and `recovered-reading-evaluation.tsv` contains two row-disjoint held-out positives. This is enough to execute a positive-unlabeled `reading` probe, but it is not enough to claim reproduction of the 227- or 491-row exercises. The one recovered Black Ball assertion, one shopping assertion, and the AbeBooks basket absent from the sanitized fixture remain in the audit ledger rather than being padded into fit sets.
+
+Validate the ledger, source-row joins, and split with:
+
+```text
+python3 experiments/category-hyperplanes/validate_recovered_labels.py
+```
 
 ## Run
 
 ```text
 python3 experiments/category-hyperplanes/probe.py \
   --vectors /path/to/embeddings.npz \
-  --input-texts /path/to/canonical-inputs.tsv \
-  --labels /path/to/accepted-labels.tsv \
-  --evaluation-labels /path/to/held-out-labels.tsv \
+  --input-texts /tmp/ib-recovered-inputs.tsv \
+  --labels experiments/category-hyperplanes/recovered-reading-fit.tsv \
+  --evaluation-labels experiments/category-hyperplanes/recovered-reading-evaluation.tsv \
+  --category reading \
   --model-id mixedbread-ai/mxbai-embed-xsmall-v1 \
   --model-revision <40-character-commit> \
   --model-file-sha256 onnx/model_quantized.onnx=<sha256> \
@@ -74,7 +101,7 @@ python3 experiments/category-hyperplanes/probe.py \
   --tokenizer-sha256 <sha256> \
   --pooling mean \
   --input-prefix '' \
-  --input-grammar 'host: <host> path: <path> title: <title> text: <snippet>' \
+  --input-grammar 'url: <url>' \
   --input-builder-revision <40-character-commit> \
   --max-input-tokens 256 \
   --truncation-side right \
