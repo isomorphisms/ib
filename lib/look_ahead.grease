@@ -1,0 +1,101 @@
+# Grease source.  Look-ahead bodies are disposable response bytes, never
+# canonical history.  A completed `body` file is the readiness marker.
+
+ib_look_ahead_fail() {
+  printf '%s\n' "$*" >&2
+  return 1
+}
+
+ib_look_ahead_require_command() {
+  command -v "$1" >/dev/null 2>&1 ||
+    ib_look_ahead_fail "missing command: $1"
+}
+
+ib_look_ahead_root() {
+  if test -n "${IB_LOOK_AHEAD_DIR:-}"; then
+    printf '%s\n' "$IB_LOOK_AHEAD_DIR"
+  elif test -n "${XDG_CACHE_HOME:-}"; then
+    printf '%s/ib/look-ahead\n' "$XDG_CACHE_HOME"
+  else
+    test -n "${HOME:-}" || {
+      ib_look_ahead_fail 'HOME is not set'
+      return 1
+    }
+    printf '%s/.cache/ib/look-ahead\n' "$HOME"
+  fi
+}
+
+ib_look_ahead_url_key() {
+  ib_look_ahead_require_command sha256sum || return 1
+  printf '%s' "$1" | sha256sum | awk '{ print $1 }'
+}
+
+ib_look_ahead_entry_directory() {
+  root=$(ib_look_ahead_root) || return 1
+  key=$(ib_look_ahead_url_key "$1") || return 1
+  printf '%s/%s\n' "$root" "$key"
+}
+
+ib_look_ahead_cached_path() {
+  entry_directory=$(ib_look_ahead_entry_directory "$1") || return 1
+  test -f "$entry_directory/body" || return 1
+  printf '%s/body\n' "$entry_directory"
+}
+
+ib_look_ahead_fetch() {
+  test "$#" -eq 1 || {
+    ib_look_ahead_fail 'usage: ib_look_ahead_fetch URL'
+    return 2
+  }
+
+  url=$1
+  nice_command=${IB_NICE:-nice}
+  icu_command=${IB_ICU:-icu}
+  niceness=${IB_LOOK_AHEAD_NICENESS:-20}
+
+  ib_look_ahead_require_command "$nice_command" || return 1
+  ib_look_ahead_require_command "$icu_command" || return 1
+
+  entry_directory=$(ib_look_ahead_entry_directory "$url") || return 1
+  body_path="$entry_directory/body"
+  request_path="$entry_directory/request.url"
+  mkdir -p "$entry_directory" || return 1
+
+  if test -f "$body_path"; then
+    printf '%s\n' "$body_path"
+    return 0
+  fi
+
+  body_partial="$entry_directory/.body.$$"
+  request_partial="$entry_directory/.request.$$"
+  rm -f "$body_partial" "$request_partial"
+  printf '%s\n' "$url" > "$request_partial"
+
+  if ! "$nice_command" -n "$niceness" "$icu_command" get "$url" > "$body_partial"; then
+    rm -f "$body_partial" "$request_partial"
+    ib_look_ahead_fail "look-ahead GET failed: $url"
+    return 1
+  fi
+
+  if ! mv "$request_partial" "$request_path"; then
+    rm -f "$body_partial" "$request_partial"
+    return 1
+  fi
+  if ! mv "$body_partial" "$body_path"; then
+    rm -f "$body_partial" "$request_path"
+    return 1
+  fi
+
+  printf '%s\n' "$body_path"
+}
+
+ib_look_ahead_prefetch_stream() {
+  failures=0
+  while IFS= read -r url || test -n "$url"; do
+    test -n "$url" || continue
+    if ! ib_look_ahead_fetch "$url"; then
+      failures=1
+    fi
+  done
+  return "$failures"
+}

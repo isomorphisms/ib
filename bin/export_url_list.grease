@@ -1,0 +1,12 @@
+#!/bin/sh
+set -eu
+
+repository_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+. "$repository_root/lib/url_list.grease"
+
+test "$#" -eq 0 || {
+  printf 'usage: %s\n' "$0" >&2
+  exit 2
+}
+
+ib_export_url_list_notice

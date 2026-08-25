@@ -1,0 +1,101 @@
+#!/bin/sh
+set -eu
+
+repository_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+work_directory=$(mktemp -d)
+cleanup() {
+  rm -rf "$work_directory"
+}
+trap cleanup EXIT HUP INT TERM
+
+input="$work_directory/urls.txt"
+expected="$work_directory/expected.txt"
+actual="$work_directory/actual.txt"
+
+{
+  printf '%s\n' \
+    'https://example.test/one' \
+    '' \
+    'https://example.test/two?q=three'
+  printf '%s' 'https://example.test/one'
+} > "$input"
+printf '%s\n' \
+  'https://example.test/one' \
+  'https://example.test/two?q=three' \
+  'https://example.test/one' > "$expected"
+
+sh "$repository_root/bin/import_url_list.grease" "$input" > "$actual"
+cmp "$expected" "$actual"
+printf '%s\n' 'https://stdin.example/path' |
+  sh "$repository_root/bin/import_url_list.grease" - > "$actual"
+grep -Fx 'https://stdin.example/path' "$actual" >/dev/null
+
+fake_commands="$work_directory/bin"
+mkdir -p "$fake_commands"
+
+{
+  printf '%s\n' '#!/bin/sh'
+  printf '%s\n' 'set -eu'
+  printf '%s\n' 'printf "%s\\n" "$*" >> "$IB_TEST_NICE_LOG"'
+  printf '%s\n' 'test "$1" = -n'
+  printf '%s\n' 'shift 2'
+  printf '%s\n' 'exec "$@"'
+} > "$fake_commands/nice"
+
+{
+  printf '%s\n' '#!/bin/sh'
+  printf '%s\n' 'set -eu'
+  printf '%s\n' 'printf "%s\\t%s\\n" "$1" "$2" >> "$IB_TEST_ICU_LOG"'
+  printf '%s\n' 'case $2 in *fail*) exit 7 ;; esac'
+  printf '%s\n' 'printf "body for %s\\n" "$2"'
+} > "$fake_commands/icu"
+
+chmod +x "$fake_commands/nice" "$fake_commands/icu"
+
+look_ahead_root="$work_directory/look-ahead"
+nice_log="$work_directory/nice.log"
+icu_log="$work_directory/icu.log"
+export IB_LOOK_AHEAD_DIR="$look_ahead_root"
+export IB_NICE="$fake_commands/nice"
+export IB_ICU="$fake_commands/icu"
+export IB_TEST_NICE_LOG="$nice_log"
+export IB_TEST_ICU_LOG="$icu_log"
+
+sh "$repository_root/bin/import_url_list.grease" "$input" |
+  sh "$repository_root/bin/look_ahead.grease" > "$work_directory/paths.txt"
+
+test -d "$look_ahead_root"
+test "$(wc -l < "$nice_log" | tr -d ' ')" = 2
+test "$(wc -l < "$icu_log" | tr -d ' ')" = 2
+tab=$(printf '\t')
+grep -Fx "get${tab}https://example.test/one" "$icu_log" >/dev/null
+grep -Fx "get${tab}https://example.test/two?q=three" "$icu_log" >/dev/null
+grep -F -- '-n 20' "$nice_log" >/dev/null
+
+one_key=$(printf '%s' 'https://example.test/one' | sha256sum | awk '{ print $1 }')
+two_key=$(printf '%s' 'https://example.test/two?q=three' | sha256sum | awk '{ print $1 }')
+test "$(cat "$look_ahead_root/$one_key/request.url")" = 'https://example.test/one'
+test "$(cat "$look_ahead_root/$one_key/body")" = 'body for https://example.test/one'
+test "$(cat "$look_ahead_root/$two_key/body")" = 'body for https://example.test/two?q=three'
+
+failure_input="$work_directory/failure-urls.txt"
+printf '%s\n' \
+  'https://fail.example/resource' \
+  'https://after.example/resource' > "$failure_input"
+
+if sh "$repository_root/bin/look_ahead.grease" < "$failure_input" \
+    > "$work_directory/failure-paths.txt" 2> "$work_directory/failure-errors.txt"; then
+  printf '%s\n' 'look-ahead batch hid an ICU failure' >&2
+  exit 1
+fi
+
+fail_key=$(printf '%s' 'https://fail.example/resource' | sha256sum | awk '{ print $1 }')
+after_key=$(printf '%s' 'https://after.example/resource' | sha256sum | awk '{ print $1 }')
+test ! -f "$look_ahead_root/$fail_key/body"
+test ! -f "$look_ahead_root/$fail_key/request.url"
+test -f "$look_ahead_root/$after_key/body"
+
+notice=$(sh "$repository_root/bin/export_url_list.grease")
+test "$notice" = "EyeBrowser freely remixes pages, so if you want an accurate export of the URLs that contributed to this cauldron of browser pages, I'm going to have to get back to you."
+
+printf '%s\n' 'URL-list import/look-ahead tests: ok'

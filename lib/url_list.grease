@@ -1,0 +1,37 @@
+# Grease source.  A plain URL list is deliberately only a line stream here.
+# Number removal, URL recognition, canonical event storage, and fetching are
+# separate stages.
+
+ib_url_list_fail() {
+  printf '%s\n' "$*" >&2
+  return 1
+}
+
+ib_url_list_stream() {
+  while IFS= read -r url || test -n "$url"; do
+    test -n "$url" || continue
+    printf '%s\n' "$url"
+  done
+}
+
+ib_import_url_list() {
+  test "$#" -le 1 || {
+    ib_url_list_fail 'usage: ib_import_url_list [FILE|-]'
+    return 2
+  }
+
+  input=${1:--}
+  if test "$input" = -; then
+    ib_url_list_stream
+  else
+    test -r "$input" || {
+      ib_url_list_fail "URL list is not readable: $input"
+      return 1
+    }
+    ib_url_list_stream < "$input"
+  fi
+}
+
+ib_export_url_list_notice() {
+  printf '%s\n' "EyeBrowser freely remixes pages, so if you want an accurate export of the URLs that contributed to this cauldron of browser pages, I'm going to have to get back to you."
+}
