@@ -115,3 +115,16 @@ Search should therefore be able to answer both:
 - which categories point at this tab?
 
 The second direction matters for understanding and editing overlapping organization, even if the on-disk representation uses ordinary forward symlinks and derives reverse membership by scanning or indexing them.
+
+## Observation from a 491-URL browsing batch
+
+A hand classification of 491 real browsing rows is a useful scale check for this model. A primary-purpose partition was possible without collapsing the corpus into one giant `math` or `books` bucket: 115 rows were book shopping/acquisition, 115 were book library/download/preview, 54 were mathematics reading/reference/course material, 29 were visual or interactive mathematics, and 16 were mathematics history/classic-source material. The rest formed a long tail of repair, tools, building, software, music, literature, politics, family/admin, games, food, and other purposes.
+
+That partition is useful as a diagnostic view, not as canonical truth. A Brecht listing can simultaneously belong to `book-shopping`, `Brecht`, and `theatre`; a mathematical book can belong to both an acquisition view and its mathematical subject. Dense recurring clusters such as Brecht, Philip Ball, Galois theory, paper folding, Euclid/Kepler, Thurston/Teichmuller theory, Japanese woodworking, Go, and EPA 608 already justify narrower overlapping views.
+
+Two details matter for ingestion:
+
+- preserve duplicate visits as distinct history rows even when their URL strings are identical;
+- do not label an opaque URL `unknown` merely because its subject metadata has not been resolved yet. An Anna's Archive `/md5/...` or download URL is already known to be book retrieval; subject/title enrichment can happen later.
+
+Private account, authentication, messaging, password-reset, and token-bearing URLs should be excluded from public fixtures rather than treated as ordinary categorization examples. In this batch only one bare archive snapshot lacked enough context even for a useful primary-purpose guess.
