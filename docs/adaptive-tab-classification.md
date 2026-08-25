@@ -40,8 +40,8 @@ Examples learned from classification corrections:
 - Haaretz is news/reading rather than money merely because the encountered page is a subscription offer.
 - Kids-related material should be grouped by the family task it supports, even when the individual pages are PDFs, calendars, sign-up pages, government pages, or payment pages.
 - A Benn Peifert post can be `long-form reading / self-education`; being hosted on X does not make it social-media ephemera or pop culture.
-- Jmail and Knockrup can belong to a user category such as `hate`, `disgusting`, `ugly`, or `evil` when the reason for retaining them is deliberate inspection of something repellent rather than enjoyment or ordinary reading.
-- A documentary such as *The Decent One* can likewise have `evil/hate` as its primary retrieval category when the subject matter and reason for retaining it are inspection of Nazism; `documentary` or `history` can remain secondary descriptors.
+- Jmail, Knockrup, death-related sites, execution details, assassination material, Nazi correspondence, antisemitic imagery, and similar material can belong to `morbid curiosity` when the reason for retaining them is deliberate inspection of disturbing, repellent, dangerous, or taboo material.
+- A documentary such as *The Decent One* can likewise have `morbid curiosity` as its primary retrieval category when the subject matter and reason for retaining it are inspection of Nazism; `documentary` or `history` can remain secondary descriptors.
 - `Problems I Like` and a Jacobian-counterexample visualization can form a bounded `intellectual fun / short reading` class: interesting enough to explore for pleasure, but meaningfully distinct from long-form reading that competes for substantial scheduled time.
 
 These examples imply that URL/domain/content features are evidence for classification, not the definition of the category.
@@ -56,9 +56,15 @@ For example, if a site is known to sell or curate books but the user no longer r
 
 A tab may have more than one true motive. Classification should therefore distinguish the category most useful for later retrieval from secondary descriptive motives rather than pretending that every tab has exactly one semantic meaning.
 
-For example, deliberate inspection of repellent material can involve both `hate/disgust` and `self-education`: the user may be trying to understand how something objectionable works, testing their own reaction to it, or simply following a fascination with disturbing material. The primary category should answer where the user would later look for the tab; secondary labels can preserve the other motive.
+For example, `morbid curiosity` can coexist with `self-education`, `history`, `documentary`, or another subject label. Someone may be examining disturbing material to understand it, to confront something frightening or repellent, or simply because dark material can attract attention. The primary category should answer where the user would later look for the tab; secondary labels can preserve the other motive.
 
-Terms such as `morbid curiosity` may describe some of this behavior, especially attraction to disturbing, dangerous, death-related, or taboo material, but they are broader than the user's `hate/disgust` category and should not be imposed as a replacement for it.
+`Morbid curiosity` is intentionally different from `hate-read`. A hate-read is more naturally something like an opinion piece consumed despite expecting to dislike or disagree with it. Morbid curiosity instead covers disturbing subject matter itself: death, violence, atrocity, taboo, evil, grotesque material, or unsettling historical evidence.
+
+## Non-moralizing organization
+
+IB's classifier should not treat a category name as a judgment about the user. Categories such as `sex` and `morbid curiosity` are ordinary descriptions of browsing motives and should be handled as neutrally as `cars`, `history`, or `kids`.
+
+The system should not hide, euphemize, or downgrade these categories merely because they concern sensitive or disturbing material. The purpose is retrieval and organization, not moral inference.
 
 ## Desired objective
 
