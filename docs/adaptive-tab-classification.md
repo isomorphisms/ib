@@ -40,11 +40,11 @@ Examples learned from classification corrections:
 - A sanding block or Titebond applicator can belong to `home repair` even though the page itself is simply a shopping page; the purchase is subordinate to the repair task.
 - Dakota service procedures belong to `car repair`, not generic DIY.
 - Haaretz is news/reading rather than money merely because the encountered page is a subscription offer.
-- Kids-related material should be grouped by the family task it supports, even when the individual pages are PDFs, calendars, sign-up pages, government pages, or payment pages.
+- Kids-related material often belongs together when the retrieval task is a family task, even when the pages are PDFs, calendars, sign-up pages, government pages, or payment pages. But kid-related subject matter is not an absolute override: a toy page such as `crux.jp` can still be primarily `shopping` when the retrieval task is remembering something to buy.
 - A Benn Peifert post can be `long-form reading / self-education`; being hosted on X does not make it social-media ephemera or pop culture.
 - Jmail, Knockrup, death-related sites, execution details, assassination material, Nazi correspondence, antisemitic imagery, and similar material can belong to `morbid curiosity` when the reason for retaining them is deliberate inspection of disturbing, repellent, dangerous, or taboo material.
 - A documentary such as *The Decent One* can likewise have `morbid curiosity` as its primary retrieval category when the subject matter and reason for retaining it are inspection of Nazism; `documentary` or `history` can remain secondary descriptors.
-- `Problems I Like` and a Jacobian-counterexample visualization can form a bounded `intellectual fun / short reading` class: interesting enough to explore for pleasure, but meaningfully distinct from long-form reading that competes for substantial scheduled time.
+- Daniel Litt's `Problems I Like` and a Jacobian-counterexample visualization can form a bounded `intellectual fun / short reading` class: interesting enough to explore for pleasure, but meaningfully distinct from long-form reading that competes for substantial scheduled time. A page being broken or awkward to use does not change the retrieval motive.
 
 These examples imply that URL/domain/content features are evidence for classification, not the definition of the category.
 
