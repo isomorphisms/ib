@@ -53,7 +53,7 @@ mkdir -p "$fake_commands"
   printf '%s\n' '#!/bin/sh'
   printf '%s\n' 'set -eu'
   printf '%s\n' 'printf "%s\\t%s\\n" "$1" "$2" >> "$IB_TEST_ICU_LOG"'
-  printf '%s\n' 'case $2 in *fail*) exit 7 ;; esac'
+  printf '%s\n' 'case $2 in *fail*) printf "%s\\n" "fixture ICU connection failure" >&2; exit 7 ;; esac'
   printf '%s\n' 'printf "body for %s\\n" "$2"'
 } > "$fake_commands/icu"
 
@@ -67,6 +67,7 @@ export IB_NICE="$fake_commands/nice"
 export IB_ICU="$fake_commands/icu"
 export IB_TEST_NICE_LOG="$nice_log"
 export IB_TEST_ICU_LOG="$icu_log"
+export IB_LOOK_AHEAD_NOW='2026-08-25T23:45:00Z'
 
 sh "$repository_root/bin/import_url_list.grease" "$input" |
   sh "$repository_root/bin/look_ahead.grease" > "$work_directory/paths.txt"
@@ -83,6 +84,7 @@ one_key=$(printf '%s' 'https://example.test/one' | sha256sum | awk '{ print $1 }
 two_key=$(printf '%s' 'https://example.test/two?q=three' | sha256sum | awk '{ print $1 }')
 test "$(cat "$look_ahead_root/$one_key/request.url")" = 'https://example.test/one'
 test "$(cat "$look_ahead_root/$one_key/body")" = 'body for https://example.test/one'
+test "$(cat "$look_ahead_root/$one_key/result")" = ok
 test "$(cat "$look_ahead_root/$two_key/body")" = 'body for https://example.test/two?q=three'
 
 failure_input="$work_directory/failure-urls.txt"
@@ -98,9 +100,16 @@ fi
 
 fail_key=$(printf '%s' 'https://fail.example/resource' | sha256sum | awk '{ print $1 }')
 after_key=$(printf '%s' 'https://after.example/resource' | sha256sum | awk '{ print $1 }')
-test ! -f "$look_ahead_root/$fail_key/body"
-test ! -f "$look_ahead_root/$fail_key/request.url"
+test -f "$look_ahead_root/$fail_key/body"
+test "$(cat "$look_ahead_root/$fail_key/request.url")" = 'https://fail.example/resource'
+test "$(cat "$look_ahead_root/$fail_key/result")" = error
+grep -Fx 'EyeBrowser could not fetch this page.' "$look_ahead_root/$fail_key/body" >/dev/null
+grep -Fx 'Attempted: 2026-08-25T23:45:00Z' "$look_ahead_root/$fail_key/body" >/dev/null
+grep -Fx 'URL: https://fail.example/resource' "$look_ahead_root/$fail_key/body" >/dev/null
+grep -Fx 'Exit status: 7' "$look_ahead_root/$fail_key/body" >/dev/null
+grep -Fx 'fixture ICU connection failure' "$look_ahead_root/$fail_key/body" >/dev/null
 test -f "$look_ahead_root/$after_key/body"
+test "$(cat "$look_ahead_root/$after_key/result")" = ok
 
 notice=$(sh "$repository_root/bin/export_url_list.grease")
 test "$notice" = "EyeBrowser freely remixes pages, so if you want an accurate export of the URLs that contributed to this cauldron of browser pages, I'm going to have to get back to you."

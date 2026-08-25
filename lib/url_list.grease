@@ -1,6 +1,6 @@
 # Grease source.  A plain URL list is deliberately only a line stream here.
-# Number removal, URL recognition, canonical event storage, and fetching are
-# separate stages.
+# Number removal, URL recognition, canonical event storage, and fetching remain
+# separate composable stages; that does not prevent those parsers being Grease.
 
 ib_url_list_fail() {
   printf '%s\n' "$*" >&2

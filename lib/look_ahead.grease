@@ -1,5 +1,6 @@
-# Grease source.  Look-ahead bodies are disposable response bytes, never
-# canonical history.  A completed `body` file is the readiness marker.
+# Grease source.  A look-ahead body is the best human-readable result of a
+# fetch attempt: fetched bytes on success, descriptive plain text on failure.
+# The small `result` file distinguishes those cases without hiding either one.
 
 ib_look_ahead_fail() {
   printf '%s\n' "$*" >&2
@@ -37,6 +38,7 @@ ib_look_ahead_entry_directory() {
 ib_look_ahead_cached_path() {
   entry_directory=$(ib_look_ahead_entry_directory "$1") || return 1
   test -f "$entry_directory/body" || return 1
+  grep -Fx 'ok' "$entry_directory/result" >/dev/null 2>&1 || return 1
   printf '%s/body\n' "$entry_directory"
 }
 
@@ -57,30 +59,61 @@ ib_look_ahead_fetch() {
   entry_directory=$(ib_look_ahead_entry_directory "$url") || return 1
   body_path="$entry_directory/body"
   request_path="$entry_directory/request.url"
+  result_path="$entry_directory/result"
   mkdir -p "$entry_directory" || return 1
 
-  if test -f "$body_path"; then
+  if test -f "$body_path" && grep -Fx 'ok' "$result_path" >/dev/null 2>&1; then
     printf '%s\n' "$body_path"
     return 0
   fi
 
   body_partial="$entry_directory/.body.$$"
   request_partial="$entry_directory/.request.$$"
-  rm -f "$body_partial" "$request_partial"
+  result_partial="$entry_directory/.result.$$"
+  error_partial="$entry_directory/.error.$$"
+  rm -f "$body_partial" "$request_partial" "$result_partial" "$error_partial"
   printf '%s\n' "$url" > "$request_partial"
 
-  if ! "$nice_command" -n "$niceness" "$icu_command" get "$url" > "$body_partial"; then
-    rm -f "$body_partial" "$request_partial"
-    ib_look_ahead_fail "look-ahead GET failed: $url"
-    return 1
+  fetch_failed=0
+  if "$nice_command" -n "$niceness" "$icu_command" get "$url" \
+      > "$body_partial" 2> "$error_partial"; then
+    printf '%s\n' ok > "$result_partial"
+  else
+    fetch_status=$?
+    attempted_at=${IB_LOOK_AHEAD_NOW:-$(date -u '+%Y-%m-%dT%H:%M:%SZ')}
+    {
+      printf '%s\n' 'EyeBrowser could not fetch this page.'
+      printf 'Attempted: %s\n' "$attempted_at"
+      printf 'URL: %s\n' "$url"
+      printf 'Command: icu get\n'
+      printf 'Exit status: %s\n' "$fetch_status"
+      printf '%s\n' 'ICU said:'
+      if test -s "$error_partial"; then
+        cat "$error_partial"
+      else
+        printf '%s\n' '(no error text)'
+      fi
+    } > "$body_partial"
+    printf '%s\n' error > "$result_partial"
+    fetch_failed=1
   fi
+  rm -f "$error_partial"
 
   if ! mv "$request_partial" "$request_path"; then
-    rm -f "$body_partial" "$request_partial"
+    rm -f "$body_partial" "$request_partial" "$result_partial"
     return 1
   fi
   if ! mv "$body_partial" "$body_path"; then
-    rm -f "$body_partial" "$request_path"
+    rm -f "$body_partial" "$request_path" "$result_partial"
+    return 1
+  fi
+  if ! mv "$result_partial" "$result_path"; then
+    rm -f "$result_partial"
+    return 1
+  fi
+
+  if test "$fetch_failed" -ne 0; then
+    ib_look_ahead_fail "look-ahead GET failed: $url"
     return 1
   fi
 
