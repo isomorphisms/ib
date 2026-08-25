@@ -118,6 +118,8 @@ Examples of rebuildable indexes:
 
 This keeps the stored model portable and makes aggressive reorganization possible without rewriting the underlying history.
 
+Tab categories are one such derived organization surface: they may overlap freely, become more specific where browsing is dense, and expose a small active working set without imposing a single hierarchy. See `docs/tab-categorization.md`.
+
 ## Reversibility
 
 Automated organization and LLM-assisted edits should operate on durable records through auditable changes. Destructive operations should be explicit. Derived organization should be cheap to rebuild or revert.
