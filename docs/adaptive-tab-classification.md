@@ -36,7 +36,9 @@ Examples learned from classification corrections:
 - Idiocracy can remain `pop culture`.
 - Music being listened to should be distinct from writing or research about music.
 - Documentaries should be distinct from generic movies/video when that difference predicts later retrieval.
-- Cars, electronics, and software contribution work should not be collapsed into one generic DIY/technical bucket.
+- Home repair, car repair, electronics, and software contribution work should not be collapsed into one generic DIY/technical bucket.
+- A sanding block or Titebond applicator can belong to `home repair` even though the page itself is simply a shopping page; the purchase is subordinate to the repair task.
+- Dakota service procedures belong to `car repair`, not generic DIY.
 - Haaretz is news/reading rather than money merely because the encountered page is a subscription offer.
 - Kids-related material should be grouped by the family task it supports, even when the individual pages are PDFs, calendars, sign-up pages, government pages, or payment pages.
 - A Benn Peifert post can be `long-form reading / self-education`; being hosted on X does not make it social-media ephemera or pop culture.
