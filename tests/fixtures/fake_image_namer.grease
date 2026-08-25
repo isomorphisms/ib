@@ -1,0 +1,8 @@
+#!/bin/sh
+set -eu
+# Protocol: argv[1] is the complete source document; argv[2] is the unresolved
+# image manifest.  A real language-model command may inspect both and emits
+# ORDER<TAB>CONCEPTUAL_NAME rows.
+test -s "$1"
+test -s "$2"
+printf '3\tpolyhedral cell decomposition after relu activation\n'

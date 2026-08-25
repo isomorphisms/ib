@@ -1,0 +1,45 @@
+#!/bin/sh
+set -eu
+
+repository_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+work_directory=$(mktemp -d)
+cleanup() {
+  rm -rf "$work_directory"
+}
+trap cleanup EXIT HUP INT TERM
+
+fixture="$repository_root/tests/fixtures/arxiv_site/html/2203.11355"
+output="$work_directory/prepaint.txt"
+export IB_ARXIV_PREPAINT_HTML="$fixture"
+export IB_ARXIV_PREPAINT_RESOLVED_URL='https://arxiv.org/html/2203.11355'
+export IB_ARXIV_PREPAINT_PREFIXES='192 512 1024'
+
+sh "$repository_root/bin/prepaint_arxiv_progressively.grease" 2203.11355 > "$output"
+
+test "$(grep -c '^stage-requested-bytes=' "$output")" -eq 3
+grep -Fx 'source-kind=html' "$output" >/dev/null
+grep -Fx 'heavyweight-renderer-invocations=0' "$output" >/dev/null
+grep -Fx 'stage-requested-bytes=192' "$output" >/dev/null
+grep -Fx 'stage-requested-bytes=512' "$output" >/dev/null
+grep -Fx 'stage-requested-bytes=1024' "$output" >/dev/null
+
+awk '
+  /^stage-requested-bytes=192$/ { in_stage = 1 }
+  /^stage-requested-bytes=512$/ { in_stage = 0 }
+  in_stage { print }
+' "$output" > "$work_directory/192.txt"
+awk '
+  /^stage-requested-bytes=512$/ { in_stage = 1 }
+  /^stage-requested-bytes=1024$/ { in_stage = 0 }
+  in_stage { print }
+' "$output" > "$work_directory/512.txt"
+
+grep -F 'information-title=Origami in N dimensions' "$work_directory/192.txt" >/dev/null
+! grep -Fx '# Abstract' "$work_directory/192.txt" >/dev/null
+grep -F '# Origami in N dimensions' "$work_directory/512.txt" >/dev/null
+grep -Fx '# Abstract' "$work_directory/512.txt" >/dev/null
+grep -Fx 'information-must-escalate=False' "$work_directory/512.txt" >/dev/null
+! grep -F 'heavyweight-renderer-marker' "$output" >/dev/null
+test "$(grep -c '^prepaint-width-bounded=True$' "$output")" -eq 3
+
+printf 'arXiv progressive pre-paint tests: ok\n'

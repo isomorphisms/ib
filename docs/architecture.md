@@ -15,6 +15,7 @@ The browser core owns:
 - user organization and labels
 - indexes and search metadata
 - renderer selection
+- display-repair policy and browser-owned augmentations
 - synchronization/export boundaries
 
 A renderer owns only the live machinery required to display and interact with a page while it is attached.
@@ -92,6 +93,14 @@ Renderer choice can eventually be:
 - chosen automatically from required capabilities
 
 The first architecture should not assume that every renderer supports JavaScript, WebAssembly, DRM, extensions, or identical DOM state restoration.
+
+## Display repair
+
+`ib` is not required to reproduce a site's interface defects literally. It may add browser-owned controls or presentation when doing so makes ordinary page actions easier.
+
+Display repair is browser policy above the renderer. It must not silently rewrite fetched responses, stored snapshots, or canonical history. Trusted repair controls should normally be painted outside page-controlled DOM/CSS/JavaScript so the site cannot hide or impersonate them.
+
+The first concrete repair is a `Copy` button for semantic text regions. Candidate detection is deliberately separate from the button primitive, so cheap structural heuristics can work without requiring an expensive semantic or language-model pass. See `docs/display-repair.md`.
 
 ## Derived indexes
 

@@ -1,0 +1,55 @@
+module PDFCaptionAssociate
+
+import PDF.Figure
+import System
+
+%default total
+
+-- This executable is deliberately not a PDF parser. Grease/Poppler supplies
+-- normalized page rectangles and text fragments; the vendored PDF.Figure
+-- module remains the owner of figure/caption association semantics.
+
+parse_text_fragments : List String → List page_text_fragment
+parse_text_fragments
+  (page_text :: left_text :: bottom_text :: right_text :: top_text :: text :: rest) =
+    text_fragment_on_page
+      (cast page_text)
+      (page_rectangle_at
+        (cast left_text)
+        (cast bottom_text)
+        (cast right_text)
+        (cast top_text))
+      text :: parse_text_fragments rest
+parse_text_fragments _ = []
+
+caption_from_figure : figure → String
+caption_from_figure (image_with_caption _ caption) = text_fragment_text caption
+caption_from_figure (image_without_identified_caption _) = ""
+
+caption_for_arguments : List String → String
+caption_for_arguments
+  (maximum_gap_text :: page_text :: object_number_text ::
+   left_text :: bottom_text :: right_text :: top_text :: fragment_arguments) =
+    let image = placed_image_from_object
+          (cast page_text)
+          (cast object_number_text)
+          (page_rectangle_at
+            (cast left_text)
+            (cast bottom_text)
+            (cast right_text)
+            (cast top_text))
+    in caption_from_figure
+      (associate_figure_caption
+        (cast maximum_gap_text)
+        image
+        (parse_text_fragments fragment_arguments))
+caption_for_arguments _ = ""
+
+program_arguments : List String → List String
+program_arguments [] = []
+program_arguments (_ :: arguments) = arguments
+
+main : IO ()
+main = do
+  arguments <- getArgs
+  putStrLn (caption_for_arguments (program_arguments arguments))

@@ -1,0 +1,40 @@
+#!/bin/sh
+set -eu
+
+repository_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+idric_prefix=${IDRIC_PREFIX:-/tmp/idric}
+idric="$idric_prefix/bin/idris2"
+vendor_source="$repository_root/vendor/harvest-images-from-pdf/src"
+bridge_source="$repository_root/src/PDFCaptionAssociate.idric"
+bridge_link="$vendor_source/PDFCaptionAssociate.idric"
+output_directory="$repository_root/src/build/exec"
+output="$output_directory/ib-pdf-caption-associate"
+output_app="$output_directory/ib-pdf-caption-associate_app"
+compile_log=/tmp/idric-pdf-caption-associate-compile.txt
+
+if ! test -x "$idric"; then
+  sh "$repository_root/bin/ci_browser_foundation.grease" build-idric
+fi
+
+test -f "$vendor_source/PDF/Figure.idric"
+test -f "$bridge_source"
+
+cleanup() {
+  rm -f "$bridge_link"
+}
+trap cleanup EXIT HUP INT TERM
+
+rm -f "$bridge_link"
+ln -s "$bridge_source" "$bridge_link"
+
+cd "$vendor_source"
+"$idric" PDFCaptionAssociate.idric -o ib-pdf-caption-associate \
+  2>&1 | tee "$compile_log"
+test -x build/exec/ib-pdf-caption-associate
+test -d build/exec/ib-pdf-caption-associate_app
+! grep -q '^Error:' "$compile_log"
+
+mkdir -p "$output_directory"
+rm -rf "$output_app"
+cp build/exec/ib-pdf-caption-associate "$output"
+cp -R build/exec/ib-pdf-caption-associate_app "$output_app"

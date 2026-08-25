@@ -1,0 +1,45 @@
+#!/bin/sh
+set -eu
+
+repository_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+work_directory=$(mktemp -d)
+cleanup() {
+  rm -rf "$work_directory"
+}
+trap cleanup EXIT HUP INT TERM
+
+output="$work_directory/prepaint.txt"
+export IB_ARXIV_PREPAINT_PREFIXES='4096 16384 32768'
+sh "$repository_root/bin/prepaint_arxiv_progressively.grease" 2203.11355 > "$output"
+
+stage_output() {
+  requested_bytes=$1
+  awk -v wanted="$requested_bytes" '
+    /^stage-requested-bytes=/ {
+      active = ($0 == "stage-requested-bytes=" wanted)
+    }
+    active { print }
+  ' "$output"
+}
+
+stage_output 4096 > "$work_directory/4096.txt"
+stage_output 16384 > "$work_directory/16384.txt"
+stage_output 32768 > "$work_directory/32768.txt"
+
+grep -Fx 'source-kind=html' "$output" >/dev/null
+grep -Fx 'heavyweight-renderer-invocations=0' "$output" >/dev/null
+grep -Fx 'stage-input-bytes=4096' "$output" >/dev/null
+grep -Fx 'stage-input-bytes=16384' "$output" >/dev/null
+grep -Fx 'stage-input-bytes=32768' "$output" >/dev/null
+grep -F 'information-title=Origami in N dimensions' "$work_directory/4096.txt" >/dev/null
+grep -F '# Origami in N dimensions' "$work_directory/16384.txt" >/dev/null
+grep -Fx '# Abstract' "$work_directory/32768.txt" >/dev/null
+grep -F 'Neural networks can implement arbitrary functions.' "$work_directory/32768.txt" >/dev/null
+! grep -F 'initializeReadingPreferences' "$output" >/dev/null
+test "$(grep -c '^prepaint-width-bounded=True$' "$output")" -eq 3
+
+document_bytes=$(sed -n 's/^document-bytes=//p' "$output")
+test "$document_bytes" -gt 32768
+
+printf 'live arXiv progressive pre-paint: title at 4 KiB, paper heading at 16 KiB, abstract at 32 KiB of %s bytes\n' \
+  "$document_bytes"
