@@ -8,7 +8,7 @@ pdf_harvester_ref=${PDF_HARVESTER_REF:-77d85dc6f7e89d109cb9e06f42706bc34f00e4a3}
 
 install_dependencies() {
   sudo apt-get update
-  sudo apt-get install -y chezscheme curl xmlstarlet busybox poppler-utils
+  sudo apt-get install -y chezscheme curl xmlstarlet busybox poppler-utils jq libgmp-dev
 }
 
 build_idric() {
@@ -74,6 +74,19 @@ exercise_workbench() {
   grep -Fx 'resident-at-10=10' /tmp/ib-workbench.txt
 }
 
+exercise_prepaint_network() {
+  cd "$repository_root"
+  sh -n bin/icu_search.grease
+  sh -n bin/prepaint_predecision.grease
+  sh -n bin/termux_prepaint_url.grease
+  sh -n tests/test_icu_search.grease
+  sh -n tests/test_prepaint_predecision.grease
+  sh -n tests/test_termux_prepaint_url.grease
+  sh tests/test_icu_search.grease
+  sh tests/test_prepaint_predecision.grease
+  sh tests/test_termux_prepaint_url.grease
+}
+
 build_information_programs() {
   test -x "$idric_prefix/bin/idris2" || build_idric
   cd "$repository_root/src"
@@ -85,6 +98,10 @@ build_information_programs() {
     2>&1 | tee /tmp/idric-arxiv-prepaint-compile.txt
   test -x ./build/exec/ib-arxiv-prepaint
   ! grep -q '^Error:' /tmp/idric-arxiv-prepaint-compile.txt
+  "$idric_prefix/bin/idris2" HtmlPrepaint.idric -o ib-html-prepaint \
+    2>&1 | tee /tmp/idric-html-prepaint-compile.txt
+  test -x ./build/exec/ib-html-prepaint
+  ! grep -q '^Error:' /tmp/idric-html-prepaint-compile.txt
 }
 
 exercise_information() {
@@ -104,6 +121,29 @@ exercise_information() {
   grep -Fx 'phone-api-row=True' /tmp/ib-information-smoke.txt
   grep -Fx 'phone-lines=8' /tmp/ib-information-smoke.txt
   grep -Fx 'phone-width-bounded=True' /tmp/ib-information-smoke.txt
+  grep -Fx 'article-first-paragraph=True' /tmp/ib-information-smoke.txt
+  grep -Fx 'article-second-paragraph=True' /tmp/ib-information-smoke.txt
+  grep -Fx 'article-href=True' /tmp/ib-information-smoke.txt
+  grep -Fx 'article-inline-href=True' /tmp/ib-information-smoke.txt
+  grep -Fx 'article-inline-prefix=True' /tmp/ib-information-smoke.txt
+  grep -Fx 'article-inline-suffix=True' /tmp/ib-information-smoke.txt
+  grep -Fx 'article-linked-image=True' /tmp/ib-information-smoke.txt
+  grep -Fx 'article-image-empty-link=False' /tmp/ib-information-smoke.txt
+  grep -Fx 'plain-first-url=True' /tmp/ib-information-smoke.txt
+  grep -Fx 'plain-second-url=True' /tmp/ib-information-smoke.txt
+  grep -Fx 'cheap-url-rejects-relative=False' /tmp/ib-information-smoke.txt
+  src/build/exec/ib-html-prepaint \
+    'https://arxiv.org/abs/2203.11355' \
+    'https://arxiv.org/html/2203.11355' \
+    tests/fixtures/arxiv_site/html/2203.11355 \
+    > /tmp/ib-html-prepaint.txt
+  tab=$(printf '\t')
+  grep -Fx "ib-prepaint${tab}1" /tmp/ib-html-prepaint.txt
+  grep -Fx "revision${tab}1${tab}complete" /tmp/ib-html-prepaint.txt
+  grep -Fx "requested-url${tab}https://arxiv.org/abs/2203.11355" \
+    /tmp/ib-html-prepaint.txt
+  test "$(tail -n 1 /tmp/ib-html-prepaint.txt)" = end
+  test "$(wc -c < /tmp/ib-html-prepaint.txt)" -le 65536
   sh -n bin/prepaint_arxiv_progressively.grease
   sh -n tests/test_arxiv_progressive_prepaint.grease
   sh tests/test_arxiv_progressive_prepaint.grease
@@ -153,11 +193,12 @@ case "${1:-}" in
   exercise-information) exercise_information ;;
   exercise-core) exercise_core ;;
   exercise-workbench) exercise_workbench ;;
+  exercise-prepaint-network) exercise_prepaint_network ;;
   exercise-scientific-media) exercise_scientific_media ;;
   exercise-live-arxiv) exercise_live_arxiv ;;
   exercise-live-arxiv-prepaint) exercise_live_arxiv_prepaint ;;
   *)
-    printf 'usage: %s {install-dependencies|build-idric|verify-pdf-harvester|exercise-information|exercise-core|exercise-workbench|exercise-scientific-media|exercise-live-arxiv|exercise-live-arxiv-prepaint}\n' "$0" >&2
+    printf 'usage: %s {install-dependencies|build-idric|verify-pdf-harvester|exercise-information|exercise-core|exercise-workbench|exercise-prepaint-network|exercise-scientific-media|exercise-live-arxiv|exercise-live-arxiv-prepaint}\n' "$0" >&2
     exit 2
     ;;
 esac

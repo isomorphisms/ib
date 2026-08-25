@@ -29,6 +29,9 @@ jobs:
       - name: Install system dependencies through Grease
         run: sh bin/ci_browser_foundation.grease install-dependencies
 
+      - name: Exercise ICU search and bounded network pre-decision
+        run: sh bin/ci_browser_foundation.grease exercise-prepaint-network
+
       - name: Restore Idric compiler
         id: idric-cache
         uses: actions/cache/restore@v4
