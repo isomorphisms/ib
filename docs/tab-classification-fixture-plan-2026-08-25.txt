@@ -1,0 +1,181 @@
+# Tab classification fixture plan — 2026-08-25
+
+Source: one 98-row real browsing batch supplied during interactive classification.
+Rows: 98
+Unique URLs: 96
+
+Purpose:
+- preserve the user's actual tab mixture, including duplicate rows;
+- test intent-first classification rather than domain/MIME/page-type classification;
+- keep UNKNOWN when page identity is known but browsing intent is not;
+- use category cardinality only as a soft pressure for future splitting;
+- permit secondary labels such as documentary/history without changing the primary retrieval bucket.
+
+Important learned boundaries:
+- kids overrides page type;
+- shopping is spending/buying, distinct from money/banking/benefits;
+- product pages may classify as home repair or vehicle repair when that is the actual project;
+- blue-collar/trades activity is separate from white-collar/academic job activity;
+- Open Syllabus and the college resilience map classify under Black Ball;
+- sex and morbid curiosity are ordinary non-moralizing retrieval categories;
+- Critical Role can be its own branch instead of generic pop culture;
+- music listening differs from music practice/reference and from writing about music;
+- Problems I Like and the Jacobian visualization are intellectual fun / short reading, not long-form reading;
+- Benn Peifert is long-form reading / self-education;
+- The Decent One is primarily morbid curiosity here, with documentary/history secondary;
+- Ultimate Library, Charbagh, crux.jp, and the Matthias Weber page remain UNKNOWN because intent was not recovered.
+
+
+## KIDS
+https://www.canwashtenaw.org/summer-camps
+https://www.canfamilies.org/summer-camps
+https://www.wlps.net/board-calendars/
+https://assets-whitmore-lake.s3.amazonaws.com/Montessori/gltw_elementary_summer_camp_flyer.pdf
+https://checkout.babylist.com/checkouts/cn/hWNCnnA4dfUov2mrTvlNRKDQ/en/information?_r=AQABKWgKVFpn7T9qezB_ElQ7adRy_Pebv5-uCwAbTsO9Oy8&auto_redirect=false&edge_redirect=true&skip_shop_pay=true
+https://stage.worklifesystems.com/ReferralUpdate/UpdateReferral/5205390?activetab=SearchPrograms
+https://www.michigan.gov/mileap/early-childhood-education/cclb/parents
+https://cclb.my.site.com/micchirp/s/statewide-facility-search
+https://a2acton.com/camp
+https://www.gshom.org/en/Camp/SummerCamp/SummerDayCamp/ann-arbor-day-camp.html
+https://schools.mybrightwheel.com/sign-up/confirmation
+https://www.michigan.gov/mileap/early-childhood-education/early-learners-and-care/cdc
+http://www.centerstagedrama.org/store/c2/CSPTickets#/
+https://support.google.com/accounts/answer/27441?hl=en&co=GENIE.Platform%3DDesktop
+https://support.google.com/families/answer/7103338?hl=en
+https://app.smore.com/n/vfb6k-primary-summer-classes
+https://www.annarborymca.org/wp-content/uploads/2026/01/Open-Arms-Application-2026-1.pdf
+
+## BLUE-COLLAR JOBS / INTERVIEWS
+https://www.thejobsquad.com/job-details/maintenance-technician-in-general-labor-jobs-1468451
+https://www.indeed.com/m/viewjob?jk=3ffd92e0a9105bac&from=appsharedroid
+https://outlook.office.com/bookwithme/user/fee3a6d7615c4272af05ff1cfd709809%40bastiansolutions.com/booking/n_EXwNHwpE-cTgytMI_TUg2?anonymous&ismsaljsauthenabled
+
+## TRADES / CREDENTIALS / SCHOOL ADMIN
+https://themanufacturinginstitute.smapply.io/acc/r/w/
+https://connect.wccnet.edu/services/account/_gl/1%252At6s64j%252A_gcl_au%252AMzgxMTE2MzQyLjE3NzU1MDA5Nzc./
+https://www.escogroup.org/training/epa608.aspx
+https://www.escotesting.com/remote/default.aspx
+https://meazurelearning.wistia.com/medias/x8sicg86fm
+https://www.escogroup.org/training/epa609.aspx
+https://washtenaw.my.salesforce-sites.com/engage/TargetX_Engage__Engage#/academic-advising-drop-in/signin?offsite=1
+https://www.wccnet.edu/directory/sinclair-lynne.php
+
+## WHITE-COLLAR / ACADEMIC JOBS
+https://www.mechanize.work/apply/software-engineer/?twclid=2475dqk2efwpgdmdp7yea4xge4
+https://orise.orau.gov/nlr-slac-summer-school/faq.html
+https://outlook.office.com/bookwithme/user/fea6671782a74f2d877f77d7a11cac70%40mjhlifesciences.com/meetingtype/KaFQQpXaJEOIENeFQs_bVQ2?anonymous&ismsaljsauthenabled
+https://outlook.office.com/bookwithme/user/fea6671782a74f2d877f77d7a11cac70%40mjhlifesciences.com/meetingtype/KaFQQpXaJEOIENeFQs_bVQ2?anonymous&ismsaljsauthenabled
+
+## MEETINGS / APPOINTMENTS
+https://calendly.com/mpixler-r717/30-minute/invitees/20bb9c84-f9af-4072-9a71-5823ad1f68ba
+https://www.google.com/url?q=https://track-mg.mobilize.us/CL0/https:%252F%252Fus02web.zoom.us%252Flaunch%252Fjc%252F87692845889/1/0100019f5b9785b9-e48a5801-f3e9-483a-8b0f-85e991173601-000000/fYs2YABYjRweaIsv-aY20Opom-FhQzdXVIAfkozLRU%3D452&source=gmail&ust=1784042420383000&usg=AOvVaw3msh132XXdOiIShhHmyUzV
+https://teams.microsoft.com/dl/launcher/launcher.html?url=%2F%23%2Fmeet%2F26864237797274%3Fp%3DmYJMvFupXRCWhhf4mm%26anon%3Dtrue&type=meet&deeplinkId=4ad8b282-9df2-4ec3-b6df-acb9d360b77e&directDl=true&msLaunch=true&enableMobilePage=true&suppressPrompt=true
+
+## MONEY / BANKING
+https://pay.homedepotconsumer.accountonline.com
+https://www.dfcufinancial.com/landing-pages/zelle#enrolls
+https://online.dfcufinancial.com/dfcufinancialonline/uux.aspx#/login
+https://www.dfcufinancial.com/Services/Anywhere-Banking#tab_673
+
+## SHOPPING
+https://www.copperleafforest.com/our-plants
+https://www.temu.com/ul/kuiper/un1.html?subj=feed-un&_bg_fs=1&_p_mat1_type=1&_p_jump_id=725&_x_vst_scene=adg&adg_ctx=a-8c568cfc~f-35bd789d&goods_id=601105596055713&_p_rfs=1&_x_ads_channel=twitter&_x_ads_account=18ce55llf8y&_x_ads_set=omylu&_x_ads_id=wo2nl&twclid=28reipnm8cv9j4fuxysqoj61yr&_x_ns_adg_trc=ta-b73c_fefc57210ae7e331c419c56e1f6b66da1fcf59fda063b295c98a92e0937545b6
+
+## FOOD / ORDERING
+https://hungryhowies.hungerrush.com/Common/SessionExpired
+
+## HOME REPAIR
+https://www.amazon.com/SATC-Sanding-Block-Mouse-shaped-Holder/dp/B08X5ZRRNT?crid=EDQC4RAZAVT9&dib=eyJ2IjoiMSJ9.IP4PoLMixf-Qy8_HjbsE2K0_IMzclMzZwXgeh5o4HWMmZYmV1W5YYVEgd4xKqJGhztIzQLmcqn4XzwwU7XWF34FebIsQt1UDuIpSXU7xF9Fu7GrR4mdRmLiXrneiBLIcD0iSPv0tphevm_8Qj4i8LWDaB6HcYI1GXyg7nXv8qcN0ZScWIF0aLNvMH12tWcmyZ5dNb7Zl56DzKMm_a9tHUcyN_r9EEAtX_UnYGE29c3M8T52UE9Chvy-SNi-A5Pu_sXUaxaJ4p4wRcWZheXvz2BNhDDvBsbmP7kJ2Wy8oiQ.pZ1nPe__mF6xKfDMTj7L9S73hSaFNPYdiis5DERjOnk&dib_tag=se&keywords=sanding%2Bmouse&qid=1721939641&sprefix=sanding%2Bmouse,aps,105&sr=8-3-spons&sp_csd=d2lkZ2V0TmFtZT1zcF9hdGY&th=1&linkCode=sl1&tag=codyromer-20&linkId=3a87a8e01bdcbf418dceca4629290d1f&language=en_US&ref=as_li_ss_tl
+https://www.amazon.com/Titebond-16330-TiteBrush-Applicator/dp/B01MSKZ24Z?crid=365MJYENH05TA&dib=eyJ2IjoiMSJ9.eIWPYKM2AJy-q1B3iqvhRNMSAqnxsgkxiU65nIe8PYFmH1aGhYT63P2OVe_6TLJJnUiIyJaxwFuxLdKzdKNt7sPsCw1zU-l8zyCYbpM_2bR2c1yQ1YGNgmtDMfOwT6iOzHwdXGKQf_o_q2TafmzWfOdo8AR161Y2VlY87qkjBzojnSFgwPekcl7PrRvUCgWuBlEoHni7MUai4JjebCHVbSxJ_h8DQv-Kgu1G2m6Vn_ySMMPTVhA5LZi4-WoV5ZLlu8KaQeW9xmfTThIFFZOGUDhMtpdSSQCT8YngrTBjhVs.3y0FxTuR8x9K9mt8IfNmrqftMcJYYh_ZNcwAxEdOpAU&dib_tag=se&keywords=titebond+glue+brush&qid=1721939956&sprefix=titebond+glue+br,aps,110&sr=8-1&linkCode=sl1&tag=codyromer-20&linkId=dcb2a7aa82fc8222aefa77e0314e8f1e&language=en_US&ref_=as_li_ss_tl
+https://partsdr.com/appliance-models/lbr4132pq2-whirlpool-washer/diagrams/2778016?srsltid=AfmBOoogwiYBHJFmGmYTUf-pXo4kmML9j66J_HI-SbuCMStsWP0GoxAd
+
+## CAR / VEHICLE REPAIR
+https://charm.li/Dodge%20and%20Ram/2005/Dakota%202WD%20V8-4.7L%20VIN%20J/Repair%20and%20Diagnosis/Transmission%20and%20Drivetrain/Automatic%20Transmission%2FTransaxle/Shift%20Interlock/Adjustments/Automatic%20Transmission%2042RLE/
+https://lemon-manuals.la/
+https://charm.li/Dodge%20and%20Ram/2005/Dakota%204WD%20V8-4.7L%20VIN%20J/Repair%20and%20Diagnosis/Heating%20and%20Air%20Conditioning/Compressor%20Clutch%20Relay/Diagrams/
+https://thetrailerpartsoutlet.com/products/6000-lb-tk-trailer-axle-6k-electric-brake-6-lug?variant=39969047773265
+https://lemon-manuals.la/Dodge%20and%20Ram/2005/Dakota%204WD%20V8-4.7L%20VIN%20N/Repair%20and%20Diagnosis/Engine%2C%20Cooling%20and%20Exhaust/Engine/Seals%20and%20Gaskets/Front%20Crankshaft%20Seal/Service%20and%20Repair/
+
+## ELECTRONICS
+https://www.ladyada.net/make/wavebubble/
+https://pcbgen.ai/
+
+## SOFTWARE CONTRIBUTIONS
+https://wiki.diasporafoundation.org/Pod_data_backup
+https://wiki.diasporafoundation.org/Getting_started_with_contributing
+https://wiki.diasporafoundation.org/Installation
+https://github.com/woheller69/FreeDroidWarn?tab=readme-ov-file#solutions
+
+## BLACK BALL
+http://kylesaunders.com/university-map/
+https://www.opensyllabus.org/
+https://analytics.opensyllabus.org/signin?redirect=https://analytics.opensyllabus.org/trends?trends_query=Machine+Learning&trends_query=Deep+Learning&trends_query=Natural+Language+Processing
+https://galaxy.opensyllabus.org/
+
+## SEX
+https://tillersinternational.org/
+https://www.bellesa.co/search?q=Maya+wolfe
+https://www.bellesa.co/videos/9772/episode-89-maya-robby
+https://www.bellesa.co/videos/8153/episode-71-maya-vanessa-lucas
+
+## MORBID CURIOSITY
+https://jmail.world/calendar?date=2011-10-01&view=month
+https://www.knockrup.com/
+https://www.thedecentonefilm.com/
+https://www.netflix.com/title/80013764?fromWatch=true
+
+## HISTORY
+https://www.sonymusic.co.uk/podcast/cover-up-ministry-of-secrets/
+https://podbay.fm/p/wars-that-shaped-the-world
+https://podtail.com/en/podcast/asian-review-of-books/lloyd-llewellyn-jones-ancient-persia-and-the-book-/
+
+## CRITICAL ROLE
+https://critrole.com/campaign4/#episodes
+https://critrole.com/wp-content/uploads/2025/11/c4_beacon_character_art_thumbnailsthimble.jpg
+
+## POP CULTURE
+https://clip.cafe/idiocracy-2006/i-cant-believe-like-money-too/?srsltid=AfmBOooqdmNBSRsbATaPawbyeXTRCM0UDCq8-WABOJu96lSkCPKjbEl2
+
+## MUSIC LISTENING
+https://music.apple.com/us/album/last-thoughts-on-woody-guthrie-live/157471642?i=157472019
+
+## MUSIC PRACTICE / REFERENCE
+http://www.learngospelmusic.com/
+https://mychords.net/en/rex-orange-county/164594-rex-orange-county-open-a-window.html
+
+## LONG-FORM READING / SELF-EDUCATION
+https://x.com/bennpeifert/status/2004518534471422095
+
+## INTELLECTUAL FUN / SHORT READING
+http://problemsilike.com/
+https://www.rezchikov.me/jacobian_counterexample_visualization.html
+
+## READING / BOOKS
+https://www.abebooks.com/checkout/basket
+
+## NEWS / READING
+https://promotion.haaretz.com/offers?htm_source=site&htm_medium=button&htm_campaign=subscription&htm_campaign_type=subscription&htm_content=hblocked
+
+## FUN / PLAY
+https://www.a2gov.org/parks-and-recreation/activities/disc-golf/
+https://nimi.li/
+https://tokitrainer.com/learn/lesson/2
+https://gomagic.org/quizzes/eyes-quiz-postroenie-glaz-2/
+https://online-go.com/game/88319248
+https://gomagic.org/lessons/imaginary-tesujis-voobrazhaemye-tesudzi/
+https://nimi.li/
+
+## HEALTH / MEDICAL ADMIN
+https://www.myuofmhealth.org/MyChart-PRD/Authentication/SecondaryValidation?ranDeviceCheck=1
+https://www.cdc.gov/ticks/media/images/2025/04/RS38383_LVV7_DVBD_Tick_Bite_Removal_Photos_2025_099_Edit.jpg
+
+## CIVIC / PERSONAL ADMIN
+https://michigan.maps.arcgis.com/apps/webappviewer/index.html?id=a0e24821a9c24b60a50038957528311a
+https://www.michigan.gov/sos/elections/voting/absentee-voting#Request
+https://mvic.sos.state.mi.us/Voter/Index/#registeredVoter
+
+## UNKNOWN / CONTEXT LOST
+https://commons.wikimedia.org/wiki/Category:Charbagh
+https://ultimatelibrary.co.uk/
+https://crux.jp/
+https://math.indiana.edu/about/faculty/weber-matthias.html
