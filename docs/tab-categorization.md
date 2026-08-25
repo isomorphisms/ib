@@ -6,24 +6,15 @@ A URL may be an article, book, video, product page, forum post, or PDF. Those ar
 
 ## Classification is not an ontology
 
-A CART-like classifier is useful for proposing memberships. Its first question is roughly:
+Membership should be treated as a collection of independent scored decisions rather than one exclusive tree. Conceptually, each category gets its own decision surface over tab features. A simple linear classifier may literally be one separating hyperplane per category; richer classifiers can replace it without changing the contract.
 
-```text
-why is this URL here?
-        |
-        +-- accomplish something
-        |      +-- car repair
-        |      +-- home repair
-        |      +-- apply / schedule / transact / ...
-        |
-        +-- know or experience something
-               +-- research
-               +-- ordinary curiosity
-               +-- morbid curiosity
-               +-- ...
-```
+The central semantic question is still roughly: why is this tab here? Purpose categories such as `car-repair`, `home-repair`, research, ordinary curiosity, morbid curiosity, applying, scheduling, or transacting are useful signals and memberships, but they are not gating branches through which every tab must descend.
 
-The classifier must not force every URL into exactly one terminal leaf. The output is evidence for zero, one, or many memberships.
+A tab can land on the positive side of several category decisions at once. Being classified into one category must not exclude simultaneous membership in other useful categories. Scores near a boundary are evidence of uncertainty, not a demand to pick one winner.
+
+CART-like behavior is useful at a different level: when one category becomes dense, IB may propose splitting off a narrower recurring cluster and give that new category its own decision surface. This is adaptive refinement, not a single hierarchy.
+
+The classifier output is evidence for zero, one, or many memberships.
 
 Prefer a useful extra membership to making material disappear from retrieval because one supposedly exclusive classification won.
 
@@ -124,7 +115,7 @@ That partition is useful as a diagnostic view, not as canonical truth. A Brecht 
 
 Two details matter for ingestion:
 
-- preserve duplicate visits as distinct history rows even when their URL strings are identical;
+- preserve duplicate visits as distinct history rows even when their URL strings are identical. Repetition is evidence of salience rather than redundant noise; revisit count, recency, and spacing between revisits are useful derived signals for ranking, category promotion, and deciding what belongs in `_active`;
 - do not label an opaque URL `unknown` merely because its subject metadata has not been resolved yet. An Anna's Archive `/md5/...` or download URL is already known to be book retrieval; subject/title enrichment can happen later.
 
 Private account, authentication, messaging, password-reset, and token-bearing URLs should be excluded from public fixtures rather than treated as ordinary categorization examples. In this batch only one bare archive snapshot lacked enough context even for a useful primary-purpose guess.
