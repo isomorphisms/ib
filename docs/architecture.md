@@ -1,131 +1,149 @@
 # Architecture
 
-## Principle
+## Principle and scope
 
-`ib` treats browsing state as durable data and rendering as a replaceable service.
+`ib` treats browsing state, user decisions, and task intent as durable data. Acquisition, extraction, rendering, and frontend presentation are replaceable services.
 
-A tab is not a renderer process. A tab is a persistent record that may currently have a renderer attached to it.
+A tab is not a renderer process. It is a persistent navigation thread that may currently have a renderer attached. A task may span several tabs, resources, searches, and actions.
+
+IB's present product target is a personal browser/workbench, not universal web compatibility. The substrate still supports multiple first-class frontends and renderer adapters so a broader browser can be built over it without owning or changing the stored model. See `docs/personal-workbench.md`.
+
+## Ownership
 
 The browser core owns:
 
-- tab identity and ordering
-- navigation history
-- sleeping and waking policy
-- saved page snapshots
-- user organization and labels
-- indexes and search metadata
-- renderer selection
-- display-repair policy and browser-owned augmentations
-- synchronization/export boundaries
+- resource, tab, event, and task identity;
+- navigation and search history;
+- sleeping and waking policy;
+- task and investigation frontiers;
+- saved representations and snapshot references;
+- user organization, assertions, corrections, and active choices;
+- indexes, category semantics, and acceptance policy;
+- renderer selection and display-repair policy;
+- synchronization and export boundaries.
 
-A renderer owns only the live machinery required to display and interact with a page while it is attached.
+Acquisition and extraction adapters obtain HTML, direct media, structured responses, or other useful source material. They may complete a task without a renderer.
+
+A renderer owns only the temporary machinery required to display and interact with a live page while attached.
+
+A frontend projects browser and task state and issues commands. It does not become the source of truth.
 
 ## Main layers
 
 ```text
-UI / commands / LLM hooks
-          |
-          v
-+-----------------------+
-|      browser core     |
-| tabs, history, state  |
-+-----------------------+
-     |             |
-     v             v
- persistent      renderer
-   store          adapter
-                    |
-          +---------+---------+
-          |         |         |
-       Servo     Chromium   text/etc.
+page frontend       task workbench       inspector/commands
+       \                  |                    /
+        +--------- browser and task core -----+
+                  /           |          \
+       persistent store   acquisition   renderer adapters
+                           / extraction    |     |     |
+                           HTTP, parsers  Servo WebView text/etc.
 ```
 
-The persistent store must remain intelligible without any rendering engine installed.
+The page frontend, text-first task workbench, inspector, information extractor, and text renderer are distinct roles. In particular, a text-oriented renderer is not the ChatGPT-like workbench frontend.
+
+The persistent store remains intelligible and useful without a rendering engine or language model installed.
 
 ## Persistent objects
 
+### Resource
+
+A browser-owned record carrying requested and resolved URLs plus any asserted canonical URL. Immutable representations and content hashes have separate identities. Compatible response bytes may be reused without collapsing resource, tab, or event identity.
+
 ### Tab
 
-A durable browsing intention. It survives process exits and normally survives renderer changes.
+A durable navigation thread. It survives process exits and normally survives renderer changes. It references a current history event and has browser-owned metadata such as stable id, creation time, sleeping state, priority, and optional renderer preference.
 
-A tab references a current history entry and has browser-owned metadata such as:
+Two tabs may deliberately refer to the same resource. Equal URLs do not collapse tab identity.
 
-- stable id
-- creation time
-- last visit time
-- current history entry
-- sleeping/awake state
-- priority
-- labels or collections
-- optional preferred renderer
+### Event
 
-### History entry
+An append-only occurrence such as a visit, search, duplicate-tab action, referrer traversal, explicit correction, or handoff. Events have stable identities and retain time, order, source, and task context when known.
 
-A navigation event. It records at minimum the requested URL, resolved URL when known, title when known, timestamps, and links to any saved snapshot or recoverable view state.
+### Task or investigation
 
-### Snapshot
+A durable user goal spanning roots, tabs, resources, candidates, background work, and actions. It preserves enough intention and frontier state to resume after process death or a later reboot. A task is not a renderer session and is not identical to its cached bodies or summaries.
 
-A stored representation of fetched material. Large content belongs in content-addressed storage or an archive format, not in the small tab manifest.
+### Snapshot or representation
 
-A snapshot can outlive the tab that first produced it.
+A stored version of fetched or derived material. Large content belongs in content-addressed or otherwise immutable storage, not in a small tab manifest. A representation can outlive the tab or task that first produced it.
 
 ### View state
 
-Browser-owned state useful for reconstructing a view, for example scroll position and selected history entry. Renderer-specific opaque state may be stored as an optional cache, but it cannot be the only representation of browser state.
+Browser-owned state useful for reconstructing a view, for example scroll position and selected history event. Renderer-specific opaque state may exist as optional cache but cannot be the only representation of browser state.
 
-## Sleeping
+### Proposal and decision
+
+A model result is an untrusted append-only proposal with provenance. Deterministic validation and explicit user action may accept, reject, aggregate, or supersede it. Models never write canonical history or user assertions directly. See `docs/inference-and-learning.md`.
+
+## Sleeping and bounded residency
 
 Sleeping is the ordinary state of an old tab, not an exceptional recovery path.
 
-A sleeping tab has no renderer session and should consume approximately the cost of its persistent metadata plus indexes. Waking attaches a renderer and reconstructs the best available view from the stored record.
+A sleeping tab has no renderer session and consumes approximately the cost of persistent metadata plus bounded indexes and caches. Waking attaches a renderer only when a task needs one and reconstructs the best available view from stored records.
 
-This means a session with thousands or tens of thousands of tabs is principally an indexing problem, not a requirement for thousands of live web views.
+A 10,000-resource or history corpus does not imply 10,000 logical tabs or live documents. The current developer fixture deliberately separates 10,000 known URLs, 32 logical tabs, and a 3–10-tab resident working set. Steady-state renderer RAM should follow the resident set, not corpus size.
 
 ## Renderer swapping
 
-The core selects a renderer through a narrow adapter contract. Swapping renderers must not change tab identity, history identity, labels, ordering, or stored snapshots.
+The core selects a renderer through a narrow adapter contract. Swapping renderers must not change resource, tab, event, task, organization, or stored-representation identity.
 
-Renderer choice can eventually be:
+Renderer choice may be global, per site, per tab, or selected from required capabilities. No first architecture assumption requires every renderer to support JavaScript, WebAssembly, DRM, extensions, or identical DOM restoration.
 
-- global
-- per site
-- per tab
-- chosen automatically from required capabilities
+Exact live DOM or JavaScript-heap continuity across unrelated engines is not required. Continuity belongs to browser-owned records.
 
-The first architecture should not assume that every renderer supports JavaScript, WebAssembly, DRM, extensions, or identical DOM state restoration.
+## Acquisition and information extraction
+
+Cheap acquisition and extraction complement renderer adapters; they are not forced through the renderer interface.
+
+An existing extracted view, direct image, HTML body, structured response, or small source-specific adapter may satisfy a task before any live page machinery starts. A full renderer remains available when interaction or visual context genuinely requires it. See `docs/resource-constrained-rendering.md` and `docs/prefetch-and-reading.md`.
 
 ## Display repair
 
-`ib` is not required to reproduce a site's interface defects literally. It may add browser-owned controls or presentation when doing so makes ordinary page actions easier.
+IB need not reproduce a site's interface defects literally. It may add browser-owned controls or presentation when doing so makes ordinary actions easier.
 
-Display repair is browser policy above the renderer. It must not silently rewrite fetched responses, stored snapshots, or canonical history. Trusted repair controls should normally be painted outside page-controlled DOM/CSS/JavaScript so the site cannot hide or impersonate them.
+Display repair is browser policy above a page renderer. It must not silently rewrite fetched responses, stored snapshots, or canonical history. Trusted controls should normally be painted outside page-controlled DOM, CSS, and JavaScript so the site cannot hide or impersonate them. See `docs/display-repair.md`.
 
-The first concrete repair is a `Copy` button for semantic text regions. Candidate detection is deliberately separate from the button primitive, so cheap structural heuristics can work without requiring an expensive semantic or language-model pass. See `docs/display-repair.md`.
+## Durable decisions and derived views
 
-## Derived indexes
+Canonical records and explicit user decisions are the source of truth. Indexes and materialized views are disposable acceleration or presentation structures.
 
-Indexes are disposable acceleration structures. Canonical browsing records are the source of truth.
+Examples of rebuildable derived state include:
 
-Examples of rebuildable indexes:
+- recency, domain, revisit, and awake/sleeping indexes;
+- full-text and vector-search indexes;
+- renderer capability requirements;
+- category directories and reverse-membership indexes;
+- extracted information views, rankings, and summaries.
 
-- recency
-- domain
-- awake/sleeping
-- priority
-- labels
-- full-text title/URL search
-- renderer capability requirements
+Category definitions, accepted memberships, correction events, and active-category choices are durable even when their filesystem projections are rebuilt. See `docs/tab-categorization.md` and `docs/storage-model.md`.
 
-This keeps the stored model portable and makes aggressive reorganization possible without rewriting the underlying history.
+## Reversibility and inference
 
-Tab categories are one such derived organization surface: they may overlap freely, become more specific where browsing is dense, and expose a small active working set without imposing a single hierarchy. See `docs/tab-categorization.md`.
+Automated organization and model-assisted work follow one direction:
 
-## Reversibility
+```text
+immutable source observations -> untrusted proposals -> validated decisions --+
+canonical browser events -----------------------------------------------------+-> views
+authoritative user assertions and corrections -------------------------------+
+```
 
-Automated organization and LLM-assisted edits should operate on durable records through auditable changes. Destructive operations should be explicit. Derived organization should be cheap to rebuild or revert.
+Reducers emit decisions; they never create an assertion in the user's name.
 
-Git may be useful for small textual metadata and schema evolution, but it should not be required to version large page bodies, caches, or renderer state.
+Destructive operations are explicit. Model absence or failure cannot make basic browsing or recovery unavailable. Git may be useful for small textual metadata and schema evolution but is not required for large bodies, caches, or renderer state.
 
-## Initial non-goals
+## Current non-goals and open choices
 
-The first design does not choose a final GUI toolkit, rendering engine, programming language, sync provider, or archive format. Those choices should follow the persistent-state boundary rather than determine it.
+IB is implemented in Idriç, with Grease for operating-system and process orchestration and narrow native platform adapters. That language boundary is already chosen; it is not an open architecture question.
+
+The current work does not promise:
+
+- universal web, MIME, renderer, or malformed-input compatibility;
+- one mandatory frontend;
+- faithful reproduction of interfaces irrelevant to the user's task;
+- preserving a JavaScript heap across renderer changes;
+- automatic understanding of every private application protocol;
+- unbounded crawling or one live renderer per candidate;
+- direct canonical mutation by a language model.
+
+Still open are the final frontend toolkit, first conventional renderer, task and proposal serialization, sync provider, archive format, and source-specific acquisition budgets.
