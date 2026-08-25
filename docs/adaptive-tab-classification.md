@@ -41,8 +41,16 @@ Examples learned from classification corrections:
 - Kids-related material should be grouped by the family task it supports, even when the individual pages are PDFs, calendars, sign-up pages, government pages, or payment pages.
 - A Benn Peifert post can be `long-form reading / self-education`; being hosted on X does not make it social-media ephemera or pop culture.
 - Jmail and Knockrup can belong to a user category such as `hate`, `disgusting`, `ugly`, or `evil` when the reason for retaining them is deliberate inspection of something repellent rather than enjoyment or ordinary reading.
+- A documentary such as *The Decent One* can likewise have `evil/hate` as its primary retrieval category when the subject matter and reason for retaining it are inspection of Nazism; `documentary` or `history` can remain secondary descriptors.
+- `Problems I Like` and a Jacobian-counterexample visualization can form a bounded `intellectual fun / short reading` class: interesting enough to explore for pleasure, but meaningfully distinct from long-form reading that competes for substantial scheduled time.
 
 These examples imply that URL/domain/content features are evidence for classification, not the definition of the category.
+
+## Identified content does not imply identified intent
+
+IB may be able to determine exactly what a site is while still not knowing why the user opened it. That distinction should be preserved rather than papered over.
+
+For example, if a site is known to sell or curate books but the user no longer remembers why the tab was opened, the correct motivational category may still be `unknown`. Content classification can be retained as evidence, but it should not be promoted to a user-intent label without support.
 
 ## Primary retrieval category and secondary motives
 
