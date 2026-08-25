@@ -57,6 +57,10 @@ exercise_core() {
 }
 
 exercise_workbench() {
+  cd "$repository_root"
+  sh -n tests/test_real_world_url_fixture.grease
+  sh tests/test_real_world_url_fixture.grease
+
   cd "$repository_root/src"
   "$idric_prefix/bin/idris2" Workbench.idric -o ib-workbench 2>&1 | tee /tmp/idric-workbench-compile.txt
   test -x ./build/exec/ib-workbench

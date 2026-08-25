@@ -1,5 +1,11 @@
 module Workbench
 
+import Data.String
+import System
+import System.File
+import IB.History
+import IB.Index
+
 %default total
 
 fixture_target : Nat
@@ -7,6 +13,9 @@ fixture_target = 10000
 
 logical_tab_count : Nat
 logical_tab_count = 32
+
+real_world_fixture_path : String
+real_world_fixture_path = "../tests/fixtures/real_world_urls.txt"
 
 fixture_url : Nat → String
 fixture_url number = "ib://fixture/" ++ show number
@@ -46,14 +55,45 @@ churn (S remaining) resident_budget next residents =
 resident_after : Nat → Nat → List Nat
 resident_after steps resident_budget = churn steps resident_budget 0 []
 
+covering
 main : IO ()
 main = do
-  let fixtures = fixture_urls fixture_target
-  let resident_at_three = resident_after fixture_target 3
-  let resident_at_ten = resident_after fixture_target 10
-  putStrLn ("fixture-urls=" ++ show (length fixtures))
-  putStrLn ("fixture-42=" ++ fixture_url 42)
-  putStrLn ("logical-tabs=" ++ show logical_tab_count)
-  putStrLn ("churn-steps=" ++ show fixture_target)
-  putStrLn ("resident-at-3=" ++ show (length resident_at_three))
-  putStrLn ("resident-at-10=" ++ show (length resident_at_ten))
+  real_world_fixture <- readFile real_world_fixture_path
+  case real_world_fixture of
+    Left error => do
+      putStrLn ("real-world-fixture-error=" ++ show error)
+      exitFailure
+    Right source => do
+      let real_world_entries = ingest_raw_lines (lines source)
+      let real_world_indices = build_indices real_world_entries
+      let real_world_ok =
+            length real_world_entries == 219 &&
+            length (index_entries real_world_indices) == 219 &&
+            row_count "https://www.whitehouse.gov/aliens/" (url_rows real_world_indices) == 2 &&
+            row_count "https://nimi.li/" (url_rows real_world_indices) == 2 &&
+            row_count "https://www.counterpunch.org/2008/08/23/quot-change-quot-quot-hope-quot-why-they-must-be-talking-about-joe-biden/" (url_rows real_world_indices) == 2 &&
+            row_count "https://math.uchicago.edu/~emerton/research.html" (url_rows real_world_indices) == 2
+      if real_world_ok
+        then pure ()
+        else do
+          putStrLn "real-world-fixture-workbench=False"
+          exitFailure
+      let fixtures = fixture_urls fixture_target
+      let resident_at_three = resident_after fixture_target 3
+      let resident_at_ten = resident_after fixture_target 10
+      putStrLn ("real-world-fixture-urls=" ++ show (length real_world_entries))
+      putStrLn ("real-world-index-entries=" ++ show (length (index_entries real_world_indices)))
+      putStrLn ("real-world-whitehouse-visits=" ++
+        show (row_count "https://www.whitehouse.gov/aliens/" (url_rows real_world_indices)))
+      putStrLn ("real-world-nimi-visits=" ++
+        show (row_count "https://nimi.li/" (url_rows real_world_indices)))
+      putStrLn ("real-world-counterpunch-visits=" ++
+        show (row_count "https://www.counterpunch.org/2008/08/23/quot-change-quot-quot-hope-quot-why-they-must-be-talking-about-joe-biden/" (url_rows real_world_indices)))
+      putStrLn ("real-world-emerton-visits=" ++
+        show (row_count "https://math.uchicago.edu/~emerton/research.html" (url_rows real_world_indices)))
+      putStrLn ("fixture-urls=" ++ show (length fixtures))
+      putStrLn ("fixture-42=" ++ fixture_url 42)
+      putStrLn ("logical-tabs=" ++ show logical_tab_count)
+      putStrLn ("churn-steps=" ++ show fixture_target)
+      putStrLn ("resident-at-3=" ++ show (length resident_at_three))
+      putStrLn ("resident-at-10=" ++ show (length resident_at_ten))
