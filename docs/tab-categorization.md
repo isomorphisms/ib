@@ -29,7 +29,7 @@ Classifier output is evidence for zero, one, or many memberships. Prefer a usefu
 Three distinct things may share the same URL string:
 
 1. **Resource identity** — a browser-owned record carrying requested and resolved URLs plus any asserted canonical URL. Immutable fetched representations and their content hashes have separate identities; one resource may change over time, and unrelated resources may contain equal bytes.
-2. **Tab identity** — a durable browsing intention. Two deliberately open tabs may refer to the same resource without being the same intention.
+2. **Tab identity** — a durable navigation thread. Two deliberately open tabs may refer to the same resource without being the same thread or tab-level intention.
 3. **Visit or opening event** — an append-only occurrence with its own time, referrer, task, and order.
 
 Resource bytes may be deduplicated. Tabs must not be collapsed merely because their current URLs match. Visits must remain distinct history events.
