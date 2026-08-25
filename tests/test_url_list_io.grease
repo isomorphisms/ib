@@ -8,6 +8,13 @@ cleanup() {
 }
 trap cleanup EXIT HUP INT TERM
 
+. "$repository_root/lib/look_ahead.grease"
+
+export HOME="$work_directory/home"
+export XDG_CACHE_HOME="$work_directory/hidden-cache"
+unset IB_LOOK_AHEAD_DIR
+test "$(ib_look_ahead_root)" = "$HOME/look-ahead"
+
 input="$work_directory/urls.txt"
 expected="$work_directory/expected.txt"
 actual="$work_directory/actual.txt"

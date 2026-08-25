@@ -14,14 +14,12 @@ ib_look_ahead_require_command() {
 ib_look_ahead_root() {
   if test -n "${IB_LOOK_AHEAD_DIR:-}"; then
     printf '%s\n' "$IB_LOOK_AHEAD_DIR"
-  elif test -n "${XDG_CACHE_HOME:-}"; then
-    printf '%s/ib/look-ahead\n' "$XDG_CACHE_HOME"
   else
     test -n "${HOME:-}" || {
       ib_look_ahead_fail 'HOME is not set'
       return 1
     }
-    printf '%s/.cache/ib/look-ahead\n' "$HOME"
+    printf '%s/look-ahead\n' "$HOME"
   fi
 }
 
