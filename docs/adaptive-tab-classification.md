@@ -39,8 +39,18 @@ Examples learned from classification corrections:
 - Cars, electronics, and software contribution work should not be collapsed into one generic DIY/technical bucket.
 - Haaretz is news/reading rather than money merely because the encountered page is a subscription offer.
 - Kids-related material should be grouped by the family task it supports, even when the individual pages are PDFs, calendars, sign-up pages, government pages, or payment pages.
+- A Benn Peifert post can be `long-form reading / self-education`; being hosted on X does not make it social-media ephemera or pop culture.
+- Jmail and Knockrup can belong to a user category such as `hate`, `disgusting`, `ugly`, or `evil` when the reason for retaining them is deliberate inspection of something repellent rather than enjoyment or ordinary reading.
 
 These examples imply that URL/domain/content features are evidence for classification, not the definition of the category.
+
+## Primary retrieval category and secondary motives
+
+A tab may have more than one true motive. Classification should therefore distinguish the category most useful for later retrieval from secondary descriptive motives rather than pretending that every tab has exactly one semantic meaning.
+
+For example, deliberate inspection of repellent material can involve both `hate/disgust` and `self-education`: the user may be trying to understand how something objectionable works, testing their own reaction to it, or simply following a fascination with disturbing material. The primary category should answer where the user would later look for the tab; secondary labels can preserve the other motive.
+
+Terms such as `morbid curiosity` may describe some of this behavior, especially attraction to disturbing, dangerous, death-related, or taboo material, but they are broader than the user's `hate/disgust` category and should not be imposed as a replacement for it.
 
 ## Desired objective
 
