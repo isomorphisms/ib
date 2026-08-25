@@ -1,0 +1,108 @@
+#!/bin/sh
+set -eu
+
+repository_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+
+if test "$#" -ne 1; then
+  printf 'usage: %s URL\n' "$0" >&2
+  exit 2
+fi
+
+requested_url=$1
+LC_ALL=C
+export LC_ALL
+
+if test "${#requested_url}" -gt 2048; then
+  printf 'ib-prepaint: URL exceeds 2048-byte request budget\n' >&2
+  exit 2
+fi
+
+if ! printf '%s\n' "$requested_url" |
+    grep -Eq '^([Hh][Tt][Tt][Pp]|[Hh][Tt][Tt][Pp][Ss])://[!-~]+$'
+then
+  printf 'ib-prepaint: URL must be one visible-ASCII absolute HTTP(S) URL\n' >&2
+  exit 2
+fi
+
+authority_and_rest=${requested_url#*://}
+authority=${authority_and_rest%%/*}
+authority=${authority%%\?*}
+authority=${authority%%\#*}
+case $authority in
+  ''|*@*|'['*)
+    printf 'ib-prepaint: unsupported or empty URL authority\n' >&2
+    exit 2
+    ;;
+esac
+
+icu_command=${IB_ICU:-icu}
+renderer=${IB_HTML_PREPAINTER:-$repository_root/src/build/exec/ib-html-prepaint}
+fetch_max_bytes=${IB_FETCH_MAX_BYTES:-4194304}
+artifact_max_bytes=${IB_PREPAINT_MAX_BYTES:-65536}
+
+case $fetch_max_bytes:$artifact_max_bytes in
+  *[!0-9:]*|:*|*:)
+    printf 'ib-prepaint: byte limits must be positive decimal integers\n' >&2
+    exit 2
+    ;;
+esac
+test "$fetch_max_bytes" -gt 0 && test "$artifact_max_bytes" -gt 0 || {
+  printf 'ib-prepaint: byte limits must be positive decimal integers\n' >&2
+  exit 2
+}
+
+command -v "$icu_command" >/dev/null 2>&1 || {
+  printf 'ib-prepaint: ICU executable not found: %s\n' "$icu_command" >&2
+  exit 127
+}
+test -x "$renderer" || {
+  printf 'ib-prepaint: Idriç renderer is not executable: %s\n' "$renderer" >&2
+  exit 127
+}
+
+work_directory=$(mktemp -d)
+cleanup() {
+  rm -rf "$work_directory"
+}
+trap cleanup EXIT HUP INT TERM
+
+html_path=$work_directory/page.html
+artifact_path=$work_directory/page.prepaint
+
+if ! "$icu_command" get "$requested_url" > "$html_path"; then
+  printf 'ib-prepaint: ICU fetch failed\n' >&2
+  exit 1
+fi
+
+html_bytes=$(wc -c < "$html_path" | tr -d ' ')
+test "$html_bytes" -gt 0 || {
+  printf 'ib-prepaint: ICU returned an empty response\n' >&2
+  exit 1
+}
+test "$html_bytes" -le "$fetch_max_bytes" || {
+  printf 'ib-prepaint: response exceeds %s-byte fetch budget\n' "$fetch_max_bytes" >&2
+  exit 1
+}
+
+if ! "$renderer" "$requested_url" "$requested_url" "$html_path" > "$artifact_path"; then
+  printf 'ib-prepaint: Idriç rendering failed\n' >&2
+  exit 1
+fi
+
+artifact_bytes=$(wc -c < "$artifact_path" | tr -d ' ')
+test "$artifact_bytes" -le "$artifact_max_bytes" || {
+  printf 'ib-prepaint: artifact exceeds %s-byte result budget\n' "$artifact_max_bytes" >&2
+  exit 1
+}
+
+tab=$(printf '\t')
+test "$(sed -n '1p' "$artifact_path")" = "ib-prepaint${tab}1" || {
+  printf 'ib-prepaint: renderer returned an invalid header\n' >&2
+  exit 1
+}
+test "$(tail -n 1 "$artifact_path")" = end || {
+  printf 'ib-prepaint: renderer returned an incomplete artifact\n' >&2
+  exit 1
+}
+
+cat "$artifact_path"

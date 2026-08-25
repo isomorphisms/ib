@@ -1,0 +1,103 @@
+module HtmlPrepaint
+
+import IB.Information
+import System
+import System.File
+
+%default total
+
+program_arguments : List String → List String
+program_arguments [] = []
+program_arguments (_ :: arguments) = arguments
+
+take_first : Nat → List value → List value
+take_first Z values = []
+take_first (S amount) [] = []
+take_first (S amount) (value :: rest) = value :: take_first amount rest
+
+clip_chars : Nat → List Char → List Char
+clip_chars Z values = []
+clip_chars (S amount) [] = []
+clip_chars (S amount) (value :: rest) = value :: clip_chars amount rest
+
+clip_field : Nat → String → String
+clip_field amount value = pack (clip_chars amount (unpack value))
+
+bounded_or_empty : Nat → String → String
+bounded_or_empty amount value =
+  if length (unpack value) <= amount then value else ""
+
+escape_chars : List Char → List Char
+escape_chars [] = []
+escape_chars ('\\' :: rest) = '\\' :: '\\' :: escape_chars rest
+escape_chars ('\t' :: rest) = '\\' :: 't' :: escape_chars rest
+escape_chars ('\n' :: rest) = '\\' :: 'n' :: escape_chars rest
+escape_chars ('\r' :: rest) = '\\' :: 'r' :: escape_chars rest
+escape_chars (value :: rest) = value :: escape_chars rest
+
+escape_field : String → String
+escape_field value = pack (escape_chars (unpack value))
+
+join_with_tabs : List String → String
+join_with_tabs [] = ""
+join_with_tabs [value] = escape_field value
+join_with_tabs (value :: rest) = escape_field value ++ "\t" ++ join_with_tabs rest
+
+put_record : String → List String → IO ()
+put_record name values = putStrLn (join_with_tabs (name :: values))
+
+bounded_content : String → String
+bounded_content = clip_field 192
+
+bounded_target : String → String
+bounded_target = bounded_or_empty 192
+
+bounded_image_field : String → String
+bounded_image_field = bounded_or_empty 64
+
+bounded_cells : List String → List String
+bounded_cells cells = map (clip_field 48) (take_first 4 cells)
+
+render_item : InformationItem → IO ()
+render_item (Heading text) = put_record "heading" ["1", bounded_content text]
+render_item (TextBlock text) = put_record "text" [bounded_content text]
+render_item (Link label target) =
+  put_record "link" [bounded_content label, bounded_target target]
+render_item (Image source alternate caption target) =
+  put_record "image"
+    [ bounded_image_field source
+    , bounded_image_field alternate
+    , bounded_image_field caption
+    , bounded_image_field target
+    ]
+render_item (TableRow cells) = put_record "row" (bounded_cells cells)
+render_item (Form label action) =
+  put_record "form" [bounded_content label, bounded_target action]
+
+render_items : List InformationItem → IO ()
+render_items [] = pure ()
+render_items (item :: rest) = do
+  render_item item
+  render_items rest
+
+render_prepaint : InformationView → IO ()
+render_prepaint (View requested_url resolved_url title items) = do
+  put_record "ib-prepaint" ["1"]
+  put_record "revision" ["1", "complete"]
+  put_record "requested-url" [bounded_or_empty 2048 requested_url]
+  put_record "resolved-url" [bounded_or_empty 2048 resolved_url]
+  put_record "title" [clip_field 256 title]
+  render_items (take_first 48 items)
+  put_record "end" []
+
+covering
+main : IO ()
+main = do
+  arguments <- getArgs
+  case program_arguments arguments of
+    [requested_url, resolved_url, html_path] ⇒ do
+      result <- readFile html_path
+      case result of
+        Left _ ⇒ die ("could not read fetched HTML: " ++ html_path)
+        Right html ⇒ render_prepaint (extract_html requested_url resolved_url html)
+    _ ⇒ die "usage: ib-html-prepaint REQUESTED_URL RESOLVED_URL HTML"

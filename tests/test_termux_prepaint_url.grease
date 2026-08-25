@@ -1,0 +1,106 @@
+#!/bin/sh
+set -eu
+
+repository_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+work_directory=$(mktemp -d)
+cleanup() {
+  rm -rf "$work_directory"
+}
+trap cleanup EXIT HUP INT TERM
+
+fake_icu=$work_directory/icu
+fake_renderer=$work_directory/renderer
+icu_arguments=$work_directory/icu-arguments.txt
+renderer_arguments=$work_directory/renderer-arguments.txt
+renderer_input=$work_directory/renderer-input.html
+
+{
+  printf '%s\n' '#!/bin/sh'
+  printf '%s\n' 'set -eu'
+  printf '%s\n' 'printf "%s\n" "$@" > "$IB_TEST_ICU_ARGUMENTS"'
+  printf '%s\n' 'printf "%s\n" "<html><title>Visible page</title><body><p>Fetched through ICU.</p></body></html>"'
+} > "$fake_icu"
+
+{
+  printf '%s\n' '#!/bin/sh'
+  printf '%s\n' 'set -eu'
+  printf '%s\n' 'printf "%s\n" "$@" > "$IB_TEST_RENDERER_ARGUMENTS"'
+  printf '%s\n' 'test -s "$3"'
+  printf '%s\n' 'cp "$3" "$IB_TEST_RENDERER_INPUT"'
+  printf '%s\n' 'tab=$(printf "\t")'
+  printf '%s\n' 'printf "ib-prepaint%s1\n" "$tab"'
+  printf '%s\n' 'printf "revision%s1%scomplete\n" "$tab" "$tab"'
+  printf '%s\n' 'printf "requested-url%s%s\n" "$tab" "$1"'
+  printf '%s\n' 'printf "resolved-url%s%s\n" "$tab" "$2"'
+  printf '%s\n' 'printf "title%sVisible page\n" "$tab"'
+  printf '%s\n' 'printf "text%sFetched through ICU.\n" "$tab"'
+  printf '%s\n' 'printf "end\n"'
+} > "$fake_renderer"
+chmod +x "$fake_icu" "$fake_renderer"
+
+url="https://example.test/a?q=one%20two&literal='value'"
+IB_ICU=$fake_icu \
+IB_HTML_PREPAINTER=$fake_renderer \
+IB_TEST_ICU_ARGUMENTS=$icu_arguments \
+IB_TEST_RENDERER_ARGUMENTS=$renderer_arguments \
+IB_TEST_RENDERER_INPUT=$renderer_input \
+  sh "$repository_root/bin/termux_prepaint_url.grease" "$url" \
+    > "$work_directory/result.prepaint"
+
+test "$(sed -n '1p' "$icu_arguments")" = get
+test "$(sed -n '2p' "$icu_arguments")" = "$url"
+test "$(sed -n '1p' "$renderer_arguments")" = "$url"
+test "$(sed -n '2p' "$renderer_arguments")" = "$url"
+grep -F 'Fetched through ICU.' "$renderer_input" >/dev/null
+tab=$(printf '\t')
+grep -Fx "ib-prepaint${tab}1" "$work_directory/result.prepaint" >/dev/null
+grep -Fx "requested-url${tab}${url}" "$work_directory/result.prepaint" >/dev/null
+grep -Fx "text${tab}Fetched through ICU." "$work_directory/result.prepaint" >/dev/null
+
+uppercase_url='HTTPS://example.test/Exact-Scheme'
+IB_ICU=$fake_icu \
+IB_HTML_PREPAINTER=$fake_renderer \
+IB_TEST_ICU_ARGUMENTS=$icu_arguments \
+IB_TEST_RENDERER_ARGUMENTS=$renderer_arguments \
+IB_TEST_RENDERER_INPUT=$renderer_input \
+  sh "$repository_root/bin/termux_prepaint_url.grease" "$uppercase_url" \
+    > "$work_directory/uppercase.prepaint"
+grep -Fx "requested-url${tab}${uppercase_url}" \
+  "$work_directory/uppercase.prepaint" >/dev/null
+
+if IB_ICU=$fake_icu IB_HTML_PREPAINTER=$fake_renderer \
+  sh "$repository_root/bin/termux_prepaint_url.grease" \
+    'https://example.test/a bad' > "$work_directory/invalid.out" 2>/dev/null
+then
+  printf 'invalid URL unexpectedly succeeded\n' >&2
+  exit 1
+fi
+test ! -s "$work_directory/invalid.out"
+
+long_url=https://example.test/
+while test "${#long_url}" -le 2048; do
+  long_url=${long_url}x
+done
+if IB_ICU=$fake_icu IB_HTML_PREPAINTER=$fake_renderer \
+  sh "$repository_root/bin/termux_prepaint_url.grease" \
+    "$long_url" > "$work_directory/long.out" 2>/dev/null
+then
+  printf 'oversized URL unexpectedly succeeded\n' >&2
+  exit 1
+fi
+test ! -s "$work_directory/long.out"
+
+if IB_ICU=$fake_icu IB_HTML_PREPAINTER=$fake_renderer \
+  IB_TEST_ICU_ARGUMENTS=$icu_arguments \
+  IB_TEST_RENDERER_ARGUMENTS=$renderer_arguments \
+  IB_TEST_RENDERER_INPUT=$renderer_input \
+  IB_PREPAINT_MAX_BYTES=16 \
+  sh "$repository_root/bin/termux_prepaint_url.grease" "$url" \
+    > "$work_directory/oversized.out" 2>/dev/null
+then
+  printf 'oversized artifact unexpectedly succeeded\n' >&2
+  exit 1
+fi
+test ! -s "$work_directory/oversized.out"
+
+printf 'Termux prepaint URL tests: ok\n'
