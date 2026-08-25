@@ -5,6 +5,8 @@ import IB.Index
 import IB.Storage
 import IB.Inspect
 import IB.DisplayRepair
+import IB.ScientificMedia
+import IB.Prefetch
 
 %default total
 
@@ -14,6 +16,14 @@ sample_entries = [
   Entry "https://example.test/a" (Just 10) (Just "a2") raw_urls visit Nothing 91,
   Entry "https://other.test/b" (Just 11) (Just "b") google_activity search (Just "browser") 92,
   Entry "https://missing-time.test/c" Nothing Nothing raw_urls visit Nothing 93
+  ]
+
+sample_prefetch_targets : List PrefetchTarget
+sample_prefetch_targets = [
+  Target "https://example.test/a" transient_cache,
+  Target "https://example.test/b" reading_corpus,
+  Target "https://example.test/a" reading_corpus,
+  Target "https://example.test/c" transient_cache
   ]
 
 first_or : Nat → List Nat → Nat
@@ -32,6 +42,7 @@ main = do
         FileRow "renderer/passwords" 40 regular_file
         ]
   let copy_repair = copy_button "code-1" "git status" code_block
+  let prefetch = bounded_prefetch 2 sample_prefetch_targets
   putStrLn ("ingest=" ++ show (length raw))
   putStrLn ("duplicate-url-count=" ++ show (row_count "https://example.test/a" (url_rows indices)))
   putStrLn ("newest-order=" ++ show (first_or 99 (index_chronology indices)))
@@ -44,3 +55,9 @@ main = do
   putStrLn ("copy-label=" ++ repair_label copy_repair)
   putStrLn ("copy-target=" ++ copy_target_id copy_repair)
   putStrLn ("copy-payload=" ++ copy_payload copy_repair)
+  putStrLn ("arxiv-html-first=" ++ arxiv_html_url "2203.11355")
+  putStrLn ("arxiv-prefetch=" ++ scientific_resource_prefetch_text arxiv_resource_prefetch)
+  putStrLn ("caption-name-basis=" ++ image_name_basis_text (initial_image_name_basis (Just "Figure 1. Regions") Nothing))
+  putStrLn ("temporary-needs-language-model=" ++ show (needs_language_model_image_name temporary_image_name))
+  putStrLn ("prefetch-bounded=" ++ show (length prefetch))
+  putStrLn ("prefetch-reading=" ++ show (reading_target_count prefetch))

@@ -1,0 +1,65 @@
+module InformationSmoke
+
+import IB.Information
+
+%default total
+
+heavy_prefix : String
+heavy_prefix =
+  "<html><head><title>Build console</title>" ++
+  "<link rel='stylesheet' href='/app-900kb.css'>" ++
+  "<style>body { display: grid; } hidden-style-marker</style>" ++
+  "</head><body>" ++
+  "<h1>Deployments</h1>" ++
+  "<p>Production account</p>" ++
+  "<table>" ++
+  "<tr><th>Service</th><th>Status</th></tr>" ++
+  "<tr><td>api</td><td>healthy</td></tr>" ++
+  "<tr><td>worker</td><td>queued</td></tr>" ++
+  "</table>"
+
+heavy_tail : String
+heavy_tail =
+  "<script>framework boot marker</script>" ++
+  "<canvas>canvas marker</canvas>" ++
+  "<video autoplay>video marker</video>" ++
+  "<img src='/hero-8mb.jpg'>" ++
+  "<a href='/jobs/42'>job 42</a>" ++
+  "<form action='/search'><label>Find project</label><input name='q'></form>" ++
+  "</body></html>"
+
+shell_only : String
+shell_only =
+  "<html><head><title>Application shell</title></head><body>" ++
+  "<div id='root'></div>" ++
+  "<script>project row exists only after framework execution</script>" ++
+  "</body></html>"
+
+all_lines_within : Nat → List String → Bool
+all_lines_within width [] = True
+all_lines_within width (line :: rest) =
+  length (unpack line) <= width && all_lines_within width rest
+
+has_line : String → List String → Bool
+has_line wanted [] = False
+has_line wanted (line :: rest) = line == wanted || has_line wanted rest
+
+main : IO ()
+main = do
+  let early = extract_html "https://console.test/deployments" "https://console.test/deployments" heavy_prefix
+  let full = extract_html "https://console.test/deployments" "https://console.test/deployments" (heavy_prefix ++ heavy_tail)
+  let shell = extract_html "https://console.test/app" "https://console.test/app" shell_only
+  let phone = phone_lines 6 48 full
+  putStrLn ("information-title=" ++ view_title full)
+  putStrLn ("early-table-header=" ++ show (has_table_row ["Service", "Status"] early))
+  putStrLn ("early-table-data=" ++ show (has_table_row ["api", "healthy"] early))
+  putStrLn ("full-link=" ++ show (has_link "job 42" "/jobs/42" full))
+  putStrLn ("full-form=" ++ show (has_form "/search" full))
+  putStrLn ("script-leaked=" ++ show (has_exact_item_text "framework boot marker" full))
+  putStrLn ("style-leaked=" ++ show (has_exact_item_text "body { display: grid; } hidden-style-marker" full))
+  putStrLn ("video-leaked=" ++ show (has_exact_item_text "video marker" full))
+  putStrLn ("html-must-escalate=" ++ show (must_escalate full))
+  putStrLn ("shell-must-escalate=" ++ show (must_escalate shell))
+  putStrLn ("phone-api-row=" ++ show (has_line "| api | healthy |" phone))
+  putStrLn ("phone-lines=" ++ show (length phone))
+  putStrLn ("phone-width-bounded=" ++ show (all_lines_within 48 phone))

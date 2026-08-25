@@ -1,0 +1,169 @@
+# Grease adapter for the vendored PDF.Figure semantics.
+# Poppler supplies image files and page-layout rectangles; figure/caption
+# association itself is performed by Idric through PDF.Figure.
+
+pdf_layout_image_rows() {
+  layout_xml=$1
+  separator=$(printf '\037')
+  xmlstarlet sel -t \
+    -m '//*[local-name()="page"]/*[local-name()="image"][@src]' \
+    -v 'ancestor::*[local-name()="page"][1]/@number' -o "$separator" \
+    -v '@src' -o "$separator" \
+    -v 'round(@left)' -o "$separator" \
+    -v 'round(ancestor::*[local-name()="page"][1]/@height - @top - @height)' -o "$separator" \
+    -v 'round(@left + @width)' -o "$separator" \
+    -v 'round(ancestor::*[local-name()="page"][1]/@height - @top)' -n \
+    "$layout_xml" 2>/dev/null
+}
+
+pdf_layout_text_rows() {
+  layout_xml=$1
+  separator=$(printf '\037')
+  xmlstarlet sel -t \
+    -m '//*[local-name()="page"]/*[local-name()="text"]' \
+    -v 'ancestor::*[local-name()="page"][1]/@number' -o "$separator" \
+    -v 'round(@left)' -o "$separator" \
+    -v 'round(ancestor::*[local-name()="page"][1]/@height - @top - @height)' -o "$separator" \
+    -v 'round(@left + @width)' -o "$separator" \
+    -v 'round(ancestor::*[local-name()="page"][1]/@height - @top)' -o "$separator" \
+    -v 'normalize-space(string(.))' -n \
+    "$layout_xml" 2>/dev/null
+}
+
+pdf_caption_associator() {
+  if test -n "${IB_PDF_CAPTION_ASSOCIATOR:-}"; then
+    printf '%s\n' "$IB_PDF_CAPTION_ASSOCIATOR"
+  else
+    printf '%s\n' "$repository_root/src/build/exec/ib-pdf-caption-associate"
+  fi
+}
+
+ensure_pdf_caption_associator() {
+  associator=$(pdf_caption_associator)
+  if test -x "$associator"; then
+    return 0
+  fi
+
+  if test -n "${IB_PDF_CAPTION_ASSOCIATOR:-}"; then
+    ib_media_fail "IB_PDF_CAPTION_ASSOCIATOR is not executable: $associator"
+    return 1
+  fi
+
+  sh "$repository_root/bin/build_pdf_caption_associator.grease" || return 1
+  test -x "$associator" || {
+    ib_media_fail "PDF caption associator was not built: $associator"
+    return 1
+  }
+}
+
+caption_for_pdf_image() {
+  associator=$1
+  maximum_gap=$2
+  image_page=$3
+  object_number=$4
+  image_left=$5
+  image_bottom=$6
+  image_right=$7
+  image_top=$8
+  text_rows_path=$9
+
+  set -- \
+    "$maximum_gap" "$image_page" "$object_number" \
+    "$image_left" "$image_bottom" "$image_right" "$image_top"
+
+  separator=$(printf '\037')
+  while IFS="$separator" read -r \
+      fragment_page fragment_left fragment_bottom fragment_right fragment_top fragment_text
+  do
+    test "$fragment_page" = "$image_page" || continue
+    test -n "$fragment_text" || continue
+    set -- "$@" \
+      "$fragment_page" "$fragment_left" "$fragment_bottom" \
+      "$fragment_right" "$fragment_top" "$fragment_text"
+  done < "$text_rows_path"
+
+  "$associator" "$@"
+}
+
+# Override the byte-only PDF fallback from scientific_media.grease. The output
+# manifest shape is unchanged; only the previously blank caption field gains
+# data when the vendored Idric association rule finds a caption.
+record_pdf_images_in_order() {
+  pdf_path=$1
+  output_directory=$2
+  images_directory="$output_directory/images"
+  manifest_path="$output_directory/images.tsv"
+  unresolved_path="$output_directory/unresolved_images.tsv"
+  extraction_directory="$output_directory/.pdf-layout"
+  layout_prefix="$extraction_directory/layout"
+  layout_xml="$layout_prefix.xml"
+  image_rows_path="$output_directory/.pdf_image_rows.tsv"
+  text_rows_path="$output_directory/.pdf_text_rows.tsv"
+
+  mkdir -p "$images_directory" "$extraction_directory"
+  : > "$manifest_path"
+  : > "$unresolved_path"
+
+  ib_media_require_command pdftohtml || return 1
+  ib_media_require_command xmlstarlet || return 1
+  ensure_pdf_caption_associator || return 1
+  associator=$(pdf_caption_associator)
+  maximum_gap=${IB_PDF_CAPTION_MAX_GAP:-50}
+
+  # -zoom 1 keeps Poppler's layout units aligned with PDF points. Poppler's XML
+  # uses a top-left origin; the row helpers mechanically convert rectangles to
+  # the bottom-left/y-up convention expected by PDF.Figure.
+  pdftohtml -xml -hidden -nodrm -zoom 1 \
+    "$pdf_path" "$layout_prefix" >/dev/null 2>&1 || return 1
+  test -s "$layout_xml" || return 1
+
+  pdf_layout_image_rows "$layout_xml" > "$image_rows_path"
+  pdf_layout_text_rows "$layout_xml" > "$text_rows_path"
+
+  order=0
+  separator=$(printf '\037')
+  while IFS="$separator" read -r \
+      image_page extracted_path image_left image_bottom image_right image_top
+  do
+    test -n "$extracted_path" || continue
+    test -f "$extracted_path" || {
+      ib_media_fail "Poppler reported a missing PDF image: $extracted_path"
+      return 1
+    }
+
+    order=$((order + 1))
+    extension=${extracted_path##*.}
+    temporary_file_name=$(printf 'temporary_image_%04d.%s' "$order" "$extension")
+    temporary_path="$images_directory/$temporary_file_name"
+    mv "$extracted_path" "$temporary_path"
+
+    caption_text=$(caption_for_pdf_image \
+      "$associator" "$maximum_gap" "$image_page" "$order" \
+      "$image_left" "$image_bottom" "$image_right" "$image_top" \
+      "$text_rows_path") || return 1
+
+    naming_source=temporary
+    final_file_name=$temporary_file_name
+    if test -n "$caption_text"; then
+      conceptual_text=$(caption_without_figure_label "$caption_text")
+      stem=$(conceptual_name_slug "$conceptual_text")
+      if test -n "$stem"; then
+        naming_source=caption
+        final_file_name=$(unique_image_file_name "$images_directory" "$stem" "$extension")
+        mv "$temporary_path" "$images_directory/$final_file_name"
+      fi
+    fi
+
+    printf '%s\t%s\t%s\t%s\t%s\t\t\n' \
+      "$order" "pdf-image:$order" "$final_file_name" "$naming_source" "$caption_text" \
+      >> "$manifest_path"
+
+    if test "$naming_source" = temporary; then
+      printf '%s\t%s\t%s\t\n' \
+        "$order" "$final_file_name" "$caption_text" >> "$unresolved_path"
+    fi
+  done < "$image_rows_path"
+
+  rm -f "$image_rows_path" "$text_rows_path"
+  rm -rf "$extraction_directory"
+}

@@ -1,0 +1,107 @@
+#!/bin/sh
+set -eu
+
+repository_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+. "$repository_root/lib/prefetch.grease"
+. "$repository_root/lib/scientific_media.grease"
+. "$repository_root/lib/scientific_navigation_prefetch.grease"
+
+ib_prefetch_require_command busybox
+ib_prefetch_require_command curl
+ib_prefetch_require_command xmlstarlet
+ib_prefetch_require_command sha256sum
+
+work_directory=$(mktemp -d)
+server_pid=''
+cleanup() {
+  if test -n "$server_pid"; then
+    kill "$server_pid" >/dev/null 2>&1 || true
+  fi
+  rm -rf "$work_directory"
+}
+trap cleanup EXIT HUP INT TERM
+
+export HOME="$work_directory/home"
+export IB_PREFETCH_DIR="$work_directory/prefetch-cache"
+export IB_READING_DIR="$work_directory/reading"
+mkdir -p "$HOME"
+
+fake_worker="$work_directory/fake-scientific-worker.grease"
+marker="$work_directory/worker.marker"
+release="$work_directory/worker.release"
+cat > "$fake_worker" <<'EOF'
+#!/bin/sh
+set -eu
+printf 'started\t%s\n' "$1" > "$IB_SCIENTIFIC_PREFETCH_TEST_MARKER"
+while test ! -f "$IB_SCIENTIFIC_PREFETCH_TEST_RELEASE"; do
+  sleep 0.1
+done
+printf 'done\t%s\n' "$1" >> "$IB_SCIENTIFIC_PREFETCH_TEST_MARKER"
+EOF
+chmod +x "$fake_worker"
+
+export IB_SCIENTIFIC_PREFETCH_WORKER="$fake_worker"
+export IB_SCIENTIFIC_PREFETCH_NICENESS=0
+export IB_SCIENTIFIC_PREFETCH_TEST_MARKER="$marker"
+export IB_SCIENTIFIC_PREFETCH_TEST_RELEASE="$release"
+
+tab=$(printf '\t')
+navigation_url='https://arxiv.org/abs/2203.11355'
+sh "$repository_root/bin/navigation_committed.grease" "$navigation_url"
+
+attempt=0
+while test ! -f "$marker" && test "$attempt" -lt 50; do
+  sleep 0.1
+  attempt=$((attempt + 1))
+done
+test -f "$marker"
+grep -Fx "started${tab}$navigation_url" "$marker" >/dev/null
+! grep -q '^done' "$marker"
+
+touch "$release"
+attempt=0
+while ! grep -q '^done' "$marker" && test "$attempt" -lt 50; do
+  sleep 0.1
+  attempt=$((attempt + 1))
+done
+grep -Fx "done${tab}$navigation_url" "$marker" >/dev/null
+
+rm -f "$marker" "$release"
+sh "$repository_root/bin/navigation_committed.grease" 'https://example.com/paper.pdf'
+sleep 1
+test ! -e "$marker"
+
+unset IB_SCIENTIFIC_PREFETCH_WORKER
+unset IB_SCIENTIFIC_PREFETCH_TEST_MARKER
+unset IB_SCIENTIFIC_PREFETCH_TEST_RELEASE
+
+port=$((18000 + ($$ % 20000)))
+busybox httpd -f -p "127.0.0.1:$port" -h "$repository_root/tests/fixtures/arxiv_site" &
+server_pid=$!
+sleep 1
+
+export IB_ARXIV_HTML_BASE="http://127.0.0.1:$port/html"
+export IB_ARXIV_PDF_BASE="http://127.0.0.1:$port/pdf"
+
+cache_directory=$(scientific_navigation_cache_directory "$navigation_url")
+# The foreground path above proves navigation does not wait for its worker.
+# Exercise the built-in worker synchronously here so a failing test cannot leave
+# a long-running curl child behind in the CI step.
+sh "$repository_root/bin/navigation_committed.grease" --scientific-prefetch-worker "$navigation_url"
+
+test -f "$cache_directory/.complete"
+test -s "$cache_directory/document.html"
+test -s "$cache_directory/images.tsv"
+test -s "$cache_directory/images/linear_regions_along_a_one_dimensional_input.svg"
+test -s "$cache_directory/images/activation_space_folding.svg"
+awk -F '\t' 'NR == 1 && $1 == "html" { found = 1 } END { exit !found }' "$cache_directory/source.tsv"
+test "$(awk -F '\t' 'NR == 1 { print $4 }' "$cache_directory/source.tsv")" = "$cache_directory/document.html"
+grep -F 'Linear regions along a one dimensional input' "$cache_directory/images.tsv" >/dev/null
+grep -Fx "navigation_committed${tab}transient_cache${tab}$navigation_url" "$cache_directory/trigger.tsv" >/dev/null
+test ! -e "$IB_READING_DIR"
+
+rm -rf "$IB_PREFETCH_DIR"
+test ! -e "$cache_directory"
+test ! -e "$IB_READING_DIR"
+
+printf 'scientific navigation prefetch tests: ok\n'

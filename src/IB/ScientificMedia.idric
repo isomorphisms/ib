@@ -1,0 +1,87 @@
+module IB.ScientificMedia
+
+%default total
+
+-- Browser-owned policy stays in Idriç.  Grease performs the corresponding
+-- HTTP requests and filesystem work, but it does not decide the preference.
+public export
+choice scientific_document_kind one_of
+  html_document
+  pdf_document
+
+public export
+document_kind_text : scientific_document_kind → String
+document_kind_text html_document = "html"
+document_kind_text pdf_document = "pdf"
+
+public export
+arxiv_html_url : String → String
+arxiv_html_url identifier = "https://arxiv.org/html/" ++ identifier
+
+public export
+arxiv_pdf_url : String → String
+arxiv_pdf_url identifier = "https://arxiv.org/pdf/" ++ identifier
+
+public export
+data ScientificSourceCandidate = SourceCandidate scientific_document_kind String
+
+public export
+source_candidate_kind : ScientificSourceCandidate → scientific_document_kind
+source_candidate_kind (SourceCandidate kind _) = kind
+
+public export
+source_candidate_url : ScientificSourceCandidate → String
+source_candidate_url (SourceCandidate _ url) = url
+
+-- HTML is deliberately first.  A caller only reaches the PDF candidate after
+-- the HTML candidate is unavailable or unusable.
+public export
+arxiv_source_candidates : String → List ScientificSourceCandidate
+arxiv_source_candidates identifier = [
+  SourceCandidate html_document (arxiv_html_url identifier),
+  SourceCandidate pdf_document (arxiv_pdf_url identifier)
+  ]
+
+public export
+choice scientific_resource_prefetch one_of
+  no_scientific_resource_prefetch
+  all_html_figures
+
+public export
+scientific_resource_prefetch_text : scientific_resource_prefetch → String
+scientific_resource_prefetch_text no_scientific_resource_prefetch = "none"
+scientific_resource_prefetch_text all_html_figures = "all-html-figures"
+
+-- An arXiv HTML paper is a bounded document resource graph.  Its complete
+-- figure set is therefore eligible for eager prefetch; this is not generic
+-- link lookahead or open-ended spidering.
+public export
+arxiv_resource_prefetch : scientific_resource_prefetch
+arxiv_resource_prefetch = all_html_figures
+
+public export
+choice image_name_basis one_of
+  caption_image_name
+  alt_text_image_name
+  temporary_image_name
+  language_model_image_name
+
+public export
+image_name_basis_text : image_name_basis → String
+image_name_basis_text caption_image_name = "caption"
+image_name_basis_text alt_text_image_name = "alt_text"
+image_name_basis_text temporary_image_name = "temporary"
+image_name_basis_text language_model_image_name = "language_model"
+
+-- The extraction boundary supplies already-normalized optional text.  The
+-- browser policy says which evidence wins; Grease performs slugging/renaming.
+public export
+initial_image_name_basis : Maybe String → Maybe String → image_name_basis
+initial_image_name_basis (Just _) _ = caption_image_name
+initial_image_name_basis Nothing (Just _) = alt_text_image_name
+initial_image_name_basis Nothing Nothing = temporary_image_name
+
+public export
+needs_language_model_image_name : image_name_basis → Bool
+needs_language_model_image_name temporary_image_name = True
+needs_language_model_image_name _ = False

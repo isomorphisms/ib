@@ -1,18 +1,23 @@
-name: Idric browser core
+name: IB browser foundation
 
 on:
   pull_request:
     paths:
       - 'src/**'
-      - 'docs/idric-implementation.md'
-      - 'docs/developer-workbench.md'
+      - 'bin/**'
+      - 'lib/**'
+      - 'tests/**'
+      - 'docs/**'
+      - '.gitmodules'
+      - 'vendor/**'
       - '.github/workflows/idric-core.yml'
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
-  idric:
+  idric-core:
     runs-on: ubuntu-latest
     env:
       IDRIS2_CG: chez
@@ -21,10 +26,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Chez Scheme
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y chezscheme
+      - name: Install system dependencies through Grease
+        run: sh bin/ci_browser_foundation.grease install-dependencies
 
       - name: Restore Idric compiler
         id: idric-cache
@@ -33,13 +36,9 @@ jobs:
           path: /tmp/idric
           key: idric-${{ runner.os }}-61970be77769f607cca8650bf424c0f0b22ddee7
 
-      - name: Build and install Idric compiler
+      - name: Build and install Idric compiler through Grease
         if: steps.idric-cache.outputs.cache-hit != 'true'
-        run: |
-          git clone --depth 1 https://github.com/isomorphisms/Idric.git /tmp/Idric
-          test "$(git -C /tmp/Idric rev-parse HEAD)" = "$IDRIC_REF"
-          make -C /tmp/Idric bootstrap PREFIX=/tmp/idric
-          make -C /tmp/Idric install PREFIX=/tmp/idric
+        run: sh bin/ci_browser_foundation.grease build-idric
 
       - name: Cache Idric compiler
         if: steps.idric-cache.outputs.cache-hit != 'true'
@@ -48,39 +47,41 @@ jobs:
           path: /tmp/idric
           key: idric-${{ runner.os }}-61970be77769f607cca8650bf424c0f0b22ddee7
 
+      - name: Exercise HTML-first information renderer
+        run: sh bin/ci_browser_foundation.grease exercise-information
+
+      - name: Exercise browser-owned Idric core
+        run: sh bin/ci_browser_foundation.grease exercise-core
+
       - name: Exercise developer workbench
-        run: |
-          set -o pipefail
-          /tmp/idric/bin/idris2 --source-dir src src/Workbench.idric -o ib-workbench 2>&1 | tee /tmp/idric-workbench-compile.txt
-          test -x ./build/exec/ib-workbench
-          ! grep -q '^Error:' /tmp/idric-workbench-compile.txt
-          ./build/exec/ib-workbench | tee /tmp/ib-workbench.txt
-          grep -Fx 'fixture-urls=10000' /tmp/ib-workbench.txt
-          grep -Fx 'fixture-42=ib://fixture/42' /tmp/ib-workbench.txt
-          grep -Fx 'logical-tabs=32' /tmp/ib-workbench.txt
-          grep -Fx 'churn-steps=10000' /tmp/ib-workbench.txt
-          grep -Fx 'resident-at-3=3' /tmp/ib-workbench.txt
-          grep -Fx 'resident-at-10=10' /tmp/ib-workbench.txt
+        run: sh bin/ci_browser_foundation.grease exercise-workbench
 
-      - name: Compile IB Idric smoke program
-        run: |
-          set -o pipefail
-          /tmp/idric/bin/idris2 --source-dir src src/Smoke.idric -o ib-smoke 2>&1 | tee /tmp/idric-compile.txt
-          test -x ./build/exec/ib-smoke
-          ! grep -q '^Error:' /tmp/idric-compile.txt
+  scientific-media:
+    runs-on: ubuntu-latest
+    env:
+      PDF_HARVESTER_REF: 77d85dc6f7e89d109cb9e06f42706bc34f00e4a3
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
 
-      - name: Exercise browser-owned core
-        run: |
-          ./build/exec/ib-smoke | tee /tmp/ib-smoke.txt
-          grep -Fx 'ingest=3' /tmp/ib-smoke.txt
-          grep -Fx 'duplicate-url-count=2' /tmp/ib-smoke.txt
-          grep -Fx 'newest-order=2' /tmp/ib-smoke.txt
-          grep -Fx 'host-count=2' /tmp/ib-smoke.txt
-          grep -Fx 'canonical=canonical' /tmp/ib-smoke.txt
-          grep -Fx 'cache-fake=cache' /tmp/ib-smoke.txt
-          grep -Fx 'secret=secret' /tmp/ib-smoke.txt
-          grep -Fx 'readable-files=2' /tmp/ib-smoke.txt
-          grep -Fx 'canonical-files=2' /tmp/ib-smoke.txt
-          grep -Fx 'copy-label=Copy' /tmp/ib-smoke.txt
-          grep -Fx 'copy-target=code-1' /tmp/ib-smoke.txt
-          grep -Fx 'copy-payload=git status' /tmp/ib-smoke.txt
+      - name: Install system dependencies through Grease
+        run: sh bin/ci_browser_foundation.grease install-dependencies
+
+      - name: Restore Idric compiler for PDF caption bridge
+        uses: actions/cache/restore@v4
+        with:
+          path: /tmp/idric
+          key: idric-${{ runner.os }}-61970be77769f607cca8650bf424c0f0b22ddee7
+
+      - name: Verify PDF harvester pin
+        run: sh bin/ci_browser_foundation.grease verify-pdf-harvester
+
+      - name: Exercise deterministic scientific image harvesting
+        run: sh bin/ci_browser_foundation.grease exercise-scientific-media
+
+      - name: Exercise live arXiv HTML-first harvesting
+        run: sh bin/ci_browser_foundation.grease exercise-live-arxiv
+
+      - name: Exercise live arXiv progressive pre-paint
+        run: sh bin/ci_browser_foundation.grease exercise-live-arxiv-prepaint
