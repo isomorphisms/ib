@@ -1,0 +1,46 @@
+module ArxivPrepaint
+
+import IB.Information
+import System
+import System.File
+
+%default total
+
+program_arguments : List String → List String
+program_arguments [] = []
+program_arguments (_ :: arguments) = arguments
+
+put_lines : List String → IO ()
+put_lines [] = pure ()
+put_lines (line :: rest) = do
+  putStrLn line
+  put_lines rest
+
+all_lines_within : Nat → List String → Bool
+all_lines_within width [] = True
+all_lines_within width (line :: rest) =
+  length (unpack line) <= width && all_lines_within width rest
+
+render_prepaint : String → String → String → IO ()
+render_prepaint requested_url resolved_url html = do
+  let view = extract_html requested_url resolved_url html
+  let lines = phone_lines 48 80 view
+  putStrLn ("information-title=" ++ view_title view)
+  putStrLn ("information-item-count=" ++ show (length (view_items view)))
+  putStrLn ("information-must-escalate=" ++ show (must_escalate view))
+  putStrLn ("prepaint-width-bounded=" ++ show (all_lines_within 80 lines))
+  putStrLn "prepaint-begin"
+  put_lines lines
+  putStrLn "prepaint-end"
+
+covering
+main : IO ()
+main = do
+  arguments <- getArgs
+  case program_arguments arguments of
+    [requested_url, resolved_url, html_path] ⇒ do
+      result <- readFile html_path
+      case result of
+        Left _ ⇒ die ("could not read HTML prefix: " ++ html_path)
+        Right html ⇒ render_prepaint requested_url resolved_url html
+    _ ⇒ die "usage: ib-arxiv-prepaint REQUESTED_URL RESOLVED_URL HTML_PREFIX"

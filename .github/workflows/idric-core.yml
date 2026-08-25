@@ -47,6 +47,9 @@ jobs:
           path: /tmp/idric
           key: idric-${{ runner.os }}-61970be77769f607cca8650bf424c0f0b22ddee7
 
+      - name: Exercise HTML-first information renderer
+        run: sh bin/ci_browser_foundation.grease exercise-information
+
       - name: Exercise browser-owned Idric core
         run: sh bin/ci_browser_foundation.grease exercise-core
 
@@ -79,3 +82,6 @@ jobs:
 
       - name: Exercise live arXiv HTML-first harvesting
         run: sh bin/ci_browser_foundation.grease exercise-live-arxiv
+
+      - name: Exercise live arXiv progressive pre-paint
+        run: sh bin/ci_browser_foundation.grease exercise-live-arxiv-prepaint

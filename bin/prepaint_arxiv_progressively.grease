@@ -1,0 +1,71 @@
+#!/bin/sh
+set -eu
+
+repository_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+. "$repository_root/lib/scientific_media.grease"
+
+if test "$#" -ne 1; then
+  printf 'usage: %s ARXIV-ID-OR-URL\n' "$0" >&2
+  exit 2
+fi
+
+input=$1
+renderer=${IB_INFORMATION_RENDERER:-$repository_root/src/build/exec/ib-arxiv-prepaint}
+prefixes=${IB_ARXIV_PREPAINT_PREFIXES:-'4096 16384 32768'}
+work_directory=$(mktemp -d)
+cleanup() {
+  rm -rf "$work_directory"
+}
+trap cleanup EXIT HUP INT TERM
+
+requested_identifier=$(arxiv_identifier_from_input "$input")
+requested_url="https://arxiv.org/abs/$requested_identifier"
+
+if test -n "${IB_ARXIV_PREPAINT_HTML:-}"; then
+  document_path=$IB_ARXIV_PREPAINT_HTML
+  resolved_url=${IB_ARXIV_PREPAINT_RESOLVED_URL:-$(arxiv_html_url "$requested_identifier")}
+else
+  source_directory="$work_directory/source"
+  fetch_preferred_arxiv_document "$input" "$source_directory"
+  test "$(source_kind_from_harvest_directory "$source_directory")" = html || {
+    ib_media_fail "progressive information pre-paint requires arXiv HTML"
+    exit 1
+  }
+  document_path=$(source_document_from_harvest_directory "$source_directory")
+  resolved_url=$(source_url_from_harvest_directory "$source_directory")
+fi
+
+test -x "$renderer" || {
+  ib_media_fail "information renderer is not built: $renderer"
+  exit 1
+}
+test -s "$document_path" || {
+  ib_media_fail "arXiv HTML is empty: $document_path"
+  exit 1
+}
+
+document_bytes=$(wc -c < "$document_path" | tr -d ' ')
+printf 'source-kind=html\n'
+printf 'source-url=%s\n' "$resolved_url"
+printf 'document-bytes=%s\n' "$document_bytes"
+printf 'heavyweight-renderer-invocations=0\n'
+
+for requested_bytes in $prefixes; do
+  case "$requested_bytes" in
+    ''|*[!0-9]*)
+      ib_media_fail "invalid arXiv pre-paint prefix: $requested_bytes"
+      exit 1
+      ;;
+  esac
+  test "$requested_bytes" -gt 0 || {
+    ib_media_fail "arXiv pre-paint prefixes must be positive"
+    exit 1
+  }
+
+  prefix_path="$work_directory/prefix-$requested_bytes.html"
+  head -c "$requested_bytes" "$document_path" > "$prefix_path"
+  input_bytes=$(wc -c < "$prefix_path" | tr -d ' ')
+  printf 'stage-requested-bytes=%s\n' "$requested_bytes"
+  printf 'stage-input-bytes=%s\n' "$input_bytes"
+  "$renderer" "$requested_url" "$resolved_url" "$prefix_path"
+done
