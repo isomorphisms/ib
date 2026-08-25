@@ -50,7 +50,7 @@ The first view may be incomplete. It should be replaced or augmented as better i
 
 `bin/prepaint_arxiv_progressively.grease` joins the scientific-media fetch boundary to the Idriç information renderer without introducing a renderer process. It uses the HTML-first arXiv source selection from the scientific-media layer, then gives the information core only progressive 4, 16, and 32 KiB prefixes of the selected HTML document.
 
-For arXiv paper `2203.11355`, the live regression requires the title, paper heading, and abstract heading to become available across those bounded inputs while script text remains absent. The script reports the complete document size, the exact bytes admitted at each stage, and zero heavyweight-renderer invocations. A compact deterministic arXiv-shaped fixture exercises the same boundary without depending on the network.
+For arXiv paper `2203.11355`, the live regression requires the title at 4 KiB, the paper heading at 16 KiB, and the abstract heading and opening text at 32 KiB while script text remains absent. The script reports the complete document size, the exact bytes admitted at each stage, and zero heavyweight-renderer invocations. A compact deterministic arXiv-shaped fixture exercises the same boundary without depending on the network.
 
 ## Information renderer
 
