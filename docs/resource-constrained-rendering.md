@@ -39,6 +39,8 @@ Useful early material includes:
 
 The first view may be incomplete. Better information may replace or augment it without losing task, source, tab, or history identity.
 
+A compact source-backed orientation summary is intended early pre-paint, not optional finishing polish. Once enough operative text has arrived, IB should schedule the lowest-cost configured model that satisfies the summary policy rather than wait for the complete page or investigation. Later source material may append or supersede the proposal. Extraction remains usable when the model is absent or fails, and every summary retains source spans and model provenance.
+
 ### arXiv integration demonstration
 
 `bin/prepaint_arxiv_progressively.grease` joins the scientific-media fetch boundary to the Idriç information projection without starting a heavyweight renderer. It selects arXiv HTML first and gives the information core progressive 4, 16, and 32 KiB prefixes.
@@ -94,6 +96,8 @@ The constrained path may suppress or defer work not needed for the task:
 
 JavaScript is an escalation, not an assumption. If source bytes or a structured response already supply the needed information, JavaScript need not run merely because the site normally expects it.
 
+Deferring autoplay or full video bytes does not discard task-relevant media context. For an actively watched video, title, channel, chapters, available captions or transcript, and current playback position may remain available to the task and configured assistant without prefetching the media stream.
+
 An unsupported input may safely remain unknown, be discarded, or be handed to an available full renderer. Its existence does not create a general compatibility obligation for IB.
 
 ## Relation to renderer capabilities
@@ -127,6 +131,7 @@ It must not remove durable resources, tabs, history events, task frontiers, user
 7. Cached extracted view: pre-paint immediately and revalidate in the background.
 8. Cache cleared: durable task and history survive and the view can be regenerated.
 9. Renderer absent or crashed: extracted results remain usable.
+10. Active video context: expose transcript metadata and playback position without fetching video bytes or exporting secrets.
 
 ## Non-goals for the first slices
 

@@ -4,7 +4,7 @@ A renderer is a replaceable live-page implementation behind a browser-owned inte
 
 The contract should be narrow enough that Servo, Chromium/WebView, a text-oriented engine, or a future renderer can coexist without becoming the source of truth for browser state.
 
-A renderer is not a frontend. A page frontend may attach one, while a task frontend may complete useful work through acquisition and extraction without attaching any renderer. A text-oriented page renderer is likewise not the ChatGPT-like task workbench.
+A renderer is not a frontend. The visual pre-paint frontend may attach one, while the text task frontend may complete useful work through acquisition and extraction without attaching any renderer. A text-oriented page renderer is likewise not the ChatGPT-like task frontend.
 
 ## Core responsibilities
 
@@ -35,6 +35,8 @@ renderer_failed
 ```
 
 The core decides what becomes durable.
+
+The visual frontend may also send ephemeral visual-focus and visible-operative-link hints to the acquisition scheduler. These hints can reprioritize bounded safe work as the user scrolls or changes focus. A focus hint may cause a safe discovered link to become queued under the active prefetch budget; it does not itself imply that bytes already exist, create a tab, or bypass unsafe-link policy. Raw layout geometry need not become canonical browsing state.
 
 ## Conceptual interface
 

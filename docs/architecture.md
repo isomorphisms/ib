@@ -6,7 +6,7 @@
 
 A tab is not a renderer process. It is a persistent navigation thread that may currently have a renderer attached. A task may span several tabs, resources, searches, and actions.
 
-IB's present product target is a personal browser/workbench, not universal web compatibility. The substrate still supports multiple first-class frontends and renderer adapters so a broader browser can be built over it without owning or changing the stored model. See `docs/personal-workbench.md`.
+IB's present product target is a personal browser/workbench, not universal web compatibility. Its first two first-class frontends are a progressively augmented visual pre-paint and a ChatGPT-like text-only-by-default task workbench. The substrate still permits additional frontends and renderer adapters so a broader browser can be built over it without owning or changing the stored model. See `docs/personal-workbench.md`.
 
 ## Ownership
 
@@ -31,16 +31,16 @@ A frontend projects browser and task state and issues commands. It does not beco
 ## Main layers
 
 ```text
-page frontend       task workbench       inspector/commands
-       \                  |                    /
-        +--------- browser and task core -----+
+visual pre-paint     text task frontend      inspector/commands
+       \                    |                      /
+        +----------- browser and task core -------+
                   /           |          \
        persistent store   acquisition   renderer adapters
                            / extraction    |     |     |
                            HTTP, parsers  Servo WebView text/etc.
 ```
 
-The page frontend, text-first task workbench, inspector, information extractor, and text renderer are distinct roles. In particular, a text-oriented renderer is not the ChatGPT-like workbench frontend.
+The visual pre-paint frontend, text-first task frontend, inspector, information extractor, and text renderer are distinct roles. In particular, a text-oriented renderer is not the ChatGPT-like workbench frontend.
 
 The persistent store remains intelligible and useful without a rendering engine or language model installed.
 
@@ -139,7 +139,7 @@ IB is implemented in Idriç, with Grease for operating-system and process orches
 The current work does not promise:
 
 - universal web, MIME, renderer, or malformed-input compatibility;
-- one mandatory frontend;
+- one singular frontend that owns browser state;
 - faithful reproduction of interfaces irrelevant to the user's task;
 - preserving a JavaScript heap across renderer changes;
 - automatic understanding of every private application protocol;

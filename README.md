@@ -4,7 +4,7 @@ An experimental personal browser and task-workbench substrate built around durab
 
 IB's immediate target is one person's real browsing corpus and workflows, not general-purpose web compatibility. It optimizes the task behind navigation: learning a documentation set, recovering a fact, finding and sharing an image, comparing delivered prices, or resuming an investigation after the live browser processes are gone.
 
-The substrate supports multiple frontends over the same browser-owned state. A conventional page surface, a small phone frontend, a text-and-action workbench, and developer inspectors may coexist. Renderers, acquisition adapters, extractors, and models remain replaceable; none owns tabs, history, tasks, or accepted organization.
+The first two user frontends share the same browser-owned state: a visual frontend that immediately pre-paints the cheapest useful source-backed view, and a ChatGPT-like text-only-by-default task frontend that answers questions and offers actions over the browsing corpus. Additional page surfaces and developer inspectors may coexist later. Renderers, acquisition adapters, extractors, and models remain replaceable; none owns tabs, history, tasks, or accepted organization.
 
 The browser core owns resource, tab, event, and task identity; sleeping and waking; snapshots; organization; indexes; inference acceptance; and renderer selection. Only roughly 3–10 renderer working sets should normally be resident even when the known corpus reaches 10,000 resources.
 
@@ -14,9 +14,10 @@ The browser core owns resource, tab, event, and task identity; sleeping and waki
 - `docs/personal-workbench.md` — personal scope, task frontend, user stories, and latency targets
 - `docs/prefetch-and-reading.md` — durable investigation frontiers, disposable fetches, and `~/reading`
 - `docs/tab-categorization.md` — overlapping personal categories and adaptive refinement
-- `docs/inference-and-learning.md` — local-model proposals, validation, ensembles, and correction events
+- `docs/inference-and-learning.md` — configured-model proposals, explicit hyperplanes, ensembles, and human supervision
 - `docs/storage-model.md` — identity levels and canonical, proposed, and derived state
 - `docs/developer-workbench.md` — fixture and memory-pressure harness
+- `experiments/category-hyperplanes/README.md` — disposable embedding and explicit affine-separator probe
 
 ## Implementation languages
 
