@@ -1,172 +1,139 @@
-# Resource-constrained information rendering
+# Resource-constrained acquisition and information views
 
-IB should treat expensive full-page rendering as one possible way to obtain useful information, not as the prerequisite for seeing a page.
+IB should treat expensive full-page rendering as one possible way to obtain useful information, not as the prerequisite for seeing a result or completing a task.
 
-This is not primarily a desktop-versus-mobile distinction and it is not ordinary reader mode. A phone may only need a small amount of useful state from a very large web application: headings, links, forms, tables, status values, prices, dates, controls, or a small set of images. The browser should be able to expose that information without first paying the full CPU, RAM, network, and latency cost of booting the site's preferred application renderer.
+This work is not primarily desktop versus mobile and is not ordinary reader mode. A phone may need only headings, links, forms, tables, status values, prices, dates, controls, or a small set of images from a much larger web application.
+
+Acquisition and extraction complement renderer adapters; they are not forced through the renderer interface. An extractor may satisfy a task without a live page session. The resulting information view may be painted by a frontend, handed to another action, or later supplied to a renderer. See `docs/personal-workbench.md`.
 
 ## Goal
 
-Make the cheapest useful representation visible first, then spend more resources only when the cheaper representation is insufficient.
+Make the cheapest useful representation or action available first, then spend more only when the task remains unsatisfied.
 
-The user should be able to request a resource-constrained profile explicitly, and IB should eventually be able to select it automatically for slow or resource-heavy sites.
+Possible sources include:
 
-## Escalation ladder
+- an existing extracted or response cache;
+- a direct image, document, or other resource;
+- HTML and its operative content;
+- a structured response or source-specific adapter;
+- a limited live renderer;
+- a full renderer.
 
-A navigation can climb through increasingly expensive representations:
-
-```text
-cached extracted representation
-        ↓
-HTML-only fetch
-        ↓
-HTML + useful CSS/images
-        ↓
-limited JavaScript / selected network requests
-        ↓
-full renderer
-```
-
-IB should stop climbing as soon as the current representation contains what the user needs. A full renderer remains available as an explicit escape hatch.
+This is not necessarily one linear page ladder. A task may consult several cheap sources before deciding that any live renderer is required.
 
 ## Pre-paint behavior
 
-As soon as IB has useful material, it should paint it. It should not wait for the site's application shell to finish booting.
+As soon as IB has useful material, it should expose it. It should not hold the surface blank until a site's application shell finishes booting.
 
 Useful early material includes:
 
-- title and canonical URL
-- headings and ordinary text
-- links and navigation targets
-- forms and form actions
-- tables and definition-list-like data
-- buttons and labeled controls
-- important images or thumbnails
-- obvious status, price, date, count, and identifier fields
-- structured metadata already present in HTML
+- title and requested, resolved, and canonical URLs;
+- headings, section ancestry, ordinary text, and code blocks;
+- links with source context and position;
+- forms and form actions;
+- tables and definition-list-like data;
+- labeled controls;
+- important images or thumbnails;
+- obvious status, price, date, count, and identifier fields;
+- structured metadata already present in HTML.
 
-The first view may be incomplete. It should be replaced or augmented as better information arrives rather than holding the screen blank until a heavyweight renderer reports completion.
+The first view may be incomplete. Better information may replace or augment it without losing task, source, tab, or history identity.
 
 ### arXiv integration demonstration
 
-`bin/prepaint_arxiv_progressively.grease` joins the scientific-media fetch boundary to the Idriç information renderer without introducing a renderer process. It uses the HTML-first arXiv source selection from the scientific-media layer, then gives the information core only progressive 4, 16, and 32 KiB prefixes of the selected HTML document.
+`bin/prepaint_arxiv_progressively.grease` joins the scientific-media fetch boundary to the Idriç information projection without starting a heavyweight renderer. It selects arXiv HTML first and gives the information core progressive 4, 16, and 32 KiB prefixes.
 
-For arXiv paper `2203.11355`, the live regression requires the title at 4 KiB, the paper heading at 16 KiB, and the abstract heading and opening text at 32 KiB while script text remains absent. The script reports the complete document size, the exact bytes admitted at each stage, and zero heavyweight-renderer invocations. A compact deterministic arXiv-shaped fixture exercises the same boundary without depending on the network.
+For arXiv paper `2203.11355`, the live regression requires the title at 4 KiB, the paper heading at 16 KiB, and the abstract heading and opening text at 32 KiB while script text remains absent. It reports complete-document size, bytes admitted at each stage, and zero heavyweight-renderer invocations. A deterministic arXiv-shaped fixture exercises the same boundary without the live network.
 
-## Information renderer
+## Renderer-neutral extracted representation
 
-The lightweight path should produce a renderer-neutral extracted representation rather than pretending to be a complete DOM snapshot.
+The lightweight path produces a source-backed representation, not a pretend complete DOM snapshot.
 
-A first representation can contain fields such as:
+A first representation may contain:
 
 ```text
-title
+source_representation_id
 requested_url
 resolved_url
 canonical_url
 fetch_time
-headings
-text_blocks
-links
+title
+headings_and_section_ancestry
+text_blocks_and_source_spans
+code_blocks
+links_with_context
 tables
 forms
 controls
 images
 structured_metadata
 observed_data_responses
+completeness
 ```
 
-The exact schema can evolve. The important boundary is that this representation describes useful page information and can be painted without owning the browser's durable tab/history state.
+The exact schema can evolve. Stable source references matter because a task summary, classifier, or language model must be able to cite the representation and span from which a claim came.
+
+The current home-grown HTML extraction is an early slice, not the final graph parser. Operative-content selection, relative URL and `<base>` resolution, semantic landmarks, code-block fidelity, and robust source spans may use deterministic parser adapters while Idriç retains typed selection and resource-budget policy.
 
 ## Network-response extraction
 
-Heavy web applications often fetch useful data before spending substantial additional work turning it into interface chrome. IB should be able to observe those responses and, when they are intelligible and safe to expose, render useful data directly.
+Large applications often fetch useful data before spending substantially more work constructing interface chrome. When an intelligible response is safe to expose, IB may project it directly as a small table or action surface.
 
-For example, if a web console eventually requests JSON containing a list of projects, credentials, jobs, or status records, IB should be able to turn that response into a plain table instead of requiring the site's JavaScript framework to construct the final interface first.
-
-This should remain an information-extraction path, not a general promise to reverse-engineer every private application protocol. Authentication, permissions, and origin policy still apply.
+This is an information-acquisition path, not a promise to reverse-engineer every private protocol. Authentication, permissions, origin policy, request partitioning, and secret storage still apply.
 
 ## Resource policy
 
-The resource-constrained profile should be able to suppress or defer work that is not needed for the current information view, including:
+The constrained path may suppress or defer work not needed for the task:
 
-- animations
-- decorative web fonts
-- analytics and telemetry
-- ads and tracking resources
-- autoplay media
-- large decorative images
-- video
-- expensive canvas/WebGL work
-- background application code unrelated to the visible information
+- animations and decorative fonts;
+- analytics, telemetry, ads, and tracking;
+- autoplay media and video;
+- large decorative images;
+- expensive canvas or WebGL work;
+- background application code unrelated to the result.
 
-JavaScript should be escalated rather than assumed. If HTML already contains the needed information, JavaScript need not run merely because the site normally expects it.
+JavaScript is an escalation, not an assumption. If source bytes or a structured response already supply the needed information, JavaScript need not run merely because the site normally expects it.
 
-When JavaScript is necessary, IB should prefer the smallest amount of execution or network activity needed to recover the missing information before escalating to a full renderer.
+An unsupported input may safely remain unknown, be discarded, or be handed to an available full renderer. Its existence does not create a general compatibility obligation for IB.
 
-## Relationship to renderer capabilities
+## Relation to renderer capabilities
 
-This fits the existing renderer-adapter model. Resource-constrained rendering should be expressed through capabilities and policy rather than hard-coding renderer brands.
+Renderer capabilities still govern live page sessions, including HTML, CSS, JavaScript, canvas, media, accessibility trees, and recoverable DOM state.
 
-Likely capabilities include or refine the existing ideas around:
-
-```text
-html
-css
-images
-javascript
-reader-text
-structured-extraction
-network-response-observation
-information-view
-full-dom-snapshot
-```
-
-A text-oriented or information renderer may satisfy a navigation without supporting the capabilities required for a full application view. The core can hot-swap to a heavier renderer without changing tab identity or history identity.
+Acquisition and extraction capabilities are adjacent services rather than brands of renderer. The core or task policy may use them first and attach or hot-swap a renderer later without changing browser-owned identity.
 
 ## Cache boundary
 
-The extracted representation is valuable as a fast pre-paint cache, but cached extraction must remain disposable.
+Extracted views are valuable pre-paint artifacts but remain disposable unless explicitly promoted.
 
 Clearing cache may remove:
 
-- extracted information views
-- response bodies retained only for pre-paint
-- thumbnails and reduced images
-- renderer-specific recovery material
-- derived extraction indexes
+- extracted information views;
+- response bodies retained only for pre-paint;
+- thumbnails and reduced images;
+- renderer recovery material;
+- derived extraction indexes and transient summary presentations.
 
-It must not remove durable tabs, history, labels, collections, or other canonical browser state.
+It must not remove durable resources, tabs, history events, task frontiers, user assertions, accepted organization, or the retained last-complete result needed to resume a durable investigation. A later visit may show that retained result immediately while revalidating it; after cache deletion, the durable task still knows what can be regenerated.
 
-A later visit should be able to show a cached information view immediately while IB refreshes it or decides whether a heavier renderer is necessary.
+## Initial regressions
 
-## Phone-first behavior
+1. Useful HTML table: expose it without JavaScript or a renderer.
+2. Headings, code, operative links, and a form: preserve structure and source context before full rendering.
+3. Header, navigation, logout, and token links: do not treat them as the operative documentation frontier.
+4. Useful structured response after a small request: expose it without booting the full application.
+5. Decorative fonts, analytics, video, and large images: do not block the first useful result.
+6. Insufficient extraction: attach a fuller renderer without losing browser or task identity.
+7. Cached extracted view: pre-paint immediately and revalidate in the background.
+8. Cache cleared: durable task and history survive and the view can be regenerated.
+9. Renderer absent or crashed: extracted results remain usable.
 
-On a resource-constrained phone, the default question should be: what is the smallest representation that lets the user continue?
+## Non-goals for the first slices
 
-A large developer console, store, dashboard, or administration site may be perfectly usable as a small collection of plain tables, links, status fields, and forms. IB should not force the phone to reproduce the site's desktop application architecture when that architecture contributes little to the user's immediate task.
-
-This policy is deliberately different from accepting a site's own "mobile" rendering. The site may still ship a very large mobile JavaScript application. IB owns the decision about how much work to perform.
-
-## Initial tests
-
-A first implementation should be testable without depending on a particular heavyweight site.
-
-Fixture cases should cover:
-
-1. Initial HTML contains a useful table: IB paints the table without JavaScript.
-2. Initial HTML contains headings, links, and a form: all are usable before full rendering.
-3. Useful JSON arrives after a small scripted request: IB can expose it as a plain information view.
-4. Decorative fonts, analytics, video, and large images are present: the constrained profile does not require them before useful paint.
-5. The lightweight representation is insufficient: the same tab escalates to a fuller renderer without losing browser-owned history or view identity.
-6. A cached extracted representation exists: it can pre-paint immediately and is independently clearable.
-7. Cache is cleared: durable tab/history state remains intact and the information view can be regenerated.
-
-## Non-goals for the first slice
-
-- perfect visual reproduction of arbitrary sites
-- preserving a JavaScript heap across renderer swaps
-- automatically understanding every application protocol
-- replacing a full renderer for workflows that genuinely require one
-- treating every page as an article
-
-The first useful slice is much smaller: fetch cheaply, extract obvious useful information, paint it immediately, cache it disposably, and escalate only when necessary.
+- perfect visual reproduction of arbitrary sites;
+- preserving a JavaScript heap across renderer swaps;
+- automatically understanding every application protocol;
+- replacing a full renderer when the task genuinely requires one;
+- treating every page as an article;
+- turning every discovered candidate into a live tab;
+- making a generated summary canonical truth.

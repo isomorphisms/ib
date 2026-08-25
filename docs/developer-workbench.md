@@ -1,104 +1,115 @@
-# IB Developer Workbench
+# IB browser-foundation fixture harness
 
-IB should have a developer workbench for exercising browser state, rendering, caching, and memory behavior against a large deterministic universe of fake URLs.
+This developer harness exercises browser state, acquisition, rendering, caching, and memory behavior against a large deterministic universe of fixture URLs.
+
+It is not the user-facing text-and-action task workbench described in `docs/personal-workbench.md`. Keeping the names and roles separate matters: the fixture harness tests the substrate; a frontend uses the substrate.
 
 ## Implementation boundary
 
-The workbench state model is Idriç. Deterministic URL identities, working-set policy, and browser-state regressions belong in `.idric` source.
+The fixture state model is Idriç. Deterministic URL identities, working-set policy, and browser-state regressions belong in `.idric` source.
 
-Grease owns fixture orchestration that actually touches the operating system or network: starting a local fixture server, fetching live scientific pages, arranging temporary directories, invoking renderers/parsers, and collecting process-level measurements. That distinction avoids turning Idriç into a shell while keeping browser policy out of scripts.
+Grease owns fixture orchestration that touches the operating system or network: starting a local server, fetching live scientific pages, arranging temporary directories, invoking renderers or parsers, and collecting process-level measurements. That avoids turning Idriç into a shell while keeping browser policy out of scripts.
 
 ## Fixture universe
 
 Start with a few hundred generated URLs and scale to at least 10,000.
 
-The fixture set should eventually be able to use a sanitized backlog derived from real browsing history so that URL shapes and navigation patterns resemble actual use without depending on the live web.
+The checked-in sanitized backlog derived from real browsing history makes URL shapes, duplicate visits, and navigation patterns resemble actual use without depending on the live web. It does not make the private 491-row classification exercise a checked-in ground truth.
 
-Each fake URL should have deterministic content and known behavior. Useful fixture classes include:
+Each synthetic URL has deterministic content and known behavior. Useful classes within IB's intended personal corpus include:
 
-- tiny text pages
-- long documents
-- image-heavy pages
-- redirects
-- repeated/shared resources
-- query-string variants
-- broken resources
-- pages with unusually large resource graphs
+- tiny text pages;
+- long documents;
+- image-heavy pages;
+- redirects and repeated shared resources;
+- query-string variants;
+- broken resources;
+- documentation pages with operative and non-operative links;
+- pages with unusually large but bounded resource graphs.
 
-A fixture URL such as `ib://fixture/000042` should reproduce the same response graph every run.
+A fixture such as `ib://fixture/000042` reproduces the same response graph every run. This is targeted failure and workload coverage, not a promise to support arbitrary malformed input or every MIME type.
 
-## Hot working set
+## Known corpus, logical tabs, and hot renderers
 
-The important architectural distinction is between the number of known URLs and the number of live browser documents.
+Do not conflate the number of known resources, logical tabs, and live renderer documents.
 
-IB should normally keep roughly 3–10 working tabs hot. A hot tab may keep parsed document state, layout state, rendered data, interaction state, and other genuinely active-page data in RAM.
+The current executable scale is:
 
-The remaining fixture universe should be cold or warm state rather than thousands of live documents.
+```text
+known fixture URLs     10,000
+logical tabs               32
+resident renderer tabs   3–10
+```
+
+A hot tab may keep parsed document state, layout state, rendered data, interaction state, and other genuinely active-page data in RAM. The remaining corpus stays warm, cold, or never visited.
 
 Possible states:
 
-- **hot** — active in RAM
-- **warm** — serialized page state and/or render cache exists
-- **cold** — metadata only
-- **never visited** — fixture exists but has no browsing state
+- **hot** — active renderer state in RAM;
+- **warm** — serialized page state, fetched bytes, or render cache exists;
+- **cold** — durable metadata or task graph only;
+- **never visited** — fixture exists but has no browsing state.
 
-Opening a cold URL promotes it into the working set. Memory pressure or working-set limits should demote another page without losing durable browser state.
+Opening a cold URL may promote a logical tab into the renderer working set. Memory pressure or working-set limits demote another renderer without losing browser-owned tab, event, task, or organization state.
 
-## Workbench display
+Prefetched documents remain cold or warm; prefetching seven documentation pages must not create seven live renderer sessions.
 
-The workbench should make the distinction visible, for example:
+## Harness display
+
+The harness should make the identity and residency distinctions visible, for example:
 
 ```text
-IB WORKBENCH
+IB FOUNDATION HARNESS
 
-Fixture universe          10,000 URLs
-Known/cacheable             8,412
-Never visited               1,588
-
-HOT TABS                     RAM
-1  fixture/000042            18 MB
-2  fixture/000731            11 MB
-3  fixture/004211            27 MB
-4  fixture/008002             9 MB
-                             -----
-Working set                  65 MB
-
-WARM / EVICTED
-27 pages with serialized page state
-413 pages with render cache
-7,912 metadata-only URLs
+Known resources             10,000
+Logical tabs                    32
+Hot renderers                     5
+Warm responses                   27
+Metadata-only resources       8,380
+Never visited                1,588
 ```
+
+Task frontiers, discovered resources, response cache, extracted views, promoted reading material, and renderer residency should have separate counters.
 
 ## Abuse controls
 
-The first version should make it easy to force pathological transitions:
+The first versions should make pathological transitions easy to force:
 
-- open random URL
-- open many tabs
-- close tab
-- evict tab
-- restore evicted tab
-- clear render cache
-- simulate memory pressure
-- simulate process death
-- reload many URLs
-- thrash repeatedly between URLs
-- impose a synthetic RAM ceiling
+- open or duplicate a tab;
+- revisit or reload a resource;
+- evict and restore a renderer;
+- clear response, extraction, or render cache independently;
+- simulate memory pressure and process death;
+- kill during queued and partial acquisition;
+- resume a week-old task under a fake clock;
+- thrash repeatedly between resources;
+- impose synthetic RAM, byte, and deadline ceilings;
+- feed malformed model proposals without changing canonical state.
 
-## First invariant to test
+## Core invariants
 
-Growing the fixture universe from 200 to 2,000 to 10,000 known URLs should not make steady-state RAM scale with the universe when the hot-tab count remains fixed.
+Growing the known universe from 200 to 2,000 to 10,000 resources must not make steady-state renderer RAM scale with the universe while hot-renderer count remains fixed.
 
-For example, with five hot tabs, the RAM cost of 10,000 known URLs should be dominated by compact metadata and bounded caches, not 10,000 parsed or rendered documents.
+Other required distinctions include:
 
-If RAM grows approximately with the number of known URLs, IB has accidentally coupled catalog size to active-page state and the architecture should be corrected.
+- repeated URL rows, duplicate tabs, and visits remain distinct events or intentions;
+- compatible response bytes may be shared without collapsing their source edges;
+- clearing cache preserves history, tasks, assertions, and accepted organization;
+- process death never exposes a partial response as complete;
+- pending durable work resumes without waking every related tab;
+- a malformed or unavailable model cannot mutate canonical history or block browsing;
+- adding a category membership does not remove another membership;
+- removing a category from `_active` creates no negative training event.
+
+If RAM grows approximately with known-resource count, or rebuilding a derived view loses a human correction, the architecture has coupled state classes that must remain separate.
 
 ## Initial implementation order
 
-1. Deterministic fake-URL fixture generator.
-2. Explicit hot/warm/cold tab-state model.
-3. Workbench counters for fixture count, state counts, and memory estimates.
-4. Controls for promotion, eviction, cache clearing, and tab thrashing.
-5. Automated regression that holds hot tabs fixed while scaling the fixture universe.
-6. Live/recorded scientific-media fixtures through Grease.
-7. Later, import a sanitized browsing-history backlog as fixture seeds.
+1. Keep the existing 10,000-resource, 32-logical-tab, 3–10-resident regression.
+2. Give browser events stable identities and distinguish duplicate, reload, redirect, restore, and revisit sources.
+3. Add durable task roots, link edges, and acquisition frontier fixtures.
+4. Add explicit hot, warm, cold, and never-visited counters.
+5. Test independent cache clearing, process death, atomic completion, and restart.
+6. Add operative-document-link and shared-child documentation fixtures.
+7. Add proposal, validation, correction, and reversible materialization fixtures.
+8. Continue live or recorded scientific-media fixtures through Grease.

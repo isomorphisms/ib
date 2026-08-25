@@ -1,20 +1,23 @@
 # Renderer adapter
 
-A renderer is a replaceable implementation detail behind a browser-owned interface.
+A renderer is a replaceable live-page implementation behind a browser-owned interface.
 
 The contract should be narrow enough that Servo, Chromium/WebView, a text-oriented engine, or a future renderer can coexist without becoming the source of truth for browser state.
+
+A renderer is not a frontend. A page frontend may attach one, while a task frontend may complete useful work through acquisition and extraction without attaching any renderer. A text-oriented page renderer is likewise not the ChatGPT-like task workbench.
 
 ## Core responsibilities
 
 The browser core supplies:
 
-- navigation request
-- browser-owned tab id and history id
-- viewport dimensions
-- policy and permissions
-- cookies/session access through a protected interface
-- any recoverable neutral view state
-- access to stored response/snapshot material when appropriate
+- navigation request;
+- browser-owned tab and history-event identities;
+- task context when relevant;
+- viewport dimensions;
+- policy and permissions;
+- cookies or session access through a protected interface;
+- any recoverable neutral view state;
+- access to stored response or snapshot material when appropriate.
 
 The renderer returns events rather than directly mutating persistent browser records.
 
@@ -54,7 +57,7 @@ This is deliberately language-neutral.
 
 ## Capability negotiation
 
-A renderer should advertise features rather than force the core to identify it by brand name.
+A renderer advertises features rather than forcing the core to identify it by brand name.
 
 Possible capabilities include:
 
@@ -72,7 +75,7 @@ reader-text
 full-dom-snapshot
 ```
 
-A site or navigation may request capabilities. The core can choose another renderer if the currently attached one cannot satisfy them.
+A site, navigation, or task may request capabilities. The core can choose another renderer if the currently attached one cannot satisfy them. Capabilities supplied by acquisition or extraction adapters need not be mislabeled as renderer capabilities merely because they can eventually be painted.
 
 ## Hot swap
 
@@ -82,10 +85,10 @@ A renderer swap is:
 2. Persist any browser-owned state that changed.
 3. Detach and destroy the old render session.
 4. Select another renderer by capability and policy.
-5. Attach it to the same tab and current history entry.
+5. Attach it to the same tab and current history event.
 6. Restore neutral state where semantics overlap.
 
-Exact live DOM/JavaScript heap continuity across unrelated engines is not a requirement. The invariant is continuity of the browser-owned record, not bit-identical renderer internals.
+Exact live DOM or JavaScript-heap continuity across unrelated engines is not a requirement. The invariant is continuity of browser-owned resource, tab, event, task, and view identities, not bit-identical renderer internals.
 
 ## Neutral view state
 
@@ -99,22 +102,22 @@ text_selection_hint
 zoom
 ```
 
-Later we can add standardized form-state restoration where it is safe and useful. Secret fields must not be persisted into ordinary state files.
+Later work may add standardized form-state restoration where it is safe and useful. Secret fields must not be persisted into ordinary state files.
 
 ## Renderer-specific cache
 
 A renderer may produce an opaque recovery blob for fast wake-up, but:
 
-- it is optional
-- it is disposable
-- it is versioned with the renderer
-- the browser remains usable without it
-- it never becomes the only copy of history or organization state
+- it is optional;
+- it is disposable;
+- it is versioned with the renderer;
+- the browser remains usable without it;
+- it never becomes the only copy of history, task, or organization state.
 
-This lets a Chromium renderer use Chromium-specific acceleration while still allowing the same tab to reopen in Servo or a text renderer.
+This lets a Chromium renderer use Chromium-specific acceleration while the same tab can later open through Servo or a text renderer.
 
 ## Failure isolation
 
-Renderer crashes should be treated like worker failures. The core keeps the tab and history record and may retry, choose a different renderer, or leave the tab sleeping.
+Renderer crashes are worker failures. The core keeps the tab, task, and history record and may retry, choose another renderer, fall back to extraction, or leave the tab sleeping.
 
-A renderer crash must not imply loss of the browsing session.
+A renderer crash must not imply loss of the browsing session or investigation.
