@@ -834,6 +834,35 @@ static int dot_product_text(const unsigned char *stored, const float *query,
   return 1;
 }
 
+static int write_query_report(const char *path, const struct manifest *manifest,
+                              int use_text, size_t dot_products) {
+  if (path == NULL || path[0] == '\0') {
+    return 0;
+  }
+  FILE *file = fopen(path, "wb");
+  if (file == NULL) {
+    return fail_path("cannot open query report", path);
+  }
+  int bad = fprintf(file,
+                    "operation=exact-dot-product-scan\n"
+                    "compute=cpu\n"
+                    "dot-product-used-gpu=False\n"
+                    "storage=%s\n"
+                    "metric=%s\n"
+                    "dimensions=%zu\n"
+                    "dot-products=%zu\n",
+                    use_text ? "readable-text" : "float32-cache",
+                    metric_text(manifest->metric), manifest->dimensions,
+                    dot_products) < 0;
+  if (!bad && flush_file(file, path) != 0) {
+    bad = 1;
+  }
+  if (fclose(file) != 0) {
+    bad = 1;
+  }
+  return bad ? fail("cannot write query report") : 0;
+}
+
 static int match_before(float score, size_t row, const struct match *other) {
   return score > other->score || (score == other->score && row < other->row);
 }
@@ -876,6 +905,7 @@ static int query_index(const char *directory, const char *limit_text,
   int data_fd = -1;
   unsigned char *mapped = MAP_FAILED;
   int status = 1;
+  const char *query_report_path = getenv("IB_VECTOR_QUERY_REPORT");
 
   if (!parse_size(limit_text, &limit)) {
     return fail("result count must be a positive integer");
@@ -913,7 +943,7 @@ static int query_index(const char *directory, const char *limit_text,
   }
 
   if (limit == 0) {
-    status = 0;
+    status = write_query_report(query_report_path, &manifest, use_text, 0);
     goto cleanup;
   }
   matches = calloc(limit, sizeof(*matches));
@@ -980,7 +1010,8 @@ static int query_index(const char *directory, const char *limit_text,
   for (size_t i = 0; i < used; ++i) {
     printf("%s\t%.9g\n", matches[i].id, (double)matches[i].score);
   }
-  status = 0;
+  status = write_query_report(query_report_path, &manifest, use_text,
+                              manifest.count);
 
 cleanup:
   if (mapped != MAP_FAILED) {

@@ -24,13 +24,23 @@ grep -Fx 'check=ok' "$temporary/check.txt"
 grep -Fx 'text_slot_bytes=16' "$temporary/check.txt"
 
 printf '%s\n' '0.9 0.1 0' |
+  IB_VECTOR_QUERY_REPORT="$temporary/cache-query-report.txt" \
   "$program" query "$index" 2 > "$temporary/results.txt"
 sed -n '1s/	.*//p' "$temporary/results.txt" | grep -Fx 'book-page'
 sed -n '2s/	.*//p' "$temporary/results.txt" | grep -Fx 'mixed-page'
+grep -Fx 'operation=exact-dot-product-scan' "$temporary/cache-query-report.txt"
+grep -Fx 'compute=cpu' "$temporary/cache-query-report.txt"
+grep -Fx 'dot-product-used-gpu=False' "$temporary/cache-query-report.txt"
+grep -Fx 'storage=float32-cache' "$temporary/cache-query-report.txt"
+grep -Fx 'dimensions=3' "$temporary/cache-query-report.txt"
+grep -Fx 'dot-products=3' "$temporary/cache-query-report.txt"
 
 printf '%s\n' '0.9 0.1 0' |
+  IB_VECTOR_QUERY_REPORT="$temporary/text-query-report.txt" \
   "$program" query-text "$index" 2 > "$temporary/text-results.txt"
 cmp "$temporary/results.txt" "$temporary/text-results.txt"
+grep -Fx 'dot-product-used-gpu=False' "$temporary/text-query-report.txt"
+grep -Fx 'storage=readable-text' "$temporary/text-query-report.txt"
 
 "$program" column "$index" 1 > "$temporary/first-coordinate.txt"
 grep -Fx 'book-page	+1.00000000e+00' "$temporary/first-coordinate.txt"
