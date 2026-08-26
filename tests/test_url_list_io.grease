@@ -37,6 +37,13 @@ printf '%s\n' 'https://stdin.example/path' |
   sh "$repository_root/bin/import_url_list.grease" - > "$actual"
 grep -Fx 'https://stdin.example/path' "$actual" >/dev/null
 
+# stdin is the default interface: pipes, including a deliberate "useless use
+# of cat", and ordinary input redirection need no special option.
+cat "$input" | sh "$repository_root/bin/import_url_list.grease" > "$actual"
+cmp "$expected" "$actual"
+sh "$repository_root/bin/import_url_list.grease" < "$input" > "$actual"
+cmp "$expected" "$actual"
+
 fake_commands="$work_directory/bin"
 mkdir -p "$fake_commands"
 
