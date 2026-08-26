@@ -29,6 +29,9 @@ jobs:
       - name: Exercise filesystem category and hot views
         run: sh bin/ci_browser_foundation.grease exercise-filesystem-views
 
+      - name: Exercise saved-tab text question mock
+        run: sh bin/ci_browser_foundation.grease exercise-tab-qa
+
       - name: Install system dependencies through Grease
         run: sh bin/ci_browser_foundation.grease install-dependencies
 

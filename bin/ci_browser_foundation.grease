@@ -74,6 +74,19 @@ exercise_filesystem_views() {
   sh tests/test_filesystem_views.grease
 }
 
+exercise_tab_qa() {
+  cd "$repository_root"
+  sh -n lib/tab_qa.grease
+  sh -n bin/ask_saved_pages.grease
+  sh -n bin/mock_tab_model.grease
+  sh -n bin/mock_tab_qa_reducer.grease
+  sh -n tests/test_mock_tab_model.grease
+  sh -n tests/test_tab_qa_pipeline.grease
+  make -C native/vector-index
+  sh tests/test_mock_tab_model.grease
+  sh tests/test_tab_qa_pipeline.grease
+}
+
 exercise_workbench() {
   cd "$repository_root"
   sh -n tests/test_real_world_url_fixture.grease
@@ -199,11 +212,12 @@ case "${1:-}" in
   exercise-workbench) exercise_workbench ;;
   exercise-file-store) exercise_file_store ;;
   exercise-filesystem-views) exercise_filesystem_views ;;
+  exercise-tab-qa) exercise_tab_qa ;;
   exercise-scientific-media) exercise_scientific_media ;;
   exercise-live-arxiv) exercise_live_arxiv ;;
   exercise-live-arxiv-prepaint) exercise_live_arxiv_prepaint ;;
   *)
-    printf 'usage: %s {install-dependencies|build-idric|verify-pdf-harvester|exercise-information|exercise-core|exercise-workbench|exercise-file-store|exercise-filesystem-views|exercise-scientific-media|exercise-live-arxiv|exercise-live-arxiv-prepaint}\n' "$0" >&2
+    printf 'usage: %s {install-dependencies|build-idric|verify-pdf-harvester|exercise-information|exercise-core|exercise-workbench|exercise-file-store|exercise-filesystem-views|exercise-tab-qa|exercise-scientific-media|exercise-live-arxiv|exercise-live-arxiv-prepaint}\n' "$0" >&2
     exit 2
     ;;
 esac

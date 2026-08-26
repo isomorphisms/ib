@@ -36,6 +36,12 @@ document-id<TAB>0.8125
 
 `query` memory-maps the Float32 cache. `query-text` performs the same exact scan by parsing the readable file and works with the cache removed. `column` uses the fixed-width layout to print one coordinate across every ID. `compile-cache` atomically recreates the Float32 file from text. A later exact or approximate program can occupy the same process boundary without changing canonical browser state or callers that stream rows and queries.
 
+When `IB_VECTOR_QUERY_REPORT` names a file, either query command also writes a
+small execution report containing the compute device, storage path, metric,
+dimensions, and number of row dot products. The current portable C scan reports
+`dot-product-used-gpu=False`; a future accelerated backend must report its own
+execution rather than letting callers infer it.
+
 ## Files
 
 One model-specific view lives below the derived view root:
