@@ -72,6 +72,18 @@ For a query such as finding a young Larry Wall in a loud 1970s shirt to show a f
 
 The result surface should therefore expose usable image candidates with direct `Share`, `Copy`, or `Save` actions and source provenance. Loading the search result page, then a preview, then the source page, then another menu is avoidable work unless one of those stages contributes information the user needs.
 
+## Acceptance story: screenshots are copy/paste
+
+People often take a screenshot because selecting and copying the useful text from the current interface is slower or impossible. Treat that as an input intent, not merely as an image-file event.
+
+Every screenshot accepted by IB should automatically get an OCR pass. The original image remains canonical evidence; OCR text is a derived projection linked back to that image and its source metadata. The derived text should become searchable, selectable, copyable, quotable, and available to the text-first frontend without requiring the user to request OCR explicitly.
+
+OCR failure must not make the screenshot disappear or become unreadable. Preserve the image, record the failed or partial extraction, and allow a later OCR implementation to replace or augment the derived projection without changing screenshot identity.
+
+The browser core owns screenshot identity, derived-text provenance, indexing, and replacement rules. Grease should orchestrate the actual OCR executable or model so that the OCR engine remains replaceable. A frontend or native Android adapter may hand the screenshot into that path, but it must not become the owner of the recognized text.
+
+A deterministic acceptance corpus should include at least ordinary UI text, mixed image-and-text content, Unicode text, and one deliberately unreadable screenshot. Importing or sharing each readable screenshot should result in indexed OCR text without an extra user action, while the unreadable fixture should preserve the original image and an inspectable extraction failure.
+
 ## Performance contract
 
 Measure task progress, not a site's load event.
@@ -92,6 +104,7 @@ Settled boundaries:
 - multiple frontends over shared browser-owned state;
 - task completion rather than page reproduction as the success measure;
 - durable task intent separated from disposable renderer and response caches;
+- screenshots are automatically OCRed into provenance-linked derived text;
 - safe failure for unsupported inputs rather than general compatibility work.
 
 Current heuristics and benchmarks:
