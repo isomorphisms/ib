@@ -1,0 +1,18 @@
+#!/bin/sh
+set -eu
+
+if test "$#" -eq 0; then
+  printf 'usage: %s SEARCH WORDS...\n' "$0" >&2
+  exit 2
+fi
+
+icu_command=${IB_ICU:-icu}
+jq_command=${IB_JQ:-jq}
+
+# With the ordinary space IFS, "$*" is the shell operation the original tiny
+# search command was remembering. PS1 is only the interactive prompt. jq owns
+# UTF-8 form encoding here; replacing %20 with + gives the familiar query form.
+query=$*
+encoded_query=$(printf '%s' "$query" | "$jq_command" -sRr @uri | sed 's/%20/+/g')
+
+exec "$icu_command" get "https://www.google.com/search?q=$encoded_query"

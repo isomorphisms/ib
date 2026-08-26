@@ -1,0 +1,28 @@
+#!/bin/sh
+set -eu
+
+repository_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+work_directory=$(mktemp -d)
+cleanup() {
+  rm -rf "$work_directory"
+}
+trap cleanup EXIT HUP INT TERM
+
+fake_icu="$work_directory/icu"
+apply_log="$work_directory/icu-arguments.txt"
+{
+  printf '%s\n' '#!/bin/sh'
+  printf '%s\n' 'set -eu'
+  printf '%s\n' 'printf "%s\\n" "$@" > "$IB_TEST_ICU_LOG"'
+} > "$fake_icu"
+chmod +x "$fake_icu"
+
+IB_ICU="$fake_icu" IB_TEST_ICU_LOG="$apply_log" \
+  sh "$repository_root/bin/icu_search.grease" small fast browser
+
+test "$(sed -n '1p' "$apply_log")" = get
+test "$(sed -n '2p' "$apply_log")" = \
+  'https://www.google.com/search?q=small+fast+browser'
+test "$(wc -l < "$apply_log" | tr -d ' ')" = 2
+
+printf 'icu search tests: ok\n'

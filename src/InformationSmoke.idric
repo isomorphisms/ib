@@ -35,6 +35,23 @@ shell_only =
   "<script>project row exists only after framework execution</script>" ++
   "</body></html>"
 
+article_body : String
+article_body =
+  "<html><head><title>Field notes</title></head><body><article>" ++
+  "<h1>Small pages first</h1>" ++
+  "<p>The first paragraph is the useful first paint.</p>" ++
+  "<p>The second paragraph remains part of the full text.</p>" ++
+  "<p>Text before <a href='/inside'>an inline article link</a> text after.</p>" ++
+  "<a href='/source'>Read the source</a>" ++
+  "<a href='/full-figure'><img src='/figure.png' alt='Figure one' title='Measured values'></a>" ++
+  "</article></body></html>"
+
+plain_url_list : String
+plain_url_list =
+  "https://example.test/one\n" ++
+  "ordinary text\n" ++
+  "http://example.test/two?q=three\n"
+
 all_lines_within : Nat → List String → Bool
 all_lines_within width [] = True
 all_lines_within width (line :: rest) =
@@ -49,6 +66,8 @@ main = do
   let early = extract_html "https://console.test/deployments" "https://console.test/deployments" heavy_prefix
   let full = extract_html "https://console.test/deployments" "https://console.test/deployments" (heavy_prefix ++ heavy_tail)
   let shell = extract_html "https://console.test/app" "https://console.test/app" shell_only
+  let article = prepaint_full_text "https://example.test/notes" "https://example.test/notes" article_body
+  let plain = prepaint_text "URL list" plain_url_list
   let phone = phone_lines 6 48 full
   putStrLn ("information-title=" ++ view_title full)
   putStrLn ("early-table-header=" ++ show (has_table_row ["Service", "Status"] early))
@@ -63,3 +82,14 @@ main = do
   putStrLn ("phone-api-row=" ++ show (has_line "| api | healthy |" phone))
   putStrLn ("phone-lines=" ++ show (length phone))
   putStrLn ("phone-width-bounded=" ++ show (all_lines_within 48 phone))
+  putStrLn ("article-first-paragraph=" ++ show (has_exact_item_text "The first paragraph is the useful first paint." article))
+  putStrLn ("article-second-paragraph=" ++ show (has_exact_item_text "The second paragraph remains part of the full text." article))
+  putStrLn ("article-href=" ++ show (has_link "Read the source" "/source" article))
+  putStrLn ("article-inline-href=" ++ show (has_link "an inline article link" "/inside" article))
+  putStrLn ("article-inline-prefix=" ++ show (has_exact_item_text "Text before" article))
+  putStrLn ("article-inline-suffix=" ++ show (has_exact_item_text "text after." article))
+  putStrLn ("article-linked-image=" ++ show (has_image "Figure one" "/figure.png" "/full-figure" article))
+  putStrLn ("article-image-empty-link=" ++ show (has_link "" "/full-figure" article))
+  putStrLn ("plain-first-url=" ++ show (has_link "https://example.test/one" "https://example.test/one" plain))
+  putStrLn ("plain-second-url=" ++ show (has_link "http://example.test/two?q=three" "http://example.test/two?q=three" plain))
+  putStrLn ("cheap-url-rejects-relative=" ++ show (cheap_http_url "/relative"))
