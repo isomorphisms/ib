@@ -27,8 +27,9 @@ model-output, reducer, and renderer boundaries without a model download.
 reducer. The two pinned Hugging Face embedding manifests remain available for
 real model views; this mock writes `model-adapter.txt`, never a misleading
 `embedding-model.txt` manifest. A model name is bound to one exact adapter
-record so a replacement cannot silently reuse vectors produced by different
-facts.
+record, including the adapter command's SHA-256, so changed adapter code cannot
+silently reuse old vectors. An adapter with external model or vocabulary files
+must report their immutable hashes from `inspect` as part of the same record.
 
 ## Filesystem boundaries
 
@@ -52,14 +53,23 @@ separate requested folder:
     answer.txt
     source.tsv
     vector-query.tsv
+    vector-format.txt
     reducer.tsv
     indexing.tsv
+    model.tsv
+    reducer-model.tsv
+    reading-source.tsv
     pipeline.tsv
 ```
 
 The exchange preserves the raw model candidate, reduction evidence, selected
-source, vector execution report, and final response separately. The command
-rejects a Q&A root equal to or nested with the reading root.
+source identity and content hash, upstream reading-source record, exact vector
+generation, adapter and reducer command hashes, vector execution report, and
+final response separately. It snapshots the selected document for processing
+and fails closed if those bytes differ from the indexed corpus record. The
+snapshot is temporary: canonical reading text is neither moved nor duplicated
+into the Q&A store. The command rejects a Q&A root equal to or nested with the
+reading root.
 
 ## Run the mock
 

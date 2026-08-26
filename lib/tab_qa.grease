@@ -51,6 +51,23 @@ ib_tab_qa_metadata_value() {
   sed -n "s/^${metadata_key}=//p" | sed -n '1p'
 }
 
+ib_tab_qa_sha256() {
+  command -v sha256sum >/dev/null 2>&1 || {
+    ib_tab_qa_fail 'sha256sum is unavailable'
+    return 1
+  }
+  checksum_line=$(sha256sum "$1") || return 1
+  checksum=${checksum_line%% *}
+  case "$checksum" in
+    ''|*[!0-9a-f]*) ib_tab_qa_fail "invalid SHA-256 for: $1"; return 1 ;;
+  esac
+  test "${#checksum}" -eq 64 || {
+    ib_tab_qa_fail "invalid SHA-256 for: $1"
+    return 1
+  }
+  printf '%s\n' "$checksum"
+}
+
 ib_tab_qa_safe_component() {
   case "$1" in
     ''|.|..|*[!A-Za-z0-9._-]*) return 1 ;;
@@ -87,7 +104,9 @@ ib_tab_qa_model_metadata() {
     ib_tab_qa_fail "model is unavailable: $model_command"
     return 1
   }
-  "$model_command" inspect
+  model_report=$("$model_command" inspect) || return 1
+  model_command_sha256=$(ib_tab_qa_sha256 "$model_command") || return 1
+  printf '%s\nadapter-command-sha256=%s\n' "$model_report" "$model_command_sha256"
 }
 
 ib_tab_qa_reducer_metadata() {
@@ -96,7 +115,9 @@ ib_tab_qa_reducer_metadata() {
     ib_tab_qa_fail "reducer is unavailable: $reducer_command"
     return 1
   }
-  "$reducer_command" inspect
+  reducer_report=$("$reducer_command" inspect) || return 1
+  reducer_command_sha256=$(ib_tab_qa_sha256 "$reducer_command") || return 1
+  printf '%s\nreducer-command-sha256=%s\n' "$reducer_report" "$reducer_command_sha256"
 }
 
 ib_tab_qa_model_name() {
@@ -135,7 +156,7 @@ ib_tab_qa_build_index() (
   command -v find >/dev/null 2>&1 || ib_tab_qa_fail 'find is unavailable' || return 1
   command -v sha256sum >/dev/null 2>&1 || ib_tab_qa_fail 'sha256sum is unavailable' || return 1
 
-  model_metadata=$("$model_command" inspect) || return 1
+  model_metadata=$(ib_tab_qa_model_metadata) || return 1
   model_available=$(printf '%s\n' "$model_metadata" | ib_tab_qa_metadata_value available)
   model_name=$(printf '%s\n' "$model_metadata" | ib_tab_qa_metadata_value model)
   model_dimensions=$(printf '%s\n' "$model_metadata" | ib_tab_qa_metadata_value dimensions)
@@ -187,7 +208,7 @@ ib_tab_qa_build_index() (
       ib_tab_qa_fail "model emitted $vector_dimensions dimensions, expected $model_dimensions"
       return 1
     }
-    document_sha256=$(sha256sum "$document_path" | awk '{ print $1 }')
+    document_sha256=$(ib_tab_qa_sha256 "$document_path") || return 1
     document_bytes=$(wc -c < "$document_path" | tr -d '[:space:]')
     printf '%s\t%s\n' "$document_id" "$document_vector" >> "$vector_rows"
     printf '%s\t%s\t%s\n' "$document_id" "$document_sha256" "$document_bytes" >> "$corpus_rows"
@@ -301,9 +322,36 @@ ib_tab_qa_answer() (
   source_document="${reading_root%/}/$source_id"
   test -s "$source_document" || ib_tab_qa_fail "retrieved source is unavailable: $source_id" || return 1
 
-  "$model_command" answer "$question" "$source_document" > "$answer_work/model-candidate.txt"
+  corpus_record=$(awk -F '\t' -v wanted="$source_id" '
+    $1 == wanted { record = $0; matches++ }
+    END { if (matches == 1) print record; else exit 1 }
+  ' "$index_directory/corpus.tsv") || {
+    ib_tab_qa_fail "retrieved source has no unique index provenance: $source_id"
+    return 1
+  }
+  indexed_source_sha256=$(printf '%s\n' "$corpus_record" | awk -F '\t' '{ print $2 }')
+  indexed_source_bytes=$(printf '%s\n' "$corpus_record" | awk -F '\t' '{ print $3 }')
+  cp "$source_document" "$answer_work/source-document.txt"
+  answer_source_sha256=$(ib_tab_qa_sha256 "$answer_work/source-document.txt") || return 1
+  answer_source_bytes=$(wc -c < "$answer_work/source-document.txt" | tr -d '[:space:]')
+  if test "$answer_source_sha256" != "$indexed_source_sha256" ||
+     test "$answer_source_bytes" != "$indexed_source_bytes"; then
+    ib_tab_qa_fail "reading source changed since index build: $source_id (run --index)"
+    return 1
+  fi
+
+  reading_source_record=${source_document%/*}/source.tsv
+  reading_source_present=False
+  reading_source_sha256=
+  if test -f "$reading_source_record" && test ! -L "$reading_source_record"; then
+    cp "$reading_source_record" "$answer_work/reading-source.tsv"
+    reading_source_sha256=$(ib_tab_qa_sha256 "$answer_work/reading-source.tsv") || return 1
+    reading_source_present=True
+  fi
+
+  "$model_command" answer "$question" "$answer_work/source-document.txt" > "$answer_work/model-candidate.txt"
   IB_TAB_QA_REDUCER_REPORT="$answer_work/reducer.tsv" \
-    "$reducer_command" reduce "$retrieval_score" "$source_document" \
+    "$reducer_command" reduce "$retrieval_score" "$answer_work/source-document.txt" \
     < "$answer_work/model-candidate.txt" > "$answer_work/reduced-answer.txt"
   ib_tab_qa_null_render < "$answer_work/reduced-answer.txt" > "$answer_work/answer.txt"
   test -s "$answer_work/answer.txt" || ib_tab_qa_fail 'post-processing returned an empty response' || return 1
@@ -317,9 +365,20 @@ ib_tab_qa_answer() (
   cp "$answer_work/vector-query.tsv" "$exchange_partial/vector-query.tsv"
   cp "$answer_work/reducer.tsv" "$exchange_partial/reducer.tsv"
   cp "$index_directory/indexing.tsv" "$exchange_partial/indexing.tsv"
-  "$model_command" inspect > "$exchange_partial/model.tsv"
-  "$reducer_command" inspect > "$exchange_partial/reducer-model.tsv"
-  printf '%s\t%s\n' "$source_id" "$retrieval_score" > "$exchange_partial/source.tsv"
+  cp "$index_directory/format.txt" "$exchange_partial/vector-format.txt"
+  ib_tab_qa_model_metadata > "$exchange_partial/model.tsv"
+  ib_tab_qa_reducer_metadata > "$exchange_partial/reducer-model.tsv"
+  if test "$reading_source_present" = True; then
+    cp "$answer_work/reading-source.tsv" "$exchange_partial/reading-source.tsv"
+  fi
+  {
+    printf 'document-id\t%s\n' "$source_id"
+    printf 'retrieval-score\t%s\n' "$retrieval_score"
+    printf 'document-sha256\t%s\n' "$answer_source_sha256"
+    printf 'document-bytes\t%s\n' "$answer_source_bytes"
+    printf 'reading-source-present\t%s\n' "$reading_source_present"
+    printf 'reading-source-sha256\t%s\n' "$reading_source_sha256"
+  } > "$exchange_partial/source.tsv"
   printf '%s\n' \
     '1=vector-retrieval' \
     '2=model-answer' \
