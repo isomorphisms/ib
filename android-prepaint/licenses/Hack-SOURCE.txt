@@ -1,0 +1,9 @@
+Hack Regular was copied from:
+
+https://github.com/source-foundry/Hack/blob/a737c121cabb337fdfe655d8c7304729f351e30f/build/ttf/Hack-Regular.ttf
+
+Upstream revision: a737c121cabb337fdfe655d8c7304729f351e30f
+SHA-256: 15f55cc0c85a2988d2b4b3a8cdb5d77fdfbaf319e1bb5309d725db9818fb7125
+Retrieved: 2026-08-24
+
+The unmodified upstream license is in Hack-LICENSE.md.
