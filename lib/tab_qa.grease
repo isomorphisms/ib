@@ -1,0 +1,398 @@
+# Grease source. This is the first console-sized vertical slice of the
+# text-and-action workbench over material deliberately saved in ~/reading.
+
+ib_tab_qa_fail() {
+  printf 'tab Q&A: %s\n' "$1" >&2
+  return 1
+}
+
+ib_tab_qa_reading_root() {
+  if test -n "${IB_READING_DIR:-}"; then
+    printf '%s\n' "$IB_READING_DIR"
+  else
+    test -n "${HOME:-}" || return 1
+    printf '%s/reading\n' "$HOME"
+  fi
+}
+
+ib_tab_qa_root() {
+  if test -n "${IB_TAB_QA_DIR:-}"; then
+    printf '%s\n' "$IB_TAB_QA_DIR"
+  else
+    test -n "${HOME:-}" || return 1
+    printf '%s/questions and answers about tabs that the user has visited\n' "$HOME"
+  fi
+}
+
+ib_tab_qa_views_root() {
+  if test -n "${IB_VIEWS_DIR:-}"; then
+    printf '%s\n' "$IB_VIEWS_DIR"
+  else
+    test -n "${HOME:-}" || return 1
+    data_home=${XDG_DATA_HOME:-$HOME/.local/share}
+    printf '%s/ib/views\n' "$data_home"
+  fi
+}
+
+ib_tab_qa_model_command() {
+  printf '%s\n' "${IB_TAB_QA_MODEL_COMMAND:-$IB_TAB_QA_REPOSITORY_ROOT/bin/mock_tab_model.grease}"
+}
+
+ib_tab_qa_reducer_command() {
+  printf '%s\n' "${IB_TAB_QA_REDUCER_COMMAND:-$IB_TAB_QA_REPOSITORY_ROOT/bin/mock_tab_qa_reducer.grease}"
+}
+
+ib_tab_qa_vector_program() {
+  printf '%s\n' "${IB_VECTOR_INDEX_PROGRAM:-$IB_TAB_QA_REPOSITORY_ROOT/native/vector-index/ib-vector-index}"
+}
+
+ib_tab_qa_metadata_value() {
+  metadata_key=$1
+  sed -n "s/^${metadata_key}=//p" | sed -n '1p'
+}
+
+ib_tab_qa_sha256() {
+  command -v sha256sum >/dev/null 2>&1 || {
+    ib_tab_qa_fail 'sha256sum is unavailable'
+    return 1
+  }
+  checksum_line=$(sha256sum "$1") || return 1
+  checksum=${checksum_line%% *}
+  case "$checksum" in
+    ''|*[!0-9a-f]*) ib_tab_qa_fail "invalid SHA-256 for: $1"; return 1 ;;
+  esac
+  test "${#checksum}" -eq 64 || {
+    ib_tab_qa_fail "invalid SHA-256 for: $1"
+    return 1
+  }
+  printf '%s\n' "$checksum"
+}
+
+ib_tab_qa_safe_component() {
+  case "$1" in
+    ''|.|..|*[!A-Za-z0-9._-]*) return 1 ;;
+    *) return 0 ;;
+  esac
+}
+
+ib_tab_qa_safe_relative_document() {
+  relative_document=$1
+  tab_character=$(printf '\t')
+  case "$relative_document" in
+    ''|/*|.|..|../*|*/../*|*/..|*"$tab_character"*|*'
+'*) return 1 ;;
+    *) return 0 ;;
+  esac
+}
+
+ib_tab_qa_separate_roots() {
+  command -v realpath >/dev/null 2>&1 || return 1
+  first_root=$(realpath -m "$1") || return 1
+  second_root=$(realpath -m "$2") || return 1
+  case "$first_root/" in
+    "$second_root/"*) return 1 ;;
+  esac
+  case "$second_root/" in
+    "$first_root/"*) return 1 ;;
+  esac
+  return 0
+}
+
+ib_tab_qa_model_metadata() {
+  model_command=$(ib_tab_qa_model_command) || return 1
+  test -x "$model_command" || {
+    ib_tab_qa_fail "model is unavailable: $model_command"
+    return 1
+  }
+  model_report=$("$model_command" inspect) || return 1
+  model_command_sha256=$(ib_tab_qa_sha256 "$model_command") || return 1
+  printf '%s\nadapter-command-sha256=%s\n' "$model_report" "$model_command_sha256"
+}
+
+ib_tab_qa_reducer_metadata() {
+  reducer_command=$(ib_tab_qa_reducer_command) || return 1
+  test -x "$reducer_command" || {
+    ib_tab_qa_fail "reducer is unavailable: $reducer_command"
+    return 1
+  }
+  reducer_report=$("$reducer_command" inspect) || return 1
+  reducer_command_sha256=$(ib_tab_qa_sha256 "$reducer_command") || return 1
+  printf '%s\nreducer-command-sha256=%s\n' "$reducer_report" "$reducer_command_sha256"
+}
+
+ib_tab_qa_model_name() {
+  model_metadata=$(ib_tab_qa_model_metadata) || return 1
+  model_name=$(printf '%s\n' "$model_metadata" | ib_tab_qa_metadata_value model)
+  ib_tab_qa_safe_component "$model_name" || {
+    ib_tab_qa_fail "model reported an unsafe name: $model_name"
+    return 1
+  }
+  printf '%s\n' "$model_name"
+}
+
+ib_tab_qa_index_directory() {
+  views_root=$(ib_tab_qa_views_root) || return 1
+  model_name=$(ib_tab_qa_model_name) || return 1
+  printf '%s/organizing-the-information/vector-spaces/%s/reading\n' \
+    "$views_root" "$model_name"
+}
+
+ib_tab_qa_build_index() (
+  build_work=
+  cleanup() {
+    test -z "$build_work" || rm -rf "$build_work"
+  }
+  trap cleanup EXIT HUP INT TERM
+
+  reading_root=$(ib_tab_qa_reading_root) || return 1
+  views_root=$(ib_tab_qa_views_root) || return 1
+  index_directory=$(ib_tab_qa_index_directory) || return 1
+  model_command=$(ib_tab_qa_model_command) || return 1
+  vector_program=$(ib_tab_qa_vector_program) || return 1
+
+  test -d "$reading_root" || ib_tab_qa_fail "reading directory is missing: $reading_root" || return 1
+  test -x "$model_command" || ib_tab_qa_fail "model is unavailable: $model_command" || return 1
+  test -x "$vector_program" || ib_tab_qa_fail "vector backend is unavailable: $vector_program" || return 1
+  command -v find >/dev/null 2>&1 || ib_tab_qa_fail 'find is unavailable' || return 1
+  command -v sha256sum >/dev/null 2>&1 || ib_tab_qa_fail 'sha256sum is unavailable' || return 1
+
+  model_metadata=$(ib_tab_qa_model_metadata) || return 1
+  model_available=$(printf '%s\n' "$model_metadata" | ib_tab_qa_metadata_value available)
+  model_name=$(printf '%s\n' "$model_metadata" | ib_tab_qa_metadata_value model)
+  model_dimensions=$(printf '%s\n' "$model_metadata" | ib_tab_qa_metadata_value dimensions)
+  test "$model_available" = True || ib_tab_qa_fail "model did not report available: $model_command" || return 1
+  ib_tab_qa_safe_component "$model_name" || ib_tab_qa_fail "model reported an unsafe name: $model_name" || return 1
+  case "$model_dimensions" in
+    ''|*[!0-9]*) ib_tab_qa_fail 'model dimensions are not a positive integer' || return 1 ;;
+  esac
+  test "$model_dimensions" -gt 0 || ib_tab_qa_fail 'model dimensions must be positive' || return 1
+
+  sh "$IB_TAB_QA_REPOSITORY_ROOT/bin/ib_views.grease" init "$views_root"
+  model_view_directory=$(dirname "$index_directory")
+  test ! -L "$model_view_directory" || ib_tab_qa_fail "model view is a symbolic link: $model_view_directory" || return 1
+  mkdir -p "$model_view_directory"
+  adapter_record="$model_view_directory/model-adapter.txt"
+  if test -e "$adapter_record" || test -L "$adapter_record"; then
+    test -f "$adapter_record" && test ! -L "$adapter_record" || \
+      ib_tab_qa_fail "model adapter record is not a regular file: $adapter_record" || return 1
+    recorded_model_metadata=$(cat "$adapter_record")
+    test "$recorded_model_metadata" = "$model_metadata" || \
+      ib_tab_qa_fail "model name is already bound to different adapter facts: $model_name" || return 1
+  else
+    adapter_temporary=$(mktemp "$model_view_directory/.model-adapter.XXXXXX") || return 1
+    printf '%s\n' "$model_metadata" > "$adapter_temporary"
+    mv -T "$adapter_temporary" "$adapter_record"
+  fi
+
+  build_work=$(mktemp -d) || return 1
+  document_paths="$build_work/document-paths.txt"
+  vector_rows="$build_work/vector-rows.tsv"
+  corpus_rows="$build_work/corpus.tsv"
+  build_report="$build_work/build-report.txt"
+  : > "$vector_rows"
+  : > "$corpus_rows"
+  find "$reading_root" -type f -name document.txt -print | LC_ALL=C sort > "$document_paths"
+
+  document_count=0
+  while IFS= read -r document_path; do
+    test -n "$document_path" || continue
+    document_id=${document_path#"${reading_root%/}"/}
+    ib_tab_qa_safe_relative_document "$document_id" || {
+      ib_tab_qa_fail "unsafe reading document identity: $document_id"
+      return 1
+    }
+    test -s "$document_path" || ib_tab_qa_fail "reading document is empty: $document_id" || return 1
+    document_vector=$("$model_command" embed < "$document_path") || return 1
+    vector_dimensions=$(printf '%s\n' "$document_vector" | awk 'NR == 1 { print NF }')
+    test "$vector_dimensions" = "$model_dimensions" || {
+      ib_tab_qa_fail "model emitted $vector_dimensions dimensions, expected $model_dimensions"
+      return 1
+    }
+    document_sha256=$(ib_tab_qa_sha256 "$document_path") || return 1
+    document_bytes=$(wc -c < "$document_path" | tr -d '[:space:]')
+    printf '%s\t%s\n' "$document_id" "$document_vector" >> "$vector_rows"
+    printf '%s\t%s\t%s\n' "$document_id" "$document_sha256" "$document_bytes" >> "$corpus_rows"
+    document_count=$((document_count + 1))
+  done < "$document_paths"
+
+  test "$document_count" -gt 0 || ib_tab_qa_fail "no document.txt files exist below $reading_root" || return 1
+  "$vector_program" build "$index_directory" "$model_dimensions" cosine \
+    < "$vector_rows" > "$build_report"
+  "$vector_program" check "$index_directory" >/dev/null
+
+  corpus_temporary=$(mktemp "$index_directory/.corpus.XXXXXX") || return 1
+  cp "$corpus_rows" "$corpus_temporary"
+  mv -T "$corpus_temporary" "$index_directory/corpus.tsv"
+  indexing_temporary=$(mktemp "$index_directory/.indexing.XXXXXX") || return 1
+  printf '%s\n' \
+    'index-count=1' \
+    'index-1=flat-f32-exact/cosine' \
+    'query-path-count=2' \
+    'query-path-1=readable-fixed-width-text' \
+    'query-path-2=rebuildable-float32-cache' \
+    'collection=reading' \
+    "model=$model_name" \
+    "dimensions=$model_dimensions" \
+    "document-count=$document_count" > "$indexing_temporary"
+  mv -T "$indexing_temporary" "$index_directory/indexing.tsv"
+
+  sed -n '1,20p' "$build_report"
+  sed -n '1,20p' "$index_directory/indexing.tsv"
+)
+
+ib_tab_qa_ensure_index() {
+  index_directory=$(ib_tab_qa_index_directory) || return 1
+  adapter_record=$(dirname "$index_directory")/model-adapter.txt
+  current_model_metadata=$(ib_tab_qa_model_metadata) || return 1
+  if test -s "$index_directory/format.txt" &&
+     test -s "$index_directory/corpus.tsv" &&
+     test -s "$index_directory/indexing.tsv" &&
+     test -f "$adapter_record" && test ! -L "$adapter_record" &&
+     test "$(cat "$adapter_record")" = "$current_model_metadata"; then
+    return 0
+  fi
+  ib_tab_qa_build_index >/dev/null
+}
+
+ib_tab_qa_null_render() {
+  # This is a mock standing in for any further post-processing we want to do
+  # before returning the text to the user. Its current behavior is identity.
+  cat
+}
+
+ib_tab_qa_inspect() {
+  reading_root=$(ib_tab_qa_reading_root) || return 1
+  qa_root=$(ib_tab_qa_root) || return 1
+  views_root=$(ib_tab_qa_views_root) || return 1
+  index_directory=$(ib_tab_qa_index_directory) || return 1
+  pinned_manifest_count=$(find "$IB_TAB_QA_REPOSITORY_ROOT/models/embedding" -type f -name '*.model' | wc -l | tr -d '[:space:]')
+  printf '%s\n' \
+    'frontend=console-text-stub' \
+    "reading-root=$reading_root" \
+    "qa-root=$qa_root" \
+    "views-root=$views_root" \
+    "index-directory=$index_directory" \
+    "pinned-embedding-manifest-count=$pinned_manifest_count"
+  ib_tab_qa_model_metadata
+  ib_tab_qa_reducer_metadata
+  if test -s "$index_directory/format.txt"; then
+    printf 'index-available=True\n'
+    sed -n '/^index-count=/p; /^query-path-count=/p' "$index_directory/indexing.tsv"
+  else
+    printf 'index-available=False\n'
+  fi
+}
+
+ib_tab_qa_answer() (
+  answer_work=
+  exchange_partial=
+  cleanup() {
+    test -z "$answer_work" || rm -rf "$answer_work"
+    test -z "$exchange_partial" || rm -rf "$exchange_partial"
+  }
+  trap cleanup EXIT HUP INT TERM
+
+  question=$1
+  test -n "$question" || ib_tab_qa_fail 'question is empty' || return 1
+
+  reading_root=$(ib_tab_qa_reading_root) || return 1
+  qa_root=$(ib_tab_qa_root) || return 1
+  ib_tab_qa_separate_roots "$reading_root" "$qa_root" || {
+    ib_tab_qa_fail 'question-and-answer storage must be separate from the reading corpus'
+    return 1
+  }
+  ib_tab_qa_ensure_index || return 1
+  index_directory=$(ib_tab_qa_index_directory) || return 1
+  model_command=$(ib_tab_qa_model_command) || return 1
+  reducer_command=$(ib_tab_qa_reducer_command) || return 1
+  vector_program=$(ib_tab_qa_vector_program) || return 1
+  test -x "$reducer_command" || ib_tab_qa_fail "reducer is unavailable: $reducer_command" || return 1
+
+  answer_work=$(mktemp -d) || return 1
+  printf '%s\n' "$question" | "$model_command" embed > "$answer_work/question-vector.txt"
+  IB_VECTOR_QUERY_REPORT="$answer_work/vector-query.tsv" \
+    "$vector_program" query "$index_directory" 1 \
+    < "$answer_work/question-vector.txt" > "$answer_work/results.tsv"
+
+  result_line=$(sed -n '1p' "$answer_work/results.tsv")
+  test -n "$result_line" || ib_tab_qa_fail 'vector query returned no saved page' || return 1
+  source_id=$(printf '%s\n' "$result_line" | awk -F '\t' '{ print $1 }')
+  retrieval_score=$(printf '%s\n' "$result_line" | awk -F '\t' '{ print $2 }')
+  ib_tab_qa_safe_relative_document "$source_id" || ib_tab_qa_fail "vector index returned unsafe identity: $source_id" || return 1
+  source_document="${reading_root%/}/$source_id"
+  test -s "$source_document" || ib_tab_qa_fail "retrieved source is unavailable: $source_id" || return 1
+
+  corpus_record=$(awk -F '\t' -v wanted="$source_id" '
+    $1 == wanted { record = $0; matches++ }
+    END { if (matches == 1) print record; else exit 1 }
+  ' "$index_directory/corpus.tsv") || {
+    ib_tab_qa_fail "retrieved source has no unique index provenance: $source_id"
+    return 1
+  }
+  indexed_source_sha256=$(printf '%s\n' "$corpus_record" | awk -F '\t' '{ print $2 }')
+  indexed_source_bytes=$(printf '%s\n' "$corpus_record" | awk -F '\t' '{ print $3 }')
+  cp "$source_document" "$answer_work/source-document.txt"
+  answer_source_sha256=$(ib_tab_qa_sha256 "$answer_work/source-document.txt") || return 1
+  answer_source_bytes=$(wc -c < "$answer_work/source-document.txt" | tr -d '[:space:]')
+  if test "$answer_source_sha256" != "$indexed_source_sha256" ||
+     test "$answer_source_bytes" != "$indexed_source_bytes"; then
+    ib_tab_qa_fail "reading source changed since index build: $source_id (run --index)"
+    return 1
+  fi
+
+  reading_source_record=${source_document%/*}/source.tsv
+  reading_source_present=False
+  reading_source_sha256=
+  if test -f "$reading_source_record" && test ! -L "$reading_source_record"; then
+    cp "$reading_source_record" "$answer_work/reading-source.tsv"
+    reading_source_sha256=$(ib_tab_qa_sha256 "$answer_work/reading-source.tsv") || return 1
+    reading_source_present=True
+  fi
+
+  "$model_command" answer "$question" "$answer_work/source-document.txt" > "$answer_work/model-candidate.txt"
+  IB_TAB_QA_REDUCER_REPORT="$answer_work/reducer.tsv" \
+    "$reducer_command" reduce "$retrieval_score" "$answer_work/source-document.txt" \
+    < "$answer_work/model-candidate.txt" > "$answer_work/reduced-answer.txt"
+  ib_tab_qa_null_render < "$answer_work/reduced-answer.txt" > "$answer_work/answer.txt"
+  test -s "$answer_work/answer.txt" || ib_tab_qa_fail 'post-processing returned an empty response' || return 1
+
+  mkdir -p "$qa_root"
+  exchange_partial=$(mktemp -d "$qa_root/.partial.XXXXXX") || return 1
+  printf '%s\n' "$question" > "$exchange_partial/question.txt"
+  cp "$answer_work/model-candidate.txt" "$exchange_partial/model-candidate.txt"
+  cp "$answer_work/reduced-answer.txt" "$exchange_partial/reduced-answer.txt"
+  cp "$answer_work/answer.txt" "$exchange_partial/answer.txt"
+  cp "$answer_work/vector-query.tsv" "$exchange_partial/vector-query.tsv"
+  cp "$answer_work/reducer.tsv" "$exchange_partial/reducer.tsv"
+  cp "$index_directory/indexing.tsv" "$exchange_partial/indexing.tsv"
+  cp "$index_directory/format.txt" "$exchange_partial/vector-format.txt"
+  ib_tab_qa_model_metadata > "$exchange_partial/model.tsv"
+  ib_tab_qa_reducer_metadata > "$exchange_partial/reducer-model.tsv"
+  if test "$reading_source_present" = True; then
+    cp "$answer_work/reading-source.tsv" "$exchange_partial/reading-source.tsv"
+  fi
+  {
+    printf 'document-id\t%s\n' "$source_id"
+    printf 'retrieval-score\t%s\n' "$retrieval_score"
+    printf 'document-sha256\t%s\n' "$answer_source_sha256"
+    printf 'document-bytes\t%s\n' "$answer_source_bytes"
+    printf 'reading-source-present\t%s\n' "$reading_source_present"
+    printf 'reading-source-sha256\t%s\n' "$reading_source_sha256"
+  } > "$exchange_partial/source.tsv"
+  printf '%s\n' \
+    '1=vector-retrieval' \
+    '2=model-answer' \
+    '3=mock-ensemble-reducer' \
+    '4=null-identity-renderer' > "$exchange_partial/pipeline.tsv"
+
+  exchange_base=$(date -u '+%Y%m%dT%H%M%SZ')-$$
+  exchange_directory="$qa_root/$exchange_base"
+  exchange_suffix=0
+  while test -e "$exchange_directory"; do
+    exchange_suffix=$((exchange_suffix + 1))
+    exchange_directory="$qa_root/$exchange_base-$exchange_suffix"
+  done
+  mv "$exchange_partial" "$exchange_directory"
+  exchange_partial=
+  cat "$answer_work/answer.txt"
+)

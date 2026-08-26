@@ -1,0 +1,61 @@
+module FileStoreSmoke
+
+import IB.FileStore
+
+import Data.String
+import System
+
+%default total
+
+manifest : String
+manifest = "id T1\nstate sleeping\ncurrent_history 2\n"
+
+first_history : String
+first_history = "1 2026-08-24T17:00:00Z request https://example.test/first"
+
+second_history : String
+second_history = "2 2026-08-24T17:01:00Z request https://example.test/second"
+
+fail_with : String → IO ()
+fail_with message = die ("error=" ++ message)
+
+write_fixture : String → IO ()
+write_fixture root = do
+  Right () ← write_tab_manifest root "T1" manifest
+    | Left error ⇒ fail_with (show error)
+  Right () ← append_tab_history root "T1" first_history
+    | Left error ⇒ fail_with (show error)
+  Right () ← append_tab_history root "T1" second_history
+    | Left error ⇒ fail_with (show error)
+  path_check ← read_canonical_text root "../outside"
+  case path_check of
+    Left (InvalidRelativePath _) ⇒ putStrLn "unsafe-path=rejected"
+    Left error ⇒ fail_with (show error)
+    Right _ ⇒ fail_with "unsafe path was readable"
+  kind_check ← read_canonical_text root "cache/fake"
+  case kind_check of
+    Left (NonCanonicalPath _) ⇒ do
+      putStrLn "write=ok"
+      putStrLn "noncanonical-path=rejected"
+    Left error ⇒ fail_with (show error)
+    Right _ ⇒ fail_with "noncanonical path was readable"
+
+covering
+read_fixture : String → IO ()
+read_fixture root = do
+  Right saved_manifest ← read_tab_manifest root "T1"
+    | Left error ⇒ fail_with (show error)
+  Right saved_history ← read_tab_history root "T1"
+    | Left error ⇒ fail_with (show error)
+  putStrLn ("manifest-survived=" ++ show (saved_manifest == manifest))
+  putStrLn ("history-survived=" ++ show (saved_history == first_history ++ "\n" ++ second_history ++ "\n"))
+  putStrLn ("history-lines=" ++ show (length (lines saved_history)))
+
+covering
+main : IO ()
+main = do
+  arguments ← getArgs
+  case arguments of
+    [_, "write", root] ⇒ write_fixture root
+    [_, "read", root] ⇒ read_fixture root
+    _ ⇒ die "usage: ib-file-store-smoke write|read STORE_ROOT"

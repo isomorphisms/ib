@@ -1,0 +1,174 @@
+#!/bin/sh
+set -eu
+
+usage() {
+  printf '%s\n' 'usage:' >&2
+  printf '%s\n' '  ib_embedding_model.grease describe MODEL_MANIFEST' >&2
+  printf '%s\n' '  ib_embedding_model.grease fetch MODEL_MANIFEST MODEL_DIRECTORY' >&2
+  printf '%s\n' '  ib_embedding_model.grease verify MODEL_MANIFEST MODEL_DIRECTORY' >&2
+  exit 2
+}
+
+fail() {
+  printf 'ib-embedding-model: %s\n' "$*" >&2
+  return 1
+}
+
+check_manifest() {
+  awk '
+    function bad(message) {
+      print "ib-embedding-model: " message > "/dev/stderr"
+      exit 1
+    }
+    NR == 1 {
+      if ($0 != "ib-embedding-model 1") bad("unsupported manifest header")
+      next
+    }
+    $1 == "artifact" {
+      if (NF != 4) bad("artifact rows require path, byte count, and SHA-256")
+      if ($2 !~ /^[A-Za-z0-9._-]+(\/[A-Za-z0-9._-]+)*$/ ||
+          $2 ~ /(^|\/)\.\.?(\/|$)/) bad("unsafe artifact path")
+      if ($3 !~ /^[0-9]+$/ || $3 == 0) bad("invalid artifact byte count")
+      if (length($4) != 64 || $4 !~ /^[0-9a-f]+$/) bad("invalid artifact SHA-256")
+      if (artifact[$2]++) bad("duplicate artifact path")
+      artifacts++
+      next
+    }
+    $1 ~ /^(slug|repository|revision|license|runtime|weight_precision|dimensions|max_tokens|pooling|normalization|token_policy|padding|query_prefix|document_prefix|tokenizer_file|onnx_file|onnx_output)$/ {
+      if (NF != 2) bad("manifest fields require one value")
+      if (seen[$1]++) bad("duplicate manifest field " $1)
+      value[$1] = $2
+      next
+    }
+    { bad("unknown manifest row " NR) }
+    END {
+      if (NR == 0) bad("empty manifest")
+      required = "slug repository revision license runtime weight_precision dimensions max_tokens pooling normalization token_policy padding query_prefix document_prefix tokenizer_file onnx_file onnx_output"
+      count = split(required, names, " ")
+      for (i = 1; i <= count; i++) if (!seen[names[i]]) bad("missing field " names[i])
+      if (value["slug"] !~ /^[a-z0-9][a-z0-9._-]*$/) bad("unsafe slug")
+      if (value["repository"] !~ /^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/) bad("invalid repository")
+      if (length(value["revision"]) != 40 || value["revision"] !~ /^[0-9a-f]+$/) bad("revision must be a commit SHA")
+      if (value["dimensions"] !~ /^[0-9]+$/ || value["dimensions"] == 0) bad("invalid dimensions")
+      if (value["max_tokens"] !~ /^[0-9]+$/ || value["max_tokens"] == 0) bad("invalid max_tokens")
+      if (!artifact[value["tokenizer_file"]]) bad("tokenizer_file is not an artifact")
+      if (!artifact[value["onnx_file"]]) bad("onnx_file is not an artifact")
+      if (artifacts == 0) bad("manifest has no artifacts")
+    }
+  ' "$1"
+}
+
+field() {
+  awk -v wanted="$2" '$1 == wanted { print $2 }' "$1"
+}
+
+verify_directory() {
+  verify_manifest=$1
+  verify_directory_name=$2
+  test -d "$verify_directory_name" || fail "model directory is missing: $verify_directory_name"
+
+  while IFS=' ' read -r marker relative_path expected_bytes expected_sha256
+  do
+    test "$marker" = artifact || continue
+    artifact_path=$verify_directory_name/$relative_path
+    test -f "$artifact_path" || fail "model artifact is missing: $relative_path"
+    actual_bytes=$(wc -c < "$artifact_path" | tr -d ' ')
+    test "$actual_bytes" = "$expected_bytes" ||
+      fail "model artifact has the wrong size: $relative_path"
+    actual_sha256=$(sha256sum "$artifact_path" | awk '{print $1}')
+    test "$actual_sha256" = "$expected_sha256" ||
+      fail "model artifact has the wrong SHA-256: $relative_path"
+  done < "$verify_manifest"
+
+  if test -f "$verify_directory_name/model.txt"; then
+    cmp -s "$verify_manifest" "$verify_directory_name/model.txt" ||
+      fail 'installed model.txt differs from the requested manifest'
+  fi
+}
+
+describe_manifest() {
+  describe_file=$1
+  printf 'slug=%s\n' "$(field "$describe_file" slug)"
+  printf 'repository=%s\n' "$(field "$describe_file" repository)"
+  printf 'revision=%s\n' "$(field "$describe_file" revision)"
+  printf 'runtime=%s\n' "$(field "$describe_file" runtime)"
+  printf 'weight_precision=%s\n' "$(field "$describe_file" weight_precision)"
+  printf 'dimensions=%s\n' "$(field "$describe_file" dimensions)"
+  awk '$1 == "artifact" { bytes += $3; files++ }
+       END { printf "artifact_files=%d\nartifact_bytes=%.0f\n", files, bytes }' \
+    "$describe_file"
+}
+
+fetch_model() {
+  fetch_manifest=$1
+  fetch_directory=$2
+  case "$fetch_directory" in
+    ''|/) fail "unsafe model directory: $fetch_directory"; return 1 ;;
+  esac
+  command -v sha256sum >/dev/null 2>&1 || fail 'missing command: sha256sum'
+  if test -e "$fetch_directory"; then
+    verify_directory "$fetch_manifest" "$fetch_directory"
+    printf '%s\n' 'fetch=already-present' 'verify=ok'
+    return 0
+  fi
+
+  command -v curl >/dev/null 2>&1 || fail 'missing command: curl'
+  fetch_parent=$(dirname "$fetch_directory")
+  fetch_name=$(basename "$fetch_directory")
+  mkdir -p "$fetch_parent"
+  fetch_temporary=$(mktemp -d "$fetch_parent/.${fetch_name}.download.XXXXXX")
+  trap 'rm -rf "$fetch_temporary"' EXIT HUP INT TERM
+  repository=$(field "$fetch_manifest" repository)
+  revision=$(field "$fetch_manifest" revision)
+
+  while IFS=' ' read -r marker relative_path expected_bytes expected_sha256
+  do
+    test "$marker" = artifact || continue
+    artifact_path=$fetch_temporary/$relative_path
+    mkdir -p "$(dirname "$artifact_path")"
+    curl --proto '=https' --tlsv1.2 --retry 3 --retry-all-errors \
+      --connect-timeout 30 -fsSL \
+      "https://huggingface.co/$repository/resolve/$revision/$relative_path?download=true" \
+      -o "$artifact_path"
+    actual_bytes=$(wc -c < "$artifact_path" | tr -d ' ')
+    test "$actual_bytes" = "$expected_bytes" ||
+      fail "downloaded artifact has the wrong size: $relative_path"
+    actual_sha256=$(sha256sum "$artifact_path" | awk '{print $1}')
+    test "$actual_sha256" = "$expected_sha256" ||
+      fail "downloaded artifact has the wrong SHA-256: $relative_path"
+  done < "$fetch_manifest"
+
+  cp "$fetch_manifest" "$fetch_temporary/model.txt"
+  verify_directory "$fetch_manifest" "$fetch_temporary"
+  if ! mv -T "$fetch_temporary" "$fetch_directory"; then
+    fail "cannot install model directory: $fetch_directory"
+    return 1
+  fi
+  trap - EXIT HUP INT TERM
+  printf '%s\n' 'fetch=ok' 'verify=ok'
+}
+
+test "$#" -gt 0 || usage
+command_name=$1
+shift
+
+case "$command_name" in
+  describe)
+    test "$#" -eq 1 || usage
+    check_manifest "$1"
+    describe_manifest "$1"
+    ;;
+  fetch)
+    test "$#" -eq 2 || usage
+    check_manifest "$1"
+    fetch_model "$1" "$2"
+    ;;
+  verify)
+    test "$#" -eq 2 || usage
+    check_manifest "$1"
+    command -v sha256sum >/dev/null 2>&1 || fail 'missing command: sha256sum'
+    verify_directory "$1" "$2"
+    printf '%s\n' 'verify=ok'
+    ;;
+  *) usage ;;
+esac

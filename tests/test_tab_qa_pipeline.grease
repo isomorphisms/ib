@@ -1,0 +1,171 @@
+#!/bin/sh
+set -eu
+
+repository_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+work_directory=$(mktemp -d)
+cleanup() {
+  rm -rf "$work_directory"
+}
+trap cleanup EXIT HUP INT TERM
+
+export HOME="$work_directory/home"
+export IB_READING_DIR="$work_directory/reading"
+export IB_TAB_QA_DIR="$work_directory/questions and answers about tabs that the user has visited"
+export IB_VIEWS_DIR="$work_directory/views"
+export IB_VECTOR_INDEX_PROGRAM="$repository_root/native/vector-index/ib-vector-index"
+index_directory="$IB_VIEWS_DIR/organizing-the-information/vector-spaces/mock-token-i8-v1/reading"
+model_view_directory=$(dirname "$index_directory")
+mkdir -p "$HOME" "$IB_READING_DIR"
+cp -R "$repository_root/tests/fixtures/reading/." "$IB_READING_DIR/"
+
+make -C "$repository_root/native/vector-index" >/dev/null
+
+document_count=$(find "$IB_READING_DIR" -type f -name document.txt | wc -l | tr -d '[:space:]')
+test "$document_count" = 2
+find "$IB_READING_DIR" -type f -name document.txt -exec test -s {} \;
+grep -F 'Origami in N dimensions' \
+  "$repository_root/tests/fixtures/arxiv_site/html/2203.11355" >/dev/null
+grep -aF 'Figure 1. Tiny color blocks' \
+  "$repository_root/tests/fixtures/arxiv_site/pdf/1901.09021" >/dev/null
+grep -F 'Feed-forward networks fold input space' \
+  "$IB_READING_DIR/arxiv/2203.11355/document.txt" >/dev/null
+grep -F 'tiny red, green, blue, and white color blocks' \
+  "$IB_READING_DIR/arxiv/1901.09021/document.txt" >/dev/null
+awk -F '\t' 'NR == 1 && $1 == "html" && $3 == "fixture://arxiv_site/html/2203.11355" { found = 1 } END { exit !found }' \
+  "$IB_READING_DIR/arxiv/2203.11355/source.tsv"
+awk -F '\t' 'NR == 1 && $1 == "pdf" && $3 == "fixture://arxiv_site/pdf/1901.09021" { found = 1 } END { exit !found }' \
+  "$IB_READING_DIR/arxiv/1901.09021/source.tsv"
+
+inspect_before=$(sh "$repository_root/bin/ask_saved_pages.grease" --inspect)
+printf '%s\n' "$inspect_before" | grep -Fx 'frontend=console-text-stub'
+pinned_manifest_count=$(printf '%s\n' "$inspect_before" | sed -n 's/^pinned-embedding-manifest-count=//p')
+test "$pinned_manifest_count" -ge 1
+printf '%s\n' "$inspect_before" | grep -Fx 'available=True'
+printf '%s\n' "$inspect_before" | grep -Fx 'llm=False'
+printf '%s\n' "$inspect_before" | grep -Fx 'ensemble=single-member-test-double'
+printf '%s\n' "$inspect_before" | grep -Fx 'index-available=False'
+
+sh "$repository_root/bin/ask_saved_pages.grease" --index > "$work_directory/index-build.txt"
+grep -Fx 'build=ok' "$work_directory/index-build.txt"
+grep -Fx 'count=2' "$work_directory/index-build.txt"
+grep -Fx 'index-count=1' "$work_directory/index-build.txt"
+grep -Fx 'query-path-count=2' "$work_directory/index-build.txt"
+grep -Fx 'query-path-1=readable-fixed-width-text' "$work_directory/index-build.txt"
+grep -Fx 'query-path-2=rebuildable-float32-cache' "$work_directory/index-build.txt"
+grep -Fx 'document-count=2' "$work_directory/index-build.txt"
+test -s "$index_directory/format.txt"
+test -s "$index_directory/corpus.tsv"
+test -s "$model_view_directory/model-adapter.txt"
+grep -E '^adapter-command-sha256=[0-9a-f]{64}$' "$model_view_directory/model-adapter.txt" >/dev/null
+test ! -e "$model_view_directory/embedding-model.txt"
+test "$(wc -l < "$index_directory/corpus.tsv" | tr -d '[:space:]')" = 2
+vectors_text=$(sed -n 's/^vectors_text //p' "$index_directory/format.txt")
+vectors_cache=$(sed -n 's/^vectors_cache //p' "$index_directory/format.txt")
+test -s "$index_directory/$vectors_text"
+test -s "$index_directory/$vectors_cache"
+"$IB_VECTOR_INDEX_PROGRAM" check "$index_directory" >/dev/null
+inspect_after=$(sh "$repository_root/bin/ask_saved_pages.grease" --inspect)
+printf '%s\n' "$inspect_after" | grep -Fx 'index-available=True'
+printf '%s\n' "$inspect_after" | grep -Fx 'index-count=1'
+printf '%s\n' "$inspect_after" | grep -Fx 'query-path-count=2'
+
+changed_model="$work_directory/changed-model.grease"
+cp "$repository_root/bin/mock_tab_model.grease" "$changed_model"
+printf '%s\n' '# behavior-bearing adapter bytes changed' >> "$changed_model"
+chmod +x "$changed_model"
+if IB_TAB_QA_MODEL_COMMAND="$changed_model" \
+  sh "$repository_root/bin/ask_saved_pages.grease" --index \
+  > "$work_directory/changed-model.txt" 2>&1; then
+  printf 'changed adapter code silently reused the model name\n' >&2
+  exit 1
+fi
+grep -F 'model name is already bound to different adapter facts' \
+  "$work_directory/changed-model.txt" >/dev/null
+
+question='What do feed-forward networks do to input space?'
+printf '%s\n' "$question" | "$repository_root/bin/mock_tab_model.grease" embed \
+  > "$work_directory/question-vector.txt"
+IB_VECTOR_QUERY_REPORT="$work_directory/cached-query.tsv" \
+  "$IB_VECTOR_INDEX_PROGRAM" query "$index_directory" 2 \
+  < "$work_directory/question-vector.txt" > "$work_directory/cached-results.tsv"
+IB_VECTOR_QUERY_REPORT="$work_directory/readable-query.tsv" \
+  "$IB_VECTOR_INDEX_PROGRAM" query-text "$index_directory" 2 \
+  < "$work_directory/question-vector.txt" > "$work_directory/readable-results.tsv"
+cmp "$work_directory/cached-results.tsv" "$work_directory/readable-results.tsv"
+grep -Fx 'dot-product-used-gpu=False' "$work_directory/cached-query.tsv"
+grep -Fx 'compute=cpu' "$work_directory/cached-query.tsv"
+grep -Fx 'storage=float32-cache' "$work_directory/cached-query.tsv"
+grep -Fx 'dot-products=2' "$work_directory/cached-query.tsv"
+grep -Fx 'dot-product-used-gpu=False' "$work_directory/readable-query.tsv"
+grep -Fx 'storage=readable-text' "$work_directory/readable-query.tsv"
+
+response=$(printf '%s\n' "$question" | \
+  sh "$repository_root/bin/ask_saved_pages.grease" 2> "$work_directory/prompt.txt")
+grep -Fx 'question> ' "$work_directory/prompt.txt"
+test -n "$response"
+printf '%s\n' "$response" | grep -Fx \
+  'Feed-forward networks fold input space into representations whose classes can be separated.'
+
+test "$IB_TAB_QA_DIR" != "$IB_READING_DIR"
+exchange_count=$(find "$IB_TAB_QA_DIR" -mindepth 1 -maxdepth 1 -type d ! -name '.partial.*' | wc -l | tr -d '[:space:]')
+test "$exchange_count" = 1
+exchange_directory=$(find "$IB_TAB_QA_DIR" -mindepth 1 -maxdepth 1 -type d ! -name '.partial.*' | sed -n '1p')
+test -s "$exchange_directory/question.txt"
+test -s "$exchange_directory/answer.txt"
+test -s "$exchange_directory/model-candidate.txt"
+test -s "$exchange_directory/reduced-answer.txt"
+test -s "$exchange_directory/source.tsv"
+test -s "$exchange_directory/vector-format.txt"
+test -s "$exchange_directory/reading-source.tsv"
+grep -Fx 'dot-product-used-gpu=False' "$exchange_directory/vector-query.tsv"
+grep -Fx 'compute=cpu' "$exchange_directory/vector-query.tsv"
+grep -Fx 'storage=float32-cache' "$exchange_directory/vector-query.tsv"
+grep -Fx 'dot-products=2' "$exchange_directory/vector-query.tsv"
+grep -Fx 'reducer=mock-single-member-weighted-reducer-v1' "$exchange_directory/reducer.tsv"
+grep -Fx 'ensemble-stage-ran=True' "$exchange_directory/reducer.tsv"
+grep -Fx 'member-count=1' "$exchange_directory/reducer.tsv"
+grep -Fx 'checks-run=3' "$exchange_directory/reducer.tsv"
+grep -Fx 'candidate-nonempty=True' "$exchange_directory/reducer.tsv"
+grep -E '^aggregate-score=[-+0-9.eE]+$' "$exchange_directory/reducer.tsv" >/dev/null
+awk -F '\t' '$1 == "document-id" && $2 == "arxiv/2203.11355/document.txt" { found = 1 } END { exit !found }' \
+  "$exchange_directory/source.tsv"
+awk -F '\t' '$1 == "document-sha256" && $2 ~ /^[0-9a-f]{64}$/ { found = 1 } END { exit !found }' \
+  "$exchange_directory/source.tsv"
+awk -F '\t' '$1 == "reading-source-present" && $2 == "True" { found = 1 } END { exit !found }' \
+  "$exchange_directory/source.tsv"
+awk -F '\t' '$1 == "reading-source-sha256" && $2 ~ /^[0-9a-f]{64}$/ { found = 1 } END { exit !found }' \
+  "$exchange_directory/source.tsv"
+cmp "$exchange_directory/reading-source.tsv" "$IB_READING_DIR/arxiv/2203.11355/source.tsv"
+grep -E '^adapter-command-sha256=[0-9a-f]{64}$' "$exchange_directory/model.tsv" >/dev/null
+grep -E '^reducer-command-sha256=[0-9a-f]{64}$' "$exchange_directory/reducer-model.tsv" >/dev/null
+cmp "$exchange_directory/reduced-answer.txt" "$exchange_directory/answer.txt"
+grep -Fx '4=null-identity-renderer' "$exchange_directory/pipeline.tsv"
+grep -Fx 'index-count=1' "$exchange_directory/indexing.tsv"
+test "$(find "$IB_READING_DIR" -type f -name document.txt | wc -l | tr -d '[:space:]')" = 2
+
+printf '%s\n' 'changed after indexing' >> "$IB_READING_DIR/arxiv/2203.11355/document.txt"
+if sh "$repository_root/bin/ask_saved_pages.grease" "$question" \
+  > "$work_directory/stale-source.txt" 2>&1; then
+  printf 'changed reading source was unexpectedly accepted\n' >&2
+  exit 1
+fi
+grep -F 'reading source changed since index build' "$work_directory/stale-source.txt" >/dev/null
+test "$(find "$IB_TAB_QA_DIR" -mindepth 1 -maxdepth 1 -type d ! -name '.partial.*' | wc -l | tr -d '[:space:]')" = 1
+
+if IB_TAB_QA_DIR="$IB_READING_DIR/qa" \
+  sh "$repository_root/bin/ask_saved_pages.grease" "$question" \
+  > "$work_directory/nested-root.txt" 2>&1; then
+  printf 'nested Q&A root was unexpectedly accepted\n' >&2
+  exit 1
+fi
+grep -F 'question-and-answer storage must be separate' "$work_directory/nested-root.txt" >/dev/null
+
+if IB_TAB_QA_DIR="$IB_READING_DIR/../reading/qa" \
+  sh "$repository_root/bin/ask_saved_pages.grease" "$question" \
+  > "$work_directory/normalized-nested-root.txt" 2>&1; then
+  printf 'normalized nested Q&A root was unexpectedly accepted\n' >&2
+  exit 1
+fi
+grep -F 'question-and-answer storage must be separate' "$work_directory/normalized-nested-root.txt" >/dev/null
+
+printf 'tab Q&A pipeline tests: ok\n'

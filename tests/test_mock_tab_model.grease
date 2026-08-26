@@ -1,0 +1,34 @@
+#!/bin/sh
+set -eu
+
+repository_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+model="$repository_root/bin/mock_tab_model.grease"
+document="$repository_root/tests/fixtures/reading/arxiv/2203.11355/document.txt"
+
+metadata=$("$model" inspect)
+printf '%s\n' "$metadata" | grep -Fx 'model=mock-token-i8-v1'
+printf '%s\n' "$metadata" | grep -Fx 'available=True'
+printf '%s\n' "$metadata" | grep -Fx 'llm=False'
+printf '%s\n' "$metadata" | grep -Fx 'quantization=int8-counts'
+printf '%s\n' "$metadata" | grep -Fx 'dimensions=32'
+
+vector=$(printf '%s\n' 'feed-forward networks fold input space' | "$model" embed)
+printf '%s\n' "$vector" | awk '
+  NF != 32 { exit 1 }
+  {
+    nonzero = 0
+    for (field = 1; field <= NF; field++) {
+      if ($field !~ /^[0-9]+$/ || $field < 0 || $field > 127)
+        exit 1
+      if ($field > 0)
+        nonzero = 1
+    }
+    exit !nonzero
+  }
+'
+
+answer=$("$model" answer 'What do feed-forward networks do to input space?' "$document")
+printf '%s\n' "$answer" | grep -Fx \
+  'Feed-forward networks fold input space into representations whose classes can be separated.'
+
+printf 'mock tab model tests: ok\n'

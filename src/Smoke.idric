@@ -7,6 +7,7 @@ import IB.Inspect
 import IB.DisplayRepair
 import IB.ScientificMedia
 import IB.Prefetch
+import IB.VectorIndex
 
 %default total
 
@@ -30,6 +31,10 @@ first_or : Nat → List Nat → Nat
 first_or fallback [] = fallback
 first_or fallback (value :: _) = value
 
+maybe_string : String → Maybe String → String
+maybe_string fallback Nothing = fallback
+maybe_string _ (Just value) = value
+
 main : IO ()
 main = do
   let raw = ingest_raw_lines ["# ignored", " https://example.test/a ", "https://example.test/a", "https://other.test/b"]
@@ -43,12 +48,14 @@ main = do
         ]
   let copy_repair = copy_button "code-1" "git status" code_block
   let prefetch = bounded_prefetch 2 sample_prefetch_targets
+  let vector_spec = IndexSpec flat_f32_exact "pages" "test-model" 384 cosine
   putStrLn ("ingest=" ++ show (length raw))
   putStrLn ("duplicate-url-count=" ++ show (row_count "https://example.test/a" (url_rows indices)))
   putStrLn ("newest-order=" ++ show (first_or 99 (index_chronology indices)))
   putStrLn ("host-count=" ++ show (row_count "example.test" (host_rows indices)))
   putStrLn ("canonical=" ++ storage_kind_text (classify_path "visits.jsonl"))
   putStrLn ("cache-fake=" ++ storage_kind_text (classify_path "cache/visits.jsonl"))
+  putStrLn ("views=" ++ storage_kind_text (classify_path "views/organizing-the-information/categories/math/tab-T1"))
   putStrLn ("secret=" ++ storage_kind_text (classify_path "renderer/passwords"))
   putStrLn ("readable-files=" ++ show (readable_file_count files))
   putStrLn ("canonical-files=" ++ show (files_of_kind canonical files))
@@ -61,3 +68,11 @@ main = do
   putStrLn ("temporary-needs-language-model=" ++ show (needs_language_model_image_name temporary_image_name))
   putStrLn ("prefetch-bounded=" ++ show (length prefetch))
   putStrLn ("prefetch-reading=" ++ show (reading_target_count prefetch))
+  putStrLn ("vector-backend=" ++ backend_name (backend vector_spec))
+  putStrLn ("vector-scalar=" ++ scalar_name (backend vector_spec))
+  putStrLn ("vector-contract=" ++ show (contract_version (backend vector_spec)))
+  putStrLn ("vector-directory=" ++ maybe_string "invalid" (vector_index_relative_directory vector_spec))
+  putStrLn ("vector-format-readable=" ++ show (readable_path "views/organizing-the-information/vector-spaces/test-model/pages/format.txt"))
+  putStrLn ("vector-model-readable=" ++ show (readable_path "views/organizing-the-information/vector-spaces/test-model/embedding-model.txt"))
+  putStrLn ("vector-text-readable=" ++ show (readable_path "views/organizing-the-information/vector-spaces/test-model/pages/vectors-1.txt"))
+  putStrLn ("vector-bytes-readable=" ++ show (readable_path "views/organizing-the-information/vector-spaces/test-model/pages/vectors-1.f32"))
