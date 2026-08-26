@@ -56,6 +56,9 @@ jobs:
       - name: Exercise developer workbench
         run: sh bin/ci_browser_foundation.grease exercise-workbench
 
+      - name: Exercise URL-list import and look-ahead
+        run: sh bin/ci_browser_foundation.grease exercise-url-list-io
+
   scientific-media:
     runs-on: ubuntu-latest
     env:

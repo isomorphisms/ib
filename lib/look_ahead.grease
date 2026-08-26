@@ -67,10 +67,10 @@ ib_look_ahead_fetch() {
     return 0
   fi
 
-  body_partial="$entry_directory/.body.$$"
-  request_partial="$entry_directory/.request.$$"
-  result_partial="$entry_directory/.result.$$"
-  error_partial="$entry_directory/.error.$$"
+  body_partial="$entry_directory/body.fetching.$$"
+  request_partial="$entry_directory/request.fetching.$$"
+  result_partial="$entry_directory/result.fetching.$$"
+  error_partial="$entry_directory/error.fetching.$$"
   rm -f "$body_partial" "$request_partial" "$result_partial" "$error_partial"
   printf '%s\n' "$url" > "$request_partial"
 
@@ -113,6 +113,7 @@ ib_look_ahead_fetch() {
   fi
 
   if test "$fetch_failed" -ne 0; then
+    printf '%s\n' "$body_path"
     ib_look_ahead_fail "look-ahead GET failed: $url"
     return 1
   fi

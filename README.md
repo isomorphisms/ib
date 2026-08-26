@@ -18,6 +18,32 @@ The browser core owns resource, tab, event, and task identity; sleeping and waki
 - `docs/storage-model.md` — identity levels and canonical, proposed, and derived state
 - `docs/developer-workbench.md` — fixture and memory-pressure harness
 
+## Plain URL lists
+
+The first URL-list boundary is deliberately a newline stream. It accepts a file,
+standard input, or an explicit `-` without changing ordering or duplicates:
+
+```sh
+bin/import_url_list.grease urls.txt
+cat urls.txt | bin/import_url_list.grease
+bin/import_url_list.grease < urls.txt
+```
+
+Blank lines are ignored. URL validation and numbered-list parsing are later,
+composable stages rather than hidden behavior in this importer. Pipe the stream
+to the low-priority ICU look-ahead mock with:
+
+```sh
+cat urls.txt |
+  bin/import_url_list.grease |
+  bin/look_ahead.grease
+```
+
+Look-ahead entries are visible under `~/look-ahead` by default; set
+`IB_LOOK_AHEAD_DIR` to choose another root. Each URL gets a `request.url`, a
+`body`, and an `ok` or `error` `result`. A failed fetch leaves a readable error
+body and remains eligible for retry.
+
 ## Implementation languages
 
 IB is implemented in **Idriç**. Browser-owned state, policy, and invariants belong in `.idric` source under `src/`.

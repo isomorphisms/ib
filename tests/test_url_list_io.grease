@@ -89,10 +89,16 @@ grep -F -- '-n 20' "$nice_log" >/dev/null
 
 one_key=$(printf '%s' 'https://example.test/one' | sha256sum | awk '{ print $1 }')
 two_key=$(printf '%s' 'https://example.test/two?q=three' | sha256sum | awk '{ print $1 }')
+printf '%s\n' \
+  "$look_ahead_root/$one_key/body" \
+  "$look_ahead_root/$two_key/body" \
+  "$look_ahead_root/$one_key/body" > "$work_directory/expected-paths.txt"
+cmp "$work_directory/expected-paths.txt" "$work_directory/paths.txt"
 test "$(cat "$look_ahead_root/$one_key/request.url")" = 'https://example.test/one'
 test "$(cat "$look_ahead_root/$one_key/body")" = 'body for https://example.test/one'
 test "$(cat "$look_ahead_root/$one_key/result")" = ok
 test "$(cat "$look_ahead_root/$two_key/body")" = 'body for https://example.test/two?q=three'
+test "$(cat "$look_ahead_root/$two_key/result")" = ok
 
 failure_input="$work_directory/failure-urls.txt"
 printf '%s\n' \
@@ -117,6 +123,23 @@ grep -Fx 'Exit status: 7' "$look_ahead_root/$fail_key/body" >/dev/null
 grep -Fx 'fixture ICU connection failure' "$look_ahead_root/$fail_key/body" >/dev/null
 test -f "$look_ahead_root/$after_key/body"
 test "$(cat "$look_ahead_root/$after_key/result")" = ok
+printf '%s\n' \
+  "$look_ahead_root/$fail_key/body" \
+  "$look_ahead_root/$after_key/body" > "$work_directory/expected-failure-paths.txt"
+cmp "$work_directory/expected-failure-paths.txt" "$work_directory/failure-paths.txt"
+
+# An error is an inspectable result, but it is not a cache hit: retry it while
+# keeping successful entries cached.
+if printf '%s\n' \
+    'https://fail.example/resource' \
+    'https://after.example/resource' |
+    sh "$repository_root/bin/look_ahead.grease" \
+      > "$work_directory/retry-paths.txt" 2> "$work_directory/retry-errors.txt"; then
+  printf '%s\n' 'look-ahead retry hid an ICU failure' >&2
+  exit 1
+fi
+test "$(wc -l < "$icu_log" | tr -d ' ')" = 5
+cmp "$work_directory/expected-failure-paths.txt" "$work_directory/retry-paths.txt"
 
 notice=$(sh "$repository_root/bin/export_url_list.grease")
 test "$notice" = "EyeBrowser freely remixes pages, so if you want an accurate export of the URLs that contributed to this cauldron of browser pages, I'm going to have to get back to you."

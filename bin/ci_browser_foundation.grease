@@ -74,6 +74,17 @@ exercise_workbench() {
   grep -Fx 'resident-at-10=10' /tmp/ib-workbench.txt
 }
 
+exercise_url_list_io() {
+  cd "$repository_root"
+  sh -n lib/url_list.grease
+  sh -n lib/look_ahead.grease
+  sh -n bin/import_url_list.grease
+  sh -n bin/export_url_list.grease
+  sh -n bin/look_ahead.grease
+  sh -n tests/test_url_list_io.grease
+  sh tests/test_url_list_io.grease
+}
+
 build_information_programs() {
   test -x "$idric_prefix/bin/idris2" || build_idric
   cd "$repository_root/src"
@@ -153,11 +164,12 @@ case "${1:-}" in
   exercise-information) exercise_information ;;
   exercise-core) exercise_core ;;
   exercise-workbench) exercise_workbench ;;
+  exercise-url-list-io) exercise_url_list_io ;;
   exercise-scientific-media) exercise_scientific_media ;;
   exercise-live-arxiv) exercise_live_arxiv ;;
   exercise-live-arxiv-prepaint) exercise_live_arxiv_prepaint ;;
   *)
-    printf 'usage: %s {install-dependencies|build-idric|verify-pdf-harvester|exercise-information|exercise-core|exercise-workbench|exercise-scientific-media|exercise-live-arxiv|exercise-live-arxiv-prepaint}\n' "$0" >&2
+    printf 'usage: %s {install-dependencies|build-idric|verify-pdf-harvester|exercise-information|exercise-core|exercise-workbench|exercise-url-list-io|exercise-scientific-media|exercise-live-arxiv|exercise-live-arxiv-prepaint}\n' "$0" >&2
     exit 2
     ;;
 esac
