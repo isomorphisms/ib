@@ -17,6 +17,7 @@ The browser core owns resource, tab, event, and task identity; sleeping and waki
 - `docs/inference-and-learning.md` — local-model proposals, validation, ensembles, and correction events
 - `docs/storage-model.md` — identity levels and canonical, proposed, and derived state
 - `docs/developer-workbench.md` — fixture and memory-pressure harness
+- `docs/android-jni.md` — pinned JNI 1.6 interface map and the native picker/share/pre-paint boundary
 
 ## Implementation languages
 
