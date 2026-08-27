@@ -18,6 +18,7 @@ The browser core owns resource, tab, event, and task identity; sleeping and waki
 - `docs/storage-model.md` — identity levels and canonical, proposed, and derived state
 - `docs/developer-workbench.md` — fixture and memory-pressure harness
 - `docs/android-jni.md` — pinned JNI 1.6 interface map and the native picker/share/pre-paint boundary
+- `docs/d-native-apk-completion-plan.md` — D-native APK plan for the callback bridge, imports, Android Views, and bundled network/TLS
 
 ## Implementation languages
 
