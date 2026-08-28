@@ -1,3 +1,6 @@
+import java.util.zip.ZipEntry
+import java.util.zip.ZipFile
+
 plugins {
     id("com.android.application")
 }
@@ -92,8 +95,8 @@ tasks.register("verifyPrepaintBoundary") {
             "Debug APK exceeds the 2 MiB harness budget."
         }
 
-        java.util.zip.ZipFile(apk).use { archive ->
-            val entries = mutableListOf<java.util.zip.ZipEntry>()
+        ZipFile(apk).use { archive ->
+            val entries = mutableListOf<ZipEntry>()
             val enumeration = archive.entries()
             while (enumeration.hasMoreElements()) entries += enumeration.nextElement()
             val nativeLibraries = entries.map { it.name }
