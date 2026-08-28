@@ -44,6 +44,16 @@ jclass ib_jni_find_class(void *environment, const char *name) {
     return (*env)->FindClass(env, name);
 }
 
+void *ib_jni_get_env(void *machine) {
+    JavaVM *vm = (JavaVM *) machine;
+    JNIEnv *env = NULL;
+    if (vm == NULL ||
+        (*vm)->GetEnv(vm, (void **) &env, JNI_VERSION_1_6) != JNI_OK) {
+        return NULL;
+    }
+    return env;
+}
+
 jclass ib_jni_get_object_class(void *environment, jobject object) {
     JNIEnv *env = (JNIEnv *) environment;
     return (*env)->GetObjectClass(env, object);

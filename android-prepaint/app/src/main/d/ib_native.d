@@ -27,9 +27,27 @@ struct ANativeActivity {
     void* vm;
     void* env;
     JObject clazz;
+    const(char)* internalDataPath;
+    const(char)* externalDataPath;
+    int sdkVersion;
+    void* instance;
+    void* assetManager;
+    const(char)* obbPath;
 }
 
+struct HttpResult {
+    int curlCode;
+    int httpStatus;
+    uint length;
+    int truncated;
+    char[192] error;
+}
+
+alias ReadyCallback = extern(C) void function() nothrow @nogc;
+alias ThreadEntry = extern(C) void* function(void*) nothrow @nogc;
+
 extern(C) nothrow @nogc {
+    void* ib_jni_get_env(void* machine);
     JClass ib_jni_find_class(void* env, const(char)* name);
     JClass ib_jni_get_object_class(void* env, JObject object);
     JMethod ib_jni_get_method_id(void* env, JClass type,
@@ -57,6 +75,18 @@ extern(C) nothrow @nogc {
     ubyte ib_jni_exception_check(void* env);
     void ib_jni_exception_describe_clear(void* env);
 
+    int ib_http_get(const(char)* url, const(void)* caData, uint caLength,
+                    ubyte* body, uint bodyCapacity, HttpResult* result);
+    int ib_network_prepare(ReadyCallback callback);
+    void ib_network_signal_main();
+    int ib_network_try_begin();
+    void ib_network_end();
+    int ib_start_detached_thread(ThreadEntry entry, void* argument);
+
+    void* AAssetManager_open(void* manager, const(char)* filename, int mode);
+    int AAsset_read(void* asset, void* buffer, uint count);
+    void AAsset_close(void* asset);
+
     int read(int descriptor, void* buffer, uint count);
     int close(int descriptor);
     int __android_log_write(int priority, const(char)* tag,
@@ -65,17 +95,28 @@ extern(C) nothrow @nogc {
 
 private enum int OPEN_DOCUMENT = 1;
 private enum int READ_CLIPBOARD = 2;
+private enum int FETCH_URL = 3;
 private enum int OPEN_DOCUMENT_REQUEST = 7;
 private enum int RESULT_OK = -1;
 private enum uint MAX_DOCUMENTS = 4;
 private enum uint MAX_FILE_BYTES = 24 * 1024;
 private enum uint DOCUMENT_CAPACITY = 48 * 1024;
+private enum uint CA_CAPACITY = 320 * 1024;
+private enum uint URL_CAPACITY = 2 * 1024;
+private enum uint RESPONSE_CAPACITY = 64 * 1024;
 
+private __gshared void* javaVm;
+private __gshared void* nativeAssetManager;
 private __gshared JObject activityReference;
 private __gshared JObject statusReference;
 private __gshared JObject contentReference;
 private __gshared ushort[DOCUMENT_CAPACITY] documentText;
 private __gshared uint documentLength;
+private __gshared ubyte[CA_CAPACITY] authorityBundle;
+private __gshared uint authorityLength;
+private __gshared char[URL_CAPACITY] requestUrl;
+private __gshared ubyte[RESPONSE_CAPACITY] networkBody;
+private __gshared HttpResult networkResult;
 
 private void logInfo(const(char)[] message) nothrow @nogc {
     __android_log_write(4, "IB-D".ptr, message.ptr);
@@ -250,16 +291,19 @@ private bool buildScreen(void* env, JObject activity) nothrow @nogc {
                                 "Open documents");
     JObject clipboard = makeTextView(env, activity, "android/widget/Button",
                                      "Paste clipboard");
+    JObject fetch = makeTextView(env, activity, "android/widget/Button",
+                                 "Fetch current HTTPS URL");
     JObject scroll = newObject(env, "android/widget/ScrollView",
                                "(Landroid/content/Context;)V", context.ptr);
     JObject content = makeTextView(
         env, activity, "android/widget/TextView",
         "Choose up to four text files. Android returns URI grants; D detaches " ~
         "and reads their file descriptors. You can also share text or a URL " ~
-        "to IB, or paste the clipboard explicitly.");
+        "to IB, paste the clipboard explicitly, then fetch an HTTPS URL with " ~
+        "native curl and mbedTLS.");
 
     if (title is null || status is null || open is null || clipboard is null ||
-        scroll is null || content is null) {
+        fetch is null || scroll is null || content is null) {
         ib_jni_exception_describe_clear(env);
         return false;
     }
@@ -277,11 +321,14 @@ private bool buildScreen(void* env, JObject activity) nothrow @nogc {
 
     setInt(env, open, "android/view/View", "setId", OPEN_DOCUMENT);
     setInt(env, clipboard, "android/view/View", "setId", READ_CLIPBOARD);
+    setInt(env, fetch, "android/view/View", "setId", FETCH_URL);
     JValue[1] listener;
     listener[0].l = activity;
     callVoid(env, open, "android/view/View", "setOnClickListener",
              "(Landroid/view/View$OnClickListener;)V", listener.ptr);
     callVoid(env, clipboard, "android/view/View", "setOnClickListener",
+             "(Landroid/view/View$OnClickListener;)V", listener.ptr);
+    callVoid(env, fetch, "android/view/View", "setOnClickListener",
              "(Landroid/view/View$OnClickListener;)V", listener.ptr);
 
     addView(env, scroll, "android/widget/ScrollView", content);
@@ -289,6 +336,7 @@ private bool buildScreen(void* env, JObject activity) nothrow @nogc {
     addView(env, root, "android/widget/LinearLayout", status);
     addView(env, root, "android/widget/LinearLayout", open);
     addView(env, root, "android/widget/LinearLayout", clipboard);
+    addView(env, root, "android/widget/LinearLayout", fetch);
     addView(env, root, "android/widget/LinearLayout", scroll);
 
     JValue[1] screen;
@@ -306,6 +354,7 @@ private bool buildScreen(void* env, JObject activity) nothrow @nogc {
 
     ib_jni_delete_local_ref(env, content);
     ib_jni_delete_local_ref(env, scroll);
+    ib_jni_delete_local_ref(env, fetch);
     ib_jni_delete_local_ref(env, clipboard);
     ib_jni_delete_local_ref(env, open);
     ib_jni_delete_local_ref(env, status);
@@ -728,6 +777,145 @@ private void readClipboard(void* env) nothrow @nogc {
     ib_jni_delete_local_ref(env, clipboard);
 }
 
+private uint loadAuthorityBundle() nothrow @nogc {
+    if (nativeAssetManager is null) return 0;
+    void* asset = AAssetManager_open(nativeAssetManager, "cacert.pem".ptr, 2);
+    if (asset is null) return 0;
+    uint length;
+    while (length < authorityBundle.length) {
+        int amount = AAsset_read(asset, authorityBundle.ptr + length,
+                                 cast(uint) authorityBundle.length - length);
+        if (amount <= 0) break;
+        length += cast(uint) amount;
+    }
+    AAsset_close(asset);
+    return length;
+}
+
+private bool prepareHttpsUrl() nothrow @nogc {
+    uint first;
+    uint last = documentLength;
+    while (first < last && documentText[first] <= 0x20) ++first;
+    while (last > first && documentText[last - 1] <= 0x20) --last;
+    uint length = last - first;
+    if (length < 9 || length >= requestUrl.length) return false;
+
+    immutable char[] scheme = "https://";
+    for (uint index = 0; index < scheme.length; ++index) {
+        if (documentText[first + index] != cast(ushort) scheme[index]) {
+            return false;
+        }
+    }
+    for (uint index = 0; index < length; ++index) {
+        ushort character = documentText[first + index];
+        if (character < 0x21 || character > 0x7e) return false;
+        requestUrl[index] = cast(char) character;
+    }
+    requestUrl[length] = '\0';
+    return true;
+}
+
+private uint statusAscii(ushort* target, uint capacity, uint offset,
+                         const(char)[] text) nothrow @nogc {
+    for (uint index = 0; index < text.length && offset < capacity; ++index) {
+        target[offset++] = cast(ubyte) text[index];
+    }
+    return offset;
+}
+
+private uint statusUnsigned(ushort* target, uint capacity, uint offset,
+                            uint value) nothrow @nogc {
+    ushort[10] digits;
+    uint count;
+    do {
+        digits[count++] = cast(ushort) ('0' + value % 10);
+        value /= 10;
+    } while (value != 0 && count < digits.length);
+    while (count != 0 && offset < capacity) {
+        target[offset++] = digits[--count];
+    }
+    return offset;
+}
+
+private void showNetworkStatus(void* env) nothrow @nogc {
+    ushort[320] status;
+    uint length;
+    bool received = networkResult.curlCode == 0 ||
+                    (networkResult.truncated != 0 && networkResult.length != 0);
+    if (received) {
+        length = statusAscii(status.ptr, status.length, length, "HTTPS ");
+        length = statusUnsigned(status.ptr, status.length, length,
+                                cast(uint) networkResult.httpStatus);
+        length = statusAscii(status.ptr, status.length, length, " / ");
+        length = statusUnsigned(status.ptr, status.length, length,
+                                networkResult.length);
+        length = statusAscii(status.ptr, status.length, length, " bytes");
+        if (networkResult.truncated != 0) {
+            length = statusAscii(status.ptr, status.length, length,
+                                 " / bounded preview");
+        }
+    } else {
+        length = statusAscii(status.ptr, status.length, length,
+                             "HTTPS failed / curl ");
+        length = statusUnsigned(status.ptr, status.length, length,
+                                cast(uint) networkResult.curlCode);
+        length = statusAscii(status.ptr, status.length, length, " / ");
+        for (uint index = 0;
+             index < networkResult.error.length &&
+             networkResult.error[index] != '\0' && length < status.length;
+             ++index) {
+            status[length++] = cast(ubyte) networkResult.error[index];
+        }
+    }
+    setTextUtf16(env, statusReference, status.ptr, length);
+}
+
+extern(C) private void* fetchWorker(void* argument) nothrow @nogc {
+    cast(void) argument;
+    ib_http_get(requestUrl.ptr, authorityBundle.ptr, authorityLength,
+                networkBody.ptr, cast(uint) networkBody.length,
+                &networkResult);
+    ib_network_signal_main();
+    return null;
+}
+
+extern(C) private void networkReady() nothrow @nogc {
+    void* env = ib_jni_get_env(javaVm);
+    if (env !is null) {
+        bool received = networkResult.curlCode == 0 ||
+                        (networkResult.truncated != 0 &&
+                         networkResult.length != 0);
+        if (received && networkResult.length != 0) {
+            documentLength = 0;
+            appendUtf8(networkBody.ptr, networkResult.length);
+            setTextUtf16(env, contentReference, documentText.ptr,
+                         documentLength);
+        }
+        showNetworkStatus(env);
+    }
+    ib_network_end();
+}
+
+private void fetchCurrentUrl(void* env) nothrow @nogc {
+    if (authorityLength == 0) {
+        setStatus(env, "HTTPS CA bundle is unavailable.");
+        return;
+    }
+    if (!prepareHttpsUrl()) {
+        setStatus(env, "Share or paste one ASCII https:// URL first.");
+        return;
+    }
+    if (ib_network_try_begin() == 0) {
+        setStatus(env, "An HTTPS request is already running.");
+        return;
+    }
+    setStatus(env, "Fetching with ARMv7 curl + mbedTLS...");
+    if (ib_start_detached_thread(&fetchWorker, null) != 0) {
+        ib_network_end();
+        setStatus(env, "Could not start the native fetch worker.");
+    }
+}
+
 extern(C) export void ANativeActivity_onCreate(ANativeActivity* activity,
                                                void* savedState,
                                                uint savedStateSize)
@@ -738,11 +926,21 @@ extern(C) export void ANativeActivity_onCreate(ANativeActivity* activity,
         return;
     }
     void* env = activity.env;
+    javaVm = activity.vm;
+    nativeAssetManager = activity.assetManager;
     activityReference = ib_jni_new_global_ref(env, activity.clazz);
     if (activityReference is null || !buildScreen(env, activity.clazz)) {
         ib_jni_exception_describe_clear(env);
         logInfo("Native screen construction failed");
         return;
+    }
+
+    authorityLength = loadAuthorityBundle();
+    int networkPreparation = ib_network_prepare(&networkReady);
+    if (networkPreparation != 0) {
+        setStatus(env, "Local interface ready / main-thread network wakeup failed.");
+    } else if (authorityLength == 0) {
+        setStatus(env, "Local interface ready / HTTPS CA bundle missing.");
     }
 
     logInfo("D native activity created");
@@ -787,5 +985,7 @@ extern(C) export void ib_native_action(void* env, JClass type, int action)
         openDocumentPicker(env);
     } else if (action == READ_CLIPBOARD) {
         readClipboard(env);
+    } else if (action == FETCH_URL) {
+        fetchCurrentUrl(env);
     }
 }

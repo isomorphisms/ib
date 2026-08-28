@@ -6,6 +6,9 @@ app_dir="$project_dir/app"
 native_dir="$app_dir/src/main"
 object_dir="$app_dir/build/native/armeabi-v7a"
 output_dir="$app_dir/build/generated/jniLibs/armeabi-v7a"
+dependency_dir="$app_dir/build/native-deps/armeabi-v7a/install"
+curl_prefix="$dependency_dir/curl"
+mbedtls_prefix="$dependency_dir/mbedtls"
 
 if [[ -z "${ANDROID_NDK_HOME:-}" || ! -d "$ANDROID_NDK_HOME" ]]; then
     echo "ANDROID_NDK_HOME must name an installed Android NDK." >&2
@@ -31,6 +34,8 @@ done
 
 mkdir -p "$object_dir" "$output_dir"
 
+bash "$project_dir/build-network-deps-armv7.sh"
+
 "$ldc" \
     -betterC \
     -O2 \
@@ -53,13 +58,32 @@ mkdir -p "$object_dir" "$output_dir"
     -o "$object_dir/jni_calls.o"
 
 "$clang" \
+    -std=c17 \
+    -O2 \
+    -fPIC \
+    -Wall \
+    -Wextra \
+    -Werror \
+    -I"$curl_prefix/include" \
+    -c "$native_dir/c/http_calls.c" \
+    -o "$object_dir/http_calls.o"
+
+"$clang" \
     -shared \
     -Wl,--no-undefined \
     -Wl,--gc-sections \
+    -Wl,--exclude-libs,ALL \
     -Wl,-z,relro,-z,now \
     -Wl,--build-id=sha1 \
     "$object_dir/ib_native.o" \
     "$object_dir/jni_calls.o" \
+    "$object_dir/http_calls.o" \
+    "$curl_prefix/lib/libcurl.a" \
+    "$mbedtls_prefix/lib/libmbedtls.a" \
+    "$mbedtls_prefix/lib/libmbedx509.a" \
+    "$mbedtls_prefix/lib/libmbedcrypto.a" \
+    -latomic \
+    -lm \
     -landroid \
     -llog \
     -o "$output_dir/libib.so"
@@ -74,8 +98,9 @@ grep -q 'Class:.*ELF32' <<<"$header"
 grep -q 'Machine:.*ARM' <<<"$header"
 grep -q 'ANativeActivity_onCreate' <<<"$symbols"
 grep -q 'JNI_OnLoad' <<<"$symbols"
-if grep -Eq 'libphobos|libdruntime|libjvm' <<<"$dynamic"; then
-    echo "Unexpected D or JVM runtime dependency in libib.so." >&2
+if grep -Eq 'libphobos|libdruntime|libjvm|libcurl|libmbedtls|libmbedx509|libmbedcrypto' \
+        <<<"$dynamic"; then
+    echo "Unexpected dynamic language or transport dependency in libib.so." >&2
     exit 1
 fi
 

@@ -13,8 +13,8 @@ android {
         applicationId = "org.isomorphisms.ib.prepaint"
         minSdk = 26
         targetSdk = 36
-        versionCode = 3
-        versionName = "0.3.0"
+        versionCode = 4
+        versionName = "0.4.0"
 
         ndk {
             abiFilters += "armeabi-v7a"
@@ -35,6 +35,7 @@ android {
     sourceSets {
         getByName("main") {
             jniLibs.srcDir("build/generated/jniLibs")
+            assets.srcDir("build/generated/assets")
         }
     }
 }
@@ -108,6 +109,12 @@ tasks.register("verifyPrepaintBoundary") {
                 ?: error("The callback router DEX is missing.")
             check(dex.size <= 64L * 1024L) {
                 "The callback router DEX exceeds 64 KiB."
+            }
+            val authorities = entries.singleOrNull {
+                it.name == "assets/cacert.pem"
+            } ?: error("The pinned HTTPS CA bundle is missing.")
+            check(authorities.size >= 100L * 1024L) {
+                "The HTTPS CA bundle is unexpectedly small."
             }
         }
     }

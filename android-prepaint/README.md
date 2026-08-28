@@ -22,13 +22,18 @@ The native shell currently provides:
 - bounded UTF-8 to UTF-16 pre-painting (24 KiB per file, 48 Ki UTF-16 total);
 - cold- and warm-start shared text or URL intake;
 - explicit, user-initiated clipboard intake;
+- HTTPS GET from a detached native worker using statically linked ARMv7 curl and
+  Mbed TLS, with redirects and certificate/hostname verification;
+- a pinned Mozilla CA bundle loaded by D from APK assets and passed to curl as a
+  memory blob;
 - cancellation, empty-result, unreadable-result, truncation, and imported-byte
   states painted in the interface.
 
-The manifest has `INTERNET` and forbids cleartext traffic. The permission is in
-place for the native TLS transport, but this revision does not yet claim that the
-transport is linked or callable. Local/import/share behavior is independent of
-that remaining network layer.
+The manifest has `INTERNET` and forbids cleartext traffic. Runtime URL policy also
+accepts only an ASCII `https://` URL. Share or paste one URL, then choose **Fetch
+current HTTPS URL**. The native response is bounded to 64 KiB and painted as UTF-8;
+HTML extraction and the complete Idriç `InformationView` projection remain later
+layers. Local/import/share behavior remains independent of network availability.
 
 ## Build
 
@@ -42,8 +47,10 @@ gradle --no-daemon :app:testDebugUnitTest :app:lintDebug :app:verifyPrepaintBoun
 
 Gradle runs `build-native-armv7.sh` before packaging. The script emits an ELF32
 ARM EABI library, links only the Android/Bionic boundary, strips it, verifies the
-native entry points, and rejects dependencies on a D or JVM runtime. The APK is
-written to `app/build/outputs/apk/debug/app-debug.apk`.
+native entry points, and rejects dynamic dependencies on a D, JVM, curl, or TLS
+runtime. It also downloads digest-pinned curl, Mbed TLS, and CA sources, then
+cross-compiles and statically links the transport. The APK is written to
+`app/build/outputs/apk/debug/app-debug.apk`.
 
 The boundary check additionally requires exactly one packaged Java source, one
 `armeabi-v7a` library, a callback-router DEX no larger than 64 KiB, and a complete

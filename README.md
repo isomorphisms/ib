@@ -33,7 +33,7 @@ Android or other native code is a narrow platform boundary for facilities Idriç
 `android-prepaint/` is the ARMv7 D-native phone shell. D constructs native Android
 views through JNI and owns picker imports, bounded UTF-8 pre-painting, shared text,
 and explicit clipboard intake. One 34-line Java class forwards Android callbacks;
-the APK packages no Java application logic and no `WebView`. Native TLS transport
-is the next incomplete boundary.
+the APK packages no Java application logic and no `WebView`. Its HTTPS worker is
+statically linked from pinned ARMv7 curl and Mbed TLS sources.
 
 The current Idriç core covers ordered history values, rebuildable indexes, storage classification and read policy, and the renderer-independent inspector model. Scientific-media work adds HTML-first arXiv harvesting, ordered image downloads, caption and alternate-text naming, PDF fallback, and a low-priority second naming pass. The task, category, and generic inference records documented above remain design boundaries rather than claims of completed implementation.
