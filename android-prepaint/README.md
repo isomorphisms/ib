@@ -58,6 +58,14 @@ complete debug APK no larger than 2 MiB. The old Java pre-paint parser remains
 only under `src/test`; it is a test oracle and is not packaged. Java-era sample
 assets and resources are not carried into this APK.
 
+Debug APKs use the committed `ib-jni-test-signing.jks`. This is deliberately a
+public, non-secret test key—not a production release identity. Its purpose is to
+make APKs from separate GitHub runners update-compatible with each other. The
+certificate SHA-256 fingerprint is
+`D6:7D:C1:52:C4:61:9D:42:46:A7:D6:1B:6E:9A:B4:08:F5:A0:FC:06:6C:94:F0:FA:8F:E9:AA:1C:88:11:86:31`.
+An older APK signed by a different transient debug key must still be uninstalled
+once before this line of builds can be installed.
+
 ## Ownership
 
 Android owns lifecycle delivery, system UI, content grants, share delivery, and

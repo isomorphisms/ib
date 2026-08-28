@@ -21,7 +21,19 @@ android {
         }
     }
 
+    signingConfigs {
+        create("jniTest") {
+            storeFile = rootProject.file("ib-jni-test-signing.jks")
+            storePassword = "android"
+            keyAlias = "ibjnitest"
+            keyPassword = "android"
+        }
+    }
+
     buildTypes {
+        getByName("debug") {
+            signingConfig = signingConfigs.getByName("jniTest")
+        }
         getByName("release") {
             isMinifyEnabled = false
         }
@@ -69,6 +81,9 @@ tasks.register("verifyPrepaintBoundary") {
         check(file("src/main/AndroidManifest.xml").readText()
             .contains("android.permission.INTERNET")) {
             "The native viewer must request Internet access for the D transport."
+        }
+        check(rootProject.file("ib-jni-test-signing.jks").isFile) {
+            "The stable public test signing key is missing."
         }
 
         val packagedJava = fileTree("src/main/java") { include("**/*.java") }.files
