@@ -105,10 +105,15 @@ tasks.register("verifyPrepaintBoundary") {
             check(nativeLibraries == listOf("lib/armeabi-v7a/libib.so")) {
                 "Expected one ARMv7 native library, found $nativeLibraries."
             }
-            val dex = entries.singleOrNull { it.name == "classes.dex" }
-                ?: error("The callback router DEX is missing.")
-            check(dex.size <= 64L * 1024L) {
-                "The callback router DEX exceeds 64 KiB."
+            val dexEntries = entries.filter {
+                it.name.matches(Regex("classes(\\d*)\\.dex"))
+            }
+            check(dexEntries.isNotEmpty()) {
+                "The callback router DEX is missing."
+            }
+            val totalDexBytes = dexEntries.sumOf { it.size }
+            check(totalDexBytes <= 64L * 1024L) {
+                "Generated DEX exceeds 64 KiB in total."
             }
             val authorities = entries.singleOrNull {
                 it.name == "assets/cacert.pem"

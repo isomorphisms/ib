@@ -53,9 +53,10 @@ cross-compiles and statically links the transport. The APK is written to
 `app/build/outputs/apk/debug/app-debug.apk`.
 
 The boundary check additionally requires exactly one packaged Java source, one
-`armeabi-v7a` library, a callback-router DEX no larger than 64 KiB, and a complete
-debug APK no larger than 2 MiB. The old Java pre-paint parser remains only under
-`src/test`; it is a test oracle and is not packaged.
+`armeabi-v7a` library, no more than 64 KiB across every generated DEX, and a
+complete debug APK no larger than 2 MiB. The old Java pre-paint parser remains
+only under `src/test`; it is a test oracle and is not packaged. Java-era sample
+assets and resources are not carried into this APK.
 
 ## Ownership
 

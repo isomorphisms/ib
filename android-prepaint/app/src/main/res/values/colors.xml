@@ -1,9 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <color name="prepaint_background">#121518</color>
-    <color name="prepaint_surface">#1C2126</color>
-    <color name="prepaint_foreground">#F5F7F8</color>
-    <color name="prepaint_secondary">#B9C1C8</color>
-    <color name="prepaint_link">#8BC4FF</color>
-    <color name="prepaint_rule">#39424A</color>
-</resources>
