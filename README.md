@@ -30,9 +30,10 @@ Python and Ithon are not IB implementation layers. A disposable comparison may e
 
 Android or other native code is a narrow platform boundary for facilities Idriç and Grease cannot yet reach directly: NativeActivity, EGL, renderers, kernel-enforced filesystem operations, clipboard and share handoff, and similar FFI edges. Those adapters do not own browser state.
 
-`android-prepaint/` is a deliberately small phone-visible harness for the Idriç
-information prepaint. It uses native Android views rather than `WebView`, applies
-a fixed dark presentation to extracted text, preserves fetched image colors, and
-replaces partial projections with later complete revisions.
+`android-prepaint/` is the ARMv7 D-native phone shell. D constructs native Android
+views through JNI and owns picker imports, bounded UTF-8 pre-painting, shared text,
+and explicit clipboard intake. One 34-line Java class forwards Android callbacks;
+the APK packages no Java application logic and no `WebView`. Native TLS transport
+is the next incomplete boundary.
 
 The current Idriç core covers ordered history values, rebuildable indexes, storage classification and read policy, and the renderer-independent inspector model. Scientific-media work adds HTML-first arXiv harvesting, ordered image downloads, caption and alternate-text naming, PDF fallback, and a low-priority second naming pass. The task, category, and generic inference records documented above remain design boundaries rather than claims of completed implementation.

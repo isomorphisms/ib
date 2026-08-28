@@ -1,5 +1,8 @@
 name: Android prepaint viewer
 
+env:
+  NDK_VERSION: "27.2.12479018"
+
 on:
   push:
     paths:
@@ -31,17 +34,26 @@ jobs:
 
       - uses: android-actions/setup-android@v3
 
-      - name: Install Android platform
-        run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
+      - name: Install Android platform and NDK
+        run: |
+          sdkmanager \
+            "platforms;android-36" \
+            "build-tools;36.0.0" \
+            "ndk;$NDK_VERSION"
+          echo "ANDROID_NDK_HOME=$ANDROID_SDK_ROOT/ndk/$NDK_VERSION" >> "$GITHUB_ENV"
+
+      - uses: dlang-community/setup-dlang@v2
+        with:
+          compiler: ldc-1.41.0
 
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "8.13"
 
-      - name: Test, lint, and build debug APK
+      - name: Test D boundary, lint, and build debug APK
         run: gradle --no-daemon :app:testDebugUnitTest :app:lintDebug :app:verifyPrepaintBoundary
 
       - uses: actions/upload-artifact@v4
         with:
-          name: ib-prepaint-viewer-apk
+          name: ib-d-native-armv7-apk
           path: android-prepaint/app/build/outputs/apk/debug/app-debug.apk

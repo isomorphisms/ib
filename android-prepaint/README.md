@@ -1,56 +1,60 @@
-# IB Prepaint APK
+# IB D-native APK
 
-This is a deliberately small display harness for IB's renderer-neutral information
-view. It paints successive prepaint revisions as a dark, linear document made from
-native Android text, rows, forms, links, and images. It also accepts an ordinary
-UTF-8 text file directly: prose becomes readable paragraphs and a line containing
-one absolute HTTP(S) URL becomes a tappable link.
+This directory now builds the ARMv7 phone shell as `libib.so`. D constructs the
+Android View tree through JNI and owns imported text, shared text, clipboard text,
+UTF-8 decoding, bounds, and status transitions. It is compiled with `-betterC`, so
+the APK does not contain druntime, Phobos, a garbage collector, or a Java
+application layer.
 
-It is not a browser engine. The APK has:
+The only packaged Java source is `IbActivity.java`. Its complete job is to load
+`libib.so` and forward three Android-only events as primitive callbacks:
 
-- no `WebView`;
-- no network permission;
-- no HTML, CSS, or JavaScript parser;
-- no durable tab or history ownership;
-- no tint, inversion, or crop applied to fetched images.
+- document-picker results;
+- a warm `ACTION_SEND` intent;
+- a button's integer action identifier.
 
-The bundled `sample.prepaint` is a small article rather than a developer-workbench
-fixture. It waits 1.4 seconds, then atomically replaces the useful prefix with the
-complete projection. **Replay** runs the repaint again. Hack Regular is bundled for
-all visible text. **Open** accepts either another local `.prepaint` artifact or a
-plain text file through Android's document picker; the app does not need broad
-storage access. A rejected structured artifact or unreadable file leaves the
-current page visible.
+The native shell currently provides:
 
-The bottom search chrome converts spaces to `+`, constructs a Google search URL,
-and produces the exact `icu get` request. In this standalone no-network harness it
-copies that command and paints the handoff visibly. The integrated IB shell owns
-running ICU and replacing the request with fetched pre-paint; the display APK does
-not quietly substitute WebView or an Android HTTP stack.
+- a D-constructed Android View screen, with no `WebView`;
+- `ACTION_OPEN_DOCUMENT` with multi-select for up to four documents;
+- detached `ParcelFileDescriptor` reads, so URI grants do not escape into durable
+  D state;
+- bounded UTF-8 to UTF-16 pre-painting (24 KiB per file, 48 Ki UTF-16 total);
+- cold- and warm-start shared text or URL intake;
+- explicit, user-initiated clipboard intake;
+- cancellation, empty-result, unreadable-result, truncation, and imported-byte
+  states painted in the interface.
+
+The manifest has `INTERNET` and forbids cleartext traffic. The permission is in
+place for the native TLS transport, but this revision does not yet claim that the
+transport is linked or callable. Local/import/share behavior is independent of
+that remaining network layer.
 
 ## Build
 
-With Android SDK 36 and Gradle 8.13 available:
+The reproducible inputs are Android SDK 36, Android NDK `27.2.12479018`, LDC
+`1.41.0`, Gradle `8.13`, and Java 17. With `ANDROID_NDK_HOME` set:
 
 ```text
 cd android-prepaint
 gradle --no-daemon :app:testDebugUnitTest :app:lintDebug :app:verifyPrepaintBoundary
 ```
 
-The APK is written to `app/build/outputs/apk/debug/app-debug.apk`. The package name
-is `org.isomorphisms.ib.prepaint`, so this harness can remain installed beside the
-IB storage inspector or a later browser shell.
+Gradle runs `build-native-armv7.sh` before packaging. The script emits an ELF32
+ARM EABI library, links only the Android/Bionic boundary, strips it, verifies the
+native entry points, and rejects dependencies on a D or JVM runtime. The APK is
+written to `app/build/outputs/apk/debug/app-debug.apk`.
 
-The boundary check rejects `android.webkit`, `WebView`, an Internet permission, or
-a debug APK larger than 2 MiB.
+The boundary check additionally requires exactly one packaged Java source, one
+`armeabi-v7a` library, a callback-router DEX no larger than 64 KiB, and a complete
+debug APK no larger than 2 MiB. The old Java pre-paint parser remains only under
+`src/test`; it is a test oracle and is not packaged.
 
-## Boundary
+## Ownership
 
-Idriç owns HTML extraction, URL policy, ICU execution, and the `InformationView`.
-This APK parses the disposable display interchange described in
-`docs/prepaint-display-contract.md`, plus the deliberately narrower plain-text
-fallback, and maps the resulting blocks to Android views. It does not parse HTML.
-The interchange is a cache format, not canonical browsing state.
-
-Hack is from Source Foundry's Hack project. Its license is retained in
-`licenses/Hack-LICENSE.md`.
+Android owns lifecycle delivery, system UI, content grants, share delivery, and
+clipboard authorization. D owns the screen composition and all application
+meaning. Idriç remains the intended owner of canonical browsing state and the
+renderer-neutral `InformationView`; this phone shell is the native platform
+adapter described in `docs/android-jni.md` and
+`docs/d-native-apk-completion-plan.md`.
