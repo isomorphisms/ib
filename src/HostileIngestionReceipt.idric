@@ -1,0 +1,98 @@
+module Main
+
+import IB.Information
+import System
+import System.File
+
+emit_meta : String → String → IO ()
+emit_meta key value = putStrLn ("meta\t" ++ key ++ "\t" ++ value)
+
+emit_stage : String → String → String → String → String → String → IO ()
+emit_stage fixture stage status code owner evidence =
+  putStrLn
+    ("stage\t" ++ fixture ++ "\t" ++ stage ++ "\t" ++ status ++ "\t" ++
+     code ++ "\t" ++ owner ++ "\t" ++ evidence)
+
+emit_summary : String → String → IO ()
+emit_summary first_failure first_incomplete = do
+  putStrLn ("summary\tfirst_failure\t" ++ first_failure)
+  putStrLn ("summary\tfirst_incomplete\t" ++ first_incomplete)
+
+headers : String → String → String → String → IO ()
+headers fixture corpus_repository_revision implementation_revision executable_sha256 = do
+  emit_meta "schema" "aici-ingestion-receipt-v1"
+  emit_meta "corpus_revision" "hostile-web-v1-2026-08-30"
+  emit_meta "corpus_repository_revision" corpus_repository_revision
+  emit_meta "fixture_id" fixture
+  emit_meta "implementation_role" "consumer"
+  emit_meta "implementation_name" "ib-information-idric"
+  emit_meta "implementation_revision" implementation_revision
+  emit_meta "executable_sha256" executable_sha256
+  emit_meta "fallback" "none"
+  emit_meta "scope" "local-document-consumer"
+  emit_meta "producer" "idric"
+
+blocked_after_input : String → IO ()
+blocked_after_input fixture = do
+  emit_stage fixture "network" "SKIP" "blocked_by_input_acquisition" "ib" "not-run"
+  emit_stage fixture "decompression" "SKIP" "blocked_by_input_acquisition" "ib" "not-run"
+  emit_stage fixture "decoding" "SKIP" "blocked_by_input_acquisition" "ib" "not-run"
+  emit_stage fixture "html_recovery" "SKIP" "blocked_by_input_acquisition" "ib" "not-run"
+  emit_stage fixture "document_construction" "SKIP" "blocked_by_input_acquisition" "ib" "not-run"
+  emit_stage fixture "downstream_extraction" "SKIP" "blocked_by_input_acquisition" "ib" "not-run"
+  emit_summary "input_acquisition" "input_acquisition"
+
+run : String → String → String → String → String → String → String → String → IO ()
+run fixture path expected_title expected_link_text expected_link_href
+    corpus_repository_revision implementation_revision executable_sha256 = do
+  headers fixture corpus_repository_revision implementation_revision executable_sha256
+  input ← readFile path
+  case input of
+    Left _ ⇒ do
+      emit_stage fixture "input_acquisition" "FAIL" "local_fixture_read_failure" "idric" "read-failed"
+      blocked_after_input fixture
+      exitFailure
+    Right html ⇒ do
+      emit_stage fixture "input_acquisition" "PASS" "local_fixture_read" "idric" "canonical-corpus"
+      emit_stage fixture "network" "SKIP" "not_applicable_local_fixture" "ib" "not-run"
+      emit_stage fixture "decompression" "PASS" "identity" "idric" "identity"
+      emit_stage fixture "decoding" "PASS" "utf8_valid" "idric"
+        ("characters=" ++ show (length (unpack html)))
+      let view = extract_html "fixture://hostile" "fixture://hostile" html
+      emit_stage fixture "html_recovery" "PASS" "ib_information_subset" "idric" "recovery=ib-subset"
+      if view_title view /= expected_title
+        then do
+          emit_stage fixture "document_construction" "FAIL" "wrong_title" "idric"
+            ("actual=" ++ view_title view)
+          emit_stage fixture "downstream_extraction" "SKIP" "blocked_by_document_construction" "idric" "not-run"
+          emit_summary "document_construction" "document_construction"
+          exitFailure
+        else do
+          emit_stage fixture "document_construction" "PASS" "information_view_built" "idric"
+            ("title=" ++ expected_title)
+          if has_link expected_link_text expected_link_href view
+            then do
+              emit_stage fixture "downstream_extraction" "PASS" "expected_link_extracted" "idric"
+                ("href=" ++ expected_link_href)
+              emit_summary "none" "none"
+            else do
+              emit_stage fixture "downstream_extraction" "FAIL" "expected_link_missing" "idric"
+                ("href=" ++ expected_link_href)
+              emit_summary "downstream_extraction" "downstream_extraction"
+              exitFailure
+
+usage : IO ()
+usage = do
+  putStrLn
+    "usage: ib-hostile-ingestion FIXTURE PATH TITLE LINK_TEXT LINK_HREF CORPUS_REPOSITORY_REVISION IMPLEMENTATION_REVISION EXECUTABLE_SHA256"
+  exitFailure
+
+main : IO ()
+main = do
+  arguments ← getArgs
+  case arguments of
+    _ :: fixture :: path :: expected_title :: expected_link_text :: expected_link_href ::
+      corpus_repository_revision :: implementation_revision :: executable_sha256 :: [] ⇒
+        run fixture path expected_title expected_link_text expected_link_href
+          corpus_repository_revision implementation_revision executable_sha256
+    _ ⇒ usage
