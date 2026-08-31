@@ -3,13 +3,19 @@
 IB consumes the exact canonical corpus revision in `ai-ci.lock`; it does not
 copy the fixtures or call the external oracle.
 
-The Idriç `IB.Information` path reads the canonical valid and malformed HTML
-fixtures directly. Network is `SKIP/not_applicable_local_fixture`, after which
-identity decompression, UTF-8 decoding, HTML subset recovery, document
-construction, and extraction remain independently visible.
+The Idriç candidate path now inserts `IB.RecoveredInformation` between raw HTML
+tokenization and `InformationView`. Its first declared recovery contract is the
+pinned corpus's `document_log_subset_v0`: source fixture identity plus ordered
+tag/text events, with only the implied-end recovery needed by the useful-document
+subset. It is not a browser DOM and does not claim full WHATWG recovery.
 
-The first receipt establishes a complete local-fixture path. The malformed
-fixture deliberately records the current first boundary at
-`downstream_extraction`: the document title is constructed, but the unclosed
-link is not extracted. That expected FAIL is retained rather than converted to
-a green extraction claim. Network ownership remains in ICU, not IB.
+The malformed fixture exercises that contract directly. Before document
+construction can pass, the recovered log must retain its source identity and
+show implied closure for the malformed paragraph, table cell/row, and the
+unterminated link at EOF. `InformationView` construction then has to retain the
+recovered `A`/`B` table row, and downstream extraction has to recover the
+`syllabus` link at `/syllabus`.
+
+Network remains `SKIP/not_applicable_local_fixture` here. The fixture bytes are
+read locally from the pinned `ai-ci` corpus, the external oracle is never called
+or used as fallback, and network ownership remains in ICU rather than IB.
