@@ -69,8 +69,8 @@ paragraph_boundary name =
 
 close_matching : String → Maybe String → Maybe String
 close_matching wanted Nothing = Nothing
-close_matching wanted (Just open) =
-  if wanted == open then Nothing else Just open
+close_matching wanted (Just value) =
+  if wanted == value then Nothing else Just value
 
 close_maybe : Maybe String → List DocumentEvent
 close_maybe Nothing = []
