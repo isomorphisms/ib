@@ -135,22 +135,20 @@ exercise_hostile_ingestion() {
     "$aici_ref" "$implementation_revision" "$executable_sha256" \
     >/tmp/ib-valid-ingestion.receipt.tsv
 
-  if build/exec/ib-hostile-ingestion \
-      malformed_html "$corpus_root/bodies/malformed.html" \
-      'Recovered fixture' syllabus /syllabus \
-      "$aici_ref" "$implementation_revision" "$executable_sha256" \
-      >/tmp/ib-malformed-ingestion.receipt.tsv; then
-    echo 'malformed unclosed-link fixture unexpectedly extracted the link' >&2
-    exit 1
-  fi
+  build/exec/ib-hostile-ingestion \
+    malformed_html "$corpus_root/bodies/malformed.html" \
+    'Recovered fixture' syllabus /syllabus \
+    "$aici_ref" "$implementation_revision" "$executable_sha256" \
+    >/tmp/ib-malformed-ingestion.receipt.tsv
 
   /tmp/aici-ingestion verify "$corpus_root" \
     /tmp/ib-valid-ingestion.receipt.tsv consumer -
   /tmp/aici-ingestion verify "$corpus_root" \
     /tmp/ib-malformed-ingestion.receipt.tsv consumer -
-  grep -Fx 'summary	first_failure	none' /tmp/ib-valid-ingestion.receipt.tsv
-  grep -Fx 'summary	first_failure	downstream_extraction' \
-    /tmp/ib-malformed-ingestion.receipt.tsv
+  grep -Fx 'summary\tfirst_failure\tnone' /tmp/ib-valid-ingestion.receipt.tsv
+  grep -Fx 'summary\tfirst_failure\tnone' /tmp/ib-malformed-ingestion.receipt.tsv
+  grep -F 'document_log_subset_v0' /tmp/ib-malformed-ingestion.receipt.tsv
+  grep -F 'expected_link_extracted' /tmp/ib-malformed-ingestion.receipt.tsv
 }
 
 exercise_scientific_media() {
