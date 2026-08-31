@@ -1,0 +1,363 @@
+module IB.RecoveredInformation
+
+import IB.Information
+
+%default total
+
+data HtmlToken
+  = HtmlText String
+  | HtmlTag String
+
+public export
+data DocumentEvent
+  = StartTag String String
+  | EndTag String
+  | ImpliedEndTag String
+  | TextEvent String
+
+data RecoveryState = RecoverState (Maybe String) (Maybe String) Bool Bool
+
+finish_text_token : List Char → List HtmlToken → List HtmlToken
+finish_text_token chars tokens =
+  let text = pack (reverse chars) in
+  if text == "" then tokens else HtmlText text :: tokens
+
+finish_tag_token : List Char → List HtmlToken → List HtmlToken
+finish_tag_token chars tokens = HtmlTag (pack (reverse chars)) :: tokens
+
+tokenize_chars : Bool → List Char → List Char → List HtmlToken → List HtmlToken
+tokenize_chars in_tag current [] tokens =
+  reverse (if in_tag then finish_tag_token current tokens else finish_text_token current tokens)
+tokenize_chars False current ('<' :: rest) tokens =
+  tokenize_chars True [] rest (finish_text_token current tokens)
+tokenize_chars False current (value :: rest) tokens =
+  tokenize_chars False (value :: current) rest tokens
+tokenize_chars True current ('>' :: rest) tokens =
+  tokenize_chars False [] rest (finish_tag_token current tokens)
+tokenize_chars True current (value :: rest) tokens =
+  tokenize_chars True (value :: current) rest tokens
+
+tokenize : String → List HtmlToken
+tokenize text = tokenize_chars False [] (unpack text) []
+
+is_space_char : Char → Bool
+is_space_char value =
+  value == ' ' || value == '\n' || value == '\r' || value == '\t'
+
+drop_space_chars : List Char → List Char
+drop_space_chars [] = []
+drop_space_chars (value :: rest) =
+  if is_space_char value then drop_space_chars rest else value :: rest
+
+is_closing_tag : String → Bool
+is_closing_tag tag =
+  case drop_space_chars (unpack tag) of
+    '/' :: _ ⇒ True
+    _ ⇒ False
+
+heading_tag : String → Bool
+heading_tag name = elem name ["h1", "h2", "h3", "h4", "h5", "h6"]
+
+paragraph_boundary : String → Bool
+paragraph_boundary name =
+  heading_tag name ||
+  elem name ["table", "tr", "div", "section", "article", "aside", "nav",
+             "ul", "ol", "form"]
+
+close_if_matching : String → Maybe String → Maybe String
+close_if_matching wanted Nothing = Nothing
+close_if_matching wanted current@(Just open) =
+  if wanted == open then Nothing else current
+
+eof_events : RecoveryState → List DocumentEvent
+eof_events (RecoverState paragraph cell row_open link_open) =
+  (if link_open then [ImpliedEndTag "a"] else []) ++
+  (case cell of
+    Nothing ⇒ []
+    Just name ⇒ [ImpliedEndTag name]) ++
+  (if row_open then [ImpliedEndTag "tr"] else []) ++
+  (case paragraph of
+    Nothing ⇒ []
+    Just name ⇒ [ImpliedEndTag name])
+
+recover_tokens : List HtmlToken → RecoveryState → List DocumentEvent
+recover_tokens [] state = eof_events state
+recover_tokens (HtmlText text :: rest) state =
+  TextEvent text :: recover_tokens rest state
+recover_tokens (HtmlTag tag :: rest) (RecoverState paragraph cell row_open link_open) =
+  let name = tag_name tag in
+  let closing = is_closing_tag tag in
+  if closing
+    then
+      if name == "p" || name == "li"
+        then EndTag name ::
+          recover_tokens rest
+            (RecoverState (close_if_matching name paragraph)
+              cell row_open link_open)
+        else if name == "td" || name == "th"
+          then EndTag name ::
+            recover_tokens rest (RecoverState paragraph Nothing row_open link_open)
+          else if name == "tr"
+            then
+              (case cell of
+                Nothing ⇒ []
+                Just open ⇒ [ImpliedEndTag open]) ++
+              [EndTag "tr"] ++
+              recover_tokens rest (RecoverState paragraph Nothing False link_open)
+            else if name == "table"
+              then
+                (case cell of
+                  Nothing ⇒ []
+                  Just open ⇒ [ImpliedEndTag open]) ++
+                (if row_open then [ImpliedEndTag "tr"] else []) ++
+                [EndTag "table"] ++
+                recover_tokens rest (RecoverState paragraph Nothing False link_open)
+              else if name == "a"
+                then EndTag "a" ::
+                  recover_tokens rest (RecoverState paragraph cell row_open False)
+                else EndTag name ::
+                  recover_tokens rest (RecoverState paragraph cell row_open link_open)
+    else
+      if name == "p" || name == "li"
+        then
+          (case paragraph of
+            Nothing ⇒ []
+            Just open ⇒ [ImpliedEndTag open]) ++
+          [StartTag name tag] ++
+          recover_tokens rest (RecoverState (Just name) cell row_open link_open)
+        else if name == "tr"
+          then
+            (case paragraph of
+              Nothing ⇒ []
+              Just open ⇒ [ImpliedEndTag open]) ++
+            (case cell of
+              Nothing ⇒ []
+              Just open ⇒ [ImpliedEndTag open]) ++
+            (if row_open then [ImpliedEndTag "tr"] else []) ++
+            [StartTag "tr" tag] ++
+            recover_tokens rest (RecoverState Nothing Nothing True link_open)
+          else if name == "td" || name == "th"
+            then
+              (case cell of
+                Nothing ⇒ []
+                Just open ⇒ [ImpliedEndTag open]) ++
+              [StartTag name tag] ++
+              recover_tokens rest (RecoverState paragraph (Just name) row_open link_open)
+            else if name == "a"
+              then
+                (if link_open then [ImpliedEndTag "a"] else []) ++
+                [StartTag "a" tag] ++
+                recover_tokens rest (RecoverState paragraph cell row_open True)
+              else if paragraph_boundary name
+                then
+                  (case paragraph of
+                    Nothing ⇒ []
+                    Just open ⇒ [ImpliedEndTag open]) ++
+                  [StartTag name tag] ++
+                  recover_tokens rest (RecoverState Nothing cell row_open link_open)
+                else StartTag name tag ::
+                  recover_tokens rest (RecoverState paragraph cell row_open link_open)
+
+public export
+data RecoveredDocumentLog = DocumentLog String (List DocumentEvent)
+
+public export
+recover_document_log : String → String → RecoveredDocumentLog
+recover_document_log source html =
+  DocumentLog source
+    (recover_tokens (tokenize html) (RecoverState Nothing Nothing False False))
+
+public export
+document_log_contract : String
+document_log_contract = "document_log_subset_v0"
+
+public export
+document_log_source : RecoveredDocumentLog → String
+document_log_source (DocumentLog source _) = source
+
+public export
+document_log_events : RecoveredDocumentLog → List DocumentEvent
+document_log_events (DocumentLog _ events) = events
+
+has_implied_end_event : String → List DocumentEvent → Bool
+has_implied_end_event wanted [] = False
+has_implied_end_event wanted (ImpliedEndTag name :: rest) =
+  name == wanted || has_implied_end_event wanted rest
+has_implied_end_event wanted (_ :: rest) = has_implied_end_event wanted rest
+
+public export
+has_implied_end : String → RecoveredDocumentLog → Bool
+has_implied_end wanted (DocumentLog _ events) =
+  has_implied_end_event wanted events
+
+data Capture
+  = NoCapture
+  | CaptureTitle
+  | CaptureHeading String
+  | CaptureText String
+  | CaptureLink String
+  | CaptureForm String
+  | CaptureCell String
+
+data SkipState = NotSkipping | Skipping String Nat
+
+capture_target : Capture → String
+capture_target NoCapture = ""
+capture_target CaptureTitle = "title"
+capture_target (CaptureHeading name) = name
+capture_target (CaptureText name) = name
+capture_target (CaptureLink _) = "a"
+capture_target (CaptureForm _) = "form"
+capture_target (CaptureCell name) = name
+
+append_capture_text : String → List Char → List Char
+append_capture_text text chars = reverse (unpack text) ++ (' ' :: chars)
+
+finish_capture : Capture → String → String → List InformationItem → Maybe (List String) →
+  (String, List InformationItem, Maybe (List String))
+finish_capture NoCapture text title items row = (title, items, row)
+finish_capture CaptureTitle text title items row = (text, items, row)
+finish_capture (CaptureHeading _) text title items row =
+  if text == "" then (title, items, row) else (title, Heading text :: items, row)
+finish_capture (CaptureText _) text title items row =
+  if text == "" then (title, items, row) else (title, TextBlock text :: items, row)
+finish_capture (CaptureLink href) text title items row =
+  if text == "" && href == "" then (title, items, row) else (title, Link text href :: items, row)
+finish_capture (CaptureForm action) text title items row =
+  if text == "" && action == "" then (title, items, row) else (title, Form text action :: items, row)
+finish_capture (CaptureCell _) text title items Nothing = (title, items, Nothing)
+finish_capture (CaptureCell _) text title items (Just cells) =
+  if text == "" then (title, items, Just cells) else (title, items, Just (text :: cells))
+
+finish_open_row : Maybe (List String) → List InformationItem → List InformationItem
+finish_open_row Nothing items = items
+finish_open_row (Just []) items = items
+finish_open_row (Just cells) items = TableRow (reverse cells) :: items
+
+add_standalone_text : String → Maybe (List String) → List InformationItem → List InformationItem
+add_standalone_text text (Just _) items = items
+add_standalone_text text Nothing items =
+  let cleaned = clean_text text in
+  if cleaned == "" then items else TextBlock cleaned :: items
+
+update_skip_start : String → SkipState → SkipState
+update_skip_start name NotSkipping = NotSkipping
+update_skip_start name (Skipping target depth) =
+  if name == target then Skipping target (S depth) else Skipping target depth
+
+update_skip_end : String → SkipState → SkipState
+update_skip_end name NotSkipping = NotSkipping
+update_skip_end name (Skipping target depth) =
+  if name == target
+    then case depth of
+      Z ⇒ NotSkipping
+      S next ⇒ Skipping target next
+    else Skipping target depth
+
+skipped_tag : String → Bool
+skipped_tag name = elem name ["script", "style", "svg", "canvas", "video", "audio", "template"]
+
+attribute_or_empty : String → String → String
+attribute_or_empty name tag =
+  case attribute_value name tag of
+    Nothing ⇒ ""
+    Just value ⇒ value
+
+collect_information : List DocumentEvent → SkipState → Capture → List Char →
+  Maybe (List String) → String → List InformationItem → (String, List InformationItem)
+collect_information [] skip capture chars row title items =
+  let text = clean_text (pack (reverse chars)) in
+  let (final_title, final_items, final_row) = finish_capture capture text title items row in
+  (final_title, reverse (finish_open_row final_row final_items))
+collect_information (TextEvent text :: rest) (Skipping target depth) capture chars row title items =
+  collect_information rest (Skipping target depth) capture chars row title items
+collect_information (TextEvent text :: rest) NotSkipping NoCapture chars row title items =
+  collect_information rest NotSkipping NoCapture [] row title (add_standalone_text text row items)
+collect_information (TextEvent text :: rest) NotSkipping capture chars row title items =
+  collect_information rest NotSkipping capture (append_capture_text text chars) row title items
+collect_information (StartTag name tag :: rest) skip capture chars row title items =
+  case skip of
+    Skipping target depth ⇒
+      collect_information rest (update_skip_start name (Skipping target depth))
+        capture chars row title items
+    NotSkipping ⇒
+      case capture of
+        NoCapture ⇒
+          if skipped_tag name
+            then collect_information rest (Skipping name Z) NoCapture chars row title items
+            else if name == "title"
+              then collect_information rest NotSkipping CaptureTitle [] row title items
+              else if heading_tag name
+                then collect_information rest NotSkipping (CaptureHeading name) [] row title items
+                else if name == "p" || name == "li"
+                  then collect_information rest NotSkipping (CaptureText name) [] row title items
+                  else if name == "a"
+                    then collect_information rest NotSkipping
+                      (CaptureLink (attribute_or_empty "href" tag)) [] row title items
+                    else if name == "form"
+                      then collect_information rest NotSkipping
+                        (CaptureForm (attribute_or_empty "action" tag)) [] row title items
+                      else if name == "tr"
+                        then collect_information rest NotSkipping NoCapture [] (Just []) title
+                          (finish_open_row row items)
+                        else if name == "td" || name == "th"
+                          then case row of
+                            Nothing ⇒ collect_information rest NotSkipping NoCapture [] row title items
+                            Just _ ⇒ collect_information rest NotSkipping (CaptureCell name) [] row title items
+                          else collect_information rest NotSkipping NoCapture [] row title items
+        _ ⇒
+          if skipped_tag name
+            then collect_information rest (Skipping name Z) capture chars row title items
+            else collect_information rest NotSkipping capture chars row title items
+collect_information (EndTag name :: rest) skip capture chars row title items =
+  case skip of
+    Skipping target depth ⇒
+      collect_information rest (update_skip_end name (Skipping target depth))
+        capture chars row title items
+    NotSkipping ⇒
+      case capture of
+        NoCapture ⇒
+          if name == "tr"
+            then collect_information rest NotSkipping NoCapture [] Nothing title
+              (finish_open_row row items)
+            else collect_information rest NotSkipping NoCapture chars row title items
+        _ ⇒
+          if name == capture_target capture
+            then
+              let text = clean_text (pack (reverse chars)) in
+              let (next_title, next_items, next_row) =
+                finish_capture capture text title items row in
+              collect_information rest NotSkipping NoCapture [] next_row next_title next_items
+            else collect_information rest NotSkipping capture chars row title items
+collect_information (ImpliedEndTag name :: rest) skip capture chars row title items =
+  case skip of
+    Skipping target depth ⇒
+      collect_information rest (update_skip_end name (Skipping target depth))
+        capture chars row title items
+    NotSkipping ⇒
+      case capture of
+        NoCapture ⇒
+          if name == "tr"
+            then collect_information rest NotSkipping NoCapture [] Nothing title
+              (finish_open_row row items)
+            else collect_information rest NotSkipping NoCapture chars row title items
+        _ ⇒
+          if name == capture_target capture
+            then
+              let text = clean_text (pack (reverse chars)) in
+              let (next_title, next_items, next_row) =
+                finish_capture capture text title items row in
+              collect_information rest NotSkipping NoCapture [] next_row next_title next_items
+            else collect_information rest NotSkipping capture chars row title items
+
+public export
+information_from_log : String → String → RecoveredDocumentLog → InformationView
+information_from_log requested_url resolved_url (DocumentLog _ events) =
+  let (title, items) =
+    collect_information events NotSkipping NoCapture [] Nothing "" [] in
+  View requested_url resolved_url title items
+
+public export
+extract_recovered_html : String → String → String → String → InformationView
+extract_recovered_html source requested_url resolved_url html =
+  information_from_log requested_url resolved_url (recover_document_log source html)
