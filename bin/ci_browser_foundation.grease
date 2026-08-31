@@ -5,6 +5,7 @@ repository_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 idric_prefix=${IDRIC_PREFIX:-/tmp/idric}
 idric_ref=${IDRIC_REF:-61970be77769f607cca8650bf424c0f0b22ddee7}
 pdf_harvester_ref=${PDF_HARVESTER_REF:-77d85dc6f7e89d109cb9e06f42706bc34f00e4a3}
+aici_ref=${AICI_REF:-c1e423d506f6adfc8c1c9659a4faaf94ae84eaf0}
 
 install_dependencies() {
   sudo apt-get update
@@ -109,6 +110,47 @@ exercise_information() {
   sh tests/test_arxiv_progressive_prepaint.grease
 }
 
+exercise_hostile_ingestion() {
+  aici_root="$repository_root/.tools/ai-ci"
+  test -d "$aici_root/.git"
+  test "$(git -C "$aici_root" rev-parse HEAD)" = "$aici_ref"
+  (cd "$aici_root/ingestion/corpus-v1" && sha256sum -c CORPUS.sha256)
+  cc -std=c17 -Wall -Wextra -Werror -pedantic -O2 \
+    -o /tmp/aici-ingestion "$aici_root/ingestion/src/aici_ingestion.c"
+
+  cd "$repository_root/src"
+  "$idric_prefix/bin/idris2" HostileIngestionReceipt.idric \
+    -o ib-hostile-ingestion 2>&1 | tee /tmp/idric-hostile-ingestion-compile.txt
+  test -x build/exec/ib-hostile-ingestion
+  ! grep -q '^Error:' /tmp/idric-hostile-ingestion-compile.txt
+
+  implementation_revision=$(git -C "$repository_root" rev-parse HEAD)
+  executable_sha256=$(sha256sum \
+    build/exec/ib-hostile-ingestion_app/ib-hostile-ingestion.so | cut -d ' ' -f1)
+  corpus_root="$aici_root/ingestion/corpus-v1"
+
+  build/exec/ib-hostile-ingestion \
+    valid_utf8 "$corpus_root/bodies/valid.html" \
+    'Hostile fixture' 'reading list' /reading \
+    "$aici_ref" "$implementation_revision" "$executable_sha256" \
+    >/tmp/ib-valid-ingestion.receipt.tsv
+
+  build/exec/ib-hostile-ingestion \
+    malformed_html "$corpus_root/bodies/malformed.html" \
+    'Recovered fixture' syllabus /syllabus \
+    "$aici_ref" "$implementation_revision" "$executable_sha256" \
+    >/tmp/ib-malformed-ingestion.receipt.tsv
+
+  /tmp/aici-ingestion verify "$corpus_root" \
+    /tmp/ib-valid-ingestion.receipt.tsv consumer -
+  /tmp/aici-ingestion verify "$corpus_root" \
+    /tmp/ib-malformed-ingestion.receipt.tsv consumer -
+  grep -Fx "$(printf 'summary\tfirst_failure\tnone')" /tmp/ib-valid-ingestion.receipt.tsv
+  grep -Fx "$(printf 'summary\tfirst_failure\tnone')" /tmp/ib-malformed-ingestion.receipt.tsv
+  grep -F 'document_log_subset_v0' /tmp/ib-malformed-ingestion.receipt.tsv
+  grep -F 'expected_link_extracted' /tmp/ib-malformed-ingestion.receipt.tsv
+}
+
 exercise_scientific_media() {
   cd "$repository_root"
   sh -n lib/scientific_media.grease
@@ -151,13 +193,14 @@ case "${1:-}" in
   build-idric) build_idric ;;
   verify-pdf-harvester) verify_pdf_harvester ;;
   exercise-information) exercise_information ;;
+  exercise-hostile-ingestion) exercise_hostile_ingestion ;;
   exercise-core) exercise_core ;;
   exercise-workbench) exercise_workbench ;;
   exercise-scientific-media) exercise_scientific_media ;;
   exercise-live-arxiv) exercise_live_arxiv ;;
   exercise-live-arxiv-prepaint) exercise_live_arxiv_prepaint ;;
   *)
-    printf 'usage: %s {install-dependencies|build-idric|verify-pdf-harvester|exercise-information|exercise-core|exercise-workbench|exercise-scientific-media|exercise-live-arxiv|exercise-live-arxiv-prepaint}\n' "$0" >&2
+    printf 'usage: %s {install-dependencies|build-idric|verify-pdf-harvester|exercise-information|exercise-hostile-ingestion|exercise-core|exercise-workbench|exercise-scientific-media|exercise-live-arxiv|exercise-live-arxiv-prepaint}\n' "$0" >&2
     exit 2
     ;;
 esac
