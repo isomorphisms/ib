@@ -1,6 +1,7 @@
 module Main
 
 import IB.Information
+import IB.RecoveredInformation
 import System
 import System.File
 
@@ -42,6 +43,28 @@ blocked_after_input fixture = do
   emit_stage fixture "downstream_extraction" "SKIP" "blocked_by_input_acquisition" "ib" "not-run"
   emit_summary "input_acquisition" "input_acquisition"
 
+blocked_after_recovery : String → IO ()
+blocked_after_recovery fixture = do
+  emit_stage fixture "document_construction" "SKIP" "blocked_by_html_recovery" "idric" "not-run"
+  emit_stage fixture "downstream_extraction" "SKIP" "blocked_by_html_recovery" "idric" "not-run"
+  emit_summary "html_recovery" "html_recovery"
+
+recovery_contract_holds : String → RecoveredDocumentLog → Bool
+recovery_contract_holds fixture log =
+  document_log_source log == fixture &&
+  (if fixture == "malformed_html"
+    then has_implied_end "p" log &&
+         has_implied_end "td" log &&
+         has_implied_end "tr" log &&
+         has_implied_end "a" log
+    else True)
+
+document_contract_holds : String → InformationView → Bool
+document_contract_holds fixture view =
+  if fixture == "malformed_html"
+    then has_table_row ["A", "B"] view
+    else True
+
 run : String → String → String → String → String → String → String → String → IO ()
 run fixture path expected_title expected_link_text expected_link_href
     corpus_repository_revision implementation_revision executable_sha256 = do
@@ -58,28 +81,38 @@ run fixture path expected_title expected_link_text expected_link_href
       emit_stage fixture "decompression" "PASS" "identity" "idric" "identity"
       emit_stage fixture "decoding" "PASS" "utf8_valid" "idric"
         ("characters=" ++ show (length (unpack html)))
-      let view = extract_html "fixture://hostile" "fixture://hostile" html
-      emit_stage fixture "html_recovery" "PASS" "ib_information_subset" "idric" "recovery=ib-subset"
-      if view_title view /= expected_title
+      let log = recover_document_log fixture html
+      if not (recovery_contract_holds fixture log)
         then do
-          emit_stage fixture "document_construction" "FAIL" "wrong_title" "idric"
-            ("actual=" ++ view_title view)
-          emit_stage fixture "downstream_extraction" "SKIP" "blocked_by_document_construction" "idric" "not-run"
-          emit_summary "document_construction" "document_construction"
+          emit_stage fixture "html_recovery" "FAIL" "document_log_contract_violation" "idric"
+            ("contract=" ++ document_log_contract)
+          blocked_after_recovery fixture
           exitFailure
         else do
-          emit_stage fixture "document_construction" "PASS" "information_view_built" "idric"
-            ("title=" ++ expected_title)
-          if has_link expected_link_text expected_link_href view
+          emit_stage fixture "html_recovery" "PASS" document_log_contract "idric"
+            ("source=" ++ document_log_source log)
+          let view = information_from_log "fixture://hostile" "fixture://hostile" log
+          if view_title view /= expected_title || not (document_contract_holds fixture view)
             then do
-              emit_stage fixture "downstream_extraction" "PASS" "expected_link_extracted" "idric"
-                ("href=" ++ expected_link_href)
-              emit_summary "none" "none"
-            else do
-              emit_stage fixture "downstream_extraction" "FAIL" "expected_link_missing" "idric"
-                ("href=" ++ expected_link_href)
-              emit_summary "downstream_extraction" "downstream_extraction"
+              emit_stage fixture "document_construction" "FAIL" "useful_document_subset_missing" "idric"
+                ("title=" ++ view_title view)
+              emit_stage fixture "downstream_extraction" "SKIP"
+                "blocked_by_document_construction" "idric" "not-run"
+              emit_summary "document_construction" "document_construction"
               exitFailure
+            else do
+              emit_stage fixture "document_construction" "PASS" "information_view_built" "idric"
+                ("title=" ++ expected_title)
+              if has_link expected_link_text expected_link_href view
+                then do
+                  emit_stage fixture "downstream_extraction" "PASS" "expected_link_extracted" "idric"
+                    ("href=" ++ expected_link_href)
+                  emit_summary "none" "none"
+                else do
+                  emit_stage fixture "downstream_extraction" "FAIL" "expected_link_missing" "idric"
+                    ("href=" ++ expected_link_href)
+                  emit_summary "downstream_extraction" "downstream_extraction"
+                  exitFailure
 
 usage : IO ()
 usage = do
