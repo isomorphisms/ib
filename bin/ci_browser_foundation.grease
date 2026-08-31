@@ -145,8 +145,8 @@ exercise_hostile_ingestion() {
     /tmp/ib-valid-ingestion.receipt.tsv consumer -
   /tmp/aici-ingestion verify "$corpus_root" \
     /tmp/ib-malformed-ingestion.receipt.tsv consumer -
-  grep -Fx 'summary\tfirst_failure\tnone' /tmp/ib-valid-ingestion.receipt.tsv
-  grep -Fx 'summary\tfirst_failure\tnone' /tmp/ib-malformed-ingestion.receipt.tsv
+  grep -Fx "$(printf 'summary\tfirst_failure\tnone')" /tmp/ib-valid-ingestion.receipt.tsv
+  grep -Fx "$(printf 'summary\tfirst_failure\tnone')" /tmp/ib-malformed-ingestion.receipt.tsv
   grep -F 'document_log_subset_v0' /tmp/ib-malformed-ingestion.receipt.tsv
   grep -F 'expected_link_extracted' /tmp/ib-malformed-ingestion.receipt.tsv
 }
