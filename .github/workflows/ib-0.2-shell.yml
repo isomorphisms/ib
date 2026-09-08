@@ -1,0 +1,16 @@
+name: ib 0.2 shell smoke
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches:
+      - '0.2/**'
+
+jobs:
+  shell-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Exercise Cauldron and Pensieve shell boundaries
+        run: sh tests/test_0_2_shell.grease

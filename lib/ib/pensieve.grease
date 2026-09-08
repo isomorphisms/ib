@@ -1,0 +1,422 @@
+# Shell support for the IB 0.2 Cauldron -> Pensieve experiment.
+
+ib_fail() {
+  printf 'ib: %s\n' "$*" >&2
+  return 1
+}
+
+ib_home() {
+  if test -n "${IB_HOME:-}"; then
+    printf '%s\n' "$IB_HOME"
+  elif test -n "${XDG_DATA_HOME:-}"; then
+    printf '%s/ib\n' "$XDG_DATA_HOME"
+  else
+    printf '%s/.local/share/ib\n' "$HOME"
+  fi
+}
+
+ib_cauldron() {
+  printf '%s/cauldron\n' "$(ib_home)"
+}
+
+ib_pensieve() {
+  printf '%s/pensieve\n' "$(ib_home)"
+}
+
+ib_icu() {
+  printf '%s\n' "${IB_ICU:-icu}"
+}
+
+ib_require_icu() {
+  command -v "$(ib_icu)" >/dev/null 2>&1 ||
+    ib_fail "ICU not found; set IB_ICU to the ICU executable"
+}
+
+arxiv_identifier_from_input() {
+  input=$1
+  cleaned=${input%%\#*}
+  cleaned=${cleaned%%\?*}
+
+  case "$cleaned" in
+    http://arxiv.org/abs/*|https://arxiv.org/abs/*)
+      identifier=${cleaned#*://arxiv.org/abs/}
+      ;;
+    http://arxiv.org/pdf/*|https://arxiv.org/pdf/*)
+      identifier=${cleaned#*://arxiv.org/pdf/}
+      identifier=${identifier%.pdf}
+      ;;
+    http://arxiv.org/html/*|https://arxiv.org/html/*)
+      identifier=${cleaned#*://arxiv.org/html/}
+      ;;
+    http://ar5iv.labs.arxiv.org/html/*|https://ar5iv.labs.arxiv.org/html/*)
+      identifier=${cleaned#*://ar5iv.labs.arxiv.org/html/}
+      ;;
+    arxiv:*)
+      identifier=${cleaned#arxiv:}
+      ;;
+    *)
+      identifier=$cleaned
+      ;;
+  esac
+
+  case "$identifier" in
+    ''|*[!A-Za-z0-9._/-]*)
+      ib_fail "not an arXiv identifier: $input"
+      return 1
+      ;;
+  esac
+
+  printf '%s\n' "$identifier"
+}
+
+arxiv_abs_url() {
+  printf 'https://arxiv.org/abs/%s\n' "$1"
+}
+
+arxiv_html_url() {
+  printf 'https://arxiv.org/html/%s\n' "$1"
+}
+
+arxiv_pdf_url() {
+  printf 'https://arxiv.org/pdf/%s\n' "$1"
+}
+
+ib_fetch_to_file() {
+  url=$1
+  output=$2
+  part="$output.part.$$"
+
+  mkdir -p "$(dirname "$output")"
+  rm -f "$part"
+  if "$(ib_icu)" get "$url" > "$part"; then
+    if test -s "$part"; then
+      mv "$part" "$output"
+      return 0
+    fi
+  fi
+
+  rm -f "$part"
+  return 1
+}
+
+ib_try_fetch_to_file() {
+  ib_fetch_to_file "$1" "$2" 2>/dev/null
+}
+
+ib_pdf_looks_like_pdf() {
+  prefix=$(dd if="$1" bs=5 count=1 2>/dev/null || true)
+  test "$prefix" = '%PDF-'
+}
+
+ib_html_looks_like_paper() {
+  grep -Eiq 'ltx_document|<(article|main)([[:space:]>])' "$1"
+}
+
+ib_html_normalized_stream() {
+  if command -v xmlstarlet >/dev/null 2>&1; then
+    xmlstarlet fo --html --recover --dropdtd "$1" 2>/dev/null
+  else
+    cat "$1"
+  fi
+}
+
+ib_html_to_text() {
+  html=$1
+  if command -v xmlstarlet >/dev/null 2>&1; then
+    ib_html_normalized_stream "$html" |
+      xmlstarlet sel -t \
+        -m '//*[local-name()="body"]//text()[normalize-space() != "" and not(ancestor::*[local-name()="script"]) and not(ancestor::*[local-name()="style"])]' \
+        -v 'normalize-space(.)' -n - 2>/dev/null
+  else
+    sed -e 's/<script[^>]*>[^<]*<\/script>/ /g' \
+        -e 's/<style[^>]*>[^<]*<\/style>/ /g' \
+        -e 's/<[^>][^>]*>/ /g' "$html" |
+      tr '\t' ' ' |
+      sed -e 's/[[:space:]][[:space:]]*/ /g' -e '/^[[:space:]]*$/d'
+  fi
+}
+
+ib_html_title() {
+  html=$1
+  if command -v xmlstarlet >/dev/null 2>&1; then
+    ib_html_normalized_stream "$html" |
+      xmlstarlet sel -t -v 'normalize-space(string(//*[local-name()="title"][1]))' -n - 2>/dev/null
+  else
+    sed -n 's#.*<title[^>]*>\(.*\)</title>.*#\1#p' "$html" |
+      sed 's/<[^>][^>]*>/ /g' |
+      sed -n '1p'
+  fi
+}
+
+ib_html_links() {
+  html=$1
+  if command -v xmlstarlet >/dev/null 2>&1; then
+    ib_html_normalized_stream "$html" |
+      xmlstarlet sel -t \
+        -m '//*[@href]' \
+        -v '@href' -o '\t' -v 'normalize-space(string(.))' -n - 2>/dev/null
+  else
+    grep -Eo 'href="[^"]+"' "$html" 2>/dev/null |
+      sed -e 's/^href="//' -e 's/"$//' || true
+  fi
+}
+
+ib_html_image_sources() {
+  html=$1
+  if command -v xmlstarlet >/dev/null 2>&1; then
+    ib_html_normalized_stream "$html" |
+      xmlstarlet sel -t \
+        -m '//*[local-name()="img"][@src]' -v '@src' -n - 2>/dev/null
+  else
+    grep -Eo 'src="[^"]+"' "$html" 2>/dev/null |
+      sed -e 's/^src="//' -e 's/"$//' || true
+  fi
+}
+
+ib_resolve_url() {
+  document_url=$1
+  reference=$2
+  case "$reference" in
+    http://*|https://*|data:*)
+      printf '%s\n' "$reference"
+      ;;
+    //*)
+      scheme=${document_url%%://*}
+      printf '%s:%s\n' "$scheme" "$reference"
+      ;;
+    /*)
+      origin=$(printf '%s\n' "$document_url" | sed -E 's#^(https?://[^/]+).*$#\1#')
+      printf '%s%s\n' "$origin" "$reference"
+      ;;
+    *)
+      printf '%s/%s\n' "${document_url%/*}" "$reference"
+      ;;
+  esac
+}
+
+ib_image_extension() {
+  source=${1%%\?*}
+  source=${source%%\#*}
+  case "$source" in
+    data:image/png*) printf 'png\n' ;;
+    data:image/jpeg*|data:image/jpg*) printf 'jpg\n' ;;
+    data:image/svg+xml*) printf 'svg\n' ;;
+    data:image/webp*) printf 'webp\n' ;;
+    *.png|*.PNG) printf 'png\n' ;;
+    *.jpg|*.JPG|*.jpeg|*.JPEG) printf 'jpg\n' ;;
+    *.svg|*.SVG) printf 'svg\n' ;;
+    *.webp|*.WEBP) printf 'webp\n' ;;
+    *.gif|*.GIF) printf 'gif\n' ;;
+    *) printf 'img\n' ;;
+  esac
+}
+
+ib_write_data_image() {
+  source=$1
+  output=$2
+  header=${source%%,*}
+  payload=${source#*,}
+  case "$header" in
+    data:image/*\;base64)
+      if printf '%s' "$payload" | base64 --decode > "$output" 2>/dev/null; then
+        return 0
+      fi
+      printf '%s' "$payload" | base64 -D > "$output" 2>/dev/null
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+ib_fetch_arxiv_figures() {
+  html=$1
+  document_url=$2
+  output_directory=$3
+  manifest=$4
+
+  mkdir -p "$output_directory"
+  sources="$output_directory/.sources.$$"
+  ib_html_image_sources "$html" |
+    awk 'NF && !seen[$0]++' > "$sources"
+
+  : > "$manifest"
+  ordinal=0
+  while IFS= read -r source; do
+    test -n "$source" || continue
+    ordinal=$((ordinal + 1))
+    resolved=$(ib_resolve_url "$document_url" "$source")
+    extension=$(ib_image_extension "$resolved")
+    relative=$(printf 'figures/%04d.%s' "$ordinal" "$extension")
+    output="$(dirname "$output_directory")/$relative"
+    status=failed
+
+    case "$resolved" in
+      data:image/*)
+        if ib_write_data_image "$resolved" "$output"; then
+          status=ok
+        fi
+        ;;
+      *)
+        if ib_try_fetch_to_file "$resolved" "$output"; then
+          status=ok
+        fi
+        ;;
+    esac
+
+    printf '%04d\t%s\t%s\t%s\t%s\n' \
+      "$ordinal" "$source" "$resolved" "$relative" "$status" >> "$manifest"
+  done < "$sources"
+  rm -f "$sources"
+}
+
+ib_fetch_arxiv() {
+  input=$1
+  identifier=$(arxiv_identifier_from_input "$input") || return 1
+  cauldron="$(ib_cauldron)/arxiv/$identifier"
+
+  if test -f "$cauldron/complete"; then
+    printf '%s\n' "$cauldron"
+    return 0
+  fi
+
+  ib_require_icu || return 1
+
+  parent=$(dirname "$cauldron")
+  leaf=$(basename "$cauldron")
+  mkdir -p "$parent"
+  incoming="$parent/.${leaf}.incoming.$$"
+  rm -rf "$incoming"
+  mkdir -p "$incoming"
+
+  printf '%s\n' "$input" > "$incoming/requested_url"
+  date -u '+%Y-%m-%dT%H:%M:%SZ' > "$incoming/fetched_at"
+
+  abs_url=$(arxiv_abs_url "$identifier")
+  html_url=$(arxiv_html_url "$identifier")
+  pdf_url=$(arxiv_pdf_url "$identifier")
+  printf '%s\n' "$abs_url" > "$incoming/abstract.url"
+  printf '%s\n' "$html_url" > "$incoming/html.url"
+  printf '%s\n' "$pdf_url" > "$incoming/pdf.url"
+
+  if ! ib_fetch_to_file "$abs_url" "$incoming/abstract.html"; then
+    rm -rf "$incoming"
+    ib_fail "could not fetch arXiv abstract page for $identifier"
+    return 1
+  fi
+
+  if ib_try_fetch_to_file "$html_url" "$incoming/paper.html"; then
+    if ! ib_html_looks_like_paper "$incoming/paper.html"; then
+      mv "$incoming/paper.html" "$incoming/html-response"
+    fi
+  fi
+
+  if ! ib_fetch_to_file "$pdf_url" "$incoming/paper.pdf"; then
+    rm -rf "$incoming"
+    ib_fail "could not fetch arXiv PDF for $identifier"
+    return 1
+  fi
+  if ! ib_pdf_looks_like_pdf "$incoming/paper.pdf"; then
+    mv "$incoming/paper.pdf" "$incoming/pdf-response"
+    rm -rf "$incoming"
+    ib_fail "arXiv PDF response was not a PDF for $identifier"
+    return 1
+  fi
+
+  if test -f "$incoming/paper.html"; then
+    ib_fetch_arxiv_figures \
+      "$incoming/paper.html" "$html_url" "$incoming/figures" "$incoming/figures.tsv"
+  else
+    mkdir -p "$incoming/figures"
+    : > "$incoming/figures.tsv"
+  fi
+
+  : > "$incoming/complete"
+  rm -rf "$cauldron"
+  mv "$incoming" "$cauldron"
+  printf '%s\n' "$cauldron"
+}
+
+ib_distill_arxiv() {
+  input=$1
+  identifier=$(arxiv_identifier_from_input "$input") || return 1
+  cauldron="$(ib_cauldron)/arxiv/$identifier"
+  pensieve="$(ib_pensieve)/arxiv/$identifier"
+
+  test -f "$cauldron/complete" || {
+    ib_fail "nothing complete in the Cauldron for $identifier"
+    return 1
+  }
+
+  parent=$(dirname "$pensieve")
+  leaf=$(basename "$pensieve")
+  mkdir -p "$parent"
+  distilled="$parent/.${leaf}.distilled.$$"
+  rm -rf "$distilled"
+  mkdir -p "$distilled/text"
+
+  printf '%s\n' "$cauldron" > "$distilled/source"
+  cp "$cauldron/requested_url" "$distilled/url"
+
+  if test -f "$cauldron/abstract.html"; then
+    ib_html_title "$cauldron/abstract.html" > "$distilled/title" || :
+    ib_html_to_text "$cauldron/abstract.html" > "$distilled/text/from-abstract.txt" || :
+  fi
+
+  if test -f "$cauldron/paper.html"; then
+    ib_html_to_text "$cauldron/paper.html" > "$distilled/text/from-html.txt" || :
+    ib_html_links "$cauldron/paper.html" > "$distilled/links.tsv" || :
+  else
+    ib_html_links "$cauldron/abstract.html" > "$distilled/links.tsv" || :
+  fi
+
+  if command -v pdftotext >/dev/null 2>&1; then
+    pdftotext -layout "$cauldron/paper.pdf" "$distilled/text/from-pdf.txt" 2>/dev/null ||
+      rm -f "$distilled/text/from-pdf.txt"
+  fi
+
+  cp "$cauldron/figures.tsv" "$distilled/figures.tsv"
+
+  rm -rf "$pensieve"
+  mv "$distilled" "$pensieve"
+
+  hook_directory="$(ib_home)/hooks/after-distill.d"
+  if test -d "$hook_directory"; then
+    for hook in "$hook_directory"/*; do
+      test -x "$hook" || continue
+      "$hook" "$pensieve" "$cauldron"
+    done
+  fi
+
+  printf '%s\n' "$pensieve"
+}
+
+ib_reindex_exact_text() {
+  pensieve=$(ib_pensieve)
+  index_directory="$pensieve/indexes"
+  index="$index_directory/exact-text.files"
+  part="$index.part.$$"
+  mkdir -p "$index_directory"
+
+  if test -d "$pensieve/arxiv"; then
+    find "$pensieve/arxiv" -type f -path '*/text/*.txt' -print |
+      LC_ALL=C sort > "$part"
+  else
+    : > "$part"
+  fi
+  mv "$part" "$index"
+  printf '%s\n' "$index"
+}
+
+ib_search_exact_text() {
+  query=$1
+  pensieve=$(ib_pensieve)
+  index="$pensieve/indexes/exact-text.files"
+  test -f "$index" || ib_reindex_exact_text >/dev/null
+
+  while IFS= read -r file; do
+    test -f "$file" || continue
+    grep -n -i -F -e "$query" "$file" 2>/dev/null |
+      sed "s#^#$file:#" || true
+  done < "$index"
+}
