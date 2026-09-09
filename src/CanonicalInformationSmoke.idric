@@ -51,7 +51,7 @@ main : IO ()
 main = do
   case fixture_strand of
     Nothing => putStrLn "canonical-information=construction-failed"
-    Just strand => do
+    (Just strand) => do
       let partial = revision_from_strand (Revision 0) PartialRevision strand
       let complete = revision_from_strand (Revision 1) CompleteRevision strand
       putStrLn "canonical-information=constructed"
@@ -63,6 +63,6 @@ main = do
       putStrLn ("nonincreasing-revision-refused=" ++ show (nonincreasing_revision_refused strand))
       case serialize_version1 [partial, complete] of
         Nothing => putStrLn "version1=serialization-failed"
-        Just version1_text => do
+        (Just version1_text) => do
           putStrLn "version1=serialized"
           putStrLn ("version1-bytes=" ++ show (length (unpack version1_text)))
