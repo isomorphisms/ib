@@ -6,13 +6,15 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.weight
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -24,6 +26,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -104,7 +107,41 @@ private fun loadPensieveArticles(assets: AssetManager): List<PensieveArticle> {
 
 @Composable
 private fun ArxivViewport(articles: List<PensieveArticle>) {
-    var selected by remember(articles) { mutableStateOf(articles.firstOrNull()) }
+    val articlesById = remember(articles) { articles.associateBy { it.arxivId } }
+
+    var selectedId by remember(articles) {
+        mutableStateOf(articles.firstOrNull()?.arxivId)
+    }
+    var recentOrder by remember(articles) {
+        mutableStateOf(articles.map { it.arxivId })
+    }
+    var pinnedOrder by remember(articles) {
+        mutableStateOf(emptyList<String>())
+    }
+
+    fun selectArticle(article: PensieveArticle) {
+        selectedId = article.arxivId
+        recentOrder = listOf(article.arxivId) + recentOrder.filterNot {
+            it == article.arxivId
+        }
+    }
+
+    fun togglePinned(article: PensieveArticle) {
+        pinnedOrder = if (article.arxivId in pinnedOrder) {
+            pinnedOrder.filterNot { it == article.arxivId }
+        } else {
+            listOf(article.arxivId) + pinnedOrder
+        }
+    }
+
+    val pinnedArticles = pinnedOrder.mapNotNull(articlesById::get)
+    val pinnedIds = pinnedOrder.toSet()
+    val recentArticles = recentOrder
+        .asSequence()
+        .filterNot(pinnedIds::contains)
+        .mapNotNull(articlesById::get)
+        .toList()
+    val selected = selectedId?.let(articlesById::get)
 
     Scaffold(
         topBar = {
@@ -113,40 +150,64 @@ private fun ArxivViewport(articles: List<PensieveArticle>) {
             )
         },
     ) { scaffoldPadding ->
-        Column(
+        Row(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(scaffoldPadding),
         ) {
-            Text(
-                text = "Pensieve · ${articles.size} arXiv entries",
-                style = MaterialTheme.typography.labelLarge,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-            )
-
-            LazyColumn(
+            Column(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(max = 260.dp),
+                    .width(320.dp)
+                    .fillMaxHeight(),
             ) {
-                items(
-                    items = articles,
-                    key = { article -> article.arxivId },
-                ) { article ->
-                    ListItem(
-                        headlineContent = { Text(article.title) },
-                        supportingContent = {
-                            Text("Pensieve · arxiv/${article.arxivId}")
-                        },
-                        modifier = Modifier.clickable { selected = article },
-                    )
-                    HorizontalDivider()
+                Text(
+                    text = "Pensieve · ${articles.size} arXiv entries",
+                    style = MaterialTheme.typography.labelLarge,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                )
+
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f),
+                ) {
+                    if (pinnedArticles.isNotEmpty()) {
+                        item(key = "pinned-heading") {
+                            RailHeading("Pinned")
+                        }
+                        items(
+                            items = pinnedArticles,
+                            key = { article -> article.arxivId },
+                        ) { article ->
+                            ArticleRailItem(
+                                article = article,
+                                pinned = true,
+                                onSelect = { selectArticle(article) },
+                                onTogglePinned = { togglePinned(article) },
+                            )
+                        }
+                    }
+
+                    item(key = "recent-heading") {
+                        RailHeading("Recent")
+                    }
+                    items(
+                        items = recentArticles,
+                        key = { article -> article.arxivId },
+                    ) { article ->
+                        ArticleRailItem(
+                            article = article,
+                            pinned = false,
+                            onSelect = { selectArticle(article) },
+                            onTogglePinned = { togglePinned(article) },
+                        )
+                    }
                 }
             }
 
             Surface(
                 modifier = Modifier
-                    .fillMaxWidth()
+                    .fillMaxHeight()
                     .weight(1f)
                     .padding(12.dp),
                 shape = MaterialTheme.shapes.large,
@@ -159,30 +220,29 @@ private fun ArxivViewport(articles: List<PensieveArticle>) {
                             .verticalScroll(rememberScrollState())
                             .padding(18.dp),
                     ) {
-                        val article = selected
-                        if (article == null) {
+                        if (selected == null) {
                             Text(
                                 text = "The Pensieve snapshot is empty.",
                                 style = MaterialTheme.typography.bodyLarge,
                             )
                         } else {
                             Text(
-                                text = article.title,
+                                text = selected.title,
                                 style = MaterialTheme.typography.headlineSmall,
                             )
                             Text(
-                                text = "arXiv ${article.arxivId}",
+                                text = "arXiv ${selected.arxivId}",
                                 style = MaterialTheme.typography.bodyMedium,
                             )
                             Text(
-                                text = article.textSource?.let {
-                                    "Pensieve · arxiv/${article.arxivId}/$it"
-                                } ?: "Pensieve · arxiv/${article.arxivId}",
+                                text = selected.textSource?.let {
+                                    "Pensieve · arxiv/${selected.arxivId}/$it"
+                                } ?: "Pensieve · arxiv/${selected.arxivId}",
                                 style = MaterialTheme.typography.labelMedium,
                             )
                             Spacer(modifier = Modifier.height(18.dp))
                             Text(
-                                text = article.body
+                                text = selected.body
                                     ?: "No text representation is present in this frozen Pensieve snapshot.",
                                 style = MaterialTheme.typography.bodyLarge,
                             )
@@ -192,4 +252,36 @@ private fun ArxivViewport(articles: List<PensieveArticle>) {
             }
         }
     }
+}
+
+@Composable
+private fun RailHeading(text: String) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.labelMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+    )
+}
+
+@Composable
+private fun ArticleRailItem(
+    article: PensieveArticle,
+    pinned: Boolean,
+    onSelect: () -> Unit,
+    onTogglePinned: () -> Unit,
+) {
+    ListItem(
+        headlineContent = { Text(article.title) },
+        supportingContent = {
+            Text("Pensieve · arxiv/${article.arxivId}")
+        },
+        trailingContent = {
+            TextButton(onClick = onTogglePinned) {
+                Text(if (pinned) "Unpin" else "Pin")
+            }
+        },
+        modifier = Modifier.clickable(onClick = onSelect),
+    )
+    HorizontalDivider()
 }
