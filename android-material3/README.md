@@ -15,19 +15,27 @@ Pensieve
    |
    v
 Scaffold
-└── Column
-    ├── TopAppBar
-    ├── LazyColumn
-    │   ├── arXiv 1107.0595
-    │   ├── arXiv 2203.11355
-    │   ├── arXiv 1901.09021
-    │   ├── arXiv 1606.05336
-    │   └── arXiv 2305.00241
+└── Row
+    ├── left LazyColumn
+    │   ├── Pinned
+    │   └── Recent
     └── Surface
         └── SelectionContainer
             └── scrollable Column
                 └── Text
 ```
+
+The left rail models two independent pieces of presentation state:
+
+- `recentOrder`: selecting an item moves it to the front;
+- `pinnedOrder`: pinning puts an item in the pinned section without rewriting its
+  underlying recent position.
+
+Pinned items are omitted from the visible Recent section only while they are pinned.
+Selecting a pinned item still updates its underlying recency, so unpinning returns it
+to the correct current place in Recent. The pin and recency state is intentionally
+in-memory in this renderer experiment; it is not added to `PensieveArticle` and does
+not claim to be canonical browser history or durable Pensieve state.
 
 For the deterministic APK stub, a frozen Pensieve-shaped snapshot lives under
 `app/src/main/assets/pensieve/arxiv/`. The app discovers the item directories
