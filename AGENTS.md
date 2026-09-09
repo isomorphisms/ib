@@ -35,7 +35,9 @@ When the viewport needs to distinguish display kinds such as text and images, ex
 
 ## Preserve language and platform boundaries
 
-IB application state, policy, and invariants belong in Idriç. Grease owns operating-system/process orchestration. Native Android code is a narrow platform adapter. Do not move browser policy into shell scripts, Android views, renderer state, or generic transport plumbing because that layer is easier to modify.
+Do not assign permanent semantic ownership merely from the implementation language. The current shell-first Pensieve/Cauldron line treats shell as a serious implementation and orchestration layer, including filesystem-visible state. Use typed Idriç components where the ontology or invariants justify them, shell/Grease where orchestration and visible state fit, and native Android as a narrow platform adapter.
+
+Do not move browser semantics into renderer state, Android views, or generic transport plumbing merely because that layer is easier to modify. When language ownership is still evolving, follow the current branch architecture instead of freezing a temporary allocation here.
 
 Python or another convenient comparison implementation is not IB runtime acceptance.
 
