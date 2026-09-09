@@ -1,5 +1,6 @@
 package org.isomorphisms.ib.material3
 
+import android.content.res.AssetManager
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -31,57 +32,79 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import java.io.IOException
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        val articles = loadPensieveArticles(assets)
         setContent {
             MaterialTheme {
-                ArxivViewport()
+                ArxivViewport(articles)
             }
         }
     }
 }
 
-private data class FrozenArticle(
-    val key: String,
+private data class PensieveArticle(
+    val arxivId: String,
     val title: String,
-    val authors: String,
-    val sourceLabel: String,
-    val body: String,
+    val body: String?,
+    val textSource: String?,
 )
 
-/*
- * These are deliberately fixtures, not invented arXiv records.  Replace them with
- * the five frozen Cauldron articles once that corpus is wired into this prototype.
- */
-private val frozenArticles = List(5) { index ->
-    val number = index + 1
-    FrozenArticle(
-        key = "frozen-$number",
-        title = "Frozen arXiv article $number",
-        authors = "authors from frozen source",
-        sourceLabel = "Cauldron fixture $number",
-        body = """
-            This is the text viewport for frozen arXiv article $number.
+private fun readAssetOrNull(assets: AssetManager, path: String): String? =
+    try {
+        assets.open(path).bufferedReader().use { it.readText() }
+    } catch (_: IOException) {
+        null
+    }
 
-            The first prototype intentionally proves only two things: a five-item
-            lazy article chooser and a readable, selectable, independently
-            scrollable text surface for the selected article.
+private fun loadPensieveArticles(assets: AssetManager): List<PensieveArticle> {
+    val root = "pensieve/arxiv"
+    val identifiers = assets.list(root)
+        ?.filter { it.isNotBlank() }
+        ?.sorted()
+        .orEmpty()
 
-            The article body will come from IB's frozen pre-paint/Cauldron data.
-            This view does not fetch the network and does not parse HTML.
+    return identifiers.map { identifier ->
+        val itemRoot = "$root/$identifier"
+        val title = readAssetOrNull(assets, "$itemRoot/title")
+            ?.trim()
+            ?.takeIf { it.isNotEmpty() }
+            ?: "arXiv $identifier"
 
-            Individual page pieces are intentionally not draggable yet.  Dragging
-            is planned as a later interaction layer so it does not contaminate the
-            article, text, or list data model.
-        """.trimIndent(),
-    )
+        val textCandidates = listOf(
+            "text/from-pdf.txt",
+            "text/from-html.txt",
+            "text/from-abstract.txt",
+        )
+
+        var body: String? = null
+        var textSource: String? = null
+        for (candidate in textCandidates) {
+            val text = readAssetOrNull(assets, "$itemRoot/$candidate")
+                ?.trim()
+                ?.takeIf { it.isNotEmpty() }
+            if (text != null) {
+                body = text
+                textSource = candidate
+                break
+            }
+        }
+
+        PensieveArticle(
+            arxivId = identifier,
+            title = title,
+            body = body,
+            textSource = textSource,
+        )
+    }
 }
 
 @Composable
-private fun ArxivViewport() {
-    var selected by remember { mutableStateOf(frozenArticles.first()) }
+private fun ArxivViewport(articles: List<PensieveArticle>) {
+    var selected by remember(articles) { mutableStateOf(articles.firstOrNull()) }
 
     Scaffold(
         topBar = {
@@ -96,7 +119,7 @@ private fun ArxivViewport() {
                 .padding(scaffoldPadding),
         ) {
             Text(
-                text = "Cauldron · five frozen arXiv articles",
+                text = "Pensieve · ${articles.size} arXiv entries",
                 style = MaterialTheme.typography.labelLarge,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
             )
@@ -107,13 +130,13 @@ private fun ArxivViewport() {
                     .heightIn(max = 260.dp),
             ) {
                 items(
-                    items = frozenArticles,
-                    key = { article -> article.key },
+                    items = articles,
+                    key = { article -> article.arxivId },
                 ) { article ->
                     ListItem(
                         headlineContent = { Text(article.title) },
                         supportingContent = {
-                            Text("${article.authors} · ${article.sourceLabel}")
+                            Text("Pensieve · arxiv/${article.arxivId}")
                         },
                         modifier = Modifier.clickable { selected = article },
                     )
@@ -136,23 +159,34 @@ private fun ArxivViewport() {
                             .verticalScroll(rememberScrollState())
                             .padding(18.dp),
                     ) {
-                        Text(
-                            text = selected.title,
-                            style = MaterialTheme.typography.headlineSmall,
-                        )
-                        Text(
-                            text = selected.authors,
-                            style = MaterialTheme.typography.bodyMedium,
-                        )
-                        Text(
-                            text = selected.sourceLabel,
-                            style = MaterialTheme.typography.labelMedium,
-                        )
-                        Spacer(modifier = Modifier.height(18.dp))
-                        Text(
-                            text = selected.body,
-                            style = MaterialTheme.typography.bodyLarge,
-                        )
+                        val article = selected
+                        if (article == null) {
+                            Text(
+                                text = "The Pensieve snapshot is empty.",
+                                style = MaterialTheme.typography.bodyLarge,
+                            )
+                        } else {
+                            Text(
+                                text = article.title,
+                                style = MaterialTheme.typography.headlineSmall,
+                            )
+                            Text(
+                                text = "arXiv ${article.arxivId}",
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
+                            Text(
+                                text = article.textSource?.let {
+                                    "Pensieve · arxiv/${article.arxivId}/$it"
+                                } ?: "Pensieve · arxiv/${article.arxivId}",
+                                style = MaterialTheme.typography.labelMedium,
+                            )
+                            Spacer(modifier = Modifier.height(18.dp))
+                            Text(
+                                text = article.body
+                                    ?: "No text representation is present in this frozen Pensieve snapshot.",
+                                style = MaterialTheme.typography.bodyLarge,
+                            )
+                        }
                     }
                 }
             }
