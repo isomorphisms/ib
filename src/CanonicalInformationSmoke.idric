@@ -30,39 +30,47 @@ fixture_strand = do
 empty_image_refused : Bool
 empty_image_refused =
   case fetched_image "" of
-    Nothing => True
-    Just _ => False
+    Nothing ⇒ True
+    Just _ ⇒ False
 
 seventh_heading_refused : Bool
 seventh_heading_refused =
   case heading_level 7 of
-    Nothing => True
-    Just _ => False
+    Nothing ⇒ True
+    Just _ ⇒ False
 
 nonincreasing_revision_refused : Strand → Bool
 nonincreasing_revision_refused strand =
   let first = revision_from_strand (Revision 1) PartialRevision strand in
   let second = revision_from_strand (Revision 1) CompleteRevision strand in
   case serialize_version1 [first, second] of
-    Nothing => True
-    Just _ => False
+    Nothing ⇒ True
+    Just _ ⇒ False
+
+version1_result : Maybe String → String
+version1_result Nothing = "version1=serialization-failed"
+version1_result (Just version1_text) =
+  "version1=serialized\n" ++
+  "version1-bytes=" ++ show (length (unpack version1_text))
+
+strand_report : Strand → String
+strand_report strand =
+  let partial = revision_from_strand (Revision 0) PartialRevision strand in
+  let complete = revision_from_strand (Revision 1) CompleteRevision strand in
+  unlines
+    [ "canonical-information=constructed"
+    , "canonical-blocks=" ++ show (length strand.blocks)
+    , "canonical-row-cells=" ++ show (length (table_row_cells (TableCells "first" ["second"])))
+    , "empty-image-refused=" ++ show empty_image_refused
+    , "seventh-heading-refused=" ++ show seventh_heading_refused
+    , "revision-zero=" ++ show (revision_sequence_value partial.sequence)
+    , "nonincreasing-revision-refused=" ++ show (nonincreasing_revision_refused strand)
+    , version1_result (serialize_version1 [partial, complete])
+    ]
+
+fixture_report : Maybe Strand → String
+fixture_report Nothing = "canonical-information=construction-failed"
+fixture_report (Just strand) = strand_report strand
 
 main : IO ()
-main = do
-  case fixture_strand of
-    Nothing => putStrLn "canonical-information=construction-failed"
-    (Just strand) => do
-      let partial = revision_from_strand (Revision 0) PartialRevision strand
-      let complete = revision_from_strand (Revision 1) CompleteRevision strand
-      putStrLn "canonical-information=constructed"
-      putStrLn ("canonical-blocks=" ++ show (length strand.blocks))
-      putStrLn ("canonical-row-cells=" ++ show (length (table_row_cells (TableCells "first" ["second"]))))
-      putStrLn ("empty-image-refused=" ++ show empty_image_refused)
-      putStrLn ("seventh-heading-refused=" ++ show seventh_heading_refused)
-      putStrLn ("revision-zero=" ++ show (revision_sequence_value partial.sequence))
-      putStrLn ("nonincreasing-revision-refused=" ++ show (nonincreasing_revision_refused strand))
-      case serialize_version1 [partial, complete] of
-        Nothing => putStrLn "version1=serialization-failed"
-        (Just version1_text) => do
-          putStrLn "version1=serialized"
-          putStrLn ("version1-bytes=" ++ show (length (unpack version1_text)))
+main = putStrLn (fixture_report fixture_strand)
