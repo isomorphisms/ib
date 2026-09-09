@@ -7,6 +7,9 @@ fail() {
   exit 1
 }
 
+command -v pdftotext >/dev/null 2>&1 ||
+  fail 'pdftotext is required for the deterministic Cauldron -> Pensieve acceptance test'
+
 work=$(mktemp -d "${TMPDIR:-/tmp}/ib-0.2-arxiv.XXXXXX")
 trap 'rm -rf "$work"' EXIT HUP INT TERM
 
@@ -42,6 +45,7 @@ for path in \
   "$pensieve/title" \
   "$pensieve/text/from-abstract.txt" \
   "$pensieve/text/from-html.txt" \
+  "$pensieve/text/from-pdf.txt" \
   "$pensieve/links.tsv" \
   "$pensieve/figures.tsv"
 do
@@ -50,6 +54,12 @@ done
 
 grep -F 'Bergman kernels' "$pensieve/text/from-html.txt" >/dev/null ||
   fail 'HTML text was not distilled into searchable Pensieve text'
+grep -F 'Bergman kernels from the Cauldron PDF become Pensieve text.' \
+  "$pensieve/text/from-pdf.txt" >/dev/null ||
+  fail 'pdftotext output was not distilled from the Cauldron PDF into the Pensieve'
+grep -F 'This line proves pdftotext was actually used.' \
+  "$pensieve/text/from-pdf.txt" >/dev/null ||
+  fail 'Pensieve PDF text does not match the deterministic PDF fixture'
 grep -F 'https://example.org/reference' "$pensieve/links.tsv" >/dev/null ||
   fail 'link extraction did not reach the Pensieve'
 grep -F 'figures/0001.png' "$cauldron/figures.tsv" >/dev/null ||
@@ -59,7 +69,9 @@ grep -F 'ok' "$cauldron/figures.tsv" >/dev/null ||
 
 search_result=$("$repository_root/bin/ib" search 'Bergman kernels')
 printf '%s\n' "$search_result" | grep -F 'from-html.txt' >/dev/null ||
-  fail 'exact-text search did not recover the local paper'
+  fail 'exact-text search did not recover the local HTML representation'
+printf '%s\n' "$search_result" | grep -F 'from-pdf.txt' >/dev/null ||
+  fail 'exact-text search did not recover the PDF-derived Pensieve representation'
 
 test -f "$IB_HOOK_RECORD" || fail 'after-distill hook did not run'
 grep -F "$pensieve" "$IB_HOOK_RECORD" >/dev/null ||
