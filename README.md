@@ -33,7 +33,10 @@ indexes and later model hooks
 
 A tab or renderer is a temporary view onto this persistent state.  Neither is part of the 0.2 acceptance boundary.
 
-The future View-to-Pensieve reading feedback contract is recorded in [`docs/reading-feedback.md`](docs/reading-feedback.md): opening is not reading, passive interaction is evidence rather than proof of comprehension, and completed items may deliberately remain in a rereading/reminder rotation.
+Two future reading contracts are recorded separately:
+
+- [`docs/reading-feedback.md`](docs/reading-feedback.md): opening is not reading, passive interaction is evidence rather than proof of comprehension, and completed items may deliberately remain in a rereading/reminder rotation.
+- [`docs/reading-assistance.md`](docs/reading-assistance.md): the Pensieve should support interrupted and question-driven reading, fiction recall without spoilers, corpus triage for papers/repositories, and replaceable source-backed model-generated guides/fragments/strands rather than optimizing for finishing long reads.
 
 ## Commands
 
@@ -62,7 +65,7 @@ This is not a claim of general Web compatibility.  The only site-specific adapte
 
 `bin/ib reindex` currently builds the simplest possible exact-text index: a sorted file list over Pensieve text representations.  `bin/ib search` searches those local files; it does not return to the Web.
 
-After an item is distilled, executable files under `$IB_HOME/hooks/after-distill.d/` are called with the Pensieve item path and its Cauldron source path.  This is intentionally a small process boundary for later vector spaces, hyperplanes, other indexing methods, and model-context adapters.  Those systems do not own the Pensieve.
+After an item is distilled, executable files under `$IB_HOME/hooks/after-distill.d/` are called with the Pensieve item path and its Cauldron source path.  This is intentionally a small process boundary for later vector spaces, hyperplanes, other indexing methods, model-context adapters, and language-model-generated reading guides.  Derived systems may append replaceable, provenance-linked artifacts; they do not own or silently rewrite the Pensieve, source evidence, human annotations, or reading observations.
 
 ## Earlier work
 
