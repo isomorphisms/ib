@@ -1,0 +1,68 @@
+module CanonicalInformationSmoke
+
+import IB.Information.Model
+import IB.Prepaint.Model
+import IB.Prepaint.Version1
+
+%default total
+
+fixture_document : Maybe InformationDocument
+fixture_document = do
+  source_reference <- nonempty_text "fixture:information-document-1"
+  requested <- requested_address "https://example.test/requested"
+  resolved <- resolved_address "https://example.test/resolved"
+  image <- fetched_image "asset:figure-1"
+  let source = Source source_reference HtmlRepresentation CompleteRepresentation
+  pure
+    (Document
+      source
+      requested
+      resolved
+      (Just "Example")
+      [ InformationHeading Heading2 "Section"
+      , InformationText "Visible paragraph"
+      , InformationLink "Next" (LinkReference "/next")
+      , InformationTableRow (TableCells "first" ["second"])
+      , InformationForm "Search" (FormReference "/search")
+      , InformationImage image "diagram" "Figure 1" (Just (LinkReference "/figure/1"))
+      ])
+
+empty_image_refused : Bool
+empty_image_refused =
+  case fetched_image "" of
+    Nothing ⇒ True
+    Just _ ⇒ False
+
+seventh_heading_refused : Bool
+seventh_heading_refused =
+  case heading_level 7 of
+    Nothing ⇒ True
+    Just _ ⇒ False
+
+nonincreasing_revision_refused : InformationDocument → Bool
+nonincreasing_revision_refused document =
+  let first = revision_from_document (Revision 1) PartialRevision document in
+  let second = revision_from_document (Revision 1) CompleteRevision document in
+  case serialize_version1 [first, second] of
+    Nothing ⇒ True
+    Just _ ⇒ False
+
+main : IO ()
+main =
+  case fixture_document of
+    Nothing ⇒ putStrLn "canonical-information=construction-failed"
+    Just document ⇒ do
+      let partial = revision_from_document (Revision 0) PartialRevision document
+      let complete = revision_from_document (Revision 1) CompleteRevision document
+      putStrLn "canonical-information=constructed"
+      putStrLn ("canonical-blocks=" ++ show (length document.blocks))
+      putStrLn ("canonical-row-cells=" ++ show (length (table_row_cells (TableCells "first" ["second"]))))
+      putStrLn ("empty-image-refused=" ++ show empty_image_refused)
+      putStrLn ("seventh-heading-refused=" ++ show seventh_heading_refused)
+      putStrLn ("revision-zero=" ++ show (revision_sequence_value partial.sequence))
+      putStrLn ("nonincreasing-revision-refused=" ++ show (nonincreasing_revision_refused document))
+      case serialize_version1 [partial, complete] of
+        Nothing ⇒ putStrLn "version1=serialization-failed"
+        Just artifact ⇒ do
+          putStrLn "version1=serialized"
+          putStrLn ("version1-bytes=" ++ show (length (unpack artifact)))
