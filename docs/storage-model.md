@@ -81,6 +81,8 @@ A task persists the user's intention and unfinished frontier even when every ass
 
 Fetched bodies, extracted views, rankings, and summaries are not the task itself. See `docs/personal-workbench.md` and `docs/prefetch-and-reading.md`.
 
+For fragment-level reading graphs, multiply indexed link tables, materialized strands, and the ordinary-file Android path, see `docs/fragment-link-table.md`. The durable graph may remain simple while rebuildable source-, destination-, type-, and strand-oriented indexes duplicate relationships deliberately to make hot traversals sequential or RAM-addressable.
+
 ## Snapshots and representations
 
 Large content belongs separately from small metadata. A resource or event can refer to zero or more stored representations:
