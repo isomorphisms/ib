@@ -1,0 +1,3 @@
+IB 0.2 deterministic PDF fixture
+Bergman kernels from the Cauldron PDF become Pensieve text.
+This line proves pdftotext was actually used.
