@@ -18,7 +18,11 @@ case "$url" in
     cat "$fixtures/paper.html"
     ;;
   https://arxiv.org/pdf/2203.11355)
-    cat "$fixtures/paper.pdf"
+    if base64 --decode "$fixtures/paper-valid.pdf.b64" 2>/dev/null; then
+      :
+    else
+      base64 -D "$fixtures/paper-valid.pdf.b64"
+    fi
     ;;
   https://arxiv.org/html/2203.11355v1/figure1.png)
     cat "$fixtures/figure1.png"
