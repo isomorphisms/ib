@@ -128,8 +128,8 @@ data InformationBlock
   | InformationImage FetchedImageReference String String (Maybe LinkReferenceText)
 
 public export
-record InformationDocument where
-  constructor Document
+record Strand where
+  constructor MakeStrand
   source : SourceRepresentation
   requested : RequestedAddressText
   resolved : ResolvedAddressText
