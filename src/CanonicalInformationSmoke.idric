@@ -47,22 +47,32 @@ nonincreasing_revision_refused strand =
     Nothing => True
     Just _ => False
 
+report_artifact : String → IO ()
+report_artifact artifact = do
+  putStrLn "version1=serialized"
+  putStrLn ("version1-bytes=" ++ show (length (unpack artifact)))
+
+report_version1 : PrepaintRevision → PrepaintRevision → IO ()
+report_version1 partial complete =
+  case serialize_version1 [partial, complete] of
+    Nothing => putStrLn "version1=serialization-failed"
+    Just artifact => report_artifact artifact
+
+report_strand : Strand → IO ()
+report_strand strand = do
+  let partial = revision_from_strand (Revision 0) PartialRevision strand
+  let complete = revision_from_strand (Revision 1) CompleteRevision strand
+  putStrLn "canonical-information=constructed"
+  putStrLn ("canonical-blocks=" ++ show (length strand.blocks))
+  putStrLn ("canonical-row-cells=" ++ show (length (table_row_cells (TableCells "first" ["second"]))))
+  putStrLn ("empty-image-refused=" ++ show empty_image_refused)
+  putStrLn ("seventh-heading-refused=" ++ show seventh_heading_refused)
+  putStrLn ("revision-zero=" ++ show (revision_sequence_value partial.sequence))
+  putStrLn ("nonincreasing-revision-refused=" ++ show (nonincreasing_revision_refused strand))
+  report_version1 partial complete
+
 main : IO ()
 main =
   case fixture_strand of
     Nothing => putStrLn "canonical-information=construction-failed"
-    Just strand => do
-      let partial = revision_from_strand (Revision 0) PartialRevision strand
-      let complete = revision_from_strand (Revision 1) CompleteRevision strand
-      putStrLn "canonical-information=constructed"
-      putStrLn ("canonical-blocks=" ++ show (length strand.blocks))
-      putStrLn ("canonical-row-cells=" ++ show (length (table_row_cells (TableCells "first" ["second"]))))
-      putStrLn ("empty-image-refused=" ++ show empty_image_refused)
-      putStrLn ("seventh-heading-refused=" ++ show seventh_heading_refused)
-      putStrLn ("revision-zero=" ++ show (revision_sequence_value partial.sequence))
-      putStrLn ("nonincreasing-revision-refused=" ++ show (nonincreasing_revision_refused strand))
-      case serialize_version1 [partial, complete] of
-        Nothing => putStrLn "version1=serialization-failed"
-        Just artifact => do
-          putStrLn "version1=serialized"
-          putStrLn ("version1-bytes=" ++ show (length (unpack artifact)))
+    Just strand => report_strand strand
