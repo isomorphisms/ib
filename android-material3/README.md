@@ -4,33 +4,68 @@ This is a deliberately separate Material 3 / Jetpack Compose experiment for IB.
 It does not replace `android-prepaint/` and does not change the pre-paint display
 contract.
 
+The viewport consumes the **Pensieve**, not the Cauldron. Cauldron owns fetched
+source material and provenance; the renderer should not know whether readable text
+came from a PDF, HTML, an abstract page, or some later distillation method.
+
 The first viewport is intentionally small:
 
 ```text
+Pensieve
+   |
+   v
 Scaffold
 └── Column
     ├── TopAppBar
     ├── LazyColumn
-    │   ├── frozen arXiv article 1
-    │   ├── frozen arXiv article 2
-    │   ├── frozen arXiv article 3
-    │   ├── frozen arXiv article 4
-    │   └── frozen arXiv article 5
+    │   ├── arXiv 1107.0595
+    │   ├── arXiv 2203.11355
+    │   ├── arXiv 1901.09021
+    │   ├── arXiv 1606.05336
+    │   └── arXiv 2305.00241
     └── Surface
         └── SelectionContainer
             └── scrollable Column
                 └── Text
 ```
 
-The five records in `MainActivity.kt` are placeholders. They are deliberately
-named as fixtures instead of inventing arXiv IDs or titles. Replace them with the
-actual frozen Cauldron records when that corpus is connected.
+For the deterministic APK stub, a frozen Pensieve-shaped snapshot lives under
+`app/src/main/assets/pensieve/arxiv/`. The app discovers the item directories
+there rather than carrying a second article list in Kotlin.
 
-The paper body is `Text`, not `TextField`: reading, selection, and copying are the
-current requirements. Editing the source paper is not. The enclosing `Surface`
-provides the visual text-box boundary.
+For each item the viewport reads `title`, then chooses the first available text
+representation in this order:
+
+```text
+text/from-pdf.txt
+text/from-html.txt
+text/from-abstract.txt
+```
+
+That ordering is a display choice, not a claim that PDF is canonically superior.
+The important boundary is that all three are Pensieve representations. The
+viewport does not open `paper.pdf`, parse HTML, fetch arXiv, or inspect Cauldron.
+
+The five asset directories correspond to the first 0.2 arXiv corpus. At present
+only `2203.11355` contains a bundled text representation: it is the deterministic
+PDF fixture used by the 0.2 acceptance test to prove
+Cauldron -> `pdftotext` -> `Pensieve/.../text/from-pdf.txt`. The other four entries
+remain visible by arXiv ID until their real frozen Pensieve representations are
+materialized. Their titles are therefore ID labels, not invented paper titles.
+
+The paper body is Material `Text`, not `TextField`: reading, selection, and copying
+are the current requirements. Editing the source paper is not. The enclosing
+`Surface` provides the visual text-box boundary.
 
 There is no network permission and no HTML parser in this prototype.
+
+## Live Pensieve later
+
+The asset tree is only the deterministic snapshot adapter. A later integration can
+replace `AssetManager` with a filesystem/process adapter for the live 0.2 Pensieve
+without changing the viewport's `PensieveArticle` model. The Android renderer
+should still receive distilled Pensieve text rather than reach backward into
+Cauldron.
 
 ## Deferred interaction: movable pieces
 
@@ -50,7 +85,7 @@ rendered piece
         +-- drag state
 ```
 
-That layer should be orthogonal: `FrozenArticle`, article text, list membership,
+That layer should be orthogonal: `PensieveArticle`, article text, list membership,
 and the eventual IB information objects should not acquire drag coordinates or
 pointer-event fields merely because one Android renderer supports moving pieces.
 
@@ -61,7 +96,7 @@ creating parallel types such as `DraggableText`, `DraggableImage`, and
 
 ## Android stack
 
-This stub follows the current stable Compose setup at the time it was written:
+This stub currently declares:
 
 - Compose BOM `2026.08.00`;
 - Material 3 from that BOM;
