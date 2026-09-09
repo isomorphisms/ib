@@ -50,6 +50,22 @@ jobs:
       - name: Exercise HTML-first information renderer
         run: sh bin/ci_browser_foundation.grease exercise-information
 
+      - name: Exercise canonical information model
+        run: |
+          cd src
+          /tmp/idric/bin/idris2 CanonicalInformationSmoke.idric -o ib-canonical-information 2>&1 | tee /tmp/idric-canonical-information-compile.txt
+          test -x ./build/exec/ib-canonical-information
+          ! grep -q '^Error:' /tmp/idric-canonical-information-compile.txt
+          ./build/exec/ib-canonical-information | tee /tmp/ib-canonical-information.txt
+          grep -Fx 'canonical-information=constructed' /tmp/ib-canonical-information.txt
+          grep -Fx 'canonical-blocks=6' /tmp/ib-canonical-information.txt
+          grep -Fx 'canonical-row-cells=2' /tmp/ib-canonical-information.txt
+          grep -Fx 'empty-image-refused=True' /tmp/ib-canonical-information.txt
+          grep -Fx 'seventh-heading-refused=True' /tmp/ib-canonical-information.txt
+          grep -Fx 'revision-zero=0' /tmp/ib-canonical-information.txt
+          grep -Fx 'nonincreasing-revision-refused=True' /tmp/ib-canonical-information.txt
+          grep -Fx 'version1=serialized' /tmp/ib-canonical-information.txt
+
       - name: Exercise browser-owned Idric core
         run: sh bin/ci_browser_foundation.grease exercise-core
 
