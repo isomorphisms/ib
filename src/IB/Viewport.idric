@@ -1,0 +1,30 @@
+module IB.Viewport
+
+%default total
+
+-- The viewport consumes already-prepared content.  It does not know how an
+-- image was fetched, extracted, indexed, or recovered from a PDF.
+public export
+data PreparedImageRef = ImageRef String
+
+public export
+image_ref_text : PreparedImageRef → String
+image_ref_text (ImageRef value) = value
+
+public export
+data Figure = FigureContent PreparedImageRef (Maybe String)
+
+public export
+figure_image : Figure → PreparedImageRef
+figure_image (FigureContent image _) = image
+
+public export
+figure_caption : Figure → Maybe String
+figure_caption (FigureContent _ caption) = caption
+
+-- This is the narrow content distinction the viewport needs.  Document-list
+-- titles/descriptions and provenance remain outside the block stream.
+public export
+data ViewportBlock
+  = ViewportText String
+  | ViewportFigure Figure
