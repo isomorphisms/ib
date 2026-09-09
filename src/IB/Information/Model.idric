@@ -9,8 +9,8 @@ public export
 nonempty_text : String → Maybe NonemptyText
 nonempty_text value =
   case unpack value of
-    [] ⇒ Nothing
-    first :: rest ⇒ Just (TextBeginning first rest)
+    [] => Nothing
+    first :: rest => Just (TextBeginning first rest)
 
 public export
 nonempty_text_value : NonemptyText → String
