@@ -28,13 +28,13 @@ record PrepaintRevision where
   blocks : List InformationBlock
 
 public export
-revision_from_document : RevisionSequence → RevisionState → InformationDocument → PrepaintRevision
-revision_from_document sequence state document =
+revision_from_strand : RevisionSequence → RevisionState → Strand → PrepaintRevision
+revision_from_strand sequence state strand =
   Prepaint
     sequence
     state
-    document.source
-    document.requested
-    document.resolved
-    document.title
-    document.blocks
+    strand.source
+    strand.requested
+    strand.resolved
+    strand.title
+    strand.blocks
