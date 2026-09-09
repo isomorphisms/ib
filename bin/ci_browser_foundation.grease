@@ -19,13 +19,13 @@ build_idric() {
   git -C /tmp/Idric checkout --detach -q FETCH_HEAD
   test "$(git -C /tmp/Idric rev-parse HEAD)" = "$idric_ref"
 
-  idric_build_root=/tmp/Idric
-  if [ -f /tmp/Idric/_/Makefile ]; then
-    idric_build_root=/tmp/Idric/_
-  fi
-
-  SCHEME=chezscheme make -C "$idric_build_root" bootstrap PREFIX="$idric_prefix"
-  SCHEME=chezscheme make -C "$idric_build_root" install PREFIX="$idric_prefix"
+  # Current Edric owns its bootstrap/build machinery below _/.  Use the stable
+  # top-level entrypoint rather than depending on the old root Makefile layout.
+  PREFIX="$idric_prefix" sh /tmp/Idric/edric bootstrap
+  make -C /tmp/Idric/_ install \
+    PREFIX="$idric_prefix" \
+    SCHEME=/tmp/Idric/_/.tools/bin/scheme
+  test -x "$idric_prefix/bin/idris2"
 }
 
 verify_pdf_harvester() {

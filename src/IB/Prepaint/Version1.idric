@@ -1,7 +1,7 @@
 module IB.Prepaint.Version1
 
-import IB.Information.Model
-import IB.Prepaint.Model
+import IB.Strand
+import IB.Prepaint
 
 %default total
 
@@ -25,12 +25,7 @@ join_fields [value] = value
 join_fields (value :: rest) = value ++ "\t" ++ join_fields rest
 
 heading_level_text : HeadingLevel → String
-heading_level_text Heading1 = "1"
-heading_level_text Heading2 = "2"
-heading_level_text Heading3 = "3"
-heading_level_text Heading4 = "4"
-heading_level_text Heading5 = "5"
-heading_level_text Heading6 = "6"
+heading_level_text level = show (heading_level_number level)
 
 revision_state_text : RevisionState → String
 revision_state_text PartialRevision = "partial"
@@ -41,33 +36,33 @@ maybe_text Nothing = ""
 maybe_text (Just value) = value
 
 serialize_block : InformationBlock → String
-serialize_block (InformationHeading level text) =
+serialize_block (Heading level text) =
   join_fields ["heading", heading_level_text level, escape_field text]
-serialize_block (InformationText text) =
+serialize_block (Text text) =
   join_fields ["text", escape_field text]
-serialize_block (InformationLink text reference) =
+serialize_block (Link text reference) =
   join_fields ["link", escape_field text, escape_field (link_reference_value reference)]
-serialize_block (InformationTableRow row) =
+serialize_block (TableRow row) =
   join_fields ("row" :: map escape_field (table_row_cells row))
-serialize_block (InformationForm text reference) =
+serialize_block (Form text reference) =
   join_fields ["form", escape_field text, escape_field (form_reference_value reference)]
-serialize_block (InformationImage source alternate caption Nothing) =
+serialize_block (Image source alternate caption Nothing) =
   join_fields
     [ "image"
-    , escape_field (fetched_image_value source)
+    , escape_field (image_reference_value source)
     , escape_field alternate
     , escape_field caption
     ]
-serialize_block (InformationImage source alternate caption (Just reference)) =
+serialize_block (Image source alternate caption (Just reference)) =
   join_fields
     [ "image"
-    , escape_field (fetched_image_value source)
+    , escape_field (image_reference_value source)
     , escape_field alternate
     , escape_field caption
     , escape_field (link_reference_value reference)
     ]
 
-public export
+export
 serialize_revision : PrepaintRevision → List String
 serialize_revision revision =
   join_fields
@@ -80,18 +75,19 @@ serialize_revision revision =
   join_fields ["title", escape_field (maybe_text revision.title)] ::
   map serialize_block revision.blocks ++ ["end"]
 
-strictly_after : Nat → PrepaintRevision → Bool
-strictly_after previous revision = previous < revision_sequence_value revision.sequence
+strictly_after : RevisionSequence → PrepaintRevision → Bool
+strictly_after previous revision =
+  revision_sequence_value previous < revision_sequence_value revision.sequence
 
-serialize_revisions : Maybe Nat → List PrepaintRevision → Maybe (List String)
+serialize_revisions : Maybe RevisionSequence → List PrepaintRevision → Maybe (List String)
 serialize_revisions previous [] = Just []
 serialize_revisions Nothing (revision :: rest) = do
-  remaining <- serialize_revisions (Just (revision_sequence_value revision.sequence)) rest
+  remaining ← serialize_revisions (Just revision.sequence) rest
   pure (serialize_revision revision ++ remaining)
 serialize_revisions (Just previous) (revision :: rest) =
   if strictly_after previous revision
     then do
-      remaining <- serialize_revisions (Just (revision_sequence_value revision.sequence)) rest
+      remaining ← serialize_revisions (Just revision.sequence) rest
       pure (serialize_revision revision ++ remaining)
     else Nothing
 
@@ -99,8 +95,8 @@ join_lines : List String → String
 join_lines [] = ""
 join_lines (line :: rest) = line ++ "\n" ++ join_lines rest
 
-public export
+export
 serialize_version1 : List PrepaintRevision → Maybe String
 serialize_version1 revisions = do
-  body <- serialize_revisions Nothing revisions
+  body ← serialize_revisions Nothing revisions
   pure (join_lines (join_fields ["ib-prepaint", "1"] :: body))

@@ -1,0 +1,151 @@
+module IB.Strand
+
+%default total
+
+-- These wrappers keep empty filesystem, source, address, and resource names out
+-- of the semantic strand.  Their representations stay private to this module.
+export
+data NonemptyText = TextBeginning Char (List Char)
+
+export
+nonempty_text : String → Maybe NonemptyText
+nonempty_text value =
+  case unpack value of
+    [] ⇒ Nothing
+    first :: rest ⇒ Just (TextBeginning first rest)
+
+export
+nonempty_text_value : NonemptyText → String
+nonempty_text_value (TextBeginning first rest) = pack (first :: rest)
+
+public export
+data RepresentationOrigin
+  = HtmlSource
+  | PdfSource
+  | PlainTextSource
+  | DerivedSource
+  | OtherSource
+
+public export
+data RepresentationCompleteness
+  = PartialSource
+  | CompleteSource
+
+public export
+record SourceRepresentation where
+  constructor Source
+  reference : NonemptyText
+  origin : RepresentationOrigin
+  completeness : RepresentationCompleteness
+
+export
+data RequestedAddress = Requested NonemptyText
+
+export
+data ResolvedAddress = Resolved NonemptyText
+
+export
+data LinkReference = LinkTo NonemptyText
+
+export
+data FormReference = SubmitTo NonemptyText
+
+export
+data ImageReference = ImageAt NonemptyText
+
+export
+requested_address : String → Maybe RequestedAddress
+requested_address value = map Requested (nonempty_text value)
+
+export
+resolved_address : String → Maybe ResolvedAddress
+resolved_address value = map Resolved (nonempty_text value)
+
+export
+link_reference : String → Maybe LinkReference
+link_reference value = map LinkTo (nonempty_text value)
+
+export
+form_reference : String → Maybe FormReference
+form_reference value = map SubmitTo (nonempty_text value)
+
+export
+image_reference : String → Maybe ImageReference
+image_reference value = map ImageAt (nonempty_text value)
+
+export
+requested_address_value : RequestedAddress → String
+requested_address_value (Requested value) = nonempty_text_value value
+
+export
+resolved_address_value : ResolvedAddress → String
+resolved_address_value (Resolved value) = nonempty_text_value value
+
+export
+link_reference_value : LinkReference → String
+link_reference_value (LinkTo value) = nonempty_text_value value
+
+export
+form_reference_value : FormReference → String
+form_reference_value (SubmitTo value) = nonempty_text_value value
+
+export
+image_reference_value : ImageReference → String
+image_reference_value (ImageAt value) = nonempty_text_value value
+
+public export
+data HeadingLevel
+  = Heading1
+  | Heading2
+  | Heading3
+  | Heading4
+  | Heading5
+  | Heading6
+
+export
+heading_level_number : HeadingLevel → Integer
+heading_level_number Heading1 = 1
+heading_level_number Heading2 = 2
+heading_level_number Heading3 = 3
+heading_level_number Heading4 = 4
+heading_level_number Heading5 = 5
+heading_level_number Heading6 = 6
+
+export
+heading_level : Integer → Maybe HeadingLevel
+heading_level 1 = Just Heading1
+heading_level 2 = Just Heading2
+heading_level 3 = Just Heading3
+heading_level 4 = Just Heading4
+heading_level 5 = Just Heading5
+heading_level 6 = Just Heading6
+heading_level _ = Nothing
+
+export
+data NonemptyTableRow = TableCells String (List String)
+
+export
+table_row : String → List String → NonemptyTableRow
+table_row first remaining = TableCells first remaining
+
+export
+table_row_cells : NonemptyTableRow → List String
+table_row_cells (TableCells first remaining) = first :: remaining
+
+public export
+data InformationBlock
+  = Heading HeadingLevel String
+  | Text String
+  | Link String LinkReference
+  | TableRow NonemptyTableRow
+  | Form String FormReference
+  | Image ImageReference String String (Maybe LinkReference)
+
+public export
+record Strand where
+  constructor MakeStrand
+  source : SourceRepresentation
+  requested : RequestedAddress
+  resolved : ResolvedAddress
+  title : Maybe String
+  blocks : List InformationBlock
