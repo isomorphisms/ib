@@ -1,0 +1,137 @@
+module IB.Information.Model
+
+%default total
+
+public export
+data NonemptyText = TextBeginning Char (List Char)
+
+public export
+nonempty_text : String → Maybe NonemptyText
+nonempty_text value =
+  case unpack value of
+    [] ⇒ Nothing
+    first :: rest ⇒ Just (TextBeginning first rest)
+
+public export
+nonempty_text_value : NonemptyText → String
+nonempty_text_value (TextBeginning first rest) = pack (first :: rest)
+
+public export
+data RepresentationOrigin
+  = HtmlRepresentation
+  | PdfRepresentation
+  | PlainTextRepresentation
+  | DerivedRepresentation
+  | OtherRepresentation
+
+public export
+data RepresentationCompleteness
+  = PartialRepresentation
+  | CompleteRepresentation
+
+public export
+record SourceRepresentation where
+  constructor Source
+  reference : NonemptyText
+  origin : RepresentationOrigin
+  completeness : RepresentationCompleteness
+
+public export
+data RequestedAddressText = RequestedAddress NonemptyText
+
+public export
+data ResolvedAddressText = ResolvedAddress NonemptyText
+
+public export
+data LinkReferenceText = LinkReference String
+
+public export
+data FormReferenceText = FormReference String
+
+public export
+data FetchedImageReference = FetchedImage NonemptyText
+
+public export
+requested_address : String → Maybe RequestedAddressText
+requested_address value = map RequestedAddress (nonempty_text value)
+
+public export
+resolved_address : String → Maybe ResolvedAddressText
+resolved_address value = map ResolvedAddress (nonempty_text value)
+
+public export
+fetched_image : String → Maybe FetchedImageReference
+fetched_image value = map FetchedImage (nonempty_text value)
+
+public export
+requested_address_value : RequestedAddressText → String
+requested_address_value (RequestedAddress value) = nonempty_text_value value
+
+public export
+resolved_address_value : ResolvedAddressText → String
+resolved_address_value (ResolvedAddress value) = nonempty_text_value value
+
+public export
+link_reference_value : LinkReferenceText → String
+link_reference_value (LinkReference value) = value
+
+public export
+form_reference_value : FormReferenceText → String
+form_reference_value (FormReference value) = value
+
+public export
+fetched_image_value : FetchedImageReference → String
+fetched_image_value (FetchedImage value) = nonempty_text_value value
+
+public export
+data HeadingLevel
+  = Heading1
+  | Heading2
+  | Heading3
+  | Heading4
+  | Heading5
+  | Heading6
+
+public export
+heading_level_number : HeadingLevel → Nat
+heading_level_number Heading1 = 1
+heading_level_number Heading2 = 2
+heading_level_number Heading3 = 3
+heading_level_number Heading4 = 4
+heading_level_number Heading5 = 5
+heading_level_number Heading6 = 6
+
+public export
+heading_level : Nat → Maybe HeadingLevel
+heading_level 1 = Just Heading1
+heading_level 2 = Just Heading2
+heading_level 3 = Just Heading3
+heading_level 4 = Just Heading4
+heading_level 5 = Just Heading5
+heading_level 6 = Just Heading6
+heading_level _ = Nothing
+
+public export
+data NonemptyTableRow = TableCells String (List String)
+
+public export
+table_row_cells : NonemptyTableRow → List String
+table_row_cells (TableCells first rest) = first :: rest
+
+public export
+data InformationBlock
+  = InformationHeading HeadingLevel String
+  | InformationText String
+  | InformationLink String LinkReferenceText
+  | InformationTableRow NonemptyTableRow
+  | InformationForm String FormReferenceText
+  | InformationImage FetchedImageReference String String (Maybe LinkReferenceText)
+
+public export
+record InformationDocument where
+  constructor Document
+  source : SourceRepresentation
+  requested : RequestedAddressText
+  resolved : ResolvedAddressText
+  title : Maybe String
+  blocks : List InformationBlock
