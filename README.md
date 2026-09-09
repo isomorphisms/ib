@@ -33,10 +33,11 @@ indexes and later model hooks
 
 A tab or renderer is a temporary view onto this persistent state.  Neither is part of the 0.2 acceptance boundary.
 
-Two future reading contracts are recorded separately:
+Three future reader-support contracts are recorded separately:
 
 - [`docs/reading-feedback.md`](docs/reading-feedback.md): opening is not reading, passive interaction is evidence rather than proof of comprehension, and completed items may deliberately remain in a rereading/reminder rotation.
 - [`docs/reading-assistance.md`](docs/reading-assistance.md): the Pensieve should support interrupted and question-driven reading, fiction recall without spoilers, corpus triage for papers/repositories, and replaceable source-backed model-generated guides/fragments/strands rather than optimizing for finishing long reads.
+- [`docs/reader-support-system.md`](docs/reader-support-system.md): physical bookshelf photographs may enter as source evidence; recognized books and inferred interests remain derived; long-book prefetch can prepare spoiler-aware character/appearance/relationship support; and the division of work among Pensieve, deterministic indexes, and language-model hooks remains deliberately open.
 
 ## Commands
 
