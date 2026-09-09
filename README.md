@@ -33,6 +33,8 @@ indexes and later model hooks
 
 A tab or renderer is a temporary view onto this persistent state.  Neither is part of the 0.2 acceptance boundary.
 
+The future View-to-Pensieve reading feedback contract is recorded in [`docs/reading-feedback.md`](docs/reading-feedback.md): opening is not reading, passive interaction is evidence rather than proof of comprehension, and completed items may deliberately remain in a rereading/reminder rotation.
+
 ## Commands
 
 ```sh
