@@ -18,3 +18,5 @@ jobs:
         run: sh tests/test_0_2_shell.grease
       - name: Exercise deterministic arXiv round trip
         run: sh tests/test_0_2_arxiv_roundtrip.grease
+      - name: Exercise reader view exposure and query path
+        run: sh tests/test_view_exposure.grease

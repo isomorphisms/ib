@@ -1,0 +1,32 @@
+# Local reader-history query support.
+# The append-only observation log is written by the reader adapter.
+
+ib_view_observations() {
+  printf '%s/view-history/observations.tsv\n' "$(ib_pensieve)"
+}
+
+ib_view_exposure() {
+  fragment_id=$1
+  observations=$(ib_view_observations)
+
+  if test -f "$observations"; then
+    weighted_us=$(awk -F '\t' -v fragment_id="$fragment_id" '
+      $3 == fragment_id { total += $8 }
+      END { printf "%.0f\n", total + 0 }
+    ' "$observations")
+  else
+    weighted_us=0
+  fi
+
+  view_units=$((weighted_us / 7000000))
+  remainder_us=$((weighted_us % 7000000))
+  weighted_ms=$(awk -v value="$weighted_us" 'BEGIN { printf "%.3f", value / 1000.0 }')
+  remainder_ms=$(awk -v value="$remainder_us" 'BEGIN { printf "%.3f", value / 1000.0 }')
+
+  printf 'fragment\t%s\n' "$fragment_id"
+  printf 'weighted_exposure_us\t%s\n' "$weighted_us"
+  printf 'weighted_exposure_ms\t%s\n' "$weighted_ms"
+  printf 'view_units\t%s\n' "$view_units"
+  printf 'remainder_us\t%s\n' "$remainder_us"
+  printf 'remainder_ms\t%s\n' "$remainder_ms"
+}

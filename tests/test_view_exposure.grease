@@ -1,0 +1,27 @@
+#!/bin/sh
+set -eu
+
+repository_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+work=$(mktemp -d "${TMPDIR:-/tmp}/ib-view-exposure.XXXXXX")
+trap 'rm -rf "$work"' EXIT HUP INT TERM
+classes="$work/classes"
+mkdir -p "$classes"
+
+javac -Xlint:all -Werror -d "$classes" \
+  "$repository_root/android-material3/app/src/main/java/org/isomorphisms/ib/material3/ViewExposure.java" \
+  "$repository_root/tests/ViewExposureTest.java"
+
+output=$(java -cp "$classes" ViewExposureTest \
+  "$repository_root/android-material3/app/src/main/assets/pensieve/arxiv/2203.11355/text/from-pdf.txt" \
+  "$work/state")
+printf '%s\n' "$output"
+
+fragment_id=$(printf '%s\n' "$output" | sed -n 's/^REAL_FRAGMENT_1=//p')
+test -n "$fragment_id"
+summary=$(IB_HOME="$work/state" "$repository_root/bin/ib" exposure "$fragment_id")
+printf '%s\n' "$summary"
+printf '%s\n' "$summary" | awk -F '\t' '$1 == "view_units" && $2 == "1" { found = 1 } END { exit !found }'
+printf '%s\n' "$summary" | awk -F '\t' '$1 == "weighted_exposure_ms" && $2 == "8000.000" { found = 1 } END { exit !found }'
+printf '%s\n' "$summary" | awk -F '\t' '$1 == "remainder_ms" && $2 == "1000.000" { found = 1 } END { exit !found }'
+
+printf 'real Pensieve view-state -> exposure query: PASS\n'

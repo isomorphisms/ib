@@ -3,17 +3,19 @@ set -eu
 
 repository_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 . "$repository_root/lib/ib/pensieve.grease"
+. "$repository_root/lib/ib/view_exposure.grease"
 
 usage() {
-  cat >&2 <<'EOF'
+  cat >&2 <<'USAGE'
 usage:
   ib fetch ARXIV-ID-OR-URL...
   ib distill ARXIV-ID-OR-URL...
   ib add ARXIV-ID-OR-URL...
   ib search TEXT
+  ib exposure FRAGMENT-ID
   ib reindex
   ib paths
-EOF
+USAGE
   exit 2
 }
 
@@ -48,6 +50,11 @@ case "$command" in
   search)
     test "$#" -eq 1 || usage
     ib_search_exact_text "$1"
+    ;;
+
+  exposure)
+    test "$#" -eq 1 || usage
+    ib_view_exposure "$1"
     ;;
 
   reindex)

@@ -8,7 +8,7 @@ The viewport consumes the **Pensieve**, not the Cauldron. Cauldron owns fetched
 source material and provenance; the renderer should not know whether readable text
 came from a PDF, HTML, an abstract page, or some later distillation method.
 
-The first viewport is intentionally small:
+The viewport now also returns local display observations to Pensieve state:
 
 ```text
 Pensieve
@@ -25,8 +25,15 @@ Scaffold
     │   └── arXiv 2305.00241
     └── Surface
         └── SelectionContainer
-            └── scrollable Column
-                └── Text
+            └── LazyColumn
+                ├── article heading
+                └── stable source-range fragments
+                       |
+                       v
+                 view observations
+                       |
+                       v
+                 Pensieve view history
 ```
 
 For the deterministic APK stub, a frozen Pensieve-shaped snapshot lives under
@@ -54,10 +61,37 @@ remain visible by arXiv ID until their real frozen Pensieve representations are
 materialized. Their titles are therefore ID labels, not invented paper titles.
 
 The paper body is Material `Text`, not `TextField`: reading, selection, and copying
-are the current requirements. Editing the source paper is not. The enclosing
-`Surface` provides the visual text-box boundary.
+are the current requirements. Editing the source paper is not. Each non-empty
+source line is currently one displayed fragment in the reader's `LazyColumn`.
+That cut is intentionally replaceable.
 
 There is no network permission and no HTML parser in this prototype.
+
+## View observations and exposure
+
+`ViewExposure` is model-facing code with no Compose dependency. The Compose reader
+feeds it viewport snapshots containing stable fragment ids, visible pixel extent,
+layout position, and movement between samples. The model records observations and
+derives weighted fragment exposure from them.
+
+A complete **view unit** is currently seven seconds of weighted exposure. Partial
+visibility contributes proportionally. Small repeated scrolling continues the same
+cumulative exposure; it does not start a new visit. Large fast movement is reduced
+or suppressed. Exposure below seven seconds is retained, and returning to a
+fragment later continues its previous total.
+
+The Android adapter samples every 500 ms and batches durable appends approximately
+every two seconds, with additional flushes when the reader is disposed or the
+Activity stops. It does not synchronously write storage on every frame.
+
+This is evidence about what IB displayed, not a measure of human attention,
+comprehension, or eye position. Reader history is private local state under the
+app's Pensieve state and never changes canonical article bytes or fragment
+identity.
+
+See `../docs/view-exposure.md` for the record format, weighting rule, durability
+boundary, query command, and relationship to the persistent model in
+`../docs/storage-model.md`.
 
 ## Live Pensieve later
 
@@ -66,6 +100,10 @@ replace `AssetManager` with a filesystem/process adapter for the live 0.2 Pensie
 without changing the viewport's `PensieveArticle` model. The Android renderer
 should still receive distilled Pensieve text rather than reach backward into
 Cauldron.
+
+The view-observation path is likewise independent of asset versus live storage:
+reader adapters emit fragment ids plus viewport evidence, while the local Pensieve
+state owns persistence and queryability.
 
 ## Deferred interaction: movable pieces
 
@@ -119,3 +157,10 @@ gradle --no-daemon :app:assembleDebug
 ```
 
 The expected APK is `app/build/outputs/apk/debug/app-debug.apk`.
+
+The host-side exposure model and real Pensieve fixture can be exercised without an
+Android SDK:
+
+```text
+sh tests/test_view_exposure.grease
+```
