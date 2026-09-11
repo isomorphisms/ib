@@ -15,4 +15,6 @@ Current known-reading cases include:
 
 Only sources that may legally be referenced as repository fixtures belong in `public-domain-reading.tsv`. Copyrighted known-reading cases can be exercised through user-owned or local representations without committing their text.
 
+For partial collections, do not promote the whole collection to a fixture merely because some contained works are familiar. The exact Sherlock Holmes stories should be identified before adding source rows for them.
+
 Do not add an unread classic merely to obtain a convenient structural example. Also do not use a work as a primary judgment fixture when it was read so long ago that detailed comparison is no longer reliable. *Moby-Dick* falls in that latter category for current testing; *War and Peace* is not a known-reading case.
