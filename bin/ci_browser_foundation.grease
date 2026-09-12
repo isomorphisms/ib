@@ -54,6 +54,19 @@ exercise_core() {
   grep -Fx 'temporary-needs-language-model=True' /tmp/ib-smoke.txt
   grep -Fx 'prefetch-bounded=2' /tmp/ib-smoke.txt
   grep -Fx 'prefetch-reading=1' /tmp/ib-smoke.txt
+
+  "$idric_prefix/bin/idris2" OccurrenceSmoke.idric -o ib-occurrence-smoke \
+    2>&1 | tee /tmp/idric-occurrence-compile.txt
+  test -x ./build/exec/ib-occurrence-smoke
+  ! grep -q '^Error:' /tmp/idric-occurrence-compile.txt
+  ./build/exec/ib-occurrence-smoke | tee /tmp/ib-occurrence-smoke.txt
+  grep -Fx 'occurrence-count=2' /tmp/ib-occurrence-smoke.txt
+  grep -Fx 'matching-fragment-count=2' /tmp/ib-occurrence-smoke.txt
+  grep -Fx 'cross-boundary-count=1' /tmp/ib-occurrence-smoke.txt
+  grep -Fx 'first-window-count=2' /tmp/ib-occurrence-smoke.txt
+  grep -Fx 'second-window-count=3' /tmp/ib-occurrence-smoke.txt
+  grep -Fx 'stale-window=False' /tmp/ib-occurrence-smoke.txt
+  grep -Fx 'unicode-count=1' /tmp/ib-occurrence-smoke.txt
 }
 
 exercise_workbench() {
