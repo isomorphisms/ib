@@ -4,7 +4,12 @@
 
 IB's immediate target is a personal browser: a workbench over one person's durable browsing corpus, tasks, and habits. It is not presently a general-purpose compatibility browser and should not spend its effort reproducing every web input or every site's preferred interface.
 
-The architecture must nevertheless support multiple first-class frontends over the same browser-owned state. A conventional page-oriented browser, a small phone surface, and a ChatGPT-like text-and-action workbench may coexist. The text-first workbench is **a frontend**, not **the frontend**, and no frontend becomes the owner of tabs, history, tasks, or saved material.
+IB's first two first-class user frontends are:
+
+1. a visual browser frontend that immediately pre-paints the cheapest useful source-backed representation, then progressively augments it or attaches a live renderer when needed; and
+2. a ChatGPT-like, text-only-by-default task frontend that answers questions and offers direct actions over the same browsing corpus.
+
+These are two projections of the same browser-owned tabs, tasks, history, organization, and source material. Neither frontend owns that state, and the architecture may support additional frontends later.
 
 Renderer adapters and capability negotiation remain first-class architecture. That makes a broader compatibility browser possible without making broad compatibility IB's current product requirement. An unsupported or irrelevant input may be marked unknown or discarded after a safe failure. MIME type, source, and renderer requirements remain useful signals even when IB does not support the input itself.
 
@@ -33,7 +38,13 @@ A task record may retain:
 
 This is a conceptual record, not a frozen schema.
 
-## One text-first frontend
+## Visual pre-paint frontend
+
+The visual frontend should paint useful extracted material as soon as it exists. A page may begin as title, headings, text, operative links, forms, tables, and already-fetched images, then gain richer styling or a live renderer only when the task needs them. Pre-paint is a user-facing frontend behavior, not merely a cache artifact or developer diagnostic.
+
+The current focus region is also task evidence. Safe operative links at or near its top are strong short-lived candidates for bounded background acquisition; changing focus reprioritizes work without manufacturing tabs.
+
+## Text-only task frontend
 
 The ChatGPT-like frontend should keep a searchable text history of requests, evidence, results, and actions. Its default output is the smallest useful combination for the current task, not a faithful miniature of a corporate webpage.
 
@@ -66,6 +77,20 @@ The depth and priority policy remain open. The invariant is that the durable tas
 
 A deterministic fixture should keep the root document usable while a bounded set of early safe links from its operative content becomes warm. Selecting a warmed target should add no predictable foreground network wait and should not require a renderer session for every warmed document.
 
+## Acceptance story: GitLab or a comparable software page
+
+Given a project, README, documentation, issue, or source page with roughly seventeen plausible operative links, IB should not require the user to open seventeen background tabs and manually wade back and forth through them. It records those links as task candidates, warms a bounded safe subset, extracts and summarizes useful material in the background, and lets the user ask, “just tell me what I need to know,” against the accumulated source-backed corpus.
+
+A discovered candidate is not a tab. A navigation thread or renderer is created only when interaction actually requires one. The same behavior applies to a batch of arXiv links: the question motivating the browsing may be asked before every paper has been opened and manually read.
+
+## Direct assistant context
+
+IB should expose a provider-neutral, user-authorized task-context interface to the person's configured assistant. The user should not have to copy URLs, open every candidate tab, or manually restate what they are browsing. A context bundle may include the current resource and navigation thread, visible and selected source spans, the current task question, roots and frontier, extracted views, retained summaries, and source provenance.
+
+For an actively watched YouTube video or comparable media resource, the bundle should include available title, channel, chapters, captions or transcript, and current playback position without requiring an automatic full-media download. For a batch of arXiv links, it should include the task-linked papers, their extracted text, and current summaries.
+
+The automatic low-cost summarizer and the user's preferred interactive assistant are separate configurable roles, although one model may fill both. A remote provider receives only the explicitly scoped context bundle; credentials, session storage, and unrelated private browsing state remain excluded. Context assembly and export are visible, inspectable actions governed by user policy, not a hidden exfiltration path.
+
 ## Acceptance story: find and send an image
 
 For a query such as finding a young Larry Wall in a loud 1970s shirt to show a friend, success is not merely displaying image-search results. The requested terminal action is sending a suitable image.
@@ -90,8 +115,10 @@ Settled boundaries:
 
 - personal-browser priorities first;
 - multiple frontends over shared browser-owned state;
+- visual pre-paint and text-only task interaction as the first two frontends;
 - task completion rather than page reproduction as the success measure;
 - durable task intent separated from disposable renderer and response caches;
+- a scoped provider-neutral bridge from the active browsing task to the configured assistant;
 - safe failure for unsupported inputs rather than general compatibility work.
 
 Current heuristics and benchmarks:

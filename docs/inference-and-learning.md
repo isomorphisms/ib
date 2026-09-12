@@ -1,6 +1,6 @@
 # Inference and learning boundary
 
-IB should interface cleanly with one or more local language or embedding models without allowing a probabilistic model to become the owner of browser state.
+IB should interface cleanly with user-configured local or remote language, embedding, reranking, and summarization models without allowing a probabilistic model or provider to become the owner of browser state.
 
 ## Observations and proposals, not mutations
 
@@ -46,13 +46,22 @@ Deterministic code may validate, compare, reduce, accept, or reject proposals. V
 
 When several models or resampled classifiers are useful, preserve their individual outputs before reducing them. Bagging, voting, or rank aggregation should not erase disagreement. An aggregate records its inputs, quorum, reducer, and reducer version. A missing model is not a negative vote, and disagreement is itself evidence that a category boundary or ranking is uncertain.
 
-The adapter should identify the model and task explicitly so local models can be replaced, compared, or run as an ensemble without changing canonical records or callers. Browsing must remain usable when every model is absent, slow, or crashes. Local models receive only explicitly selected corpus material; secret and session storage are excluded by default.
+The adapter should identify the model and task explicitly so models can be replaced, compared, or run as an ensemble without changing canonical records or callers. Browsing must remain usable when every model is absent, slow, or crashes. Local models receive only task-relevant corpus material. Remote models receive only an explicitly scoped, inspectable context export; secret and session storage and unrelated private browsing state are excluded by default.
 
 ## Classification baseline
 
-Category membership is multilabel. A useful first baseline is one scored binary classifier per category rather than a single exclusive multiclass classifier.
+Category membership is multilabel. A useful first baseline is one independent inclusion scorer per category rather than a single exclusive multiclass classifier. It is binary relevance only in the sense of asking one category question at a time; material outside category `c` is not automatically a negative example for `c`.
 
-A linear baseline can use one separator per category over persistent Float32 embeddings and cheap structured features. Train from explicit or trusted positive and negative evidence; where absence is merely unlabeled, use a positive-unlabeled treatment rather than declaring every other object negative. Useful features include:
+For category `c`, an explicit linear baseline is an affine score and a separately recorded policy threshold:
+
+```text
+s_c(x) = w_c dot phi(x) + b_c
+propose c when s_c(x) >= tau_c
+```
+
+`b_c` is normally learned, so the decision surface is affine and is not forced through the origin. `tau_c` need not be zero: it should reflect the cost of hiding relevant material. There is no argmax across categories. An authoritative human membership remains included and an authoritative category-scoped exclusion remains excluded regardless of a later model score; passing the threshold is still a proposal, not silent acceptance.
+
+Train from explicit or trusted positive and negative evidence; where absence is merely unlabeled, use a positive-unlabeled treatment rather than declaring every other object negative. Useful features include:
 
 - URL, host, title, MIME type, and source;
 - extracted text or image description;
@@ -61,13 +70,32 @@ A linear baseline can use one separator per category over persistent Float32 emb
 - prior accepted memberships and explicit corrections;
 - neighborhood or vector similarity.
 
-The literal classifier remains replaceable. A margin is a score, not an ontology. Slack, support examples, and disagreement among plausible separators should remain inspectable where they help explain uncertainty.
+In a soft-margin SVM, each labeled example has a scalar slack variable measuring violation of the desired margin. The collection of those scalars may be called a slack vector. Support vectors are instead the training examples with nonzero dual weight that determine the separator; some lie on the margin and some violate it. The signed geometric distance to the fitted zero surface is `s_c(x) / norm(w_c)`; distance to the model-policy threshold surface is `(s_c(x) - tau_c) / norm(w_c)`. Raw score, normalized distance, slack, support-vector status, held-out error, and ensemble disagreement are separate diagnostics; none is automatically a calibrated probability or an inclusion band.
+
+One-class SVM is an origin-related construction that separates examples from the feature-space origin with an offset. It is a possible positive-only probe, not the ordinary soft-margin binary SVM and not the default once explicit negative corrections exist.
+
+IB may fit another affine separator inside a coherent region or against residual errors from an earlier separator. That yields a collection of binary decisions—possibly an oblique tree, a boosted ensemble, or overlapping category scorers—not a compulsory single hierarchy. A parent and a narrower category may both remain true.
+
+Bagging may fit planes over row, feature, or provisional-unlabeled resamples and retain every plane before voting or averaging; this is a useful positive-unlabeled baseline. Boosting may fit later learners against earlier errors. A sum of unthresholded linear scores collapses algebraically to one linear score, while thresholded-plane voting or tree structure can represent a more elaborate boundary. Vote fraction still is not automatically a probability.
 
 Zero, one, or many categories may pass their per-category decisions. Retrieval should generally prefer an extra plausible membership to hiding material because another category won.
 
-## Corrections are training events
+## Human organization is supervision
 
-A drag, drop, rename, membership addition, or membership removal is an explicit human correction. Record the correction as an event and update derived models conservatively; do not overwrite the model proposal that prompted it.
+Machine learning should learn from intentional human organization, not merely from corrections made after a bad proposal.
+
+- creating or naming a category supplies category semantics;
+- adding membership supplies an authoritative category-scoped positive;
+- removing membership supplies an authoritative negative for that category only;
+- accepting a split or merge supplies a structural constraint;
+- grouping resources into a task or reading bundle supplies relationship and ranking evidence;
+- explicitly meaningful pinning or ordering may supply attention evidence.
+
+Each signal retains its original event, target kind, scope, and authority instead of being flattened into a universal label. Incidental filesystem order, passive visibility, `_active` removal, and unaccepted model output are not negative classification evidence.
+
+## Corrections and assertions are training events
+
+A drag, drop, rename, membership addition, membership removal, or accepted structural change is a typed human assertion. Record the event and update derived models conservatively; do not overwrite the model proposal that prompted it.
 
 Dropping an object into category `B` is an authoritative positive assertion for `B` and changes that view immediately. It is an add, not a move: existing membership in `A` remains because categories overlap. Explicitly removing `B` is negative evidence only for `B`. Removing `B` from `_active` is attention control and produces no classification or training event. Never train on a model's own unaccepted labels.
 
@@ -81,7 +109,7 @@ A history-analysis view may ask: *what is this a record of about the user?* It c
 
 Those are evidence-backed interpretations, not facts about identity or belief. Every interpretation should retain links to the searches, visits, tabs, or accepted categories that support it. A repeated URL or duplicate tab is evidence of salience or revisitation, not redundant noise and not by itself proof of endorsement.
 
-Private source material and credentials remain subject to the storage and export boundaries even when inference runs locally. A public fixture should not acquire private URLs merely because a model could classify them.
+Private source material and credentials remain subject to the storage and export boundaries whether inference is local or remote. A public fixture should not acquire private URLs merely because a model could classify them.
 
 ## Implementation status
 
@@ -91,7 +119,7 @@ The generic proposal, validation, aggregation, and correction records described 
 
 Settled boundaries:
 
-- local-model adapters are replaceable;
+- local and remote model adapters are replaceable and provider-neutral;
 - model output is append-only evidence, never direct canonical mutation;
 - proposals retain provenance, model identity, scores, and source references;
 - deterministic code owns validation and acceptance;
@@ -101,7 +129,7 @@ Settled boundaries:
 Current baselines and evaluation ideas:
 
 - Float32 embeddings and exact vector search at the current 10,000-URL scale;
-- one scored linear decision per category using explicit or trusted labels;
+- one explicit affine inclusion score and a separately recorded threshold per category using positive, explicit-negative, and unlabeled evidence correctly;
 - ensembles when disagreement is useful;
 - measurable improvement after a few nearby corrections.
 
