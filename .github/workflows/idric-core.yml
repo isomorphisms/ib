@@ -22,7 +22,7 @@ jobs:
     env:
       IDRIS2_CG: chez
       SCHEME: scheme
-      IDRIC_REF: 61970be77769f607cca8650bf424c0f0b22ddee7
+      IDRIC_REF: d2463ec8a3a0dd4ac167029927452f3e83805dc3
     steps:
       - uses: actions/checkout@v4
 
@@ -34,7 +34,7 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: /tmp/idric
-          key: idric-${{ runner.os }}-61970be77769f607cca8650bf424c0f0b22ddee7
+          key: idric-${{ runner.os }}-d2463ec8a3a0dd4ac167029927452f3e83805dc3
 
       - name: Build and install Idric compiler through Grease
         if: steps.idric-cache.outputs.cache-hit != 'true'
@@ -45,10 +45,26 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: /tmp/idric
-          key: idric-${{ runner.os }}-61970be77769f607cca8650bf424c0f0b22ddee7
+          key: idric-${{ runner.os }}-d2463ec8a3a0dd4ac167029927452f3e83805dc3
 
       - name: Exercise HTML-first information renderer
         run: sh bin/ci_browser_foundation.grease exercise-information
+
+      - name: Exercise canonical information model
+        run: |
+          cd src
+          /tmp/idric/bin/idris2 CanonicalInformationSmoke.idric -o ib-canonical-information 2>&1 | tee /tmp/idric-canonical-information-compile.txt
+          test -x ./build/exec/ib-canonical-information
+          ! grep -q '^Error:' /tmp/idric-canonical-information-compile.txt
+          ./build/exec/ib-canonical-information | tee /tmp/ib-canonical-information.txt
+          grep -Fx 'canonical-information=constructed' /tmp/ib-canonical-information.txt
+          grep -Fx 'canonical-blocks=6' /tmp/ib-canonical-information.txt
+          grep -Fx 'canonical-row-cells=2' /tmp/ib-canonical-information.txt
+          grep -Fx 'empty-image-refused=True' /tmp/ib-canonical-information.txt
+          grep -Fx 'seventh-heading-refused=True' /tmp/ib-canonical-information.txt
+          grep -Fx 'revision-zero=0' /tmp/ib-canonical-information.txt
+          grep -Fx 'nonincreasing-revision-refused=True' /tmp/ib-canonical-information.txt
+          grep -Fx 'version1=serialized' /tmp/ib-canonical-information.txt
 
       - name: Exercise browser-owned Idric core
         run: sh bin/ci_browser_foundation.grease exercise-core
@@ -57,6 +73,7 @@ jobs:
         run: sh bin/ci_browser_foundation.grease exercise-workbench
 
   scientific-media:
+    needs: idric-core
     runs-on: ubuntu-latest
     env:
       PDF_HARVESTER_REF: 77d85dc6f7e89d109cb9e06f42706bc34f00e4a3
@@ -72,7 +89,7 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: /tmp/idric
-          key: idric-${{ runner.os }}-61970be77769f607cca8650bf424c0f0b22ddee7
+          key: idric-${{ runner.os }}-d2463ec8a3a0dd4ac167029927452f3e83805dc3
 
       - name: Verify PDF harvester pin
         run: sh bin/ci_browser_foundation.grease verify-pdf-harvester
