@@ -13,6 +13,7 @@ from ib_conversations.acquire import import_export, verify_public
 from ib_conversations.classify import (
     classify_geometric_model,
     compare,
+    filing_projection,
     merge_incremental_proposals,
     train_geometric_model,
 )
@@ -141,6 +142,11 @@ def build_parser() -> argparse.ArgumentParser:
     projection.add_argument("--axis", choices=sorted(AXES), required=True)
     projection.add_argument("--minimum-authority", choices=sorted(AUTHORITIES, key=AUTHORITIES.get), default="accepted_decision")
     projection.add_argument("--output", required=True, type=Path)
+
+    destinations = commands.add_parser("destinations", help="derive a deterministic abstaining filing projection")
+    destinations.add_argument("--proposals", required=True, type=Path)
+    destinations.add_argument("--ambiguity-margin", type=float, default=0.05)
+    destinations.add_argument("--output", required=True, type=Path)
     return parser
 
 
@@ -310,6 +316,30 @@ def main() -> int:
             ),
         }
         write_json_if_changed(arguments.output / "projection-report.json", report)
+        print(json.dumps(report, indent=2, sort_keys=True))
+        return 0
+    if arguments.command == "destinations":
+        proposals = [
+            json.loads(line)
+            for line in arguments.proposals.read_text(encoding="utf-8").splitlines()
+            if line.strip()
+        ]
+        rows = filing_projection(proposals, ambiguity_margin=arguments.ambiguity_margin)
+        arguments.output.mkdir(parents=True, exist_ok=True)
+        write_jsonl_if_changed(arguments.output / "destination-proposals.jsonl", rows)
+        report = {
+            "rows": len(rows),
+            "ambiguity_margin": arguments.ambiguity_margin,
+            "outcomes": {
+                outcome: sum(row["outcome"] == outcome for row in rows)
+                for outcome in (
+                    "confident_destination",
+                    "several_plausible_destinations",
+                    "no_sufficiently_supported_destination",
+                )
+            },
+        }
+        write_json_if_changed(arguments.output / "destination-report.json", report)
         print(json.dumps(report, indent=2, sort_keys=True))
         return 0
     raise AssertionError(arguments.command)

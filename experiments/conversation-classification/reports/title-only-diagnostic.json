@@ -6,6 +6,9 @@
   "conversation_bodies": 0,
   "reference_axis": "filing_destination",
   "reference_authority": "weak assistant cleanup proposal",
+  "model_revision": "conversation-independent-separators-v2",
+  "minimum_train_positives": 5,
+  "target_development_precision": 0.9,
   "split": {
     "method": "duplicate-grouped deterministic random split",
     "seed": "ib-conversation-v1",
@@ -18,30 +21,30 @@
   "test_results": [
     {
       "model": "sparse title TF-IDF hyperplanes",
-      "micro_precision": 0.3,
-      "micro_recall": 0.21951219512195122,
-      "micro_f1": 0.2535211267605634,
-      "automatic_coverage": 0.6341463414634146,
-      "misfile_rate_among_automatic": 0.6538461538461539,
-      "review_burden": 0.36585365853658536
+      "micro_precision": 0.42105263157894735,
+      "micro_recall": 0.1951219512195122,
+      "micro_f1": 0.26666666666666666,
+      "automatic_coverage": 0.4634146341463415,
+      "misfile_rate_among_automatic": 0.5789473684210527,
+      "review_burden": 0.5365853658536586
     },
     {
       "model": "dense title LSA hyperplanes",
-      "micro_precision": 0.20689655172413793,
-      "micro_recall": 0.14634146341463414,
-      "micro_f1": 0.1714285714285714,
-      "automatic_coverage": 0.5121951219512195,
-      "misfile_rate_among_automatic": 0.7142857142857143,
-      "review_burden": 0.4878048780487805
+      "micro_precision": 0.3125,
+      "micro_recall": 0.12195121951219512,
+      "micro_f1": 0.17543859649122806,
+      "automatic_coverage": 0.3902439024390244,
+      "misfile_rate_among_automatic": 0.6875,
+      "review_burden": 0.6097560975609756
     },
     {
       "model": "dense title LSA positive centroid",
-      "micro_precision": 0.20588235294117646,
-      "micro_recall": 0.17073170731707318,
-      "micro_f1": 0.18666666666666668,
-      "automatic_coverage": 0.6097560975609756,
-      "misfile_rate_among_automatic": 0.76,
-      "review_burden": 0.3902439024390244
+      "micro_precision": 0.25,
+      "micro_recall": 0.12195121951219512,
+      "micro_f1": 0.16393442622950818,
+      "automatic_coverage": 0.4634146341463415,
+      "misfile_rate_among_automatic": 0.7894736842105263,
+      "review_burden": 0.5365853658536586
     },
     {
       "model": "exploratory exact rules",
@@ -54,12 +57,12 @@
     },
     {
       "model": "exploratory rules plus sparse title hyperplanes",
-      "micro_precision": 0.4878048780487805,
-      "micro_recall": 0.4878048780487805,
-      "micro_f1": 0.4878048780487805,
-      "automatic_coverage": 0.6585365853658537,
-      "misfile_rate_among_automatic": 0.5185185185185185,
-      "review_burden": 0.34146341463414637
+      "micro_precision": 0.6333333333333333,
+      "micro_recall": 0.4634146341463415,
+      "micro_f1": 0.5352112676056339,
+      "automatic_coverage": 0.6341463414634146,
+      "misfile_rate_among_automatic": 0.2692307692307692,
+      "review_burden": 0.36585365853658536
     }
   ],
   "chronological_test": {
@@ -70,21 +73,21 @@
     "results": [
       {
         "model": "sparse title TF-IDF hyperplanes",
-        "micro_f1": 0.10344827586206896,
-        "automatic_coverage": 0.4375,
-        "misfile_rate_among_automatic": 0.8571428571428571
+        "micro_f1": 0.09523809523809523,
+        "automatic_coverage": 0.3125,
+        "misfile_rate_among_automatic": 0.8
       },
       {
         "model": "dense title LSA hyperplanes",
-        "micro_f1": 0.09677419354838711,
-        "automatic_coverage": 0.40625,
-        "misfile_rate_among_automatic": 0.8461538461538461
+        "micro_f1": 0.09523809523809523,
+        "automatic_coverage": 0.3125,
+        "misfile_rate_among_automatic": 0.8
       },
       {
         "model": "dense title LSA positive centroid",
-        "micro_f1": 0.08450704225352113,
-        "automatic_coverage": 0.5,
-        "misfile_rate_among_automatic": 0.9375
+        "micro_f1": 0.09090909090909091,
+        "automatic_coverage": 0.28125,
+        "misfile_rate_among_automatic": 0.8888888888888888
       },
       {
         "model": "exploratory exact rules",
@@ -94,9 +97,9 @@
       },
       {
         "model": "exploratory rules plus sparse title hyperplanes",
-        "micro_f1": 0.16666666666666666,
-        "automatic_coverage": 0.46875,
-        "misfile_rate_among_automatic": 0.8
+        "micro_f1": 0.18181818181818182,
+        "automatic_coverage": 0.34375,
+        "misfile_rate_among_automatic": 0.6363636363636364
       }
     ]
   },

@@ -10,6 +10,9 @@ The experiment starts from `main` at
 delete every repository artifact introduced for this work.  Do not merge the
 branch merely because a classifier looks promising.
 
+`STATUS.md` is the evidence-limited handoff at the current acquisition boundary.
+`RUNBOOK.md` is the exact resume path once the one-time export is available.
+
 ## Boundaries inherited from IB
 
 The experiment follows the current architecture rather than creating another

@@ -98,7 +98,10 @@ def chronological_partition(documents: list[Document], groups: dict[str, str]) -
             missing.add(group)
         else:
             times.setdefault(group, []).append(float(document.created_at))
-    ordered = sorted(times, key=lambda group: (min(times[group]), group))
+    # Order a duplicate group by its newest member.  Using the oldest member
+    # could place a later branch duplicate in training ahead of genuinely older
+    # held-out conversations.
+    ordered = sorted(times, key=lambda group: (max(times[group]), group))
     train_end = int(round(0.70 * len(ordered)))
     development_end = int(round(0.85 * len(ordered)))
     group_split = {
@@ -130,11 +133,14 @@ def partition_rows(
         for document in sorted(documents, key=lambda value: value.corpus_id)
     ]
     distribution: dict[str, dict[str, int]] = {}
+    chronological_label_distribution: dict[str, dict[str, int]] = {}
     for row in rows:
         for category, polarity in labels.get(row["corpus_id"], {}).items():
             if polarity:
                 distribution.setdefault(category, {}).setdefault(row["random_split"], 0)
                 distribution[category][row["random_split"]] += 1
+                chronological_label_distribution.setdefault(category, {}).setdefault(row["chronological_split"], 0)
+                chronological_label_distribution[category][row["chronological_split"]] += 1
     report = {
         "documents": len(documents),
         "duplicate_groups": len(set(groups.values())),
@@ -149,5 +155,6 @@ def partition_rows(
             for split in ("train", "development", "test", "missing_chronology")
         },
         "positive_label_distribution": dict(sorted(distribution.items())),
+        "positive_label_distribution_chronological": dict(sorted(chronological_label_distribution.items())),
     }
     return rows, report

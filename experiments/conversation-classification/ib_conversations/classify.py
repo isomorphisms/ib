@@ -29,7 +29,7 @@ from .corpus import Document
 from .identity import canonical_json_bytes, sha256_bytes, write_bytes_if_changed, write_json_if_changed, write_jsonl_if_changed
 
 
-MODEL_REVISION = "conversation-independent-separators-v1"
+MODEL_REVISION = "conversation-independent-separators-v2"
 
 
 @dataclass(frozen=True)
@@ -506,9 +506,15 @@ def fit_independent_hyperplanes(
     target_positive_recall: float = 0.90,
     target_development_precision: float = 0.90,
     closed_world_single_label: bool = False,
+    minimum_train_positives: int = 5,
 ) -> tuple[list[dict[str, Any]], dict[str, Any], dict[str, np.ndarray]]:
     ids = [document.corpus_id for document in documents]
     train_indices = [index for index, target_id in enumerate(ids) if partitions[target_id] == "train"]
+    model_selection_indices = [
+        index
+        for index, target_id in enumerate(ids)
+        if partitions[target_id] in {"train", "development"}
+    ]
     categories = sorted({category for values in labels.values() for category in values})
     predictions = {target_id: {"corpus_id": target_id, "categories": {}} for target_id in ids}
     model_rows: list[dict[str, Any]] = []
@@ -522,8 +528,8 @@ def fit_independent_hyperplanes(
             train_indices,
             closed_world_single_label,
         )
-        if len(positives) < 2:
-            skipped[category] = f"needs at least two train positives; found {len(positives)}"
+        if len(positives) < minimum_train_positives:
+            skipped[category] = f"needs at least {minimum_train_positives} train positives; found {len(positives)}"
             continue
         requested = max(1, int(math.ceil(len(positives) * unlabeled_per_positive))) if not negatives else int(math.ceil(len(positives) * unlabeled_per_positive))
         samples = _provisional_samples(unlabeled, requested, bags, _seed(f"{MODEL_REVISION}:{space.representation}:{category}"))
@@ -606,6 +612,7 @@ def fit_independent_hyperplanes(
                 "accepted": bool(accepted[index]),
                 "proposal_threshold": proposal_threshold,
                 "ranking_margin": float(median_scores[index] - proposal_threshold),
+                "ranking_priority": 0,
                 "feature_contributions": _local_contributions(
                     space.matrix,
                     index,
@@ -623,8 +630,8 @@ def fit_independent_hyperplanes(
                 "proposal_threshold": proposal_threshold,
                 "vote_threshold": 0.60,
                 "bags": bag_rows,
-                "all_margin_quantiles": _quantiles(median_scores),
-                "accepted_count": int(accepted.sum()),
+                "model_selection_margin_quantiles": _quantiles(median_scores[model_selection_indices]),
+                "model_selection_accepted_count": int(accepted[model_selection_indices].sum()),
             }
         )
     model = {
@@ -639,6 +646,7 @@ def fit_independent_hyperplanes(
         "target_positive_recall_when_no_labeled_negatives": target_positive_recall,
         "target_development_precision": target_development_precision,
         "closed_world_single_label": closed_world_single_label,
+        "minimum_train_positives": minimum_train_positives,
     }
     return [predictions[target_id] for target_id in ids], model, arrays
 
@@ -721,6 +729,7 @@ def classify_geometric_model(directory: Path, documents: list[Document]) -> list
                 "accepted": bool(accepted[index]),
                 "proposal_threshold": proposal_threshold,
                 "ranking_margin": float(median_scores[index] - proposal_threshold),
+                "ranking_priority": 0,
                 "feature_contributions": _local_contributions(
                     space.matrix,
                     index,
@@ -744,13 +753,15 @@ def training_provenance(
             "labels": labels.get(document.corpus_id, {}),
         }
         for document in documents
-        if partitions[document.corpus_id] == "train"
+        if partitions[document.corpus_id] in {"train", "development"}
     ]
+    for row in rows:
+        row["partition"] = partitions[row["corpus_id"]]
     rows = sorted(rows, key=lambda row: row["corpus_id"])
     return {
-        "scope": "training partition only",
+        "scope": "training fit and development threshold calibration; test excluded",
         "documents": rows,
-        "training_input_sha256": sha256_bytes(canonical_json_bytes(rows)),
+        "model_selection_input_sha256": sha256_bytes(canonical_json_bytes(rows)),
     }
 
 
@@ -802,7 +813,7 @@ def train_geometric_model(
         "trained_categories": [row["category"] for row in model["categories"]],
         "skipped_categories": model["skipped_categories"],
         "model_generation_id": artifact["model_generation_id"],
-        "training_input_sha256": provenance["training_input_sha256"],
+        "model_selection_input_sha256": provenance["model_selection_input_sha256"],
         "proposals_written": 0,
         "closed_world_single_label": closed_world_single_label,
     }
@@ -850,18 +861,24 @@ def fit_nearest_centroids(
     target_positive_recall: float = 0.90,
     target_development_precision: float = 0.90,
     closed_world_single_label: bool = False,
+    minimum_train_positives: int = 5,
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     matrix = np.asarray(space.matrix, dtype=np.float64)
     ids = [document.corpus_id for document in documents]
     train = [index for index, target_id in enumerate(ids) if partitions[target_id] == "train"]
+    model_selection = [
+        index
+        for index, target_id in enumerate(ids)
+        if partitions[target_id] in {"train", "development"}
+    ]
     categories = sorted({category for values in labels.values() for category in values})
     predictions = {target_id: {"corpus_id": target_id, "categories": {}} for target_id in ids}
     rows: list[dict[str, Any]] = []
     skipped: dict[str, str] = {}
     for category in categories:
         positives = [index for index in train if labels.get(ids[index], {}).get(category) is True]
-        if len(positives) < 2:
-            skipped[category] = f"needs at least two train positives; found {len(positives)}"
+        if len(positives) < minimum_train_positives:
+            skipped[category] = f"needs at least {minimum_train_positives} train positives; found {len(positives)}"
             continue
         centroid = np.mean(matrix[positives], axis=0)
         norm = float(np.linalg.norm(centroid))
@@ -889,6 +906,7 @@ def fit_nearest_centroids(
                 "proposal_threshold": threshold,
                 "threshold_calibration": calibration,
                 "ranking_margin": float(scores[index] - threshold),
+                "ranking_priority": 0,
             }
         rows.append(
             {
@@ -896,7 +914,7 @@ def fit_nearest_centroids(
                 "train_positive_ids": [ids[index] for index in positives],
                 "centroid": centroid.astype(np.float32).tolist(),
                 "proposal_threshold": threshold,
-                "all_score_quantiles": _quantiles(scores),
+                "model_selection_score_quantiles": _quantiles(scores[model_selection]),
             }
         )
     return [predictions[target_id] for target_id in ids], {
@@ -907,6 +925,7 @@ def fit_nearest_centroids(
         "skipped_categories": skipped,
         "target_development_precision": target_development_precision,
         "closed_world_single_label": closed_world_single_label,
+        "minimum_train_positives": minimum_train_positives,
     }
 
 
@@ -938,6 +957,7 @@ def rule_predictions(documents: list[Document], rules: dict[str, list[re.Pattern
                     "accepted": True,
                     "proposal_threshold": 1.0,
                     "ranking_margin": float(len(evidence) - 1.0),
+                    "ranking_priority": 1,
                     "evidence": evidence,
                 }
         rows.append({"corpus_id": document.corpus_id, "categories": categories})
@@ -961,6 +981,7 @@ def hybrid_predictions(rules: list[dict[str, Any]], geometric: list[dict[str, An
                     float(combined.get(category, {}).get("ranking_margin", -math.inf)),
                     float(evidence["ranking_margin"]),
                 ),
+                "ranking_priority": 1,
             }
         output.append({"corpus_id": target_id, "categories": combined})
     return output
@@ -974,7 +995,10 @@ def multilabel_metrics(
     closed_world_single_label: bool = False,
 ) -> dict[str, Any]:
     by_id = {row["corpus_id"]: row["categories"] for row in predictions}
-    categories = sorted({category for values in labels.values() for category in values})
+    categories = sorted(
+        {category for values in labels.values() for category in values}
+        | {category for row in predictions for category in row.get("categories", {})}
+    )
     category_rows: dict[str, Any] = {}
     micro = collections.Counter()
     hamming_errors = hamming_total = 0
@@ -1002,7 +1026,12 @@ def multilabel_metrics(
         tp, fp, fn, tn = (counts[key] for key in ("tp", "fp", "fn", "tn"))
         precision = tp / (tp + fp) if tp + fp else None
         recall = tp / (tp + fn) if tp + fn else None
-        f1 = 2 * precision * recall / (precision + recall) if precision is not None and recall is not None and precision + recall else None
+        if not tp + fn:
+            f1 = None
+        elif tp == 0:
+            f1 = 0.0
+        else:
+            f1 = 2 * precision * recall / (precision + recall) if precision is not None and recall is not None else 0.0
         false_positive_rate = fp / (fp + tn) if fp + tn else None
         false_negative_rate = fn / (fn + tp) if fn + tp else None
         category_rows[category] = {
@@ -1031,11 +1060,23 @@ def multilabel_metrics(
         if split_name == split and sum(value is True for value in labels.get(target_id, {}).values()) >= 2
     ]
     sample_f1: list[float] = []
+    confusions: collections.Counter[tuple[str, str]] = collections.Counter()
     for target_id in multi_ids:
         truth = {category for category, value in labels[target_id].items() if value is True}
         proposed = {category for category, row in by_id.get(target_id, {}).items() if row.get("accepted")}
         if truth or proposed:
             sample_f1.append(2 * len(truth & proposed) / (len(truth) + len(proposed)))
+    for target_id, split_name in partitions.items():
+        if split_name != split:
+            continue
+        truth = {category for category, value in labels.get(target_id, {}).items() if value is True}
+        proposed = {category for category, row in by_id.get(target_id, {}).items() if row.get("accepted")}
+        for false_category in proposed - truth:
+            explicitly_false = labels.get(target_id, {}).get(false_category) is False
+            if not explicitly_false and not closed_world_single_label:
+                continue
+            for true_category in truth:
+                confusions[(true_category, false_category)] += 1
     return {
         "split": split,
         "category": category_rows,
@@ -1049,7 +1090,79 @@ def multilabel_metrics(
         "multi_category_conversations": len(multi_ids),
         "multi_category_mean_sample_f1": float(np.mean(sample_f1)) if sample_f1 else None,
         "closed_world_single_label": closed_world_single_label,
+        "cross_category_confusions": [
+            {"true_category": pair[0], "proposed_category": pair[1], "count": count}
+            for pair, count in sorted(confusions.items(), key=lambda item: (-item[1], item[0]))
+        ],
     }
+
+
+def _ranked_categories(category_rows: dict[str, Any]) -> list[dict[str, Any]]:
+    return sorted(
+        (
+            {
+                "category": category,
+                "priority": int(row.get("ranking_priority", 0)),
+                "margin": float(
+                    row.get(
+                        "ranking_margin",
+                        float(row.get("score", 0.0)) - float(row.get("proposal_threshold", 0.0)),
+                    )
+                ),
+                "score": row.get("score"),
+                "proposal_threshold": row.get("proposal_threshold"),
+                "vote_fraction": row.get("vote_fraction"),
+                "rule_evidence": row.get("rule_evidence", row.get("evidence", [])),
+            }
+            for category, row in category_rows.items()
+            if row.get("accepted")
+        ),
+        key=lambda item: (-item["priority"], -item["margin"], item["category"]),
+    )
+
+
+def filing_projection(
+    predictions: list[dict[str, Any]],
+    *,
+    ambiguity_margin: float = 0.05,
+) -> list[dict[str, Any]]:
+    output: list[dict[str, Any]] = []
+    for row in predictions:
+        accepted = _ranked_categories(row.get("categories", {}))
+        base = {
+            "corpus_id": row["corpus_id"],
+            "input_sha256": row.get("input_sha256"),
+            "model_generation_id": row.get("model_generation_id"),
+        }
+        if not accepted:
+            output.append({**base, "outcome": "no_sufficiently_supported_destination", "candidates": []})
+            continue
+        gap = (
+            math.inf
+            if len(accepted) == 1 or accepted[0]["priority"] != accepted[1]["priority"]
+            else accepted[0]["margin"] - accepted[1]["margin"]
+        )
+        if len(accepted) > 1 and accepted[0]["priority"] == accepted[1]["priority"] and gap < ambiguity_margin:
+            output.append(
+                {
+                    **base,
+                    "outcome": "several_plausible_destinations",
+                    "candidates": accepted[:5],
+                    "top_adjusted_margin_gap": gap,
+                }
+            )
+        else:
+            output.append(
+                {
+                    **base,
+                    "outcome": "confident_destination",
+                    "proposed_destination": accepted[0]["category"],
+                    "evidence": accepted[0],
+                    "alternatives": accepted[1:5],
+                    "top_adjusted_margin_gap": gap,
+                }
+            )
+    return output
 
 
 def filing_metrics(
@@ -1070,28 +1183,17 @@ def filing_metrics(
         if len(truth) != 1:
             continue
         eligible += 1
-        accepted = sorted(
-            (
-                (
-                    category,
-                    float(
-                        row.get(
-                            "ranking_margin",
-                            float(row.get("score", 0.0)) - float(row.get("proposal_threshold", 0.0)),
-                        )
-                    ),
-                )
-                for category, row in by_id.get(target_id, {}).items()
-                if row.get("accepted")
-            ),
-            key=lambda item: (-item[1], item[0]),
-        )
+        accepted = _ranked_categories(by_id.get(target_id, {}))
         if not accepted:
             unsupported += 1
             details.append({"corpus_id": target_id, "truth": truth[0], "result": "no_supported_destination"})
             continue
-        gap = math.inf if len(accepted) == 1 else accepted[0][1] - accepted[1][1]
-        if len(accepted) > 1 and gap < ambiguity_margin:
+        gap = (
+            math.inf
+            if len(accepted) == 1 or accepted[0]["priority"] != accepted[1]["priority"]
+            else accepted[0]["margin"] - accepted[1]["margin"]
+        )
+        if len(accepted) > 1 and accepted[0]["priority"] == accepted[1]["priority"] and gap < ambiguity_margin:
             ambiguous += 1
             details.append(
                 {
@@ -1104,14 +1206,14 @@ def filing_metrics(
             )
             continue
         confident += 1
-        is_wrong = accepted[0][0] != truth[0]
+        is_wrong = accepted[0]["category"] != truth[0]
         wrong += int(is_wrong)
         details.append(
             {
                 "corpus_id": target_id,
                 "truth": truth[0],
                 "result": "confident_destination",
-                "destination": accepted[0][0],
+                "destination": accepted[0]["category"],
                 "correct": not is_wrong,
                 "top_adjusted_margin_gap": gap,
             }
@@ -1127,7 +1229,7 @@ def filing_metrics(
         "several_plausible": ambiguous,
         "no_supported_destination": unsupported,
         "ambiguity_margin": ambiguity_margin,
-        "ranking": "category score minus that category's proposal threshold",
+        "ranking": "rule priority first, then category score minus that category's proposal threshold",
         "details": details,
     }
 
@@ -1181,6 +1283,7 @@ def compare(
         write_json_if_changed(output / model_name / "metrics.json", metrics)
         if filing is not None:
             write_json_if_changed(output / model_name / "filing.json", filing)
+            write_jsonl_if_changed(output / model_name / "destination-proposals.jsonl", filing_projection(predictions))
         run_rows.append({"model": model_name, "representation": space.representation, "model_generation_id": artifact["model_generation_id"], "metrics": metrics, "filing": filing})
 
         if model_name == f"sparse_{views[0]}":
@@ -1214,6 +1317,7 @@ def compare(
                 write_json_if_changed(output / dense_name / "metrics.json", dense_metrics)
                 if dense_filing is not None:
                     write_json_if_changed(output / dense_name / "filing.json", dense_filing)
+                    write_jsonl_if_changed(output / dense_name / "destination-proposals.jsonl", filing_projection(dense_predictions))
                 run_rows.append({"model": dense_name, "representation": dense.representation, "model_generation_id": dense_artifact["model_generation_id"], "metrics": dense_metrics, "filing": dense_filing})
 
                 centroid_name = f"dense_centroid_{views[0]}"
@@ -1232,6 +1336,7 @@ def compare(
                 write_json_if_changed(output / centroid_name / "metrics.json", centroid_metrics)
                 if centroid_filing is not None:
                     write_json_if_changed(output / centroid_name / "filing.json", centroid_filing)
+                    write_jsonl_if_changed(output / centroid_name / "destination-proposals.jsonl", filing_projection(centroid_predictions))
                 run_rows.append({"model": centroid_name, "representation": dense.representation, "metrics": centroid_metrics, "filing": centroid_filing})
 
     rules = load_rules(rules_path)
@@ -1245,6 +1350,7 @@ def compare(
         write_json_if_changed(output / rule_name / "metrics.json", rule_metrics)
         if rule_filing is not None:
             write_json_if_changed(output / rule_name / "filing.json", rule_filing)
+            write_jsonl_if_changed(output / rule_name / "destination-proposals.jsonl", filing_projection(rule_rows))
         run_rows.append({"model": rule_name, "representation": "exact_regular_expression_rules", "metrics": rule_metrics, "filing": rule_filing})
         first_geometric = next((name for name, _, _ in configurations if name in predictions_by_model), None)
         if first_geometric:
@@ -1256,6 +1362,7 @@ def compare(
             write_json_if_changed(output / hybrid_name / "metrics.json", hybrid_metrics)
             if hybrid_filing is not None:
                 write_json_if_changed(output / hybrid_name / "filing.json", hybrid_filing)
+                write_jsonl_if_changed(output / hybrid_name / "destination-proposals.jsonl", filing_projection(hybrid))
             run_rows.append({"model": hybrid_name, "representation": "rule_override_plus_geometric", "metrics": hybrid_metrics, "filing": hybrid_filing})
 
     manifest = {
@@ -1270,7 +1377,8 @@ def compare(
                     "labels": labels,
                     "partitions": partitions,
                     "views": views,
-                    "rules": str(rules_path) if rules_path else None,
+                    "rules_path": str(rules_path) if rules_path else None,
+                    "rules_sha256": sha256_bytes(rules_path.read_bytes()) if rules_path else None,
                     "filing_evaluation": filing_evaluation,
                 }
             )

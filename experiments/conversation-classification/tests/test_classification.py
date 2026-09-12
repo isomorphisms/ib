@@ -9,6 +9,7 @@ from pathlib import Path
 from ib_conversations.classify import (
     classify_geometric_model,
     compare,
+    filing_projection,
     merge_incremental_proposals,
     multilabel_metrics,
     train_geometric_model,
@@ -88,6 +89,19 @@ class ClassificationTest(unittest.TestCase):
                 view="user",
             )
             self.assertEqual(report["model_generation_id"], repeated_report["model_generation_id"])
+            new_test = document(999, "neither")
+            expanded_documents = self.documents + [new_test]
+            expanded_labels = {**self.labels, new_test.corpus_id: {"HVAC/R": False, "mathematics": False}}
+            expanded_partitions = {**self.partitions, new_test.corpus_id: "test"}
+            expanded_report = train_geometric_model(
+                expanded_documents,
+                expanded_labels,
+                expanded_partitions,
+                Path(temporary) / "expanded-model",
+                representation="sparse",
+                view="user",
+            )
+            self.assertEqual(report["model_generation_id"], expanded_report["model_generation_id"])
 
             first = classify_geometric_model(model, self.documents)
             second = classify_geometric_model(model, self.documents)
@@ -134,6 +148,39 @@ class ClassificationTest(unittest.TestCase):
             self.assertEqual(query_proposals(path, operation="unclassified")[0]["corpus_id"], "two")
             self.assertEqual(query_proposals(path, operation="overlap", category="A", other_category="B")[0]["corpus_id"], "one")
             self.assertEqual(query_proposals(path, operation="boundary", category="A")[0]["distance_to_boundary"], 0.01)
+
+    def test_filing_projection_prioritizes_exact_rules_and_can_abstain(self) -> None:
+        rows = filing_projection(
+            [
+                {
+                    "corpus_id": "exact",
+                    "categories": {
+                        "wrong-geometry": {"accepted": True, "ranking_priority": 0, "ranking_margin": 20.0},
+                        "exact-rule": {"accepted": True, "ranking_priority": 1, "ranking_margin": 0.0},
+                    },
+                },
+                {
+                    "corpus_id": "ambiguous",
+                    "categories": {
+                        "one": {"accepted": True, "ranking_margin": 0.10},
+                        "two": {"accepted": True, "ranking_margin": 0.08},
+                    },
+                },
+                {"corpus_id": "none", "categories": {}},
+            ]
+        )
+        self.assertEqual(rows[0]["proposed_destination"], "exact-rule")
+        self.assertEqual(rows[1]["outcome"], "several_plausible_destinations")
+        self.assertEqual(rows[2]["outcome"], "no_sufficiently_supported_destination")
+
+        metrics = multilabel_metrics(
+            [{"corpus_id": "one", "categories": {"spurious": {"accepted": True}}}],
+            {"one": {"truth": True}},
+            {"one": "test"},
+            closed_world_single_label=True,
+        )
+        self.assertEqual(metrics["category"]["truth"]["f1"], 0.0)
+        self.assertEqual(metrics["category"]["spurious"]["fp"], 1)
 
     def test_comparison_exercises_rules_sparse_dense_centroid_weighting_and_hybrid(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
