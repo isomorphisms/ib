@@ -1,0 +1,197 @@
+module IB.Occurrence
+
+%default total
+
+-- Authoritative source text remains separate from fragment and strand indexes.
+public export
+data AuthoritativeText = SourceText String String
+
+public export
+source_id : AuthoritativeText → String
+source_id (SourceText value _) = value
+
+public export
+source_text : AuthoritativeText → String
+source_text (SourceText _ value) = value
+
+-- Source ranges are half-open: source_start <= coordinate < source_end.
+public export
+data SourceFragment = Fragment String String Nat Nat
+
+public export
+fragment_id : SourceFragment → String
+fragment_id (Fragment value _ _ _) = value
+
+public export
+fragment_source_id : SourceFragment → String
+fragment_source_id (Fragment _ value _ _) = value
+
+public export
+fragment_source_start : SourceFragment → Nat
+fragment_source_start (Fragment _ _ value _) = value
+
+public export
+fragment_source_end : SourceFragment → Nat
+fragment_source_end (Fragment _ _ _ value) = value
+
+-- A materialized strand keeps the hot document-order path contiguous.
+public export
+data DocumentStrand = Strand String String (List String)
+
+public export
+strand_id : DocumentStrand → String
+strand_id (Strand value _ _) = value
+
+public export
+strand_source_id : DocumentStrand → String
+strand_source_id (Strand _ value _) = value
+
+public export
+strand_fragment_ids : DocumentStrand → List String
+strand_fragment_ids (Strand _ _ value) = value
+
+-- Each literal occurrence retains both its source coordinate and its position
+-- on the materialized strand.  The fragment id remains the durable identity.
+public export
+data Occurrence = Hit Nat Nat String
+
+public export
+occurrence_source_start : Occurrence → Nat
+occurrence_source_start (Hit value _ _) = value
+
+public export
+occurrence_strand_position : Occurrence → Nat
+occurrence_strand_position (Hit _ value _) = value
+
+public export
+occurrence_fragment_id : Occurrence → String
+occurrence_fragment_id (Hit _ _ value) = value
+
+starts_with_chars : List Char → List Char → Bool
+starts_with_chars [] _ = True
+starts_with_chars (_ :: _) [] = False
+starts_with_chars (wanted :: wanted_rest) (value :: rest) =
+  wanted == value && starts_with_chars wanted_rest rest
+
+literal_offsets_from : Nat → List Char → List Char → List Nat
+literal_offsets_from position wanted [] = []
+literal_offsets_from position wanted chars@(_ :: rest) =
+  if starts_with_chars wanted chars
+    then position :: literal_offsets_from (S position) wanted rest
+    else literal_offsets_from (S position) wanted rest
+
+-- Empty text is not treated as an occurrence at every source coordinate.
+public export
+literal_offsets : String → AuthoritativeText → List Nat
+literal_offsets wanted source =
+  if wanted == ""
+    then []
+    else literal_offsets_from 0 (unpack wanted) (unpack (source_text source))
+
+nat_less : Nat → Nat → Bool
+nat_less Z Z = False
+nat_less Z (S _) = True
+nat_less (S _) Z = False
+nat_less (S left) (S right) = nat_less left right
+
+contains_coordinate : Nat → SourceFragment → Bool
+contains_coordinate coordinate fragment =
+  not (nat_less coordinate (fragment_source_start fragment)) &&
+  nat_less coordinate (fragment_source_end fragment)
+
+fragment_at_coordinate : String → Nat → List SourceFragment → Maybe String
+fragment_at_coordinate wanted_source coordinate [] = Nothing
+fragment_at_coordinate wanted_source coordinate (fragment :: rest) =
+  if fragment_source_id fragment == wanted_source && contains_coordinate coordinate fragment
+    then Just (fragment_id fragment)
+    else fragment_at_coordinate wanted_source coordinate rest
+
+strand_position_from : Nat → String → List String → Maybe Nat
+strand_position_from position wanted [] = Nothing
+strand_position_from position wanted (value :: rest) =
+  if wanted == value
+    then Just position
+    else strand_position_from (S position) wanted rest
+
+strand_position : String → DocumentStrand → Maybe Nat
+strand_position wanted strand = strand_position_from 0 wanted (strand_fragment_ids strand)
+
+occurrence_at : String → List SourceFragment → DocumentStrand → Nat → Maybe Occurrence
+occurrence_at wanted_source fragments strand coordinate =
+  case fragment_at_coordinate wanted_source coordinate fragments of
+    Nothing ⇒ Nothing
+    Just found_fragment ⇒
+      case strand_position found_fragment strand of
+        Nothing ⇒ Nothing
+        Just position ⇒ Just (Hit coordinate position found_fragment)
+
+collect_occurrences : String → List SourceFragment → DocumentStrand → List Nat → List Occurrence
+collect_occurrences wanted_source fragments strand [] = []
+collect_occurrences wanted_source fragments strand (coordinate :: rest) =
+  case occurrence_at wanted_source fragments strand coordinate of
+    Nothing ⇒ collect_occurrences wanted_source fragments strand rest
+    Just occurrence ⇒ occurrence :: collect_occurrences wanted_source fragments strand rest
+
+-- Search the authoritative source, then map each exact match back onto stable
+-- fragments and the materialized document-order strand.  No alias, fuzzy,
+-- semantic, or model-derived matching occurs here.
+public export
+search_occurrences : String → AuthoritativeText → List SourceFragment → DocumentStrand → List Occurrence
+search_occurrences wanted source fragments strand =
+  if source_id source == strand_source_id strand
+    then collect_occurrences (source_id source) fragments strand (literal_offsets wanted source)
+    else []
+
+seen_fragment : String → List String → Bool
+seen_fragment wanted [] = False
+seen_fragment wanted (value :: rest) = wanted == value || seen_fragment wanted rest
+
+unique_occurrence_fragments : List String → List Occurrence → List String
+unique_occurrence_fragments seen [] = []
+unique_occurrence_fragments seen (occurrence :: rest) =
+  let value = occurrence_fragment_id occurrence in
+    if seen_fragment value seen
+      then unique_occurrence_fragments seen rest
+      else value :: unique_occurrence_fragments (value :: seen) rest
+
+public export
+matching_fragment_ids : String → AuthoritativeText → List SourceFragment → DocumentStrand → List String
+matching_fragment_ids wanted source fragments strand =
+  unique_occurrence_fragments [] (search_occurrences wanted source fragments strand)
+
+subtract_saturating : Nat → Nat → Nat
+subtract_saturating value Z = value
+subtract_saturating Z (S _) = Z
+subtract_saturating (S value) (S amount) = subtract_saturating value amount
+
+window_from : Nat → Nat → Nat → List String → List String
+window_from index lower upper [] = []
+window_from index lower upper (value :: rest) =
+  if nat_less upper index
+    then []
+    else if nat_less index lower
+      then window_from (S index) lower upper rest
+      else value :: window_from (S index) lower upper rest
+
+fragment_id_at : Nat → List String → Maybe String
+fragment_id_at Z [] = Nothing
+fragment_id_at Z (value :: _) = Just value
+fragment_id_at (S position) [] = Nothing
+fragment_id_at (S position) (_ :: rest) = fragment_id_at position rest
+
+-- A hit is only windowed against the strand revision it still matches.  A stale
+-- position/id pair fails rather than silently returning context around a
+-- different fragment.
+public export
+context_fragment_ids : Nat → Nat → Occurrence → DocumentStrand → Maybe (List String)
+context_fragment_ids before after occurrence strand =
+  let position = occurrence_strand_position occurrence in
+  let ids = strand_fragment_ids strand in
+    case fragment_id_at position ids of
+      Nothing ⇒ Nothing
+      Just current ⇒
+        if current == occurrence_fragment_id occurrence
+          then let lower = subtract_saturating position before in
+               let upper = position + after in
+                 Just (window_from 0 lower upper ids)
+          else Nothing
