@@ -8,6 +8,8 @@ The substrate supports multiple frontends over the same browser-owned state. A c
 
 The browser core owns resource, tab, event, and task identity; sleeping and waking; snapshots; organization; indexes; inference acceptance; and renderer selection. Only roughly 3–10 renderer working sets should normally be resident even when the known corpus reaches 10,000 resources.
 
+Low-memory behavior has a harder exception: an active authenticated transaction may be protected from ordinary sleeping or eviction. Opening another tab or app to retrieve information must not silently destroy the login/session or in-progress form state. See `docs/architecture.md` and #59.
+
 ## Design notes
 
 - `docs/architecture.md` — ownership and replaceable-service boundaries
