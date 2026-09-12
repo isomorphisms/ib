@@ -1,0 +1,79 @@
+#!/bin/sh
+set -eu
+
+repository_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+fail() {
+  printf '0.2 arXiv round trip: %s\n' "$*" >&2
+  exit 1
+}
+
+work=$(mktemp -d "${TMPDIR:-/tmp}/ib-0.2-arxiv.XXXXXX")
+trap 'rm -rf "$work"' EXIT HUP INT TERM
+
+export IB_HOME="$work/state"
+export IB_ICU="$repository_root/tests/fake_icu_0_2"
+export IB_FAKE_FIXTURES="$repository_root/tests/fixtures/arxiv-0.2"
+export IB_FAKE_LOG="$work/fetches.log"
+: > "$IB_FAKE_LOG"
+
+hook_directory="$IB_HOME/hooks/after-distill.d"
+mkdir -p "$hook_directory"
+cat > "$hook_directory/record" <<'EOF'
+#!/bin/sh
+set -eu
+printf '%s\t%s\n' "$1" "$2" > "${IB_HOOK_RECORD:?}"
+EOF
+chmod +x "$hook_directory/record"
+export IB_HOOK_RECORD="$work/hook.tsv"
+
+"$repository_root/bin/ib" add 'https://arxiv.org/abs/2203.11355' >/dev/null
+
+cauldron="$IB_HOME/cauldron/arxiv/2203.11355"
+pensieve="$IB_HOME/pensieve/arxiv/2203.11355"
+
+for path in \
+  "$cauldron/complete" \
+  "$cauldron/abstract.html" \
+  "$cauldron/paper.html" \
+  "$cauldron/paper.pdf" \
+  "$cauldron/figures/0001.png" \
+  "$cauldron/figures.tsv" \
+  "$pensieve/source" \
+  "$pensieve/title" \
+  "$pensieve/text/from-abstract.txt" \
+  "$pensieve/text/from-html.txt" \
+  "$pensieve/links.tsv" \
+  "$pensieve/figures.tsv"
+do
+  test -e "$path" || fail "missing $path"
+done
+
+grep -F 'Bergman kernels' "$pensieve/text/from-html.txt" >/dev/null ||
+  fail 'HTML text was not distilled into searchable Pensieve text'
+grep -F 'https://example.org/reference' "$pensieve/links.tsv" >/dev/null ||
+  fail 'link extraction did not reach the Pensieve'
+grep -F 'figures/0001.png' "$cauldron/figures.tsv" >/dev/null ||
+  fail 'figure manifest did not record the fetched figure'
+grep -F 'ok' "$cauldron/figures.tsv" >/dev/null ||
+  fail 'figure fetch did not complete'
+
+search_result=$("$repository_root/bin/ib" search 'Bergman kernels')
+printf '%s\n' "$search_result" | grep -F 'from-html.txt' >/dev/null ||
+  fail 'exact-text search did not recover the local paper'
+
+test -f "$IB_HOOK_RECORD" || fail 'after-distill hook did not run'
+grep -F "$pensieve" "$IB_HOOK_RECORD" >/dev/null ||
+  fail 'hook did not receive the Pensieve item path'
+grep -F "$cauldron" "$IB_HOOK_RECORD" >/dev/null ||
+  fail 'hook did not receive the Cauldron source path'
+
+first_fetch_count=$(wc -l < "$IB_FAKE_LOG" | tr -d ' ')
+test "$first_fetch_count" = 4 ||
+  fail "expected four network acquisitions, found $first_fetch_count"
+
+"$repository_root/bin/ib" add 'https://arxiv.org/abs/2203.11355' >/dev/null
+second_fetch_count=$(wc -l < "$IB_FAKE_LOG" | tr -d ' ')
+test "$second_fetch_count" = "$first_fetch_count" ||
+  fail 'adding an already complete Cauldron item fetched it again'
+
+printf 'ib 0.2 arXiv round trip: PASS\n'

@@ -1,0 +1,49 @@
+#!/bin/sh
+set -eu
+
+repository_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+. "$repository_root/lib/ib/pensieve.grease"
+
+fail() {
+  printf '0.2 smoke: %s\n' "$*" >&2
+  exit 1
+}
+
+assert_identifier() {
+  input=$1
+  expected=$2
+  actual=$(arxiv_identifier_from_input "$input")
+  test "$actual" = "$expected" ||
+    fail "identifier mismatch: $input -> $actual, expected $expected"
+}
+
+assert_identifier 'https://arxiv.org/abs/2203.11355' '2203.11355'
+assert_identifier 'https://arxiv.org/pdf/1901.09021.pdf' '1901.09021'
+assert_identifier 'arxiv:1606.05336v2' '1606.05336v2'
+assert_identifier 'https://ar5iv.labs.arxiv.org/html/math/0506432' 'math/0506432'
+
+work=$(mktemp -d "${TMPDIR:-/tmp}/ib-0.2-smoke.XXXXXX")
+trap 'rm -rf "$work"' EXIT HUP INT TERM
+export IB_HOME="$work/state"
+
+text_directory="$IB_HOME/pensieve/arxiv/2203.11355/text"
+mkdir -p "$text_directory"
+printf '%s\n' 'A local note about Bergman kernels and holomorphic functions.' > "$text_directory/from-html.txt"
+printf '%s\n' 'another representation' > "$text_directory/from-pdf.txt"
+
+index=$("$repository_root/bin/ib" reindex)
+test -f "$index" || fail 'reindex did not create the index file'
+count=$(wc -l < "$index" | tr -d ' ')
+test "$count" = 2 || fail "expected two indexed text files, found $count"
+
+result=$("$repository_root/bin/ib" search 'Bergman kernels')
+printf '%s\n' "$result" | grep -F 'from-html.txt' >/dev/null ||
+  fail 'local search did not find the Pensieve text'
+
+paths=$("$repository_root/bin/ib" paths)
+printf '%s\n' "$paths" | grep -F "$IB_HOME/cauldron" >/dev/null ||
+  fail 'paths did not report the Cauldron'
+printf '%s\n' "$paths" | grep -F "$IB_HOME/pensieve" >/dev/null ||
+  fail 'paths did not report the Pensieve'
+
+printf 'ib 0.2 shell smoke: PASS\n'
