@@ -42,6 +42,7 @@ exercise_core() {
   grep -Fx 'host-count=2' /tmp/ib-smoke.txt
   grep -Fx 'canonical=canonical' /tmp/ib-smoke.txt
   grep -Fx 'cache-fake=cache' /tmp/ib-smoke.txt
+  grep -Fx 'views=derived' /tmp/ib-smoke.txt
   grep -Fx 'secret=secret' /tmp/ib-smoke.txt
   grep -Fx 'readable-files=2' /tmp/ib-smoke.txt
   grep -Fx 'canonical-files=2' /tmp/ib-smoke.txt
@@ -54,6 +55,36 @@ exercise_core() {
   grep -Fx 'temporary-needs-language-model=True' /tmp/ib-smoke.txt
   grep -Fx 'prefetch-bounded=2' /tmp/ib-smoke.txt
   grep -Fx 'prefetch-reading=1' /tmp/ib-smoke.txt
+  grep -Fx 'vector-backend=flat-f32-exact' /tmp/ib-smoke.txt
+  grep -Fx 'vector-scalar=f32' /tmp/ib-smoke.txt
+  grep -Fx 'vector-contract=2' /tmp/ib-smoke.txt
+  grep -Fx 'vector-directory=organizing-the-information/vector-spaces/test-model/pages' /tmp/ib-smoke.txt
+  grep -Fx 'vector-format-readable=True' /tmp/ib-smoke.txt
+  grep -Fx 'vector-model-readable=True' /tmp/ib-smoke.txt
+  grep -Fx 'vector-text-readable=True' /tmp/ib-smoke.txt
+  grep -Fx 'vector-bytes-readable=False' /tmp/ib-smoke.txt
+}
+
+exercise_filesystem_views() {
+  cd "$repository_root"
+  sh -n lib/filesystem_views.grease
+  sh -n bin/ib_views.grease
+  sh -n tests/fixtures/mock_documentation_synthesizer.grease
+  sh -n tests/test_filesystem_views.grease
+  sh tests/test_filesystem_views.grease
+}
+
+exercise_tab_qa() {
+  cd "$repository_root"
+  sh -n lib/tab_qa.grease
+  sh -n bin/ask_saved_pages.grease
+  sh -n bin/mock_tab_model.grease
+  sh -n bin/mock_tab_qa_reducer.grease
+  sh -n tests/test_mock_tab_model.grease
+  sh -n tests/test_tab_qa_pipeline.grease
+  make -C native/vector-index
+  sh tests/test_mock_tab_model.grease
+  sh tests/test_tab_qa_pipeline.grease
 }
 
 exercise_workbench() {
@@ -80,6 +111,24 @@ exercise_workbench() {
   grep -Fx 'churn-steps=10000' /tmp/ib-workbench.txt
   grep -Fx 'resident-at-3=3' /tmp/ib-workbench.txt
   grep -Fx 'resident-at-10=10' /tmp/ib-workbench.txt
+}
+
+exercise_file_store() {
+  cd "$repository_root"
+  "$idric_prefix/bin/idris2" --source-dir src src/FileStoreSmoke.idric -o ib-file-store-smoke \
+    2>&1 | tee /tmp/idric-file-store-compile.txt
+  test -x ./build/exec/ib-file-store-smoke
+  ! grep -q '^Error:' /tmp/idric-file-store-compile.txt
+
+  store_root="$(mktemp -d)/state"
+  ./build/exec/ib-file-store-smoke write "$store_root" | tee /tmp/ib-file-store-write.txt
+  grep -Fx 'write=ok' /tmp/ib-file-store-write.txt
+  grep -Fx 'unsafe-path=rejected' /tmp/ib-file-store-write.txt
+  grep -Fx 'noncanonical-path=rejected' /tmp/ib-file-store-write.txt
+  ./build/exec/ib-file-store-smoke read "$store_root" | tee /tmp/ib-file-store-read.txt
+  grep -Fx 'manifest-survived=True' /tmp/ib-file-store-read.txt
+  grep -Fx 'history-survived=True' /tmp/ib-file-store-read.txt
+  grep -Fx 'history-lines=2' /tmp/ib-file-store-read.txt
 }
 
 build_information_programs() {
@@ -161,11 +210,14 @@ case "${1:-}" in
   exercise-information) exercise_information ;;
   exercise-core) exercise_core ;;
   exercise-workbench) exercise_workbench ;;
+  exercise-file-store) exercise_file_store ;;
+  exercise-filesystem-views) exercise_filesystem_views ;;
+  exercise-tab-qa) exercise_tab_qa ;;
   exercise-scientific-media) exercise_scientific_media ;;
   exercise-live-arxiv) exercise_live_arxiv ;;
   exercise-live-arxiv-prepaint) exercise_live_arxiv_prepaint ;;
   *)
-    printf 'usage: %s {install-dependencies|build-idric|verify-pdf-harvester|exercise-information|exercise-core|exercise-workbench|exercise-scientific-media|exercise-live-arxiv|exercise-live-arxiv-prepaint}\n' "$0" >&2
+    printf 'usage: %s {install-dependencies|build-idric|verify-pdf-harvester|exercise-information|exercise-core|exercise-workbench|exercise-file-store|exercise-filesystem-views|exercise-tab-qa|exercise-scientific-media|exercise-live-arxiv|exercise-live-arxiv-prepaint}\n' "$0" >&2
     exit 2
     ;;
 esac

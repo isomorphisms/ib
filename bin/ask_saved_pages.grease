@@ -1,0 +1,30 @@
+#!/bin/sh
+set -eu
+
+repository_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+export IB_TAB_QA_REPOSITORY_ROOT="$repository_root"
+. "$repository_root/lib/tab_qa.grease"
+
+case "${1:-}" in
+  --index)
+    test "$#" -eq 1 || exit 2
+    ib_tab_qa_build_index
+    ;;
+  --inspect)
+    test "$#" -eq 1 || exit 2
+    ib_tab_qa_inspect
+    ;;
+  --help)
+    printf '%s\n' \
+      "usage: $0 [--index|--inspect|QUESTION]" \
+      'With no argument, read one question from the console.'
+    ;;
+  '')
+    printf 'question> ' >&2
+    IFS= read -r question || exit 1
+    ib_tab_qa_answer "$question"
+    ;;
+  *)
+    ib_tab_qa_answer "$*"
+    ;;
+esac

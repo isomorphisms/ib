@@ -50,6 +50,8 @@ Possible states:
 - **cold** — durable metadata or task graph only;
 - **never visited** — fixture exists but has no browsing state.
 
+The filesystem `views/hot` set is a request to favor presentation targets for immediate use. It is not the same measurement as resident renderer tabs: a text or synthesized Markdown presentation may be hot without any page renderer, and memory pressure may temporarily make requested-hot differ from actually resident. See `docs/filesystem-views.md`.
+
 Opening a cold URL may promote a logical tab into the renderer working set. Memory pressure or working-set limits demote another renderer without losing browser-owned tab, event, task, or organization state.
 
 Prefetched documents remain cold or warm; prefetching seven documentation pages must not create seven live renderer sessions.

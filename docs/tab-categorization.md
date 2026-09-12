@@ -51,15 +51,17 @@ state/
   events/
     visits.log
 
-categories/
-  algebraic-topology/
-    tab-01T... -> ../../state/tabs/01T...
+views/
+  organizing-the-information/
+    categories/
+      algebraic-topology/
+        tab-01T... -> ../../../../state/tabs/01T...
 
-  algebraic-topology-1950s/
-    tab-01T... -> ../../state/tabs/01T...
+      algebraic-topology-1950s/
+        tab-01T... -> ../../../../state/tabs/01T...
 
-  Serre/
-    tab-01T... -> ../../state/tabs/01T...
+      Serre/
+        tab-01T... -> ../../../../state/tabs/01T...
 ```
 
 The same tab can therefore appear in `algebraic-topology`, `algebraic-topology-1950s`, `Serre`, and any other useful view without duplicating the underlying record.
@@ -94,17 +96,25 @@ Once a narrower name is unambiguous and useful to the user, redundant umbrella p
 
 Categories can remain durable without all of them being active in the current workbench.
 
-One representation may use an underscore-prefixed control directory such as `_active` as a small set of pointers to category views currently in use:
+One representation uses `views/_active` as a small set of pointers to category views currently in use:
 
 ```text
-categories/
+views/
+  organizing-the-information/
+    categories/
+      algebraic-topology-1950s/
+      algebraic-topology-1970s/
+      campaign-4/
+
   _active/
-    algebraic-topology-1950s -> ../algebraic-topology-1950s
-    algebraic-topology-1970s -> ../algebraic-topology-1970s
-    campaign-4               -> ../campaign-4
+    algebraic-topology-1950s -> ../organizing-the-information/categories/algebraic-topology-1950s
+    algebraic-topology-1970s -> ../organizing-the-information/categories/algebraic-topology-1970s
+    campaign-4               -> ../organizing-the-information/categories/campaign-4
 ```
 
 Removing a link from `_active` neither deletes nor freezes the category. It removes it from the present attention surface while leaving older interests searchable and recoverable. `_active` is not the renderer's hot-tab working set: activating a category must not wake every tab or fetch every resource in it.
+
+The separate `views/hot` control surface points at presentation targets that should receive immediate working-set attention. A hot target may be a text, Markdown, or HTML file, or a local bundle synthesized from several resources; it need not be the original fetched page or a tab record. Requested-hot and actually resident remain distinct under memory pressure. See `docs/filesystem-views.md`.
 
 ## Derived, rebuildable organization
 
@@ -142,7 +152,11 @@ Private account, authentication, messaging, password-reset, and token-bearing UR
 
 ## Implementation status
 
-The current `IB.History` and `IB.Index` slices preserve repeated URL rows and their input order. That normalized order is not yet a stable event identity across imports, merges, restarts, or sync. Category definitions, proposal records, accepted-membership storage, filesystem projections, reverse-membership inspection, and `_active` are not implemented on `main` yet. The current storage inspector also does not follow category symlinks. This note defines the boundary for that future work; its example directories are not a claim about the present schema.
+The current `IB.History` and `IB.Index` slices preserve repeated URL rows and their input order. That normalized order is not yet a stable event identity across imports, merges, restarts, or sync.
+
+The first Grease filesystem slice can materialize typed tab/resource links into overlapping category directories, manage `_active`, list reverse membership, publish presentation files or bundles into `views/hot`, and prune broken links. Its deterministic fixture makes a twenty-source Markdown composite hot without a renderer or language model. See `docs/filesystem-views.md`.
+
+Category definitions, proposal records, and accepted-membership storage are not implemented yet, so these projections cannot yet be rebuilt from durable Idriç assertions. The current storage inspector classifies `views/` as derived but does not follow category symlinks. The Grease slice also does not claim that a requested-hot presentation has actually been loaded into RAM.
 
 ## Commitment level
 
@@ -160,7 +174,8 @@ Current heuristics and baselines:
 - roughly 5–10 relevant objects as a category-promotion signal;
 - one affine inclusion scorer and separate threshold per category using positives, explicit negatives, and unlabeled material correctly;
 - over-inclusion when the alternative is failed retrieval;
-- `_active` as a filesystem-shaped working-set control.
+- `_active` as a filesystem-shaped category-attention control;
+- `views/hot` as a separate requested presentation working set.
 
 Still open:
 

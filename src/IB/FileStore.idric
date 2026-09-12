@@ -1,0 +1,149 @@
+module IB.FileStore
+
+import IB.Storage
+
+import System.Directory
+import System.File
+
+%default total
+
+public export
+data StoreError
+  = InvalidRoot
+  | InvalidRelativePath String
+  | NonCanonicalPath String
+  | FileFailure String FileError
+
+file_error_text : FileError → String
+file_error_text (GenericFileError number) = "filesystem error " ++ show number
+file_error_text FileReadError = "file read error"
+file_error_text FileWriteError = "file write error"
+file_error_text FileNotFound = "file not found"
+file_error_text PermissionDenied = "permission denied"
+file_error_text FileExists = "file exists"
+
+public export
+Show StoreError where
+  show InvalidRoot = "store root must not be empty"
+  show (InvalidRelativePath path) = "unsafe store path: " ++ path
+  show (NonCanonicalPath path) = "not a canonical store path: " ++ path
+  show (FileFailure path error) = path ++ ": " ++ file_error_text error
+
+canonical_kind : storage_kind → Bool
+canonical_kind canonical = True
+canonical_kind _ = False
+
+store_path : String → String → String
+store_path root relative = root ++ "/" ++ relative
+
+create_if_missing : String → IO (Either StoreError ())
+create_if_missing path = do
+  result ← createDir path
+  case result of
+    Right () ⇒ pure (Right ())
+    Left FileExists ⇒ pure (Right ())
+    Left error ⇒ pure (Left (FileFailure path error))
+
+public export
+prepare_store : String → IO (Either StoreError ())
+prepare_store "" = pure (Left InvalidRoot)
+prepare_store root = do
+  Right () ← create_if_missing root
+    | Left error ⇒ pure (Left error)
+  Right () ← create_if_missing (store_path root "tabs")
+    | Left error ⇒ pure (Left error)
+  Right () ← create_if_missing (store_path root "snapshots")
+    | Left error ⇒ pure (Left error)
+  Right () ← create_if_missing (store_path root "indexes")
+    | Left error ⇒ pure (Left error)
+  create_if_missing (store_path root "cache")
+
+valid_tab_id : String → Bool
+valid_tab_id tab_id =
+  tab_id /= "." && safe_relative_path tab_id && path_parts tab_id == [tab_id]
+
+public export
+prepare_tab : String → String → IO (Either StoreError ())
+prepare_tab root tab_id =
+  if valid_tab_id tab_id
+    then do
+      Right () ← prepare_store root
+        | Left error ⇒ pure (Left error)
+      create_if_missing (store_path root ("tabs/" ++ tab_id))
+    else pure (Left (InvalidRelativePath tab_id))
+
+check_canonical_path : String → Either StoreError ()
+check_canonical_path path =
+  if not (safe_relative_path path)
+    then Left (InvalidRelativePath path)
+    else if canonical_kind (classify_path path)
+      then Right ()
+      else Left (NonCanonicalPath path)
+
+check_store_path : String → String → Either StoreError ()
+check_store_path "" relative = Left InvalidRoot
+check_store_path root relative = check_canonical_path relative
+
+public export
+covering
+read_canonical_text : String → String → IO (Either StoreError String)
+read_canonical_text root relative =
+  case check_store_path root relative of
+    Left error ⇒ pure (Left error)
+    Right () ⇒ do
+      result ← readFile (store_path root relative)
+      case result of
+        Left error ⇒ pure (Left (FileFailure (store_path root relative) error))
+        Right text ⇒ pure (Right text)
+
+public export
+write_canonical_text : String → String → String → IO (Either StoreError ())
+write_canonical_text root relative text =
+  case check_store_path root relative of
+    Left error ⇒ pure (Left error)
+    Right () ⇒ do
+      result ← writeFile (store_path root relative) text
+      case result of
+        Left error ⇒ pure (Left (FileFailure (store_path root relative) error))
+        Right () ⇒ pure (Right ())
+
+public export
+append_canonical_text : String → String → String → IO (Either StoreError ())
+append_canonical_text root relative text =
+  case check_store_path root relative of
+    Left error ⇒ pure (Left error)
+    Right () ⇒ do
+      result ← appendFile (store_path root relative) text
+      case result of
+        Left error ⇒ pure (Left (FileFailure (store_path root relative) error))
+        Right () ⇒ pure (Right ())
+
+public export
+write_tab_manifest : String → String → String → IO (Either StoreError ())
+write_tab_manifest root tab_id text = do
+  Right () ← prepare_tab root tab_id
+    | Left error ⇒ pure (Left error)
+  write_canonical_text root ("tabs/" ++ tab_id ++ "/tab.txt") text
+
+public export
+covering
+read_tab_manifest : String → String → IO (Either StoreError String)
+read_tab_manifest root tab_id =
+  if valid_tab_id tab_id
+    then read_canonical_text root ("tabs/" ++ tab_id ++ "/tab.txt")
+    else pure (Left (InvalidRelativePath tab_id))
+
+public export
+append_tab_history : String → String → String → IO (Either StoreError ())
+append_tab_history root tab_id line = do
+  Right () ← prepare_tab root tab_id
+    | Left error ⇒ pure (Left error)
+  append_canonical_text root ("tabs/" ++ tab_id ++ "/history.log") (line ++ "\n")
+
+public export
+covering
+read_tab_history : String → String → IO (Either StoreError String)
+read_tab_history root tab_id =
+  if valid_tab_id tab_id
+    then read_canonical_text root ("tabs/" ++ tab_id ++ "/history.log")
+    else pure (Left (InvalidRelativePath tab_id))

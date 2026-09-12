@@ -1,0 +1,147 @@
+#!/bin/sh
+set -eu
+
+repository_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+. "$repository_root/lib/filesystem_views.grease"
+
+work_directory=$(mktemp -d)
+cleanup() {
+  rm -rf "$work_directory"
+}
+trap cleanup EXIT HUP INT TERM
+
+view_root="$work_directory/views"
+state_root="$work_directory/state"
+presentation_root="$work_directory/reading"
+mkdir -p \
+  "$state_root/tabs/01T-CAMPAIGN" \
+  "$state_root/resources/01R-RULES" \
+  "$presentation_root/sources" \
+  "$presentation_root/plain" \
+  "$presentation_root/html"
+printf '%s\n' 'id 01T-CAMPAIGN' > "$state_root/tabs/01T-CAMPAIGN/tab.txt"
+printf '%s\n' 'id 01R-RULES' > "$state_root/resources/01R-RULES/resource.txt"
+printf '%s\n' 'plain prepaint' > "$presentation_root/plain/view.txt"
+printf '%s\n' '<p>fast local prepaint</p>' > "$presentation_root/html/view.html"
+
+ib_views_initialize "$view_root"
+ib_views_initialize "$view_root"
+test -d "$view_root/retrieved-from-the-web/text"
+test -d "$view_root/retrieved-from-the-web/images"
+test -d "$view_root/organizing-the-information/categories"
+test -d "$view_root/organizing-the-information/vector-spaces"
+test -d "$view_root/_active"
+test -d "$view_root/hot"
+
+ib_category_add "$view_root" "$state_root" critical-role tab 01T-CAMPAIGN >/dev/null
+ib_category_add "$view_root" "$state_root" campaign-4 tab 01T-CAMPAIGN >/dev/null
+ib_category_add "$view_root" "$state_root" campaign-4 tab 01T-CAMPAIGN >/dev/null
+ib_category_add "$view_root" "$state_root" rules-reference resource 01R-RULES >/dev/null
+
+tab_target=$(realpath "$state_root/tabs/01T-CAMPAIGN")
+test "$(readlink "$view_root/organizing-the-information/categories/critical-role/tab-01T-CAMPAIGN")" = "$tab_target"
+test "$(readlink "$view_root/organizing-the-information/categories/campaign-4/tab-01T-CAMPAIGN")" = "$tab_target"
+test "$(ib_category_memberships "$view_root" "$state_root" tab 01T-CAMPAIGN)" = "$(printf '%s\n' campaign-4 critical-role)"
+
+ib_category_activate "$view_root" campaign-4 >/dev/null
+test -L "$view_root/_active/campaign-4"
+test -d "$view_root/_active/campaign-4"
+ib_category_deactivate "$view_root" campaign-4
+test ! -L "$view_root/_active/campaign-4"
+test -L "$view_root/organizing-the-information/categories/campaign-4/tab-01T-CAMPAIGN"
+
+set --
+source_ordinal=1
+while test "$source_ordinal" -le 20; do
+  source_path="$presentation_root/sources/page-$source_ordinal.txt"
+  printf 'documentation page %s\nbody not needed by the fake\n' "$source_ordinal" > "$source_path"
+  set -- "$@" "$source_path"
+  source_ordinal=$((source_ordinal + 1))
+done
+
+sh "$repository_root/tests/fixtures/mock_documentation_synthesizer.grease" \
+  "$presentation_root/aws-composite" "$@"
+test "$(grep -c '^## Source ' "$presentation_root/aws-composite/view.md")" -eq 20
+test "$(wc -l < "$presentation_root/aws-composite/sources.tsv")" -eq 21
+
+ib_hot_add "$view_root" "$presentation_root" aws-iam aws-composite >/dev/null
+ib_hot_add "$view_root" "$presentation_root" quick.txt plain/view.txt >/dev/null
+ib_hot_add "$view_root" "$presentation_root" quick.html html/view.html >/dev/null
+test -d "$view_root/hot/aws-iam"
+test -f "$view_root/hot/aws-iam/view.md"
+test -f "$view_root/hot/quick.txt"
+test -f "$view_root/hot/quick.html"
+grep -F 'documentation page 20' "$view_root/hot/aws-iam/view.md" >/dev/null
+
+printf '%s\n' '# Replacement presentation' > "$presentation_root/replacement.md"
+ib_hot_add "$view_root" "$presentation_root" aws-iam replacement.md >/dev/null
+test "$(readlink "$view_root/hot/aws-iam")" = "$(realpath "$presentation_root/replacement.md")"
+test -f "$presentation_root/aws-composite/view.md"
+
+printf '%s\n' '# Race A' > "$presentation_root/race-a.md"
+printf '%s\n' '# Race B' > "$presentation_root/race-b.md"
+ib_hot_add "$view_root" "$presentation_root" race race-a.md >/dev/null &
+race_a_pid=$!
+ib_hot_add "$view_root" "$presentation_root" race race-b.md >/dev/null &
+race_b_pid=$!
+wait "$race_a_pid"
+wait "$race_b_pid"
+race_target=$(readlink "$view_root/hot/race")
+case "$race_target" in
+  "$(realpath "$presentation_root/race-a.md")"|"$(realpath "$presentation_root/race-b.md")") ;;
+  *)
+    printf '%s\n' 'concurrent hot publication left an invalid target' >&2
+    exit 1
+    ;;
+esac
+test -f "$view_root/hot/race"
+
+printf '%s\n' 'do not clobber me' > "$view_root/hot/manual"
+if ib_hot_add "$view_root" "$presentation_root" manual replacement.md >/dev/null 2>&1; then
+  printf '%s\n' 'hot materialization replaced a regular file' >&2
+  exit 1
+fi
+grep -Fx 'do not clobber me' "$view_root/hot/manual" >/dev/null
+
+mkdir -p "$work_directory/outside"
+printf '%s\n' 'outside allowed presentation root' > "$work_directory/outside/view.md"
+ln -s "$work_directory/outside/view.md" "$presentation_root/escape.md"
+if ib_hot_add "$view_root" "$presentation_root" escape escape.md >/dev/null 2>&1; then
+  printf '%s\n' 'hot materialization accepted an escaping target' >&2
+  exit 1
+fi
+if ib_category_add "$view_root" "$state_root" '../escape' tab 01T-CAMPAIGN >/dev/null 2>&1; then
+  printf '%s\n' 'category materialization accepted an unsafe name' >&2
+  exit 1
+fi
+if ib_category_add "$view_root" "$state_root" _active tab 01T-CAMPAIGN >/dev/null 2>&1; then
+  printf '%s\n' 'category materialization accepted the reserved control name' >&2
+  exit 1
+fi
+ln -s "$work_directory/outside" "$state_root/tabs/01T-ESCAPE"
+if ib_category_add "$view_root" "$state_root" escaped-tab tab 01T-ESCAPE >/dev/null 2>&1; then
+  printf '%s\n' 'category materialization accepted an escaping object target' >&2
+  exit 1
+fi
+
+printf '%s\n' 'soon stale' > "$presentation_root/stale.md"
+ib_hot_add "$view_root" "$presentation_root" stale stale.md >/dev/null
+rm -f "$presentation_root/stale.md"
+pruned=$(ib_views_prune_broken_links "$view_root")
+test "$pruned" = "$view_root/hot/stale"
+test ! -L "$view_root/hot/stale"
+
+ib_category_remove "$view_root" critical-role tab 01T-CAMPAIGN
+test ! -L "$view_root/organizing-the-information/categories/critical-role/tab-01T-CAMPAIGN"
+test -f "$state_root/tabs/01T-CAMPAIGN/tab.txt"
+ib_hot_remove "$view_root" quick.txt
+test ! -L "$view_root/hot/quick.txt"
+test -f "$presentation_root/plain/view.txt"
+
+cli_view_root="$work_directory/cli-views"
+sh "$repository_root/bin/ib_views.grease" init "$cli_view_root"
+sh "$repository_root/bin/ib_views.grease" \
+  category-add "$cli_view_root" "$state_root" rules-reference resource 01R-RULES >/dev/null
+test -L "$cli_view_root/organizing-the-information/categories/rules-reference/resource-01R-RULES"
+
+printf '%s\n' 'filesystem view tests: ok'

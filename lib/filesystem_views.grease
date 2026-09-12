@@ -1,0 +1,335 @@
+# Grease source.  This layer materializes filesystem control surfaces over
+# browser-owned state and human-readable presentation artifacts.  The links
+# are rebuildable views; they do not become canonical browser records.
+
+ib_views_fail() {
+  printf '%s\n' "$*" >&2
+  return 1
+}
+
+ib_views_require_command() {
+  command -v "$1" >/dev/null 2>&1 || ib_views_fail "missing command: $1"
+}
+
+ib_views_validate_component() (
+  ib_views_component_label=$1
+  ib_views_component_value=$2
+
+  case "$ib_views_component_value" in
+    ''|.|..|*/*)
+      ib_views_fail "unsafe $ib_views_component_label: $ib_views_component_value"
+      return 1
+      ;;
+    *'
+'*)
+      ib_views_fail "$ib_views_component_label contains a newline"
+      return 1
+      ;;
+  esac
+)
+
+ib_views_validate_relative_path() (
+  ib_views_relative_path=$1
+
+  case "$ib_views_relative_path" in
+    ''|.|/*|./*|*/./*|*/.|..|../*|*/../*|*/..)
+      ib_views_fail "unsafe relative target: $ib_views_relative_path"
+      return 1
+      ;;
+    *'
+'*)
+      ib_views_fail 'relative target contains a newline'
+      return 1
+      ;;
+  esac
+)
+
+ib_views_existing_target() (
+  ib_views_allowed_root=$1
+  ib_views_relative_target=$2
+
+  ib_views_require_command realpath || return 1
+  ib_views_validate_relative_path "$ib_views_relative_target" || return 1
+  test -d "$ib_views_allowed_root" || {
+    ib_views_fail "target root is not a directory: $ib_views_allowed_root"
+    return 1
+  }
+
+  ib_views_physical_root=$(realpath -e "$ib_views_allowed_root") || return 1
+  ib_views_physical_target=$(realpath -e "$ib_views_allowed_root/$ib_views_relative_target") || {
+    ib_views_fail "view target does not exist: $ib_views_relative_target"
+    return 1
+  }
+
+  case "$ib_views_physical_target" in
+    "$ib_views_physical_root"/*) ;;
+    *)
+      ib_views_fail "view target escapes its allowed root: $ib_views_relative_target"
+      return 1
+      ;;
+  esac
+
+  printf '%s\n' "$ib_views_physical_target"
+)
+
+ib_views_atomic_link() (
+  ib_views_link_target=$1
+  ib_views_link_path=$2
+  ib_views_link_directory=$(dirname "$ib_views_link_path")
+  ib_views_link_name=$(basename "$ib_views_link_path")
+
+  ib_views_require_command ln || return 1
+  ib_views_require_command mktemp || return 1
+  ib_views_require_command mv || return 1
+  ib_views_require_command readlink || return 1
+  mkdir -p "$ib_views_link_directory"
+
+  if test -e "$ib_views_link_path" || test -L "$ib_views_link_path"; then
+    test -L "$ib_views_link_path" || {
+      ib_views_fail "refusing to replace non-link view entry: $ib_views_link_path"
+      return 1
+    }
+    if test "$(readlink "$ib_views_link_path")" = "$ib_views_link_target"; then
+      printf '%s\n' "$ib_views_link_path"
+      return 0
+    fi
+  fi
+
+  ib_views_temporary_directory=$(mktemp -d "$ib_views_link_directory/.${ib_views_link_name}.link.XXXXXX") || return 1
+  ib_views_temporary_link="$ib_views_temporary_directory/candidate"
+  if ! ln -s "$ib_views_link_target" "$ib_views_temporary_link"; then
+    rmdir "$ib_views_temporary_directory"
+    return 1
+  fi
+  if ! mv -Tf "$ib_views_temporary_link" "$ib_views_link_path"; then
+    rm -f "$ib_views_temporary_link"
+    rmdir "$ib_views_temporary_directory"
+    return 1
+  fi
+  rmdir "$ib_views_temporary_directory"
+
+  printf '%s\n' "$ib_views_link_path"
+)
+
+ib_views_remove_link() (
+  ib_views_link_path=$1
+
+  if ! test -e "$ib_views_link_path" && ! test -L "$ib_views_link_path"; then
+    return 0
+  fi
+  test -L "$ib_views_link_path" || {
+    ib_views_fail "refusing to remove non-link view entry: $ib_views_link_path"
+    return 1
+  }
+  rm -f "$ib_views_link_path"
+)
+
+ib_views_initialize() (
+  ib_views_root=$1
+
+  case "$ib_views_root" in
+    ''|/)
+      ib_views_fail "unsafe view root: $ib_views_root"
+      return 1
+      ;;
+  esac
+  mkdir -p "$ib_views_root"
+  for ib_views_relative_directory in \
+    retrieved-from-the-web \
+    organizing-the-information \
+    _active \
+    hot \
+    retrieved-from-the-web/text \
+    retrieved-from-the-web/images \
+    organizing-the-information/categories \
+    organizing-the-information/vector-spaces
+  do
+    ib_views_directory="$ib_views_root/$ib_views_relative_directory"
+    test ! -L "$ib_views_directory" || {
+      ib_views_fail "view directory must not be a symbolic link: $ib_views_directory"
+      return 1
+    }
+    if test -e "$ib_views_directory" && ! test -d "$ib_views_directory"; then
+      ib_views_fail "view directory path is not a directory: $ib_views_directory"
+      return 1
+    fi
+    mkdir -p "$ib_views_directory"
+  done
+)
+
+ib_category_add() (
+  ib_views_root=$1
+  ib_views_state_root=$2
+  ib_views_category=$3
+  ib_views_object_kind=$4
+  ib_views_object_id=$5
+
+  ib_views_initialize "$ib_views_root" || return 1
+  ib_views_validate_component category "$ib_views_category" || return 1
+  test "$ib_views_category" != _active || {
+    ib_views_fail '_active is reserved for active-category links'
+    return 1
+  }
+  ib_views_validate_component object-id "$ib_views_object_id" || return 1
+
+  case "$ib_views_object_kind" in
+    tab) ib_views_object_relative_path="tabs/$ib_views_object_id" ;;
+    resource) ib_views_object_relative_path="resources/$ib_views_object_id" ;;
+    *)
+      ib_views_fail "unsupported category target kind: $ib_views_object_kind"
+      return 1
+      ;;
+  esac
+
+  ib_views_object_target=$(
+    ib_views_existing_target "$ib_views_state_root" "$ib_views_object_relative_path"
+  ) || return 1
+
+  ib_views_category_directory="$ib_views_root/organizing-the-information/categories/$ib_views_category"
+  test ! -L "$ib_views_category_directory" || {
+    ib_views_fail "category directory must not be a symbolic link: $ib_views_category"
+    return 1
+  }
+  if test -e "$ib_views_category_directory" && ! test -d "$ib_views_category_directory"; then
+    ib_views_fail "category path is not a directory: $ib_views_category"
+    return 1
+  fi
+  mkdir -p "$ib_views_category_directory"
+
+  ib_views_atomic_link \
+    "$ib_views_object_target" \
+    "$ib_views_category_directory/$ib_views_object_kind-$ib_views_object_id"
+)
+
+ib_category_remove() (
+  ib_views_root=$1
+  ib_views_category=$2
+  ib_views_object_kind=$3
+  ib_views_object_id=$4
+
+  ib_views_initialize "$ib_views_root" || return 1
+  ib_views_validate_component category "$ib_views_category" || return 1
+  test "$ib_views_category" != _active || {
+    ib_views_fail '_active is reserved for active-category links'
+    return 1
+  }
+  ib_views_validate_component object-id "$ib_views_object_id" || return 1
+  case "$ib_views_object_kind" in
+    tab|resource) ;;
+    *)
+      ib_views_fail "unsupported category target kind: $ib_views_object_kind"
+      return 1
+      ;;
+  esac
+
+  ib_views_category_directory="$ib_views_root/organizing-the-information/categories/$ib_views_category"
+  test ! -L "$ib_views_category_directory" || {
+    ib_views_fail "category directory must not be a symbolic link: $ib_views_category"
+    return 1
+  }
+  ib_views_remove_link \
+    "$ib_views_category_directory/$ib_views_object_kind-$ib_views_object_id"
+)
+
+ib_category_activate() (
+  ib_views_root=$1
+  ib_views_category=$2
+
+  ib_views_initialize "$ib_views_root" || return 1
+  ib_views_validate_component category "$ib_views_category" || return 1
+  test "$ib_views_category" != _active || {
+    ib_views_fail '_active cannot activate itself'
+    return 1
+  }
+
+  ib_views_category_directory="$ib_views_root/organizing-the-information/categories/$ib_views_category"
+  test -d "$ib_views_category_directory" && test ! -L "$ib_views_category_directory" || {
+    ib_views_fail "category does not exist: $ib_views_category"
+    return 1
+  }
+  ib_views_category_target=$(realpath -e "$ib_views_category_directory") || return 1
+
+  ib_views_atomic_link \
+    "$ib_views_category_target" \
+    "$ib_views_root/_active/$ib_views_category"
+)
+
+ib_category_deactivate() (
+  ib_views_root=$1
+  ib_views_category=$2
+
+  ib_views_initialize "$ib_views_root" || return 1
+  ib_views_validate_component category "$ib_views_category" || return 1
+  ib_views_remove_link "$ib_views_root/_active/$ib_views_category"
+)
+
+ib_category_memberships() (
+  ib_views_root=$1
+  ib_views_state_root=$2
+  ib_views_object_kind=$3
+  ib_views_object_id=$4
+
+  ib_views_initialize "$ib_views_root" || return 1
+  ib_views_validate_component object-id "$ib_views_object_id" || return 1
+  case "$ib_views_object_kind" in
+    tab) ib_views_object_relative_path="tabs/$ib_views_object_id" ;;
+    resource) ib_views_object_relative_path="resources/$ib_views_object_id" ;;
+    *)
+      ib_views_fail "unsupported category target kind: $ib_views_object_kind"
+      return 1
+      ;;
+  esac
+  ib_views_expected_target=$(
+    ib_views_existing_target "$ib_views_state_root" "$ib_views_object_relative_path"
+  ) || return 1
+
+  for ib_views_category_directory in "$ib_views_root/organizing-the-information/categories/"*; do
+    test -d "$ib_views_category_directory" || continue
+    test ! -L "$ib_views_category_directory" || continue
+    ib_views_category=$(basename "$ib_views_category_directory")
+    ib_views_member_path="$ib_views_category_directory/$ib_views_object_kind-$ib_views_object_id"
+    test -L "$ib_views_member_path" || continue
+    test "$(readlink "$ib_views_member_path")" = "$ib_views_expected_target" || continue
+    printf '%s\n' "$ib_views_category"
+  done
+)
+
+ib_hot_add() (
+  ib_views_root=$1
+  ib_views_presentation_root=$2
+  ib_views_slot=$3
+  ib_views_presentation_relative_path=$4
+
+  ib_views_initialize "$ib_views_root" || return 1
+  ib_views_validate_component hot-slot "$ib_views_slot" || return 1
+  ib_views_presentation_target=$(
+    ib_views_existing_target \
+      "$ib_views_presentation_root" \
+      "$ib_views_presentation_relative_path"
+  ) || return 1
+
+  ib_views_atomic_link \
+    "$ib_views_presentation_target" \
+    "$ib_views_root/hot/$ib_views_slot"
+)
+
+ib_hot_remove() (
+  ib_views_root=$1
+  ib_views_slot=$2
+
+  ib_views_initialize "$ib_views_root" || return 1
+  ib_views_validate_component hot-slot "$ib_views_slot" || return 1
+  ib_views_remove_link "$ib_views_root/hot/$ib_views_slot"
+)
+
+ib_views_prune_broken_links() (
+  ib_views_root=$1
+
+  ib_views_initialize "$ib_views_root" || return 1
+  ib_views_require_command find || return 1
+  find "$ib_views_root" -type l -print | while IFS= read -r ib_views_link_path; do
+    test -e "$ib_views_link_path" && continue
+    printf '%s\n' "$ib_views_link_path"
+    rm -f "$ib_views_link_path"
+  done
+)

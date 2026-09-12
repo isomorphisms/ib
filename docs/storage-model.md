@@ -49,7 +49,9 @@ state/
     ...
 ```
 
-This is a conceptual separation, not a frozen on-disk grammar. In particular, the category, task, proposal, and assertion paths are not implemented on `main` yet.
+This is not a frozen on-disk grammar. `IB.FileStore` implements the first slice: store and tab directories, `tab.txt`, and `history.log` are created and accessed by Idriç. The category, task, proposal, and assertion paths remain design boundaries rather than claims about the current runtime.
+
+Rebuildable filesystem projections currently live under a separate `views/` root. Source-derived text and images live below `retrieved-from-the-web/`; cross-object categories and model-specific vector spaces live below `organizing-the-information/`; `_active` and `hot/` remain short control surfaces at the root. The Grease slice does not yet provide the durable Idriç assertion records required to reconstruct accepted human organization after deleting every view.
 
 ## Stable event identity
 
@@ -110,6 +112,8 @@ authoritative user assertions and corrections -------------------------------+
 
 A malformed or malicious model output cannot change canonical history, source files, explicit assertions, or secret storage. See `docs/inference-and-learning.md`.
 
+The current file-store slice appends complete caller-supplied records and preserves duplicates and ordering. It does not yet parse or validate the record grammar. It also does not yet provide `fsync`, atomic manifest replacement, or journal recovery; those guarantees require a small native filesystem boundary and fault-injection tests.
+
 ## Derived artifacts
 
 An index or derived artifact should be reconstructible from canonical records and durable decisions whenever practical.
@@ -138,6 +142,8 @@ The core defines a separate secret/session boundary. Persistent browser records 
 Clearing cache may remove response bytes retained only for prefetch, extracted information-view presentations, thumbnails, embeddings, rankings, transient summaries, and renderer recovery blobs.
 
 It must not remove tabs, stable history events, task roots and frontiers, explicit assertions and corrections, proposal decisions, accepted category definitions, material deliberately promoted to the reading corpus, or the accepted or last-complete summary record required to resume a retained task. Missing presentation artifacts may be rebuilt without rerunning a model in a way that loses human decisions.
+
+The first vector implementation follows the same rule without SQLite: model-specific directories under `views/organizing-the-information/vector-spaces/` retain IDs and fixed-width row-major vectors as plain text. A little-endian Float32 sidecar accelerates exact scans but can be deleted and recreated from the text. The backend-neutral streaming command contract permits another disposable cache implementation without changing canonical records or readable vector views. See `vector-index.md`.
 
 ## Sync
 

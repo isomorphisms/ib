@@ -1,0 +1,5 @@
+Origami in N dimensions: How feed-forward networks manufacture linear separability
+Feed-forward networks fold input space into representations whose classes can be separated.
+The paper studies the geometry of the folding process.
+Figure 1. Linear regions along a one dimensional input.
+Activation space folding.

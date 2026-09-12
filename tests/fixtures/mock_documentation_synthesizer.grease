@@ -1,0 +1,37 @@
+#!/bin/sh
+set -eu
+
+output_directory=${1:-}
+test -n "$output_directory" || {
+  printf 'usage: %s OUTPUT_DIRECTORY SOURCE...\n' "$0" >&2
+  exit 2
+}
+shift
+test "$#" -gt 0 || {
+  printf 'mock synthesizer needs at least one source\n' >&2
+  exit 2
+}
+
+mkdir -p "$output_directory"
+view_partial="$output_directory/.view.md.$$"
+sources_partial="$output_directory/.sources.tsv.$$"
+rm -f "$view_partial" "$sources_partial"
+
+printf 'ordinal\tsource\n' > "$sources_partial"
+{
+  printf '%s\n\n' '# Mock documentation synthesis'
+  printf '%s\n\n' 'Deterministic fixture output; no language model ran.'
+  source_ordinal=0
+  for source_path in "$@"; do
+    source_ordinal=$((source_ordinal + 1))
+    test -f "$source_path"
+    printf '%s\n\n' '---'
+    printf '## Source %s\n\n' "$source_ordinal"
+    sed -n '1p' "$source_path"
+    printf '\n'
+    printf '%s\t%s\n' "$source_ordinal" "$source_path" >> "$sources_partial"
+  done
+} > "$view_partial"
+
+mv "$view_partial" "$output_directory/view.md"
+mv "$sources_partial" "$output_directory/sources.tsv"

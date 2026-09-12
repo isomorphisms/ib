@@ -133,9 +133,16 @@ Current baselines and evaluation ideas:
 - ensembles when disagreement is useful;
 - measurable improvement after a few nearby corrections.
 
+Pinned initial embedding views:
+
+- `potion-base-2m`, a 64-coordinate static Model2Vec view for extremely cheap broad indexing;
+- `mxbai-embed-xsmall-v1-int8`, a 384-coordinate transformer view used as an independent retrieval challenger;
+- both remain replaceable, retain immutable model/file provenance, and may coexist rather than forcing one representation.
+
 Still open:
 
-- the embedding model and feature weights;
+- which model views are active by default on each device and how their evidence is ensembled;
+- feature weights beyond the frozen embedding output;
 - the online update rule;
 - acceptance thresholds and which proposals require explicit review;
 - the exact proposal serialization;
