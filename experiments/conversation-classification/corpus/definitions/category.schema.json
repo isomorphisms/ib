@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/ib/conversation-category.schema.json",
+  "title": "IB experimental conversation category definition",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "category_id",
+    "axis",
+    "name",
+    "definition",
+    "include",
+    "exclude",
+    "adjacent_categories",
+    "version",
+    "created_at",
+    "provenance"
+  ],
+  "properties": {
+    "category_id": {"type": "string", "minLength": 1},
+    "axis": {"enum": ["concept", "filing_destination"]},
+    "name": {"type": "string", "minLength": 1},
+    "definition": {"type": "string", "minLength": 1},
+    "include": {"type": "array", "items": {"type": "string"}},
+    "exclude": {"type": "array", "items": {"type": "string"}},
+    "adjacent_categories": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+    "version": {"type": "integer", "minimum": 1},
+    "created_at": {"type": "string", "format": "date-time"},
+    "provenance": {"type": "string", "minLength": 1}
+  }
+}

@@ -1,0 +1,41 @@
+{
+  "HVAC/R": [
+    "\\bHVACR?\\b",
+    "\\brefrigerant\\b",
+    "\\bR-?(?:134a|1234[a-z]{0,3}|410a|22)\\b",
+    "\\bESCO 608\\b"
+  ],
+  "Jewish history & antisemitism": [
+    "\\bantisemit(?:e|ic|ism)?\\b",
+    "\\banti-semit(?:e|ic|ism)?\\b",
+    "\\bpogroms?\\b",
+    "\\bJuden Raus\\b"
+  ],
+  "automotive A/C": [
+    "\\bAC (?:compressor|charging|leak|pressure)\\b",
+    "\\bcompressor clutch\\b",
+    "\\bmanifold hose\\b",
+    "\\bSchrader valve\\b"
+  ],
+  "education industry": [
+    "\\b(?:higher education|university|college|accreditation|syllabus|doctoral|PhD)\\b"
+  ],
+  "garden": [
+    "\\b(?:garden|planting|raspberry|goldenrod|burdock|Typha latifolia)\\b"
+  ],
+  "local schools": [
+    "\\b(?:AAPS|Ypsilanti Schools|Whitmore Lake|school board|summer camp)\\b"
+  ],
+  "mathematics": [
+    "\\b(?:eigenvalue|eigenvector|homotopy|category theory)\\b"
+  ],
+  "music": [
+    "\\b(?:album|chords?|song|music|piano|Zappa|James Brown)\\b"
+  ],
+  "politics": [
+    "\\b(?:Trump|election|primary|Congress|Democrat|Republican|voter|tax policy)\\b"
+  ],
+  "resume": [
+    "\\b(?:resume|curriculum vitae|CV advice)\\b"
+  ]
+}

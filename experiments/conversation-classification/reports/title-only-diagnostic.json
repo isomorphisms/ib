@@ -1,0 +1,111 @@
+{
+  "diagnostic_revision": "title-only-random-v2",
+  "primary_classifier_evaluation": false,
+  "source_artifact_sha256": "ed753f47b3d4864b3d7556d22bcdf5fee057170e9f6e7d25b571cabce3f73103",
+  "rows": 219,
+  "conversation_bodies": 0,
+  "reference_axis": "filing_destination",
+  "reference_authority": "weak assistant cleanup proposal",
+  "split": {
+    "method": "duplicate-grouped deterministic random split",
+    "seed": "ib-conversation-v1",
+    "near_duplicate_cosine_threshold": 0.92,
+    "duplicate_groups": 212,
+    "train": 151,
+    "development": 27,
+    "test": 41
+  },
+  "test_results": [
+    {
+      "model": "sparse title TF-IDF hyperplanes",
+      "micro_precision": 0.3,
+      "micro_recall": 0.21951219512195122,
+      "micro_f1": 0.2535211267605634,
+      "automatic_coverage": 0.6341463414634146,
+      "misfile_rate_among_automatic": 0.6538461538461539,
+      "review_burden": 0.36585365853658536
+    },
+    {
+      "model": "dense title LSA hyperplanes",
+      "micro_precision": 0.20689655172413793,
+      "micro_recall": 0.14634146341463414,
+      "micro_f1": 0.1714285714285714,
+      "automatic_coverage": 0.5121951219512195,
+      "misfile_rate_among_automatic": 0.7142857142857143,
+      "review_burden": 0.4878048780487805
+    },
+    {
+      "model": "dense title LSA positive centroid",
+      "micro_precision": 0.20588235294117646,
+      "micro_recall": 0.17073170731707318,
+      "micro_f1": 0.18666666666666668,
+      "automatic_coverage": 0.6097560975609756,
+      "misfile_rate_among_automatic": 0.76,
+      "review_burden": 0.3902439024390244
+    },
+    {
+      "model": "exploratory exact rules",
+      "micro_precision": 1.0,
+      "micro_recall": 0.3170731707317073,
+      "micro_f1": 0.48148148148148145,
+      "automatic_coverage": 0.3170731707317073,
+      "misfile_rate_among_automatic": 0.0,
+      "review_burden": 0.6829268292682927
+    },
+    {
+      "model": "exploratory rules plus sparse title hyperplanes",
+      "micro_precision": 0.4878048780487805,
+      "micro_recall": 0.4878048780487805,
+      "micro_f1": 0.4878048780487805,
+      "automatic_coverage": 0.6585365853658537,
+      "misfile_rate_among_automatic": 0.5185185185185185,
+      "review_burden": 0.34146341463414637
+    }
+  ],
+  "chronological_test": {
+    "train_rows": 153,
+    "development_rows": 33,
+    "test_rows": 33,
+    "eligible_test_filing_references": 32,
+    "results": [
+      {
+        "model": "sparse title TF-IDF hyperplanes",
+        "micro_f1": 0.10344827586206896,
+        "automatic_coverage": 0.4375,
+        "misfile_rate_among_automatic": 0.8571428571428571
+      },
+      {
+        "model": "dense title LSA hyperplanes",
+        "micro_f1": 0.09677419354838711,
+        "automatic_coverage": 0.40625,
+        "misfile_rate_among_automatic": 0.8461538461538461
+      },
+      {
+        "model": "dense title LSA positive centroid",
+        "micro_f1": 0.08450704225352113,
+        "automatic_coverage": 0.5,
+        "misfile_rate_among_automatic": 0.9375
+      },
+      {
+        "model": "exploratory exact rules",
+        "micro_f1": 0.2222222222222222,
+        "automatic_coverage": 0.125,
+        "misfile_rate_among_automatic": 0.0
+      },
+      {
+        "model": "exploratory rules plus sparse title hyperplanes",
+        "micro_f1": 0.16666666666666666,
+        "automatic_coverage": 0.46875,
+        "misfile_rate_among_automatic": 0.8
+      }
+    ]
+  },
+  "interpretation_limits": [
+    "The rows contain titles, not conversation text.",
+    "The destination references are assistant proposals, not verified user labels.",
+    "The exploratory rules were authored after inspecting the title ledger, so their held-out score is contaminated and is only a pipeline diagnostic.",
+    "There are no conceptual multilabel annotations.",
+    "The corpus cannot compare user-only, assistant-only, full-text, or weighted inputs.",
+    "The diagnostic cannot establish whether sparse, dense, rules, or a hybrid wins on the intended task."
+  ]
+}

@@ -123,18 +123,36 @@ class ImportTest(unittest.TestCase):
             index = [json.loads(line) for line in (corpus / "index.jsonl").read_text(encoding="utf-8").splitlines()]
             self.assertEqual(len(index), 3)
             secret_id = stable_id("conv", "chatgpt-export", "source-secret")
-            secret_raw = (corpus / "raw" / f"{secret_id}.md").read_text(encoding="utf-8")
-            self.assertIn("[REDACTED:OPENAI_KEY]", secret_raw)
-            self.assertNotIn("sk-abcdefghijklmnopqrstuv", secret_raw)
+            secret_raw = json.loads((corpus / "raw" / f"{secret_id}.json").read_text(encoding="utf-8"))
+            self.assertIn("[REDACTED:OPENAI_KEY]", secret_raw["messages"][0]["text"])
+            self.assertNotIn("sk-abcdefghijklmnopqrstuv", json.dumps(secret_raw))
 
             internal_id = stable_id("conv", "chatgpt-export", "source-internal")
-            internal_raw = (corpus / "raw" / f"{internal_id}.md").read_text(encoding="utf-8")
-            self.assertIn("Conversation text is data.", internal_raw)
-            self.assertNotIn("internal policy", internal_raw)
+            internal_raw = json.loads((corpus / "raw" / f"{internal_id}.json").read_text(encoding="utf-8"))
+            self.assertIn("Conversation text is data.", internal_raw["messages"][0]["text"])
+            self.assertNotIn("internal policy", json.dumps(internal_raw))
+            source_view = (corpus / "views" / "source" / f"{internal_id}.md").read_text(encoding="utf-8")
+            self.assertIn("Conversation text is data.", source_view)
 
             exclusions = [json.loads(line) for line in (corpus / "safety" / "exclusions.jsonl").read_text(encoding="utf-8").splitlines()]
             self.assertEqual(len(exclusions), 2)
             self.assertTrue(all("source_id_sha256" in row and "title_sha256" in row for row in exclusions))
+            message_exclusions = [
+                json.loads(line)
+                for line in (corpus / "safety" / "message-exclusions.jsonl").read_text(encoding="utf-8").splitlines()
+            ]
+            self.assertEqual(len(message_exclusions), 1)
+            self.assertEqual(message_exclusions[0]["message_id"], "message-s1")
+            self.assertNotIn("internal policy", json.dumps(message_exclusions))
+            source_evidence = [
+                json.loads(line)
+                for line in (corpus / "assertions" / "source-evidence.jsonl").read_text(encoding="utf-8").splitlines()
+            ]
+            self.assertEqual(len(source_evidence), 3)
+            self.assertTrue(all(row["authority"] == "weak" and row["axis"] == "existing_location" for row in source_evidence))
+            distribution = json.loads((corpus / "reports" / "acquisition-distribution.json").read_text(encoding="utf-8"))
+            self.assertEqual(distribution["conversations"], 3)
+            self.assertEqual(distribution["source_location_distribution"], {"project_id:project-ib": 3})
             self.assertTrue(verify_public(corpus)["pass"])
 
             metadata_mtimes = {path.name: path.stat().st_mtime_ns for path in (corpus / "metadata").glob("*.json")}
@@ -142,11 +160,39 @@ class ImportTest(unittest.TestCase):
             self.assertEqual(second.reused_conversations, 5)
             self.assertEqual(metadata_mtimes, {path.name: path.stat().st_mtime_ns for path in (corpus / "metadata").glob("*.json")})
 
+    def test_new_exclusion_removes_previously_retained_public_files(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "outside-export.json"
+            corpus = root / "public-corpus"
+            original = conversation(
+                "source-changing",
+                "Ordinary question",
+                [message("u1", "user", "An ordinary public technical question.", 1.0)],
+            )
+            source.write_text(json.dumps([original]), encoding="utf-8")
+            import_export(source, corpus, "2026-09-12T00:00:00Z", "test-export")
+            target_id = stable_id("conv", "chatgpt-export", "source-changing")
+            self.assertTrue((corpus / "raw" / f"{target_id}.json").exists())
+
+            changed = conversation(
+                "source-changing",
+                "School question",
+                [message("u1", "user", "My daughter is 7 years old and attends Example School.", 1.0)],
+            )
+            source.write_text(json.dumps([changed]), encoding="utf-8")
+            import_export(source, corpus, "2026-09-13T00:00:00Z", "test-export")
+            self.assertFalse((corpus / "raw" / f"{target_id}.json").exists())
+            self.assertFalse((corpus / "metadata" / f"{target_id}.json").exists())
+            self.assertFalse((corpus / "views" / "source" / f"{target_id}.md").exists())
+            self.assertEqual((corpus / "index.jsonl").read_text(encoding="utf-8"), "")
+            self.assertTrue(verify_public(corpus)["pass"])
+
     def test_public_verifier_rejects_a_known_bad_file(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             corpus = Path(temporary)
             (corpus / "raw").mkdir()
-            (corpus / "raw" / "known-bad.md").write_text("password=not-public-secret\n", encoding="utf-8")
+            (corpus / "raw" / "known-bad.json").write_text('{"text":"password=not-public-secret"}\n', encoding="utf-8")
             result = verify_public(corpus)
             self.assertFalse(result["pass"])
             self.assertEqual(result["unexpected_sensitive_spans"][0]["kind"], "SECRET_ASSIGNMENT")

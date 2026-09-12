@@ -77,6 +77,9 @@ def import_title_ledger(source: Path, destination: Path) -> dict[str, Any]:
                 "polarity": "positive",
                 "provenance": "inherited_existing_location",
                 "authority": "weak",
+                "asserted_at": "2026-09-02T14:03:35Z",
+                "source_reference": f"source.md#conversation-ledger-row-{source_row}",
+                "reason": "Location recorded by the prior account cleanup pass; no move was verified.",
                 "source_artifact_sha256": source_sha256,
                 "source_row": source_row,
             }
@@ -91,6 +94,9 @@ def import_title_ledger(source: Path, destination: Path) -> dict[str, Any]:
                     "polarity": "positive",
                     "provenance": "assistant_cleanup_proposal",
                     "authority": "weak",
+                    "asserted_at": "2026-09-02T14:03:35Z",
+                    "source_reference": f"source.md#conversation-ledger-row-{source_row}",
+                    "reason": "Title-led assistant proposal; conversation body unavailable and move unverified.",
                     "source_artifact_sha256": source_sha256,
                     "source_row": source_row,
                 }
@@ -125,4 +131,3 @@ def import_title_ledger(source: Path, destination: Path) -> dict[str, Any]:
     write_jsonl_if_changed(destination / "weak_evidence.jsonl", evidence_rows)
     write_json_if_changed(destination / "report.json", report)
     return report
-
