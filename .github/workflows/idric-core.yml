@@ -26,6 +26,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Checkout canonical hostile-input corpus
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: isomorphisms/ai-ci
+          ref: c1e423d506f6adfc8c1c9659a4faaf94ae84eaf0
+          path: .tools/ai-ci
+
       - name: Install system dependencies through Grease
         run: sh bin/ci_browser_foundation.grease install-dependencies
 
@@ -49,6 +56,15 @@ jobs:
 
       - name: Exercise HTML-first information renderer
         run: sh bin/ci_browser_foundation.grease exercise-information
+
+      - name: Exercise pinned hostile-input document receipts
+        run: sh bin/ci_browser_foundation.grease exercise-hostile-ingestion
+
+      - name: Exercise the pinned reusable AICI action
+        uses: isomorphisms/ai-ci/ingestion@c1e423d506f6adfc8c1c9659a4faaf94ae84eaf0
+        with:
+          receipt: /tmp/ib-valid-ingestion.receipt.tsv
+          role: consumer
 
       - name: Exercise browser-owned Idric core
         run: sh bin/ci_browser_foundation.grease exercise-core
