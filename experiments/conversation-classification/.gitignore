@@ -1,0 +1,11 @@
+# Unscreened account exports must never enter Git.
+incoming/
+*.export.zip
+conversations.json
+
+# Rebuildable local caches not selected for an evidence-linked run.
+__pycache__/
+*.pyc
+.pytest_cache/
+corpus/derived/work/
+

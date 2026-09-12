@@ -1,0 +1,35 @@
+{
+  "recorded_at": "2026-09-12T00:00:00Z",
+  "branch": "experiment/conversation-classification-corpus",
+  "branch_base": "d199a992a70e54338e1f0dd73ffd82d6ca6bad96",
+  "preferred_source": "one ChatGPT account data export containing conversations.json",
+  "sources_checked": [
+    {
+      "source": "ChatGPT account data export",
+      "result": "not acquired",
+      "evidence": "The signed-in Data controls page exposed Export data. Confirmation entered a reauthentication flow and the page states that the archive is prepared asynchronously and sent to the registered email. No downloadable archive became available in this environment.",
+      "individual_conversations_opened_by_this_experiment": 0
+    },
+    {
+      "source": "available user files",
+      "result": "no ChatGPT export found",
+      "evidence": "Filename and content searches found no conversations.json, chat.html, or ChatGPT data-export archive."
+    },
+    {
+      "source": "prior conversation-context retrieval",
+      "result": "no bulk archive or filing-label set found",
+      "evidence": "The retrieval found hyperplane screenshots and repository metadata but no conversation export."
+    },
+    {
+      "source": "chatgpt_thread_cleanup_ledger.md",
+      "result": "retained as a title-only diagnostic",
+      "source_artifact_sha256": "ed753f47b3d4864b3d7556d22bcdf5fee057170e9f6e7d25b571cabce3f73103",
+      "rows": 219,
+      "reported_bodies_exposed": 12,
+      "usable_conversation_bodies_in_artifact": 0,
+      "label_boundary": "Assistant-proposed filing destinations are weak evidence and are invalid for primary held-out classifier evaluation."
+    }
+  ],
+  "blocking_acquisition_limit": "A bulk conversation export must be supplied from outside the Git worktree before the requested full-text empirical comparison can run.",
+  "prohibited_fallback": "Do not replace the missing archive with per-conversation ChatGPT UI traversal."
+}
