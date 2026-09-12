@@ -1,0 +1,114 @@
+IB URL recognition strategy — staged, readable, and replaceable
+================================================================
+
+This file deliberately keeps two recognizers instead of one enormous regular
+expression.
+
+
+1. Cheap foreground recognizer
+------------------------------
+
+Purpose: turn an ordinary text file containing one URL per line into useful
+links without delaying first paint.
+
+Current rule, written as words:
+
+* begin at the start of the trimmed line;
+* find exactly "http://" or "https://";
+* require a nonempty authority before slash, question mark, or fragment;
+* reject whitespace, controls, non-ASCII bytes, and user information;
+* accept the remainder as a candidate, not as proof that the resource exists.
+
+This intentionally mirrors the current ICU input boundary. It will miss valid
+internationalized or unusual URLs. False negatives are acceptable in the first
+paint because the background recognizer can add links later.
+
+
+2. Authoritative recognizer
+---------------------------
+
+Do not validate the full web with a copied mega-regex. Parse components.
+
+The complete generic syntax is the collected ABNF in RFC 3986 Appendix A:
+
+https://www.rfc-editor.org/rfc/rfc3986.html#appendix-A
+
+That grammar covers scheme, authority, user information, host forms including
+IP literals, port, all path variants, query, fragment, percent encoding,
+reserved characters, and unreserved characters. Scheme-specific rules still
+apply after generic parsing. RFC 3986 itself warns that generic syntax is a
+superset; parsing a shape is not the same as proving it is dereferenceable.
+
+IB's current authoritative HTTP subset should call the same Idriç URL parser as
+ICU rather than independently drifting. Today ICU intentionally supports only
+http/https, visible ASCII targets, no user information, and no IPv6 literal.
+When ICU grows IDNA/IPv6/IRI handling, IB should consume that typed result.
+
+
+3. Background enrichment
+------------------------
+
+After plain text is already visible, a low-priority pass may:
+
+* scan URLs embedded inside prose rather than occupying a whole line;
+* trim sentence punctuation using surrounding-text rules;
+* resolve HTML href and src values against the fetched base URL;
+* preserve an anchor's label and absolute target;
+* preserve an image's alternate text, caption, source URL, and link target;
+* ask ICU to fetch the candidate;
+* classify an image from response Content-Type plus decoded magic, not merely a
+  filename extension;
+* replace a remote image reference with an already-fetched local/content source
+  in a later pre-paint revision.
+
+An `<a href>` is a link even when it wraps text. An `<a href>` wrapping an image
+must retain both behaviors: paint the fetched image as an image and keep its
+navigation target. `InformationItem.Image` now carries source, alternate text,
+caption/title, and the enclosing link target. The sibling Android interchange
+accepts the same optional linked-image field. Until ICU has fetched and checked
+the bytes, the source remains a remote reference; only the later revision may
+replace it with a local/content source and claim that it is paintable.
+
+
+4. Readable-regex references
+----------------------------
+
+The remembered Ruby project is VerbalExpressions. Its URL example literally
+uses names such as start_of_line, find, maybe, anything_but, and end_of_line:
+
+https://github.com/ryan-endacott/verbal_expressions
+
+It is MIT licensed and useful as a readable sketching vocabulary. Its small URL
+example is not a complete URL validator; it essentially accepts http(s), an
+optional www, and then non-space text. Keep it as a strategy/prototyping
+reference, not as IB's source of truth.
+
+Ruby's maintained URI module is a better executable reference for component
+parsing and exposes parser/regular-expression facilities:
+
+https://github.com/ruby/uri
+
+Neither Ruby dependency belongs on the foreground phone path. A slow comparison
+tool or fixture oracle is acceptable while the Idriç/ICU parser is developed.
+
+
+5. Test ladder
+--------------
+
+Keep separate fixtures for:
+
+* cheap obvious http and https lines;
+* relative href resolution against a base URL;
+* punctuation around a URL in prose;
+* query, fragment, percent encoding, and an explicit port;
+* IPv4, IPv6 literals, IDNA, and Unicode IRI input;
+* malformed percent escapes, spaces, controls, and empty hosts;
+* user information that must not leak into painted text;
+* a text URL that resolves to HTML;
+* a text URL that resolves to an image despite having no image extension;
+* an image-looking extension whose response is not an image;
+* an anchor wrapping an image.
+
+The cheap recognizer may deliberately fail advanced positive cases. The
+authoritative/background path may not silently convert malformed or dangerous
+input into a clickable target.

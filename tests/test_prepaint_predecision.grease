@@ -1,0 +1,62 @@
+#!/bin/sh
+set -eu
+
+repository_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+work_directory=$(mktemp -d)
+cleanup() {
+  rm -rf "$work_directory"
+}
+trap cleanup EXIT HUP INT TERM
+
+fake_commands="$work_directory/bin"
+mkdir -p "$fake_commands"
+
+{
+  printf '%s\n' '#!/bin/sh'
+  printf '%s\n' 'set -eu'
+  printf '%s\n' 'printf "%s\\n" "$@" > "$IB_TEST_DIG_LOG"'
+  printf '%s\n' 'printf "%s\\n" "example.com. 300 IN A 192.0.2.8"'
+  printf '%s\n' 'printf "%s\\n" "example.com. 300 IN NS ns1.example.com."'
+  printf '%s\n' 'printf "%s\\n" ";; Query time: 7 msec"'
+} > "$fake_commands/dig"
+
+{
+  printf '%s\n' '#!/bin/sh'
+  printf '%s\n' 'set -eu'
+  printf '%s\n' 'printf "%s\\n" "$@" > "$IB_TEST_TRACEROUTE_LOG"'
+  printf '%s\n' 'printf "%s\\n" "traceroute to example.com, 8 hops max"'
+  printf '%s\n' 'printf "%s\\n" " 1  192.0.2.1  3.1 ms"'
+  printf '%s\n' 'printf "%s\\n" " 2  192.0.2.8  17.2 ms"'
+} > "$fake_commands/traceroute"
+
+chmod +x "$fake_commands/dig" "$fake_commands/traceroute"
+
+output="$work_directory/predecision.tsv"
+PATH="$fake_commands:$PATH" \
+IB_TEST_DIG_LOG="$work_directory/dig-arguments.txt" \
+IB_TEST_TRACEROUTE_LOG="$work_directory/traceroute-arguments.txt" \
+IB_KNOWN_ASSET_COUNT=900 \
+IB_KNOWN_ASSET_BYTES=39321600 \
+IB_ASSUMED_BYTES_PER_SECOND=131072 \
+  sh "$repository_root/bin/prepaint_predecision.grease" \
+    'https://example.com/large/page?q=one' > "$output"
+
+tab=$(printf '\t')
+grep -Fx "host${tab}example.com" "$output" >/dev/null
+grep -Fx "dig-status${tab}ok" "$output" >/dev/null
+grep -Fx "dns-ms${tab}7" "$output" >/dev/null
+grep -Fx "address-records${tab}1" "$output" >/dev/null
+grep -Fx "namespace-records${tab}1" "$output" >/dev/null
+grep -Fx "traceroute-status${tab}ok" "$output" >/dev/null
+grep -Fx "route-hops${tab}2" "$output" >/dev/null
+grep -Fx "route-last-ms${tab}17.2" "$output" >/dev/null
+grep -Fx "estimated-transfer-seconds${tab}300" "$output" >/dev/null
+grep -Fx "decision${tab}keep-prepaint-unless-user-escalates" "$output" >/dev/null
+
+grep -Fx '+tries=1' "$work_directory/dig-arguments.txt" >/dev/null
+grep -Fx '+time=1' "$work_directory/dig-arguments.txt" >/dev/null
+grep -Fx 'NS' "$work_directory/dig-arguments.txt" >/dev/null
+grep -Fx -- '-m' "$work_directory/traceroute-arguments.txt" >/dev/null
+grep -Fx '8' "$work_directory/traceroute-arguments.txt" >/dev/null
+
+printf 'prepaint predecision tests: ok\n'

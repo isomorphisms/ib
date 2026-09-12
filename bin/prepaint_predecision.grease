@@ -1,0 +1,118 @@
+#!/bin/sh
+set -eu
+
+if test "$#" -ne 1; then
+  printf 'usage: %s URL\n' "$0" >&2
+  exit 2
+fi
+
+input_url=$1
+case $input_url in
+  http://*) authority_and_rest=${input_url#http://} ;;
+  https://*) authority_and_rest=${input_url#https://} ;;
+  *)
+    printf 'predecision: URL must begin with http:// or https://\n' >&2
+    exit 2
+    ;;
+esac
+
+authority=${authority_and_rest%%/*}
+authority=${authority%%\?*}
+authority=${authority%%\#*}
+case $authority in
+  ''|*@*|'['*)
+    printf 'predecision: unsupported or empty URL authority\n' >&2
+    exit 2
+    ;;
+esac
+host=${authority%%:*}
+
+dig_command=${IB_DIG:-dig}
+traceroute_command=${IB_TRACEROUTE:-traceroute}
+timeout_command=${IB_TIMEOUT:-timeout}
+
+work_directory=$(mktemp -d)
+cleanup() {
+  rm -rf "$work_directory"
+}
+trap cleanup EXIT HUP INT TERM
+
+dig_status=unavailable
+if command -v "$dig_command" >/dev/null 2>&1; then
+  if "$timeout_command" 3 "$dig_command" +tries=1 +time=1 +stats \
+      "$host" A "$host" NS > "$work_directory/dig.txt" 2>&1
+  then
+    dig_status=ok
+  else
+    dig_status=failed
+  fi
+else
+  : > "$work_directory/dig.txt"
+fi
+
+route_status=unavailable
+if command -v "$traceroute_command" >/dev/null 2>&1; then
+  if "$timeout_command" 10 "$traceroute_command" -n -m 8 -w 1 -q 1 \
+      "$host" > "$work_directory/traceroute.txt" 2>&1
+  then
+    route_status=ok
+  else
+    route_status=failed
+  fi
+else
+  : > "$work_directory/traceroute.txt"
+fi
+
+dns_milliseconds=$(awk '/Query time:/ { print $(NF - 1); exit }' "$work_directory/dig.txt")
+test -n "$dns_milliseconds" || dns_milliseconds=unknown
+address_records=$(awk '$4 == "A" || $4 == "AAAA" { amount += 1 } END { print amount + 0 }' \
+  "$work_directory/dig.txt")
+namespace_records=$(awk '$4 == "NS" { amount += 1 } END { print amount + 0 }' \
+  "$work_directory/dig.txt")
+route_hops=$(awk '/^[[:space:]]*[0-9]+[[:space:]]/ { hop = $1 } END { if (hop == "") print 0; else print hop }' \
+  "$work_directory/traceroute.txt")
+route_last_milliseconds=$(awk '
+  /^[[:space:]]*[0-9]+[[:space:]]/ {
+    for (field = 1; field <= NF; field += 1) {
+      if ($field == "ms" && field > 1) last = $(field - 1)
+    }
+  }
+  END { if (last == "") print "unknown"; else print last }
+' "$work_directory/traceroute.txt")
+
+known_asset_count=${IB_KNOWN_ASSET_COUNT:-unknown}
+known_asset_bytes=${IB_KNOWN_ASSET_BYTES:-unknown}
+assumed_bytes_per_second=${IB_ASSUMED_BYTES_PER_SECOND:-unknown}
+estimated_transfer_seconds=unknown
+decision=measure-assets-before-heavy-renderer
+
+case $known_asset_bytes:$assumed_bytes_per_second in
+  *[!0-9:]*|:*|*:0) ;;
+  *)
+    estimated_transfer_seconds=$((
+      (known_asset_bytes + assumed_bytes_per_second - 1) / assumed_bytes_per_second
+    ))
+    if test "$estimated_transfer_seconds" -ge 300; then
+      decision=keep-prepaint-unless-user-escalates
+    else
+      decision=prepaint-then-bounded-escalation
+    fi
+    ;;
+esac
+
+printf 'predecision\t1\n'
+printf 'url\t%s\n' "$input_url"
+printf 'host\t%s\n' "$host"
+printf 'dig-status\t%s\n' "$dig_status"
+printf 'dns-ms\t%s\n' "$dns_milliseconds"
+printf 'address-records\t%s\n' "$address_records"
+printf 'namespace-records\t%s\n' "$namespace_records"
+printf 'traceroute-status\t%s\n' "$route_status"
+printf 'route-hops\t%s\n' "$route_hops"
+printf 'route-last-ms\t%s\n' "$route_last_milliseconds"
+printf 'known-asset-count\t%s\n' "$known_asset_count"
+printf 'known-asset-bytes\t%s\n' "$known_asset_bytes"
+printf 'assumed-bytes-per-second\t%s\n' "$assumed_bytes_per_second"
+printf 'estimated-transfer-seconds\t%s\n' "$estimated_transfer_seconds"
+printf 'decision\t%s\n' "$decision"
+printf 'route-warning\t%s\n' 'DNS and traceroute are diagnostics, not page-load predictions.'
