@@ -279,7 +279,7 @@ public final class PrepaintActivity extends Activity {
         currentRevision = revision;
         int oldScroll = scroll.getScrollY();
         page.removeAllViews();
-        if (PrepaintDocument.TEXT_SOURCE.equals(document.sourceKind)) {
+        if (document.sourceKind == PrepaintDocument.SourceKind.PLAIN_TEXT) {
             status.setText("IB PREPAINT  ·  plain text");
         } else {
             status.setText("IB PREPAINT  " + (revisionIndex + 1) + "/"
@@ -307,54 +307,55 @@ public final class PrepaintActivity extends Activity {
     }
 
     private void addInformationBlock(PrepaintDocument.Block block) {
-        switch (block.kind) {
-            case PrepaintDocument.Block.HEADING:
-                float headingSize = block.level == 1 ? 20 : block.level == 2 ? 17 : 15;
-                TextView heading = text(block.values.get(0), headingSize, FOREGROUND);
-                heading.setTypeface(hack, Typeface.BOLD);
-                addBlock(heading, 0, block.level == 1 ? 8 : 4, 0, 8);
-                break;
-            case PrepaintDocument.Block.TEXT:
-                TextView paragraph = text(block.values.get(0), 15, FOREGROUND);
-                paragraph.setLineSpacing(0, 1.18f);
-                paragraph.setTextIsSelectable(true);
-                addBlock(paragraph, 0, 0, 0, 14);
-                break;
-            case PrepaintDocument.Block.LINK:
-                String label = block.values.get(0);
-                String target = block.values.get(1);
-                TextView link = text(label.equals(target) ? target : label + "\n" + target,
-                        14, LINK);
-                link.setPadding(dp(8), dp(5), dp(8), dp(5));
-                link.setBackground(box(SURFACE, dp(4)));
-                link.setOnClickListener(ignored -> requestLink(target));
-                addBlock(link, 0, 2, 0, 14);
-                break;
-            case PrepaintDocument.Block.ROW:
-                addRow(block);
-                break;
-            case PrepaintDocument.Block.FORM:
-                TextView form = text("[ " + block.values.get(0) + " ]  →  "
-                        + block.values.get(1), 14, FOREGROUND);
-                form.setPadding(dp(12), dp(10), dp(12), dp(10));
-                form.setBackground(box(SURFACE, dp(4)));
-                addBlock(form, 0, 3, 0, 14);
-                break;
-            case PrepaintDocument.Block.IMAGE:
-                addImage(block);
-                break;
-            default:
-                throw new IllegalStateException("unhandled block " + block.kind);
+        if (block instanceof PrepaintDocument.HeadingBlock) {
+            addHeading((PrepaintDocument.HeadingBlock) block);
+        } else if (block instanceof PrepaintDocument.TextBlock) {
+            PrepaintDocument.TextBlock textBlock = (PrepaintDocument.TextBlock) block;
+            TextView paragraph = text(textBlock.text, 15, FOREGROUND);
+            paragraph.setLineSpacing(0, 1.18f);
+            paragraph.setTextIsSelectable(true);
+            addBlock(paragraph, 0, 0, 0, 14);
+        } else if (block instanceof PrepaintDocument.LinkBlock) {
+            PrepaintDocument.LinkBlock linkBlock = (PrepaintDocument.LinkBlock) block;
+            TextView link = text(linkBlock.label.equals(linkBlock.target)
+                            ? linkBlock.target
+                            : linkBlock.label + "\n" + linkBlock.target,
+                    14, LINK);
+            link.setPadding(dp(8), dp(5), dp(8), dp(5));
+            link.setBackground(box(SURFACE, dp(4)));
+            link.setOnClickListener(ignored -> requestLink(linkBlock.target));
+            addBlock(link, 0, 2, 0, 14);
+        } else if (block instanceof PrepaintDocument.RowBlock) {
+            addRow((PrepaintDocument.RowBlock) block);
+        } else if (block instanceof PrepaintDocument.FormBlock) {
+            PrepaintDocument.FormBlock formBlock = (PrepaintDocument.FormBlock) block;
+            TextView form = text("[ " + formBlock.label + " ]  →  "
+                    + formBlock.action, 14, FOREGROUND);
+            form.setPadding(dp(12), dp(10), dp(12), dp(10));
+            form.setBackground(box(SURFACE, dp(4)));
+            addBlock(form, 0, 3, 0, 14);
+        } else if (block instanceof PrepaintDocument.ImageBlock) {
+            addImage((PrepaintDocument.ImageBlock) block);
+        } else {
+            throw new AssertionError("unhandled prepaint block type");
         }
     }
 
-    private void addRow(PrepaintDocument.Block block) {
+    private void addHeading(PrepaintDocument.HeadingBlock block) {
+        int level = block.level.wireNumber;
+        float headingSize = level == 1 ? 20 : level == 2 ? 17 : 15;
+        TextView heading = text(block.text, headingSize, FOREGROUND);
+        heading.setTypeface(hack, Typeface.BOLD);
+        addBlock(heading, 0, level == 1 ? 8 : 4, 0, 8);
+    }
+
+    private void addRow(PrepaintDocument.RowBlock block) {
         LinearLayout row = new LinearLayout(this);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.TOP);
         row.setPadding(dp(1), dp(1), dp(1), dp(1));
         row.setBackgroundColor(RULE);
-        for (String cellText : block.values) {
+        for (String cellText : block.cells) {
             TextView cell = text(cellText, 13, FOREGROUND);
             cell.setTextIsSelectable(true);
             cell.setPadding(dp(9), dp(9), dp(9), dp(9));
@@ -367,17 +368,13 @@ public final class PrepaintActivity extends Activity {
         addBlock(row, 0, 0, 0, 3);
     }
 
-    private void addImage(PrepaintDocument.Block block) {
-        String source = block.values.get(0);
-        String alternate = block.values.get(1);
-        String caption = block.values.get(2);
-        String target = block.values.get(3);
-        Drawable drawable = loadDrawable(source);
+    private void addImage(PrepaintDocument.ImageBlock block) {
+        Drawable drawable = loadDrawable(block.source);
         if (drawable == null) {
-            TextView missing = text("[image] " + alternate, 13, SECONDARY);
-            if (!target.isEmpty()) {
+            TextView missing = text("[image] " + block.alternateText, 13, SECONDARY);
+            if (!block.linkTarget.isEmpty()) {
                 missing.setTextColor(LINK);
-                missing.setOnClickListener(ignored -> requestLink(target));
+                missing.setOnClickListener(ignored -> requestLink(block.linkTarget));
             }
             addBlock(missing, 0, 3, 0, 12);
             return;
@@ -386,17 +383,17 @@ public final class PrepaintActivity extends Activity {
         ImageView image = new ImageView(this);
         image.setAdjustViewBounds(true);
         image.setScaleType(ImageView.ScaleType.FIT_CENTER);
-        image.setContentDescription(alternate);
+        image.setContentDescription(block.alternateText);
         image.setImageDrawable(drawable);
-        if (!target.isEmpty()) {
+        if (!block.linkTarget.isEmpty()) {
             image.setClickable(true);
             image.setFocusable(true);
-            image.setOnClickListener(ignored -> requestLink(target));
+            image.setOnClickListener(ignored -> requestLink(block.linkTarget));
         }
-        addBlock(image, 0, 5, 0, caption.isEmpty() ? 14 : 5);
+        addBlock(image, 0, 5, 0, block.caption.isEmpty() ? 14 : 5);
 
-        if (!caption.isEmpty()) {
-            TextView captionView = text(caption, 12, SECONDARY);
+        if (!block.caption.isEmpty()) {
+            TextView captionView = text(block.caption, 12, SECONDARY);
             captionView.setLineSpacing(0, 1.12f);
             addBlock(captionView, 0, 0, 0, 14);
         }
