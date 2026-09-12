@@ -34,24 +34,22 @@ public export
 fragment_source_end : SourceFragment → Nat
 fragment_source_end (Fragment _ _ _ value) = value
 
--- A materialized strand keeps the hot document-order path contiguous.
+-- A strand is source-agnostic.  The occurrence path uses a document-order
+-- strand, but other strands may cross source boundaries.
 public export
-data DocumentStrand = Strand String String (List String)
+data Strand = MaterializedStrand String (List String)
 
 public export
-strand_id : DocumentStrand → String
-strand_id (Strand value _ _) = value
+strand_id : Strand → String
+strand_id (MaterializedStrand value _) = value
 
 public export
-strand_source_id : DocumentStrand → String
-strand_source_id (Strand _ value _) = value
-
-public export
-strand_fragment_ids : DocumentStrand → List String
-strand_fragment_ids (Strand _ _ value) = value
+strand_fragment_ids : Strand → List String
+strand_fragment_ids (MaterializedStrand _ value) = value
 
 -- Each literal occurrence retains both its source coordinate and its position
--- on the materialized strand.  The fragment id remains the durable identity.
+-- on the supplied materialized strand.  The fragment id remains the durable
+-- identity.
 public export
 data Occurrence = Hit Nat Nat String
 
@@ -113,10 +111,10 @@ strand_position_from position wanted (value :: rest) =
     then Just position
     else strand_position_from (S position) wanted rest
 
-strand_position : String → DocumentStrand → Maybe Nat
+strand_position : String → Strand → Maybe Nat
 strand_position wanted strand = strand_position_from 0 wanted (strand_fragment_ids strand)
 
-occurrence_at : String → List SourceFragment → DocumentStrand → Nat → Maybe Occurrence
+occurrence_at : String → List SourceFragment → Strand → Nat → Maybe Occurrence
 occurrence_at wanted_source fragments strand coordinate =
   case fragment_at_coordinate wanted_source coordinate fragments of
     Nothing ⇒ Nothing
@@ -125,7 +123,7 @@ occurrence_at wanted_source fragments strand coordinate =
         Nothing ⇒ Nothing
         Just position ⇒ Just (Hit coordinate position found_fragment)
 
-collect_occurrences : String → List SourceFragment → DocumentStrand → List Nat → List Occurrence
+collect_occurrences : String → List SourceFragment → Strand → List Nat → List Occurrence
 collect_occurrences wanted_source fragments strand [] = []
 collect_occurrences wanted_source fragments strand (coordinate :: rest) =
   case occurrence_at wanted_source fragments strand coordinate of
@@ -133,14 +131,13 @@ collect_occurrences wanted_source fragments strand (coordinate :: rest) =
     Just occurrence ⇒ occurrence :: collect_occurrences wanted_source fragments strand rest
 
 -- Search the authoritative source, then map each exact match back onto stable
--- fragments and the materialized document-order strand.  No alias, fuzzy,
--- semantic, or model-derived matching occurs here.
+-- fragments and the supplied materialized strand.  For #54 that strand is the
+-- source's document-order strand.  No alias, fuzzy, semantic, or model-derived
+-- matching occurs here.
 public export
-search_occurrences : String → AuthoritativeText → List SourceFragment → DocumentStrand → List Occurrence
+search_occurrences : String → AuthoritativeText → List SourceFragment → Strand → List Occurrence
 search_occurrences wanted source fragments strand =
-  if source_id source == strand_source_id strand
-    then collect_occurrences (source_id source) fragments strand (literal_offsets wanted source)
-    else []
+  collect_occurrences (source_id source) fragments strand (literal_offsets wanted source)
 
 seen_fragment : String → List String → Bool
 seen_fragment wanted [] = False
@@ -155,7 +152,7 @@ unique_occurrence_fragments seen (occurrence :: rest) =
       else value :: unique_occurrence_fragments (value :: seen) rest
 
 public export
-matching_fragment_ids : String → AuthoritativeText → List SourceFragment → DocumentStrand → List String
+matching_fragment_ids : String → AuthoritativeText → List SourceFragment → Strand → List String
 matching_fragment_ids wanted source fragments strand =
   unique_occurrence_fragments [] (search_occurrences wanted source fragments strand)
 
@@ -183,7 +180,7 @@ fragment_id_at (S position) (_ :: rest) = fragment_id_at position rest
 -- position/id pair fails rather than silently returning context around a
 -- different fragment.
 public export
-context_fragment_ids : Nat → Nat → Occurrence → DocumentStrand → Maybe (List String)
+context_fragment_ids : Nat → Nat → Occurrence → Strand → Maybe (List String)
 context_fragment_ids before after occurrence strand =
   let position = occurrence_strand_position occurrence in
   let ids = strand_fragment_ids strand in
