@@ -81,6 +81,8 @@ jobs:
           import json
           from collections import Counter, defaultdict
 
+          import numpy as np
+
           with open('/tmp/ib-mxbai-reading-probe.json', encoding='utf-8') as stream:
               report = json.load(stream)
           with open('/tmp/ib-recovered-inputs.tsv', encoding='utf-8', newline='') as stream:
@@ -88,26 +90,42 @@ jobs:
 
           result = report['categories'][0]
           ranking = {row['id']: row for row in result['ranking']}
+          rank = {row['id']: offset for offset, row in enumerate(result['ranking'], start=1)}
           support_count = Counter()
+          sample_count = Counter()
           max_slack = defaultdict(float)
           slack_count = Counter()
+          normals = []
           for plane in result['planes']:
               support_count.update(plane['support_ids'])
+              sample_count.update(plane['provisional_unlabeled_ids'])
+              normals.append(np.asarray(plane['w'], dtype=np.float64) / plane['w_norm'])
               for violation in plane['largest_margin_violations']:
                   row_id = violation['id']
                   slack_count[row_id] += 1
                   max_slack[row_id] = max(max_slack[row_id], violation['slack'])
 
+          normals = np.vstack(normals)
+          cosine = normals @ normals.T
+          upper = cosine[np.triu_indices(len(normals), 1)]
+          support_sizes = [len(plane['support_ids']) for plane in result['planes']]
+          proposal_count = sum(row['model_proposed'] for row in result['ranking'])
+
           print(f"retained_unique_plane_count={result['retained_unique_plane_count']}")
           print(f"provisional_unlabeled_per_plane={result['provisional_unlabeled_per_plane']}")
+          print(f"support_vectors_per_plane={min(support_sizes)}..{max(support_sizes)}")
+          print(f"plane_normal_cosine_min={upper.min():.6f}")
+          print(f"plane_normal_cosine_median={np.median(upper):.6f}")
+          print(f"plane_normal_cosine_max={upper.max():.6f}")
           print(f"inclusion_threshold={result['inclusion_threshold']:.9f}")
+          print(f"model_proposal_count={proposal_count}")
           print(f"held_out_positive_recall={result['held_out_positive_recall']}")
           print()
           print('held-out positives:')
           for row in result['ranking']:
               if row['evaluation_positive']:
                   print(
-                      f"  {row['id']} score={row['score']:.9f} "
+                      f"  rank={rank[row['id']]} {row['id']} score={row['score']:.9f} "
                       f"zero_vote={row['zero_surface_vote_fraction']:.3f} "
                       f"proposed={row['model_proposed']} {texts[row['id']]}"
                   )
@@ -118,32 +136,34 @@ jobs:
               if row['fit_positive']:
                   row_id = row['id']
                   print(
-                      f"  {row_id} score={row['score']:.9f} "
+                      f"  rank={rank[row_id]} {row_id} score={row['score']:.9f} "
                       f"zero_vote={row['zero_surface_vote_fraction']:.3f} "
                       f"support={support_count[row_id]}/{len(result['planes'])} "
+                      f"slack_nonzero={slack_count[row_id]}/{len(result['planes'])} "
                       f"largest_reported_slack={max_slack[row_id]:.9f} "
                       f"{texts[row_id]}"
                   )
 
           print()
-          print('most frequent unlabeled support examples:')
+          print('most frequently sampled unlabeled support examples:')
           fit_positive_ids = {
               row['id'] for row in result['ranking'] if row['fit_positive']
           }
-          for row_id, count in support_count.most_common():
+          for row_id, sampled in sample_count.most_common():
               if row_id in fit_positive_ids:
                   continue
               row = ranking[row_id]
               print(
-                  f"  {row_id} support={count}/{len(result['planes'])} "
+                  f"  {row_id} support={support_count[row_id]}/{sampled}_sampled "
                   f"score={row['score']:.9f} proposed={row['model_proposed']} "
+                  f"slack_nonzero={slack_count[row_id]}/{sampled}_sampled "
                   f"largest_reported_slack={max_slack[row_id]:.9f} {texts[row_id]}"
               )
 
           print()
           print('nearest model-policy boundary:')
           for row in result['nearest_model_policy_boundary'][:10]:
-              print(f"  {row['id']} score={row['score']:.9f} {texts[row['id']]}")
+              print(f"  rank={rank[row['id']]} {row['id']} score={row['score']:.9f} {texts[row['id']]}")
           PY
           cat /tmp/ib-mxbai-reading-summary.txt
 
