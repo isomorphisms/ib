@@ -32,6 +32,12 @@ length, repository/non-repository material, and related categories.  Add labels
 where development boundaries, overlaps, and failure clusters remain unstable.
 Keep the test labels untouched while rules and thresholds are being developed.
 
+Define filing destinations separately from concepts.  After concepts are stable
+enough to evaluate, write a filing policy conforming to
+`corpus/definitions/filing-policy.schema.json`.  A destination may draw support
+from several concepts and weak inherited location evidence.  Do not make a
+concept name a destination implicitly.
+
 ## 3. Partition before fitting
 
 ```text
@@ -48,7 +54,7 @@ splits.  Inspect category support; the reference classifier refuses categories
 with fewer than five positive training examples, but five is an execution floor,
 not evidence of a reliable estimate.
 
-## 4. Compare representations
+## 4. Compare conceptual representations
 
 Run the random and chronological partitions separately.  Include all principal
 views in the same frozen configuration:
@@ -64,14 +70,16 @@ python3 experiments/conversation-classification/conversation_lab.py compare \
   --output experiments/conversation-classification/corpus/derived/random-v1
 ```
 
-Repeat with `--split-field chronological_split`.  Filing-destination evaluation
-is a separate run with `--axis filing_destination --filing-evaluation`; only
-that single-destination axis uses closed-world negatives.
+Repeat with `--split-field chronological_split`.  A direct
+`filing_destination` classifier may still be run with
+`--axis filing_destination --filing-evaluation` as a diagnostic baseline, but
+it is not the primary filing architecture and must be reported separately from
+the policy projection.
 
 Do not interpret a modern semantic embedding result unless an actual embedding
 provider and model hash are recorded.  The included dense baseline is LSA.
 
-## 5. Inspect and correct
+## 5. Inspect and correct concepts
 
 Use `query` for unclassified rows, membership, overlaps, boundary cases, and
 explanations; use `evidence` for weak-only provenance.  Diagnose representative
@@ -95,8 +103,24 @@ python3 experiments/conversation-classification/conversation_lab.py classify-mod
 For one new or changed item, pass `--only <corpus-id>` and
 `--previous-proposals`.  The command reads the cheap index for all fingerprints,
 parses only selected bodies, and reports classified versus reused counts and
-elapsed time.  Use `destinations` to emit the final deterministic mapping with
-confidence, margin, evidence, alternatives, and abstentions.
+elapsed time.
+
+Filing is a third operation and does not retrain the classifier:
+
+```text
+python3 experiments/conversation-classification/conversation_lab.py destinations \
+  --proposals <resolved-concept-proposals.jsonl> \
+  --policy experiments/conversation-classification/corpus/definitions/filing-policy-v1.json \
+  --events experiments/conversation-classification/corpus/assertions \
+  --output experiments/conversation-classification/corpus/derived/destinations-v1
+```
+
+The destination projection emits one of `confident_destination`,
+`several_plausible_destinations`, or `no_sufficiently_supported_destination`.
+It records the policy hash, support components, alternatives, and any explicit
+filing correction that overrode or blocked policy output.  Per-category
+classifier margins remain explanation evidence and are not summed across
+categories.
 
 ## 7. Adaptive stop
 
