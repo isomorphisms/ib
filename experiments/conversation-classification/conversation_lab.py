@@ -13,12 +13,12 @@ from ib_conversations.acquire import import_export, verify_public
 from ib_conversations.classify import (
     classify_geometric_model,
     compare,
-    filing_projection,
     merge_incremental_proposals,
     train_geometric_model,
 )
 from ib_conversations.corpus import INPUT_VIEWS, load_corpus, load_title_diagnostic, source_fingerprints
 from ib_conversations.events import AUTHORITIES, AXES, append_correction, current_labels, load_events
+from ib_conversations.filing_policy import load_filing_policy, project_filing_destinations
 from ib_conversations.identity import write_json_if_changed, write_jsonl_if_changed
 from ib_conversations.partitions import partition_rows
 from ib_conversations.query import changed_proposals, query_evidence, query_proposals, resolve_proposals
@@ -143,9 +143,13 @@ def build_parser() -> argparse.ArgumentParser:
     projection.add_argument("--minimum-authority", choices=sorted(AUTHORITIES, key=AUTHORITIES.get), default="accepted_decision")
     projection.add_argument("--output", required=True, type=Path)
 
-    destinations = commands.add_parser("destinations", help="derive a deterministic abstaining filing projection")
-    destinations.add_argument("--proposals", required=True, type=Path)
-    destinations.add_argument("--ambiguity-margin", type=float, default=0.05)
+    destinations = commands.add_parser(
+        "destinations",
+        help="project conceptual memberships through a versioned filing policy",
+    )
+    destinations.add_argument("--proposals", required=True, type=Path, help="concept-membership proposals")
+    destinations.add_argument("--policy", required=True, type=Path)
+    destinations.add_argument("--events", required=True, type=Path, help="existing-location evidence and authoritative filing corrections")
     destinations.add_argument("--output", required=True, type=Path)
     return parser
 
@@ -324,12 +328,17 @@ def main() -> int:
             for line in arguments.proposals.read_text(encoding="utf-8").splitlines()
             if line.strip()
         ]
-        rows = filing_projection(proposals, ambiguity_margin=arguments.ambiguity_margin)
+        policy = load_filing_policy(arguments.policy)
+        rows = project_filing_destinations(proposals, policy, load_events(arguments.events))
         arguments.output.mkdir(parents=True, exist_ok=True)
         write_jsonl_if_changed(arguments.output / "destination-proposals.jsonl", rows)
         report = {
             "rows": len(rows),
-            "ambiguity_margin": arguments.ambiguity_margin,
+            "filing_policy_id": policy["policy_id"],
+            "filing_policy_version": policy["version"],
+            "filing_policy_sha256": policy["policy_sha256"],
+            "minimum_support": policy["minimum_support"],
+            "ambiguity_gap": policy["ambiguity_gap"],
             "outcomes": {
                 outcome: sum(row["outcome"] == outcome for row in rows)
                 for outcome in (
@@ -338,6 +347,7 @@ def main() -> int:
                     "no_sufficiently_supported_destination",
                 )
             },
+            "authoritative_overrides": sum(bool(row.get("authority_override")) for row in rows),
         }
         write_json_if_changed(arguments.output / "destination-report.json", report)
         print(json.dumps(report, indent=2, sort_keys=True))
