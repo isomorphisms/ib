@@ -1,8 +1,0 @@
-branch=webview
-head=e2ec343aa78391a1c016b2377dedac4bf4a710c3
-artifact=ib-webview-protected-transaction-apk
-apk=app-debug.apk
-sha256=87fea79f2c719996f888546ff3acdc97dc37722834c7b724e5b66d52408d536f
-
-This checksum is for the debug APK produced by GitHub Actions run 34854847438.
-It is build evidence only; no physical-device runtime acceptance is claimed here.
