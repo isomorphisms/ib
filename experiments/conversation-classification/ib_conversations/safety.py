@@ -146,11 +146,12 @@ CHILD_CONTEXT = re.compile(r"(?i)\b(?:my|our)\s+(?:daughter|son|child|kid|childr
 CHILD_IDENTIFIER = re.compile(
     r"(?i)\b(?:named|name\s+is|birthday|born|turn(?:ed|ing)?\s+\d|\d{1,2}\s+years?\s+old|school|teacher|classroom|daycare|camp|custody|pickup|drop[- ]?off)\b"
 )
-PRIVATE_CORRESPONDENCE = re.compile(
-    r"(?im)(?:^\s*(?:from|to|cc|bcc|subject)\s*:\s*\S|"
-    r"\b(?:draft|reply|respond|forward|send)\s+(?:an?\s+)?(?:email|message|text)\s+(?:to|from)\b|"
-    r"\b(?:private|direct)\s+(?:email|message|correspondence)\b)"
-)
+# A request to draft, send, or reply to a message is the user's own conversation
+# and is not by itself evidence that third-party private text has been pasted.
+# Whole-conversation exclusion is reserved for correspondence-shaped source text
+# such as a received/forwarded message with a From: header.  Span detectors still
+# remove email addresses, phone numbers, addresses, credentials, and identifiers.
+PRIVATE_CORRESPONDENCE = re.compile(r"(?im)^\s*from\s*:\s*\S")
 
 
 def scan_text(text: str) -> list[Finding]:
@@ -191,4 +192,3 @@ def redact_text(text: str, findings: Iterable[Finding]) -> str:
         cursor = finding.end
     result.append(text[cursor:])
     return "".join(result)
-
