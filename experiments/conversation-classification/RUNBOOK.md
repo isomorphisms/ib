@@ -3,6 +3,11 @@
 This run starts only after a one-time ChatGPT export ZIP is available outside
 the Git worktree.  Do not substitute per-conversation UI traversal.
 
+`EVALUATION.md` is normative for the representation/classifier comparison.  In
+particular, the same frozen held-out rows must be used for every contender, and
+representation, classification head, and threshold policy must remain separate
+experimental factors.
+
 ## 1. Import and publication gate
 
 ```text
@@ -54,10 +59,18 @@ splits.  Inspect category support; the reference classifier refuses categories
 with fewer than five positive training examples, but five is an execution floor,
 not evidence of a reliable estimate.
 
-## 4. Compare conceptual representations
+Freeze the partition, category-definition, assertion, and corpus hashes before
+fitting contenders.  A material change after test inspection creates a new
+experiment generation and requires a fresh untouched holdout.
 
-Run the random and chronological partitions separately.  Include all principal
-views in the same frozen configuration:
+## 4. Compare representations before choosing a classifier
+
+Run the random and chronological partitions separately.  The comparison must be
+paired: every contender sees the same training, development, and test rows.
+Follow the full matrix in `EVALUATION.md`.
+
+The existing command remains useful for the sparse baselines and current LSA
+reference:
 
 ```text
 python3 experiments/conversation-classification/conversation_lab.py compare \
@@ -65,21 +78,47 @@ python3 experiments/conversation-classification/conversation_lab.py compare \
   --events experiments/conversation-classification/corpus/assertions \
   --axis concept \
   --partitions experiments/conversation-classification/corpus/derived/partitions-v1 \
-  --view full --view user --view assistant --view title_user --view structural \
+  --view structural --view title --view user --view assistant --view title_user --view full \
   --rules experiments/conversation-classification/corpus/definitions/rules-v1.json \
   --output experiments/conversation-classification/corpus/derived/random-v1
 ```
 
-Repeat with `--split-field chronological_split`.  A direct
-`filing_destination` classifier may still be run with
+Repeat with `--split-field chronological_split`.
+
+Do **not** treat the current command's output as a decisive representation/head
+comparison until the matrix is fully crossed.  At this branch state, sparse
+hyperplanes run for every view, while LSA and centroid are attached only to the
+first requested view.  Before architecture selection, run both the positive
+centroid and bagged positive/unlabeled hyperplane heads on every serious numeric
+representation, including content-bearing pretrained semantic embeddings when
+their exact model/tokenizer/runtime provenance is recorded.
+
+A direct `filing_destination` classifier may still be run with
 `--axis filing_destination --filing-evaluation` as a diagnostic baseline, but
 it is not the primary filing architecture and must be reported separately from
 the policy projection.
 
 Do not interpret a modern semantic embedding result unless an actual embedding
-provider and model hash are recorded.  The included dense baseline is LSA.
+provider and model hash are recorded.  The included dense baseline is LSA.  For
+mxbai or another pretrained encoder, classify conversation content rather than
+URLs, record deterministic message/chunk pooling and truncation statistics, and
+preserve assistant-only as a contamination control rather than a preferred
+input.
 
-## 5. Inspect and correct concepts
+## 5. Evaluate held-out behavior, then inspect failures
+
+Thresholded F1 is not sufficient under positive/unlabeled supervision.  For
+each category and contender, preserve the ordinary explicit-label metrics and
+also report held-out positive absolute/percentile ranks, recall within fixed
+review-budget percentiles, and unlabeled proposal rate separately from any
+false-positive rate.
+
+For PU hyperplanes, also record bag-to-bag normal cosine, held-out score/rank
+spread, vote fractions, and the fraction of fit rows on or inside the SVM
+margin.  If almost every fit row is margin-active while provisional-unlabeled
+resampling rotates the separator and held-out ranks move substantially, report
+that category as underdetermined rather than choosing the cleanest training
+fit.
 
 Use `query` for unclassified rows, membership, overlaps, boundary cases, and
 explanations; use `evidence` for weak-only provenance.  Diagnose representative
@@ -90,6 +129,7 @@ threads, and incoherent definitions.
 `correct` appends an authoritative event.  `project` overlays it on immutable
 classifier output.  Retrain only the affected category when the correction is
 to become training evidence; retain the prior model generation for comparison.
+Do not reuse the inspected test set as development evidence.
 
 ## 6. Measure incremental work
 
@@ -124,7 +164,13 @@ categories.
 
 ## 7. Adaptive stop
 
-Increase reviewed examples only while category support, held-out filing risk,
-coverage/review curves, or dominant failure clusters materially change.  Stop
-when repeated additions leave the architecture choice and practical risk
-estimate stable.  Never expand merely to reach a round corpus count.
+Increase reviewed examples only while category support, paired held-out method
+ordering, held-out filing risk, coverage/review curves, or dominant failure
+clusters materially change.  Stop when repeated additions leave the
+architecture choice and practical risk estimate stable in both random and
+chronological regimes.
+
+A category with very few held-out positives is a case study, not an architecture
+verdict.  If the paired evidence is too sparse to distinguish contenders, record
+`insufficient held-out evidence` rather than selecting the largest point
+estimate.  Never expand merely to reach a round corpus count.
