@@ -33,8 +33,11 @@ coverage to 34.4% while misfiling 63.6% of automatic choices.  Even as a weak
 diagnostic, this is strong evidence against treating a random title split as an
 adequate proxy for future filing.
 
-This diagnostic supports one narrow architectural decision: filing policy
-should permit abstention, and category scores must be ranked by margin relative
-to each category's own threshold.  It does not answer whether user-only text
-helps, whether semantic hyperplanes beat rules, or whether overlapping concepts
-are useful.  Those conclusions remain blocked on the one-time export.
+This diagnostic supports one narrow architectural decision: automatic filing
+must permit abstention.  It does not justify treating independently calibrated
+category margins as commensurable destination scores.  The branch now evaluates
+conceptual membership first and applies a separately versioned filing policy to
+accepted concepts and weak location evidence.  The title diagnostic does not
+answer whether user-only text helps, whether semantic hyperplanes beat rules,
+or whether overlapping concepts are useful.  Those conclusions remain blocked
+on the one-time export.
