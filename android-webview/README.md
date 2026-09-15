@@ -58,3 +58,29 @@ silently conflated with durable host-process recovery.
 `android:usesCleartextTraffic="true"` is present only because the deterministic
 fixture server is HTTP on `127.0.0.1`. The harness does not browse arbitrary
 cleartext sites.
+
+## Incremental large-page experiment
+
+The branch `incremental-large-page-render` also registers
+`IncrementalLargePageActivity` in a separate `:incremental` process. This is a
+diagnostic adapter for `docs/incremental-large-page-render.md`; it does not
+replace the protected-transaction fixture above.
+
+After installing the branch APK, an exact target can be launched explicitly:
+
+```sh
+/system/bin/am start \
+  -n org.isomorphisms.ib.webview/.IncrementalLargePageActivity \
+  --es url 'https://console.cloud.google.com/agent-platform/studio/multimodal?authuser=5&project=isomorphismes-youtube-shorts&supportedpurview=project&model=gemini-3.7-flash&region=global'
+```
+
+The adapter records coarse load progress, first committed visible content,
+`onPageFinished`, compact Performance API timing/count samples, and renderer
+death to an app-private disk journal. **Background** moves the task out of the
+foreground without deliberately pausing WebView timers, so a phone run can
+observe whether the live renderer keeps progressing while its process survives.
+
+For forms it records only whether an input/change event made the page dirty; it
+does not read the value. Renderer death never automatically reloads this real
+page. **Reload** is an explicit user action because replaying or discarding an
+in-progress form is not a renderer-recovery implementation detail.
