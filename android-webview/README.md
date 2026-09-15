@@ -66,13 +66,10 @@ The branch `incremental-large-page-render` also registers
 diagnostic adapter for `docs/incremental-large-page-render.md`; it does not
 replace the protected-transaction fixture above.
 
-After installing the branch APK, an exact target can be launched explicitly:
-
-```sh
-/system/bin/am start \
-  -n org.isomorphisms.ib.webview/.IncrementalLargePageActivity \
-  --es url 'https://console.cloud.google.com/agent-platform/studio/multimodal?authuser=5&project=isomorphismes-youtube-shorts&supportedpurview=project&model=gemini-3.7-flash&region=global'
-```
+The APK exposes a second launcher entry named **IB Large Page**. Tap that entry
+to start the exact Google Cloud Studio target with `authuser=5`. This avoids
+relying on `/system/bin/am`, which some Android/Unisoc builds reject when it is
+invoked from an application UID such as Termux.
 
 The adapter records coarse load progress, first committed visible content,
 `onPageFinished`, compact Performance API timing/count samples, and renderer
