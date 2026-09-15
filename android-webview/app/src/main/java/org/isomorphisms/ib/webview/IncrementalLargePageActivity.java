@@ -61,7 +61,7 @@ public final class IncrementalLargePageActivity extends Activity {
         }
 
         String supplied_url = getIntent().getStringExtra("url");
-        target_url = supplied_url == null || supplied_url.isBlank() ? DEFAULT_URL : supplied_url;
+        target_url = supplied_url == null || supplied_url.trim().isEmpty() ? DEFAULT_URL : supplied_url;
         started_at = SystemClock.elapsedRealtime();
         journal_file = create_journal_file();
 
