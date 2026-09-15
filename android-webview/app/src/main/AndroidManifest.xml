@@ -21,6 +21,16 @@
             android:process=":incremental" />
 
         <activity
+            android:name=".IncrementalLargePageLauncherActivity"
+            android:exported="true"
+            android:label="IB Large Page">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <activity
             android:name=".WebViewActivity"
             android:exported="true">
             <intent-filter>
