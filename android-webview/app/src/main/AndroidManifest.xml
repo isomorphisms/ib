@@ -15,6 +15,12 @@
             android:process=":pressure" />
 
         <activity
+            android:name=".IncrementalLargePageActivity"
+            android:exported="true"
+            android:label="IB Incremental Page"
+            android:process=":incremental" />
+
+        <activity
             android:name=".WebViewActivity"
             android:exported="true">
             <intent-filter>
