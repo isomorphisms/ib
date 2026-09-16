@@ -1,0 +1,1 @@
+A rectified network folds space by composing affine maps with activation boundaries. Each fixed activation pattern selects one affine transformation, while crossing an activation boundary changes the linear region. This second positive body document provides a distinct expression of the same conceptual membership.
