@@ -1,0 +1,3 @@
+Tiny color blocks
+Figure 1 shows tiny red, green, blue, and white color blocks.
+The figure is embedded in the PDF fixture used by the scientific reading path.

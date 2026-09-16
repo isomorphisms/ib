@@ -1,0 +1,25 @@
+ib-embedding-model 1
+slug mxbai-embed-xsmall-v1-int8
+repository mixedbread-ai/mxbai-embed-xsmall-v1
+revision b0561d9a97e6b298da39f0ef3e7d3cf153b1b29a
+license Apache-2.0
+runtime sentence-transformer-onnx
+weight_precision int8
+dimensions 384
+max_tokens 128
+pooling attention-mask-mean
+normalization l2
+token_policy include-special
+padding dynamic-right
+query_prefix none
+document_prefix none
+tokenizer_file tokenizer.json
+onnx_file onnx/model_int8.onnx
+onnx_output sentence_embedding
+artifact config.json 675 55f755d351fd04b0fef37760e07e195eb47e15f7aed6fc42d9be3dde3d38bca4
+artifact tokenizer.json 711661 da0e79933b9ed51798a3ae27893d3c5fa4a201126cef75586296df9b4d2c62a0
+artifact tokenizer_config.json 1433 bd2e06a5b20fd1b13ca988bedc8763d332d242381b4fbc98f8fead4524158f79
+artifact special_tokens_map.json 695 5d5b662e421ea9fac075174bb0688ee0d9431699900b90662acd44b2a350503a
+artifact modules.json 229 8f4b264b80206c830bebbdcae377e137925650a433b689343a63bdc9b3145460
+artifact 1_Pooling/config.json 296 a19c83805e1ce4174f3fbfec4ac8d3b8dbae0c958f8fd51b80937eb33e0c5335
+artifact onnx/model_int8.onnx 24448010 952f996d8cf46c311ee8654a750fa942b71c8b94aabe69d043dbb2bcaff5528e

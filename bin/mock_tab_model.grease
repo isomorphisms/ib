@@ -1,0 +1,116 @@
+#!/bin/sh
+set -eu
+
+model_name=mock-token-i8-v1
+dimensions=32
+
+inspect_model() {
+  printf '%s\n' \
+    "model=$model_name" \
+    'available=True' \
+    'model-kind=deterministic-token-test-double' \
+    'llm=False' \
+    'quantization=int8-counts' \
+    "dimensions=$dimensions" \
+    'tasks=embedding,extractive-answer'
+}
+
+embed_text() {
+  awk -v dimensions="$dimensions" '
+    function token_slot(token,    alphabet, character, hash, index_in_alphabet, position) {
+      alphabet = "abcdefghijklmnopqrstuvwxyz0123456789"
+      hash = 0
+      for (position = 1; position <= length(token); position++) {
+        character = substr(token, position, 1)
+        index_in_alphabet = index(alphabet, character)
+        hash = (hash * 37 + index_in_alphabet) % dimensions
+      }
+      return hash + 1
+    }
+    {
+      text = tolower($0)
+      gsub(/[^[:alnum:]]+/, " ", text)
+      token_count = split(text, tokens, / +/)
+      for (token_index = 1; token_index <= token_count; token_index++) {
+        token = tokens[token_index]
+        if (length(token) < 2)
+          continue
+        slot = token_slot(token)
+        if (values[slot] < 127)
+          values[slot]++
+      }
+    }
+    END {
+      for (slot = 1; slot <= dimensions; slot++)
+        printf "%s%d", slot == 1 ? "" : " ", values[slot] + 0
+      printf "\n"
+    }
+  '
+}
+
+answer_from_document() {
+  question=$1
+  document=$2
+  test -s "$document" || {
+    printf 'mock tab model: source document is empty: %s\n' "$document" >&2
+    return 1
+  }
+
+  awk -v question="$question" '
+    BEGIN {
+      normalized_question = tolower(question)
+      gsub(/[^[:alnum:]]+/, " ", normalized_question)
+      question_count = split(normalized_question, question_tokens, / +/)
+      for (question_index = 1; question_index <= question_count; question_index++)
+        if (length(question_tokens[question_index]) >= 2)
+          wanted[question_tokens[question_index]] = 1
+    }
+    NF {
+      if (first_line == "")
+        first_line = $0
+      normalized_line = tolower($0)
+      gsub(/[^[:alnum:]]+/, " ", normalized_line)
+      line_count = split(normalized_line, line_tokens, / +/)
+      score = 0
+      for (line_index = 1; line_index <= line_count; line_index++) {
+        token = line_tokens[line_index]
+        if (token in wanted && seen_on_line[token] != NR) {
+          score++
+          seen_on_line[token] = NR
+        }
+      }
+      if (best_line == "" || score > best_score) {
+        best_line = $0
+        best_score = score
+      }
+    }
+    END {
+      if (best_line != "")
+        print best_line
+      else if (first_line != "")
+        print first_line
+    }
+  ' "$document"
+}
+
+case "${1:-}" in
+  inspect)
+    test "$#" -eq 1 || exit 2
+    inspect_model
+    ;;
+  embed)
+    test "$#" -eq 1 || exit 2
+    embed_text
+    ;;
+  answer)
+    test "$#" -eq 3 || {
+      printf 'usage: %s answer QUESTION DOCUMENT\n' "$0" >&2
+      exit 2
+    }
+    answer_from_document "$2" "$3"
+    ;;
+  *)
+    printf 'usage: %s {inspect|embed|answer QUESTION DOCUMENT}\n' "$0" >&2
+    exit 2
+    ;;
+esac

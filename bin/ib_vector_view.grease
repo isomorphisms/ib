@@ -1,0 +1,81 @@
+#!/bin/sh
+set -eu
+
+repository_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+
+usage() {
+  printf '%s\n' \
+    'usage: ib_vector_view.grease build VIEW_ROOT COLLECTION MODEL_MANIFEST cosine|dot [VECTOR_PROGRAM]' >&2
+  exit 2
+}
+
+fail() {
+  printf 'ib-vector-view: %s\n' "$*" >&2
+  return 1
+}
+
+safe_component() {
+  case "$2" in
+    ''|.|..|*/*) fail "unsafe $1: $2"; return 1 ;;
+    *'
+'*) fail "$1 contains a newline"; return 1 ;;
+  esac
+}
+
+install_model_manifest() {
+  install_source=$1
+  install_directory=$2
+  install_target=$install_directory/embedding-model.txt
+
+  if test -e "$install_target" || test -L "$install_target"; then
+    if ! test -f "$install_target" || test -L "$install_target"; then
+      fail "embedding model record is not a regular file: $install_target"
+      return 1
+    fi
+    if ! cmp -s "$install_source" "$install_target"; then
+      fail 'model slug is already bound to a different immutable manifest'
+      return 1
+    fi
+    return 0
+  fi
+
+  install_temporary=$(mktemp "$install_directory/.embedding-model.XXXXXX")
+  trap 'rm -f "$install_temporary"' EXIT HUP INT TERM
+  cp "$install_source" "$install_temporary"
+  mv -T "$install_temporary" "$install_target"
+  trap - EXIT HUP INT TERM
+}
+
+test "$#" -gt 0 || usage
+command_name=$1
+shift
+test "$command_name" = build || usage
+test "$#" -eq 4 || test "$#" -eq 5 || usage
+
+view_root=$1
+collection=$2
+model_manifest=$3
+metric=$4
+vector_program=${5:-ib-vector-index}
+
+case "$view_root" in
+  ''|/) fail "unsafe view root: $view_root"; exit 1 ;;
+esac
+safe_component collection "$collection"
+case "$metric" in cosine|dot) ;; *) fail "unsupported metric: $metric"; exit 1 ;; esac
+
+"$repository_root/bin/ib_embedding_model.grease" describe "$model_manifest" >/dev/null
+slug=$(awk '$1 == "slug" { print $2 }' "$model_manifest")
+dimensions=$(awk '$1 == "dimensions" { print $2 }' "$model_manifest")
+vector_spaces=$view_root/organizing-the-information/vector-spaces
+model_view_directory=$vector_spaces/$slug
+index_directory=$model_view_directory/$collection
+
+sh "$repository_root/bin/ib_views.grease" init "$view_root"
+test ! -L "$model_view_directory" ||
+  fail "model vector-space directory is a symbolic link: $model_view_directory"
+mkdir -p "$model_view_directory"
+test ! -L "$index_directory" || fail "vector view is a symbolic link: $index_directory"
+mkdir -p "$index_directory"
+install_model_manifest "$model_manifest" "$model_view_directory"
+"$vector_program" build "$index_directory" "$dimensions" "$metric"

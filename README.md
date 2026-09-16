@@ -15,9 +15,13 @@ The browser core owns resource, tab, event, and task identity; sleeping and waki
 - `docs/prefetch-and-reading.md` — durable investigation frontiers, disposable fetches, and `~/reading`
 - `docs/tab-categorization.md` — overlapping personal categories and adaptive refinement
 - `docs/inference-and-learning.md` — configured-model proposals, explicit hyperplanes, ensembles, and human supervision
+- `docs/filesystem-views.md` — category links, `_active`, and the requested `hot/` presentation set
 - `docs/storage-model.md` — identity levels and canonical, proposed, and derived state
 - `docs/developer-workbench.md` — fixture and memory-pressure harness
+- `docs/vector-index.md` — readable multi-model vector views and rebuildable Float32 query caches
+- `docs/tab-qa-mock.md` — console questions over saved reading pages with replaceable processing stages
 - `experiments/category-hyperplanes/README.md` — disposable embedding and explicit affine-separator probe
+- `experiments/embedding-models/README.md` — pinned tiny ONNX models and an end-to-end filesystem-index comparison
 
 ## Implementation languages
 

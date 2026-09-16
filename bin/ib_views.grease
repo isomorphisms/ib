@@ -1,0 +1,63 @@
+#!/bin/sh
+set -eu
+
+repository_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+. "$repository_root/lib/filesystem_views.grease"
+
+usage() {
+  printf '%s\n' 'usage:' >&2
+  printf '%s\n' '  ib_views.grease init VIEW_ROOT' >&2
+  printf '%s\n' '  ib_views.grease category-add VIEW_ROOT STATE_ROOT CATEGORY {tab|resource} ID' >&2
+  printf '%s\n' '  ib_views.grease category-remove VIEW_ROOT CATEGORY {tab|resource} ID' >&2
+  printf '%s\n' '  ib_views.grease category-activate VIEW_ROOT CATEGORY' >&2
+  printf '%s\n' '  ib_views.grease category-deactivate VIEW_ROOT CATEGORY' >&2
+  printf '%s\n' '  ib_views.grease category-memberships VIEW_ROOT STATE_ROOT {tab|resource} ID' >&2
+  printf '%s\n' '  ib_views.grease hot-add VIEW_ROOT PRESENTATION_ROOT SLOT RELATIVE_TARGET' >&2
+  printf '%s\n' '  ib_views.grease hot-remove VIEW_ROOT SLOT' >&2
+  printf '%s\n' '  ib_views.grease prune-broken VIEW_ROOT' >&2
+  exit 2
+}
+
+command_name=${1:-}
+test "$#" -gt 0 || usage
+shift
+
+case "$command_name" in
+  init)
+    test "$#" -eq 1 || usage
+    ib_views_initialize "$1"
+    ;;
+  category-add)
+    test "$#" -eq 5 || usage
+    ib_category_add "$1" "$2" "$3" "$4" "$5"
+    ;;
+  category-remove)
+    test "$#" -eq 4 || usage
+    ib_category_remove "$1" "$2" "$3" "$4"
+    ;;
+  category-activate)
+    test "$#" -eq 2 || usage
+    ib_category_activate "$1" "$2"
+    ;;
+  category-deactivate)
+    test "$#" -eq 2 || usage
+    ib_category_deactivate "$1" "$2"
+    ;;
+  category-memberships)
+    test "$#" -eq 4 || usage
+    ib_category_memberships "$1" "$2" "$3" "$4"
+    ;;
+  hot-add)
+    test "$#" -eq 4 || usage
+    ib_hot_add "$1" "$2" "$3" "$4"
+    ;;
+  hot-remove)
+    test "$#" -eq 2 || usage
+    ib_hot_remove "$1" "$2"
+    ;;
+  prune-broken)
+    test "$#" -eq 1 || usage
+    ib_views_prune_broken_links "$1"
+    ;;
+  *) usage ;;
+esac
