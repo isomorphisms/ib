@@ -1,0 +1,4 @@
+id	concept	role	provenance
+arxiv:1901.09021	piecewise-linear-network-geometry	fit_positive	experiment fixture from paper subject; not durable user membership
+arxiv:1606.05336	piecewise-linear-network-geometry	fit_positive	experiment fixture from paper subject; not durable user membership
+arxiv:2305.00241	piecewise-linear-network-geometry	held_out_positive	experiment fixture from paper subject; excluded from fit and threshold selection
