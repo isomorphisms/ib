@@ -1,0 +1,1 @@
+A quadratic form assigns a scalar to each vector and, after choosing a basis, may be represented by a matrix. Nondegeneracy and definiteness are intrinsic properties, while the Gram matrix depends on coordinates. This body document supplies unrelated mathematical material as provisional unlabeled evidence.
