@@ -1,0 +1,1 @@
+Piecewise-linear neural networks divide input space into regions on which the network is affine. The boundaries between adjacent activation patterns form linear pieces, and changes of activation state alter the local affine map. This fixture is body text for testing a conceptual separator about piecewise-linear geometry, not a title or URL representation.
