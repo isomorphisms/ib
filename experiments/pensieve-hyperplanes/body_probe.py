@@ -228,6 +228,11 @@ def fit_concept(
     def recall(values: np.ndarray) -> float | None:
         return float(proposed[values].mean()) if len(values) else None
 
+    positive_set = set(positives.tolist())
+    negative_set = set(negatives.tolist())
+    held_positive_set = set(held_positive.tolist())
+    held_negative_set = set(held_negative.tolist())
+
     return {
         "concept": concept,
         "fit_positive_count": int(len(positives)),
@@ -239,6 +244,10 @@ def fit_concept(
         "retained_unique_plane_count": len(planes),
         "provisional_unlabeled_per_plane": sample_count,
         "fit_mode": "bagged linear soft-margin SVM with provisional-unlabeled resampling",
+        "aggregate_score_definition": "mean signed geometric distance across retained planes",
+        "proposal_policy": "aggregate_score >= proposal_threshold",
+        "zero_surface_vote_policy": "diagnostic fraction only; proposal uses thresholded aggregate score",
+        "unlabeled_policy": "unasserted rows may be sampled provisionally as comparison rows; sampling does not create a negative assertion",
         "proposal_threshold": threshold,
         "target_fit_positive_recall": target_recall,
         "fit_positive_recall": recall(positives),
@@ -253,10 +262,10 @@ def fit_concept(
                 "score": float(aggregate[value]),
                 "zero_surface_vote_fraction": float(zero_votes[value]),
                 "proposed": bool(proposed[value]),
-                "fit_positive": bool(value in set(positives.tolist())),
-                "fit_negative": bool(value in set(negatives.tolist())),
-                "held_out_positive": bool(value in set(held_positive.tolist())),
-                "held_out_negative": bool(value in set(held_negative.tolist())),
+                "fit_positive": bool(value in positive_set),
+                "fit_negative": bool(value in negative_set),
+                "held_out_positive": bool(value in held_positive_set),
+                "held_out_negative": bool(value in held_negative_set),
             }
             for value in ranking
         ],
@@ -301,9 +310,12 @@ def main() -> int:
 
     input_manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     embedding_provenance = json.loads(embedding_path.read_text(encoding="utf-8"))
+    input_sha256 = sha256(input_path)
     if input_manifest.get("title_or_url_used") is not False:
         raise ValueError("body probe requires a manifest asserting title_or_url_used=false")
-    if embedding_provenance.get("input_text_sha256") != sha256(input_path):
+    if input_manifest.get("output_sha256") != input_sha256:
+        raise ValueError("body-input manifest does not match the body-text input artifact")
+    if embedding_provenance.get("input_text_sha256") != input_sha256:
         raise ValueError("embedding provenance does not match the body-text input artifact")
 
     report = {
@@ -317,7 +329,7 @@ def main() -> int:
         },
         "body_input": {
             "path": str(input_path),
-            "sha256": sha256(input_path),
+            "sha256": input_sha256,
             "manifest_path": str(manifest_path),
             "manifest_sha256": sha256(manifest_path),
             "format": input_manifest.get("format"),
