@@ -1,0 +1,1 @@
+Holomorphic functions are complex-differentiable on open subsets of the complex plane. Their local behavior is constrained by analyticity, contour integrals, and power-series expansions. This document is intentionally unrelated to piecewise-linear activation geometry and remains unlabeled rather than asserted negative.
