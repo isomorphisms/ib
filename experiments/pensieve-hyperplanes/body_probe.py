@@ -17,8 +17,16 @@ import sklearn
 from sklearn.svm import SVC
 
 
-ROLES = {"fit_positive", "fit_negative", "held_out_positive", "held_out_negative"}
-FORMAT = "ib-pensieve-body-hyperplane-probe-v1"
+ROLES = {
+    "fit_positive",
+    "fit_negative",
+    "development_positive",
+    "development_negative",
+    "held_out_positive",
+    "held_out_negative",
+}
+FORMAT = "ib-pensieve-body-hyperplane-probe-v2"
+POLICY_FORMAT = "ib-pensieve-hyperplane-proposal-policy-v2"
 
 
 @dataclass(frozen=True)
@@ -88,7 +96,24 @@ def load_labels(path: Path, known_ids: set[str]) -> list[Label]:
     return labels
 
 
-def choose_threshold(scores: np.ndarray, positives: np.ndarray, target_recall: float) -> float:
+def load_policy(path: Path) -> dict:
+    policy = json.loads(path.read_text(encoding="utf-8"))
+    if policy.get("format") != POLICY_FORMAT:
+        raise ValueError("unexpected proposal policy format")
+    fraction = policy.get("score_floor_fraction_of_fit_positive_floor")
+    vote = policy.get("minimum_zero_surface_vote_fraction")
+    if not isinstance(fraction, (int, float)) or not 0 < fraction <= 1:
+        raise ValueError("proposal policy score-floor fraction must be in (0, 1]")
+    if not isinstance(vote, (int, float)) or not 0 <= vote <= 1:
+        raise ValueError("proposal policy vote fraction must be in [0, 1]")
+    if not isinstance(policy.get("concept"), str) or not policy["concept"]:
+        raise ValueError("proposal policy must name a concept")
+    return policy
+
+
+def choose_fit_positive_floor(
+    scores: np.ndarray, positives: np.ndarray, target_recall: float
+) -> float:
     positive_scores = np.sort(scores[positives])
     allowed_misses = int(math.floor((1.0 - target_recall) * len(positive_scores)))
     allowed_misses = min(max(allowed_misses, 0), len(positive_scores) - 1)
@@ -115,6 +140,7 @@ def fit_concept(
     ids: list[str],
     vectors: np.ndarray,
     labels: list[Label],
+    policy: dict,
     bags: int,
     unlabeled_per_positive: float,
     c_value: float,
@@ -122,37 +148,58 @@ def fit_concept(
     target_recall: float,
     seed: int,
 ) -> dict:
+    if policy["concept"] != concept:
+        raise ValueError(
+            f"proposal policy concept {policy['concept']!r} does not match {concept!r}"
+        )
+
     index = {row_id: offset for offset, row_id in enumerate(ids)}
 
     def role_indices(role: str) -> np.ndarray:
         return np.asarray(
-            sorted(index[label.row_id] for label in labels if label.concept == concept and label.role == role),
+            sorted(
+                index[label.row_id]
+                for label in labels
+                if label.concept == concept and label.role == role
+            ),
             dtype=np.int64,
         )
 
     positives = role_indices("fit_positive")
     negatives = role_indices("fit_negative")
+    development_positive = role_indices("development_positive")
+    development_negative = role_indices("development_negative")
     held_positive = role_indices("held_out_positive")
     held_negative = role_indices("held_out_negative")
     if len(positives) < 2:
         raise ValueError(f"concept {concept!r} needs at least two fit positives")
 
     fit_ids = set(positives.tolist()) | set(negatives.tolist())
-    held_ids = set(held_positive.tolist()) | set(held_negative.tolist())
-    if fit_ids & held_ids:
-        raise ValueError(f"concept {concept!r} has fit/evaluation overlap")
-
-    all_held = {
+    excluded_ids = {
         index[label.row_id]
         for label in labels
-        if label.role.startswith("held_out_")
+        if label.concept == concept
+        and label.role
+        in {
+            "development_positive",
+            "development_negative",
+            "held_out_positive",
+            "held_out_negative",
+        }
     }
-    fixed = fit_ids | all_held
-    unlabeled = np.asarray([offset for offset in range(len(ids)) if offset not in fixed], dtype=np.int64)
+    if fit_ids & excluded_ids:
+        raise ValueError(f"concept {concept!r} has fit/evaluation overlap")
+
+    fixed = fit_ids | excluded_ids
+    unlabeled = np.asarray(
+        [offset for offset in range(len(ids)) if offset not in fixed], dtype=np.int64
+    )
     requested = int(math.ceil(len(positives) * unlabeled_per_positive))
     sample_count = min(len(unlabeled), requested)
     if len(negatives) == 0 and sample_count == 0:
-        raise ValueError(f"concept {concept!r} has no explicit negative or provisional unlabeled rows")
+        raise ValueError(
+            f"concept {concept!r} has no explicit negative or provisional unlabeled rows"
+        )
 
     rng = np.random.default_rng(seed)
     if sample_count == 0:
@@ -197,7 +244,11 @@ def fit_concept(
         raw_train = raw_all[train]
         slack = np.maximum(0.0, 1.0 - y * raw_train)
         violating = np.flatnonzero(slack > 1e-9)
-        largest = violating[np.argsort(slack[violating])[::-1][:10]] if len(violating) else []
+        largest = (
+            violating[np.argsort(slack[violating])[::-1][:10]]
+            if len(violating)
+            else []
+        )
         support = train[classifier.support_]
 
         planes.append(
@@ -221,15 +272,25 @@ def fit_concept(
     matrix = np.vstack(plane_scores)
     aggregate = matrix.mean(axis=0)
     zero_votes = (matrix >= 0.0).mean(axis=0)
-    threshold = choose_threshold(aggregate, positives, target_recall)
-    proposed = aggregate >= threshold
+    fit_positive_floor = choose_fit_positive_floor(
+        aggregate, positives, target_recall
+    )
+    score_fraction = float(
+        policy["score_floor_fraction_of_fit_positive_floor"]
+    )
+    minimum_vote = float(policy["minimum_zero_surface_vote_fraction"])
+    proposal_threshold = fit_positive_floor * score_fraction
+    strict_proposed = aggregate >= fit_positive_floor
+    proposed = (aggregate >= proposal_threshold) & (zero_votes >= minimum_vote)
     ranking = np.argsort(aggregate)[::-1]
 
-    def recall(values: np.ndarray) -> float | None:
-        return float(proposed[values].mean()) if len(values) else None
+    def rate(values: np.ndarray, mask: np.ndarray = proposed) -> float | None:
+        return float(mask[values].mean()) if len(values) else None
 
     positive_set = set(positives.tolist())
     negative_set = set(negatives.tolist())
+    development_positive_set = set(development_positive.tolist())
+    development_negative_set = set(development_negative.tolist())
     held_positive_set = set(held_positive.tolist())
     held_negative_set = set(held_negative.tolist())
 
@@ -237,6 +298,8 @@ def fit_concept(
         "concept": concept,
         "fit_positive_count": int(len(positives)),
         "explicit_negative_count": int(len(negatives)),
+        "development_positive_count": int(len(development_positive)),
+        "development_negative_count": int(len(development_negative)),
         "held_out_positive_count": int(len(held_positive)),
         "held_out_negative_count": int(len(held_negative)),
         "fit_eligible_unlabeled_count": int(len(unlabeled)),
@@ -245,15 +308,23 @@ def fit_concept(
         "provisional_unlabeled_per_plane": sample_count,
         "fit_mode": "bagged linear soft-margin SVM with provisional-unlabeled resampling",
         "aggregate_score_definition": "mean signed geometric distance across retained planes",
-        "proposal_policy": "aggregate_score >= proposal_threshold",
-        "zero_surface_vote_policy": "diagnostic fraction only; proposal uses thresholded aggregate score",
+        "strict_fit_positive_floor": fit_positive_floor,
+        "proposal_policy": {
+            "name": policy["name"],
+            "score_floor_fraction_of_fit_positive_floor": score_fraction,
+            "minimum_zero_surface_vote_fraction": minimum_vote,
+            "proposal_threshold": proposal_threshold,
+            "rule": policy["proposal_rule"],
+        },
         "unlabeled_policy": "unasserted rows may be sampled provisionally as comparison rows; sampling does not create a negative assertion",
-        "proposal_threshold": threshold,
         "target_fit_positive_recall": target_recall,
-        "fit_positive_recall": recall(positives),
-        "held_out_positive_recall": recall(held_positive),
-        "explicit_negative_false_proposal_rate": recall(negatives),
-        "held_out_negative_false_proposal_rate": recall(held_negative),
+        "fit_positive_recall": rate(positives),
+        "development_positive_recall": rate(development_positive),
+        "development_negative_false_proposal_rate": rate(development_negative),
+        "held_out_positive_recall": rate(held_positive),
+        "explicit_negative_false_proposal_rate": rate(negatives),
+        "held_out_negative_false_proposal_rate": rate(held_negative),
+        "strict_held_out_positive_recall": rate(held_positive, strict_proposed),
         "plane_normal_cosine": pairwise_normal_cosines(planes),
         "planes": planes,
         "ranking": [
@@ -261,9 +332,12 @@ def fit_concept(
                 "id": ids[value],
                 "score": float(aggregate[value]),
                 "zero_surface_vote_fraction": float(zero_votes[value]),
+                "strict_proposed": bool(strict_proposed[value]),
                 "proposed": bool(proposed[value]),
                 "fit_positive": bool(value in positive_set),
                 "fit_negative": bool(value in negative_set),
+                "development_positive": bool(value in development_positive_set),
+                "development_negative": bool(value in development_negative_set),
                 "held_out_positive": bool(value in held_positive_set),
                 "held_out_negative": bool(value in held_negative_set),
             }
@@ -279,6 +353,7 @@ def main() -> int:
     parser.add_argument("--input-manifest", required=True)
     parser.add_argument("--embedding-provenance", required=True)
     parser.add_argument("--labels", required=True)
+    parser.add_argument("--proposal-policy", required=True)
     parser.add_argument("--output", required=True)
     parser.add_argument("--concept", action="append", default=[])
     parser.add_argument("--bags", type=int, default=16)
@@ -289,7 +364,12 @@ def main() -> int:
     parser.add_argument("--seed", type=int, default=1729)
     args = parser.parse_args()
 
-    if args.bags < 1 or args.unlabeled_per_positive < 0 or args.c_value <= 0 or args.positive_weight <= 0:
+    if (
+        args.bags < 1
+        or args.unlabeled_per_positive < 0
+        or args.c_value <= 0
+        or args.positive_weight <= 0
+    ):
         raise SystemExit("invalid fit parameter")
     if not 0 < args.target_positive_recall <= 1:
         raise SystemExit("--target-positive-recall must be in (0, 1]")
@@ -299,11 +379,15 @@ def main() -> int:
     manifest_path = Path(args.input_manifest)
     embedding_path = Path(args.embedding_provenance)
     labels_path = Path(args.labels)
+    policy_path = Path(args.proposal_policy)
 
     ids, vectors = load_vectors(vector_path)
     validate_inputs(input_path, ids)
     labels = load_labels(labels_path, set(ids))
-    available = sorted({label.concept for label in labels if label.role == "fit_positive"})
+    policy = load_policy(policy_path)
+    available = sorted(
+        {label.concept for label in labels if label.role == "fit_positive"}
+    )
     concepts = sorted(set(args.concept)) if args.concept else available
     if not concepts or set(concepts) - set(available):
         raise ValueError("requested concept lacks a fit-positive set")
@@ -312,11 +396,17 @@ def main() -> int:
     embedding_provenance = json.loads(embedding_path.read_text(encoding="utf-8"))
     input_sha256 = sha256(input_path)
     if input_manifest.get("title_or_url_used") is not False:
-        raise ValueError("body probe requires a manifest asserting title_or_url_used=false")
+        raise ValueError(
+            "body probe requires a manifest asserting title_or_url_used=false"
+        )
     if input_manifest.get("output_sha256") != input_sha256:
-        raise ValueError("body-input manifest does not match the body-text input artifact")
+        raise ValueError(
+            "body-input manifest does not match the body-text input artifact"
+        )
     if embedding_provenance.get("input_text_sha256") != input_sha256:
-        raise ValueError("embedding provenance does not match the body-text input artifact")
+        raise ValueError(
+            "embedding provenance does not match the body-text input artifact"
+        )
 
     report = {
         "format": FORMAT,
@@ -341,6 +431,11 @@ def main() -> int:
             "sha256": sha256(labels_path),
             "rows": [label.__dict__ for label in labels],
         },
+        "proposal_policy": {
+            "path": str(policy_path),
+            "sha256": sha256(policy_path),
+            "definition": policy,
+        },
         "runtime": {
             "numpy": np.__version__,
             "scikit_learn": sklearn.__version__,
@@ -360,6 +455,7 @@ def main() -> int:
                 ids,
                 vectors,
                 labels,
+                policy,
                 args.bags,
                 args.unlabeled_per_positive,
                 args.c_value,
@@ -373,7 +469,9 @@ def main() -> int:
 
     output = Path(args.output)
     output.parent.mkdir(parents=True, exist_ok=True)
-    output.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    output.write_text(
+        json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
     print(output)
     return 0
 

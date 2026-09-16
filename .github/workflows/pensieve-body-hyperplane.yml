@@ -73,7 +73,7 @@ jobs:
             --provenance /tmp/ib-body-live/embedding-provenance.json \
             --max-input-tokens 256
 
-      - name: Fit positive-unlabeled body hyperplanes
+      - name: Fit positive-unlabeled body hyperplanes with frozen proposal policy
         run: |
           python experiments/pensieve-hyperplanes/body_probe.py \
             --vectors /tmp/ib-body-live/body-vectors.npz \
@@ -81,12 +81,13 @@ jobs:
             --input-manifest /tmp/ib-body-live/body-inputs.manifest.json \
             --embedding-provenance /tmp/ib-body-live/embedding-provenance.json \
             --labels experiments/pensieve-hyperplanes/live-labels.tsv \
+            --proposal-policy experiments/pensieve-hyperplanes/proposal-policy-v2.json \
             --concept piecewise-linear-network-geometry \
             --bags 16 \
             --unlabeled-per-positive 0.5 \
             --output /tmp/ib-body-live/body-probe.json
 
-      - name: Validate held-out isolation and print diagnostic summary
+      - name: Validate isolation and print frozen-policy test summary
         run: |
           python - <<'PY' > /tmp/ib-body-live/summary.txt
           import json
@@ -94,28 +95,44 @@ jobs:
           with open('/tmp/ib-body-live/body-probe.json', encoding='utf-8') as stream:
               report = json.load(stream)
           result = report['concepts'][0]
-          held_out = 'arxiv:2305.00241'
+          protected = {
+              'arxiv:2305.00241',
+              'arxiv:2206.08615',
+              'arxiv:2006.00978',
+              'arxiv:2104.13478',
+              'arxiv:1806.07366',
+          }
 
           assert report['body_input']['title_or_url_used'] is False
           assert result['fit_positive_count'] == 2
-          assert result['held_out_positive_count'] == 1
+          assert result['development_positive_count'] == 1
+          assert result['held_out_positive_count'] == 2
+          assert result['held_out_negative_count'] == 2
           assert result['fit_eligible_unlabeled_count'] == 3
           assert result['retained_unique_plane_count'] == 3
+          assert result['proposal_policy']['name'] == 'development-calibrated-unanimous-70pct-fit-floor'
+          assert result['proposal_policy']['score_floor_fraction_of_fit_positive_floor'] == 0.7
+          assert result['proposal_policy']['minimum_zero_surface_vote_fraction'] == 1.0
           for plane in result['planes']:
-              assert held_out not in plane['fit_positive_ids']
-              assert held_out not in plane['explicit_negative_ids']
-              assert held_out not in plane['provisional_unlabeled_ids']
+              assert protected.isdisjoint(plane['fit_positive_ids'])
+              assert protected.isdisjoint(plane['explicit_negative_ids'])
+              assert protected.isdisjoint(plane['provisional_unlabeled_ids'])
               assert len(plane['normal']) == 384
               assert isinstance(plane['offset'], float)
 
           print(f"concept={result['concept']}")
           print(f"fit_positive_count={result['fit_positive_count']}")
+          print(f"development_positive_count={result['development_positive_count']}")
           print(f"held_out_positive_count={result['held_out_positive_count']}")
+          print(f"held_out_negative_count={result['held_out_negative_count']}")
           print(f"fit_eligible_unlabeled_count={result['fit_eligible_unlabeled_count']}")
           print(f"retained_unique_plane_count={result['retained_unique_plane_count']}")
-          print(f"proposal_threshold={result['proposal_threshold']:.9f}")
-          print(f"fit_positive_recall={result['fit_positive_recall']}")
+          print(f"strict_fit_positive_floor={result['strict_fit_positive_floor']:.9f}")
+          print(f"proposal_threshold={result['proposal_policy']['proposal_threshold']:.9f}")
+          print(f"development_positive_recall={result['development_positive_recall']}")
           print(f"held_out_positive_recall={result['held_out_positive_recall']}")
+          print(f"held_out_negative_false_proposal_rate={result['held_out_negative_false_proposal_rate']}")
+          print(f"strict_held_out_positive_recall={result['strict_held_out_positive_recall']}")
           cosine = result['plane_normal_cosine']
           if cosine:
               print(f"plane_normal_cosine_min={cosine['minimum']:.6f}")
@@ -124,13 +141,20 @@ jobs:
           print('ranking:')
           for rank, row in enumerate(result['ranking'], start=1):
               flags = []
-              for key in ('fit_positive', 'held_out_positive', 'fit_negative', 'held_out_negative'):
+              for key in (
+                  'fit_positive',
+                  'development_positive',
+                  'development_negative',
+                  'held_out_positive',
+                  'held_out_negative',
+              ):
                   if row[key]:
                       flags.append(key)
               print(
                   f"  {rank}: {row['id']} score={row['score']:.9f} "
                   f"zero_vote={row['zero_surface_vote_fraction']:.3f} "
-                  f"proposed={row['proposed']} roles={','.join(flags) or 'unlabeled'}"
+                  f"strict={row['strict_proposed']} proposed={row['proposed']} "
+                  f"roles={','.join(flags) or 'unlabeled'}"
               )
           PY
           cat /tmp/ib-body-live/summary.txt

@@ -10,9 +10,9 @@ The primary input here is distilled Pensieve body text. The experiment remains d
 - `bin/pensieve_hyperplane_inputs.grease` can run as an `after-distill.d` hook or as a full rebuild. It writes only under `pensieve/indexes/hyperplanes/`.
 - `build_pensieve_inputs.py` chooses one body representation per item in this order: HTML, PDF text, abstract text. It does not concatenate duplicate renderings of the same paper.
 - Long bodies are represented by deterministic windows spread across the document rather than by a title, URL, or only the first few hundred tokens.
-- Embeddings and fitted planes are derived state. The retained model state is explicit: embedding provenance, plane normal, offset, threshold, support rows, provisional-unlabeled rows, slack diagnostics, and input hashes.
+- Embeddings and fitted planes are derived state. The retained model state is explicit: embedding provenance, plane normal, offset, thresholds, support rows, provisional-unlabeled rows, slack diagnostics, proposal-policy hash, and input hashes.
 - Missing membership remains unlabeled. Unlabeled rows may be sampled provisionally as comparison rows for a plane; that does not assert that they are negative.
-- Held-out rows are excluded from plane fitting, provisional-unlabeled sampling, and threshold selection.
+- Development and held-out rows are excluded from plane fitting and provisional-unlabeled sampling.
 - Filing destinations remain a separate policy layer. Hyperplane margins do not rank destinations across concepts.
 
 ## Deterministic integration check
@@ -21,20 +21,46 @@ The primary input here is distilled Pensieve body text. The experiment remains d
 
 ## Real-body diagnostic
 
-The workflow also stages a disposable six-paper arXiv corpus in a temporary Pensieve-shaped directory. This staging helper is **not** the IB acquisition implementation; production acquisition remains behind the 0.2 ICU boundary. The temporary paper bodies are not uploaded as workflow artifacts.
+The workflow stages a disposable arXiv corpus in a temporary Pensieve-shaped directory. This staging helper is **not** the IB acquisition implementation; production acquisition remains behind the 0.2 ICU boundary. Temporary paper bodies are not uploaded as workflow artifacts.
 
-The diagnostic concept is `piecewise-linear-network-geometry`:
+The diagnostic concept is `piecewise-linear-network-geometry`.
 
-- fit positives: `1901.09021`, `1606.05336`;
-- held-out positive: `2305.00241`;
-- unlabeled pool: `1107.0595`, `2203.11355`, `1706.03762`.
+Fit positives:
+- `1901.09021`
+- `1606.05336`
 
-These labels are an experiment fixture based on paper subject matter. They are not durable user organization and must not be imported as personal category assertions.
+The first exact-head body run used `2305.00241` as a held-out positive. It ranked immediately below the two fit positives and lay above the zero surface in every retained plane, but the old fit-positive-floor threshold rejected it. After inspection it became development evidence and can no longer be counted as an unbiased test.
 
-The body sketches are embedded with the same pinned `mixedbread-ai/mxbai-embed-xsmall-v1` INT8 ONNX representation used by the earlier real-embedding probe. `body_probe.py` then fits independent linear soft-margin SVM planes with positive/unlabeled resampling and reports held-out recall, proposal threshold, support examples, slack, ranking, and pairwise cosine between normalized plane normals.
+## Frozen proposal policy v2
 
-No minimum held-out score is asserted in CI. A poor result is evidence, not a test failure. CI only enforces data isolation, body-only input, explicit portable plane state, and reproducibility boundaries.
+`proposal-policy-v2.json` was committed before any fresh held-out papers were added. The policy is:
+
+- aggregate score = mean signed geometric distance across retained planes;
+- fit-positive floor = the threshold required to retain the configured fraction of fit positives;
+- proposal score floor = `0.70 * fit-positive floor`;
+- proposal also requires a zero-surface vote fraction of `1.0`.
+
+The 0.70 ratio is deliberately coarser than the observed development ratio (`0.718...`). It is frozen for the next test and must not be changed after seeing the fresh held-out rows without retiring those rows from test status.
+
+## Fresh test after the freeze
+
+Fresh positives:
+- `2206.08615` — regions of piecewise-linear neural networks;
+- `2006.00978` — linear regions of convolutional neural networks.
+
+Fresh hard negatives:
+- `2104.13478` — geometric deep learning broadly, rather than piecewise-linear region geometry;
+- `1806.07366` — neural ordinary differential equations.
+
+The original unlabeled comparison pool remains:
+- `1107.0595`
+- `2203.11355`
+- `1706.03762`
+
+These labels are experiment fixtures based on paper subject matter. They are not durable user organization and must not be imported as personal category assertions.
+
+CI deliberately does not require a good fresh-test score. A poor result is evidence, not a test failure. CI enforces isolation, body-only input, explicit portable plane state, the frozen proposal-policy boundary, and reproducibility.
 
 ## What this does not establish
 
-Six papers and one held-out positive cannot establish general semantic quality. A useful result here answers only whether the body-text path behaves materially better than the earlier URL/title diagnostic and whether it is stable enough to justify a larger labeled corpus. Promotion into a persistent Pensieve hyperplane index requires broader held-out evidence across overlapping concepts.
+This small corpus cannot establish general semantic quality. Promotion into a persistent Pensieve hyperplane index requires broader held-out evidence across multiple overlapping concepts.
