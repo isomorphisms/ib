@@ -29,18 +29,18 @@ jobs:
       - name: Install system dependencies through Grease
         run: sh bin/ci_browser_foundation.grease install-dependencies
 
-      - name: Restore Idric compiler
+      - name: Restore Idriç compiler
         id: idric-cache
         uses: actions/cache/restore@v4
         with:
           path: /tmp/idric
           key: idric-${{ runner.os }}-61970be77769f607cca8650bf424c0f0b22ddee7
 
-      - name: Build and install Idric compiler through Grease
+      - name: Build and install Idriç compiler through Grease
         if: steps.idric-cache.outputs.cache-hit != 'true'
         run: sh bin/ci_browser_foundation.grease build-idric
 
-      - name: Cache Idric compiler
+      - name: Cache Idriç compiler
         if: steps.idric-cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@v4
         with:
@@ -50,7 +50,7 @@ jobs:
       - name: Exercise HTML-first information renderer
         run: sh bin/ci_browser_foundation.grease exercise-information
 
-      - name: Exercise browser-owned Idric core
+      - name: Exercise browser-owned Idriç core
         run: sh bin/ci_browser_foundation.grease exercise-core
 
       - name: Exercise developer workbench
@@ -68,7 +68,7 @@ jobs:
       - name: Install system dependencies through Grease
         run: sh bin/ci_browser_foundation.grease install-dependencies
 
-      - name: Restore Idric compiler for PDF caption bridge
+      - name: Restore Idriç compiler for PDF caption bridge
         uses: actions/cache/restore@v4
         with:
           path: /tmp/idric
