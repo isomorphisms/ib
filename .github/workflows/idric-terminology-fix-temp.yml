@@ -1,0 +1,59 @@
+name: Temporary Idriç terminology repair
+
+on:
+  push:
+    branches:
+      - docs/idric-terminology-audit
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: docs/idric-terminology-audit
+          fetch-depth: 0
+
+      - name: Correct labels and comments and remove this workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          replacements = {
+              '.github/workflows/idric-core.yml': [
+                  ('Restore Idric compiler', 'Restore Idriç compiler'),
+                  ('Build and install Idric compiler through Grease', 'Build and install Idriç compiler through Grease'),
+                  ('Cache Idric compiler', 'Cache Idriç compiler'),
+                  ('Exercise browser-owned Idric core', 'Exercise browser-owned Idriç core'),
+                  ('Restore Idric compiler for PDF caption bridge', 'Restore Idriç compiler for PDF caption bridge'),
+              ],
+              'lib/pdf_figure_captions.grease': [
+                  ('performed by Idric through PDF.Figure', 'performed by Idriç through PDF.Figure'),
+                  ('vendored Idric association rule', 'vendored Idriç association rule'),
+              ],
+          }
+          for name, pairs in replacements.items():
+              path = Path(name)
+              text = path.read_text()
+              original = text
+              for old, new in pairs:
+                  if old not in text:
+                      raise SystemExit(f'expected text not found in {name}: {old!r}')
+                  text = text.replace(old, new)
+              if text == original:
+                  raise SystemExit(f'no change in {name}')
+              path.write_text(text)
+          PY
+
+          rm .github/workflows/idric-terminology-fix-temp.yml
+          git config user.name 'isomorphisms terminology audit'
+          git config user.email 'isomorphisms@users.noreply.github.com'
+          git add -A
+          git diff --cached --check
+          git commit -m 'Normalize Idriç integration prose'
+          git push origin HEAD:docs/idric-terminology-audit
