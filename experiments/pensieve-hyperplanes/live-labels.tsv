@@ -1,0 +1,8 @@
+id	concept	role	provenance
+arxiv:1901.09021	piecewise-linear-network-geometry	fit_positive	experiment fixture from paper subject; not durable user membership
+arxiv:1606.05336	piecewise-linear-network-geometry	fit_positive	experiment fixture from paper subject; not durable user membership
+arxiv:2305.00241	piecewise-linear-network-geometry	development_positive	development evidence from exact-head run 35120749002; excluded from fit and fresh-test metrics
+arxiv:2206.08615	piecewise-linear-network-geometry	held_out_positive	fresh test fixed after proposal-policy-v2 freeze; paper studies regions of piecewise-linear neural networks
+arxiv:2006.00978	piecewise-linear-network-geometry	held_out_positive	fresh test fixed after proposal-policy-v2 freeze; paper studies linear regions of convolutional neural networks
+arxiv:2104.13478	piecewise-linear-network-geometry	held_out_negative	fresh hard negative fixed after proposal-policy-v2 freeze; geometric deep learning survey, not linear-region geometry
+arxiv:1806.07366	piecewise-linear-network-geometry	held_out_negative	fresh hard negative fixed after proposal-policy-v2 freeze; neural ODEs, not piecewise-linear region geometry

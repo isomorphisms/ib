@@ -1,0 +1,68 @@
+#!/bin/sh
+set -eu
+
+repository_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+fail() {
+  printf 'Pensieve hyperplane hook: %s\n' "$*" >&2
+  exit 1
+}
+
+work=$(mktemp -d "${TMPDIR:-/tmp}/ib-hyperplane-hook.XXXXXX")
+trap 'rm -rf "$work"' EXIT HUP INT TERM
+
+export IB_HOME="$work/state"
+export IB_ICU="$repository_root/tests/fake_icu_0_2"
+export IB_FAKE_FIXTURES="$repository_root/tests/fixtures/arxiv-0.2"
+export IB_FAKE_LOG="$work/fetches.log"
+: > "$IB_FAKE_LOG"
+
+hook_directory="$IB_HOME/hooks/after-distill.d"
+mkdir -p "$hook_directory"
+cat > "$hook_directory/hyperplane-body-inputs" <<EOF
+#!/bin/sh
+exec sh "$repository_root/bin/pensieve_hyperplane_inputs.grease" "\$@"
+EOF
+chmod +x "$hook_directory/hyperplane-body-inputs"
+
+"$repository_root/bin/ib" add 'https://arxiv.org/abs/2203.11355' >/dev/null
+
+pensieve_item="$IB_HOME/pensieve/arxiv/2203.11355"
+index_directory="$IB_HOME/pensieve/indexes/hyperplanes"
+inputs="$index_directory/body-inputs.tsv"
+manifest="$index_directory/body-inputs.manifest.json"
+
+for path in \
+  "$pensieve_item/text/from-html.txt" \
+  "$inputs" \
+  "$manifest"
+do
+  test -f "$path" || fail "missing $path"
+done
+
+python3 - "$inputs" "$manifest" <<'PY'
+import csv
+import json
+import sys
+
+inputs, manifest = sys.argv[1:]
+with open(inputs, encoding='utf-8', newline='') as stream:
+    rows = list(csv.DictReader(stream, delimiter='\t'))
+assert len(rows) == 1, rows
+assert rows[0]['id'] == 'arxiv:2203.11355', rows
+assert 'Bergman kernels' in rows[0]['text'], rows[0]['text']
+
+with open(manifest, encoding='utf-8') as stream:
+    metadata = json.load(stream)
+assert metadata['format'] == 'ib-pensieve-body-sketch-v1', metadata
+assert metadata['title_or_url_used'] is False, metadata
+assert metadata['rows'][0]['selected_body'].endswith('/text/from-html.txt'), metadata
+PY
+
+body_before=$(sha256sum "$pensieve_item/text/from-html.txt" | awk '{print $1}')
+rm -rf "$index_directory"
+body_after=$(sha256sum "$pensieve_item/text/from-html.txt" | awk '{print $1}')
+test "$body_before" = "$body_after" || fail 'deleting derived hyperplane state changed Pensieve body text'
+
+test -f "$pensieve_item/text/from-html.txt" || fail 'deleting derived state removed source observation'
+
+printf 'Pensieve hyperplane hook: PASS\n'
