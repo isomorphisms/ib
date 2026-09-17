@@ -1,7 +1,13 @@
 #!/bin/sh
 set -eu
 
-repository_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+case $0 in
+  */*) script_directory=${0%/*} ;;
+  *) script_directory=. ;;
+esac
+# Keep the only command substitution in a bare assignment so Grease's
+# strict_errexit retains its status instead of losing a nested dirname status.
+repository_root=$(CDPATH= cd -- "$script_directory/.." && pwd)
 . "$repository_root/lib/prefetch.grease"
 . "$repository_root/lib/scientific_media.grease"
 . "$repository_root/lib/scientific_navigation_prefetch.grease"
