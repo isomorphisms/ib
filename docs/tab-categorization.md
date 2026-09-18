@@ -12,17 +12,17 @@ This is a personal taxonomy learned from one person's corpus. Fixture-derived ca
 
 ## Classification is multilabel
 
-Membership is represented as non-exclusive per-category scores or proposals rather than one leaf in a tree. Conceptually, each category gets its own decision surface over tab, resource, event, and task features. A simple baseline may use one binary separator per category, trained from explicit or trusted positive and negative evidence and treated as positive-unlabeled where negatives are missing. Richer or ensembled classifiers can replace it without changing the contract. This does not assert that categories or scores are statistically independent, and a signed margin is not automatically a calibrated probability.
+Membership is represented as non-exclusive per-category scores or proposals rather than one leaf in a tree. Conceptually, each category gets its own inclusion surface over tab, resource, event, and task features. A simple baseline may use one affine score `s_c(x) = w_c dot phi(x) + b_c` and separately recorded inclusion threshold `tau_c` per category. It learns from positive, explicit-negative, and unlabeled evidence without treating every object outside the category as negative. Richer or ensembled classifiers can replace it without changing the contract. This does not assert that categories or scores are statistically independent.
 
 The central semantic question is roughly: why is this here? Purpose categories such as repair, research, ordinary curiosity, morbid curiosity, applying, scheduling, transacting, reading, and acquiring are useful signals and memberships. They are not gating branches through which every object must descend.
 
-An object may land on the positive side of several decisions at once. A small signed margin means the decision is fragile under that fitted classifier; it is not by itself a probability or full epistemic uncertainty. Slack examples, repeated fits, and disagreement among plausible separators can expose additional instability without demanding one winner.
+An object may pass several inclusion thresholds at once. For a soft-margin SVM, slack variables measure labeled examples' margin violations; support vectors are the examples that determine the fitted separator. Normalized geometric distance, held-out errors, and disagreement among resampled planes are useful but different diagnostics. None is by itself a probability or full epistemic uncertainty.
 
 Missing membership is normally unlabeled, not an automatic negative example. Explicit removal supplies negative evidence for that category only.
 
-“CART-like” is only an analogy for adaptive refinement. When one region contains a coherent recurring subcluster, IB may propose an additional narrower category with its own decision surface. Members need not leave the broader category, and the broader category may remain useful. This is not a CART tree and not a single hierarchy.
+When one region contains a coherent recurring subcluster, IB may fit another affine separator to that region or to residual errors from an earlier separator. Several planes may be retained as an oblique tree, bagged vote, boosted ensemble, or independent overlapping category scorers. Members need not leave the broader category, and the broader category may remain useful. This is not necessarily CART and not a compulsory single hierarchy.
 
-Classifier output is evidence for zero, one, or many memberships. Prefer a useful extra membership to making material disappear from retrieval because one supposedly exclusive classification won.
+Classifier output is evidence for zero, one, or many memberships. High-recall proposal and retrieval policy should prefer a useful extra candidate to making material disappear because one supposedly exclusive classification won. A proposal does not silently become accepted durable membership.
 
 ## Do not conflate identity levels
 
@@ -131,7 +131,7 @@ The pass separated, among other things, book acquisition from book reading or re
 
 A Brecht listing can still belong simultaneously to `book-shopping`, `Brecht`, and `theatre`; a mathematical book can belong to an acquisition view and several mathematical subjects. The exercise supports overlapping refinement precisely because the forced partition loses useful memberships.
 
-If a reproducible labeled fixture is later derived from that pass, it should retain explicit corrections rather than plausible guesses from names alone: `cruz.jp` was kids'-toy shopping, and Daniel Litt's “Problems I Like” was a broken mathematics site.
+If a reproducible labeled fixture is later derived from that pass, it should retain explicit corrections rather than plausible guesses from names alone: the fixture URL `crux.jp` (earlier transcribed as `cruz.jp`) was kids'-toy shopping, and Daniel Litt's “Problems I Like” was a broken mathematics site.
 
 Two ingestion lessons are settled:
 
@@ -158,7 +158,7 @@ Settled boundaries:
 Current heuristics and baselines:
 
 - roughly 5–10 relevant objects as a category-promotion signal;
-- one scored binary classifier per category using explicit or trusted labels;
+- one affine inclusion scorer and separate threshold per category using positives, explicit negatives, and unlabeled material correctly;
 - over-inclusion when the alternative is failed retrieval;
 - `_active` as a filesystem-shaped working-set control.
 

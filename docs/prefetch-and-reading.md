@@ -88,6 +88,8 @@ For a documentation or research task, an acquisition adapter may discover and pr
 
 The operative part is not simply the first links in the HTML or body. It is the relevant document content after global navigation, branding, and unrelated chrome have been excluded.
 
+Within safe operative content, links at or near the top of the current visual-focus region are strong short-lived prefetch candidates. The visual frontend updates that priority as focus or scrolling changes so useful work can begin before a click. “Top” means the current laid-out viewport or focus region, not the first links in HTML. Global navigation, hidden links, logout controls, form actions, and token-bearing URLs remain excluded. A focus hint may cause a safe discovered link to become queued under the active prefetch budget; it does not imply that bytes already exist, manufacture a tab, or erase durable source edges.
+
 Expansion remains bounded by explicit depth, bytes, storage, CPU, network, and task budgets. It warms response or extraction state on disk; it does not create a live renderer session for every target and it is not a promise to crawl arbitrary sites.
 
 ## Programming-documentation behavior
@@ -96,9 +98,13 @@ If fifty saved documentation tabs belong to one documentation task and each cont
 
 When several roots link to the same page, keep one reusable resource plus all source edges. Continue bounded background fetching and extraction while the foreground remains usable. A later question should search and combine the already accumulated material with per-source provenance instead of requiring the user to open each link again.
 
+A GitLab project, README, issue, source page, or comparable software page may expose roughly seventeen plausible operative links. Those are candidates in one task frontier, not an instruction to create seventeen background tabs. IB should warm a bounded subset, extract useful facts and code spans, produce early orientation summaries, and let the text frontend answer “just tell me what I need to know” from the accumulated evidence. An interactive tab is created only when the requested action requires one.
+
 After a week and a reboot, the browser may have lost every cached response and renderer process. It should still know the roots, discovered frontier, completed work, and missing work. Resume or refetch according to current policy rather than starting the investigation from nothing.
 
 Summaries and rankings are versioned derived artifacts keyed to immutable source-representation hashes. They retain page and section references, generator or model identity, prompt or policy revision, creation time, completeness, and staleness. A new result appends or supersedes; it does not overwrite the source or the prior result. A page summary may be reused by several tasks, while a cross-page synthesis remains task-specific.
+
+A compact orientation summary is an intended early pre-paint artifact. Once enough operative text has arrived, the lowest-cost configured model satisfying the summary policy may run without waiting for a complete page or complete investigation. Later bytes may append or supersede that proposal. Extraction and navigation remain usable when no model is configured or the model fails.
 
 For a resumable investigation, the accepted or last-complete task summary—or its complete raw proposal—plus source references is durable enough to show immediately after a week and a reboot. Presentation indexes and intermediate or rejected attempts remain disposable. The task, user selections and corrections, and source graph are durable browser state.
 
@@ -132,9 +138,11 @@ For an arXiv identifier, the reading layout begins as:
   image_tags/
 ```
 
-The HTML and external figures may also remain in the disposable response cache. The files under `~/reading` are the semantic corpus: a person or local model can query the paper text, captions, image manifest, and figure files without depending on a live renderer cache.
+The HTML and external figures may also remain in the disposable response cache. The files under `~/reading` are the semantic corpus: a person or configured model can query the paper text, captions, image manifest, and figure files without depending on a live renderer cache.
 
 If usable arXiv HTML is unavailable, the existing scientific-media policy may fall back to PDF.
+
+A batch of arXiv links encountered during one research task is one investigation frontier, not a request for one tab or renderer per paper. Within task budgets, IB may acquire HTML and explicit figures, produce compact per-paper orientation summaries as text becomes available, and answer or synthesize across the batch with paper-and-span provenance. The user should be able to ask the motivating question before manually opening and inspecting every paper.
 
 ## Test surfaces
 
@@ -153,13 +161,16 @@ A regression should clear response and extraction caches, reconstruct the same t
 Minimum deterministic cases should also prove:
 
 - header, navigation, form, logout, and token links do not outrank safe links in operative documentation content;
+- changing the visual-focus region reprioritizes safe operative links without creating tabs or renderers;
 - two roots targeting one child yield one compatible fetch and two retained edges;
 - a stronger later retention claim is not lost;
 - killing the process after queueing or during a fetch never exposes a torn body/metadata pair, and pending work resumes;
 - a fake-clock return one week later shows the last complete view immediately and revalidates stale material in the background;
 - relative URLs, `<base>`, fragments, redirects, and incompatible auth/`Vary` partitions preserve the correct identity distinctions;
 - a changed source marks the old summary stale and appends a new source-backed version;
-- duplicate tab intentions and visit events survive while compatible response bytes remain shared.
+- duplicate tab intentions and visit events survive while compatible response bytes remain shared;
+- a GitLab-shaped page with seventeen operative links yields no speculative tabs or renderers and can produce a cited answer from bounded background work;
+- an arXiv batch yields early per-paper summaries and one cross-paper answer without a renderer per paper.
 
 ## Commitment level
 

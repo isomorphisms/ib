@@ -1,0 +1,3 @@
+id	category	polarity	authority	asserted_at	assertion_source	source_artifact_sha256	source_row
+real-world-20260825-000102	reading	positive	human_assertion	2026-08-25T16:49:44Z	conversation-user-message@2026-08-25T16:49:44Z	4c71746f994ef02959cef9baf9787a74c60e6fe51309d096e6398d56bef0c850	102
+real-world-20260825-000197	reading	positive	human_assertion	2026-08-25T16:46:28Z	conversation-user-message@2026-08-25T16:46:28Z	4c71746f994ef02959cef9baf9787a74c60e6fe51309d096e6398d56bef0c850	197
