@@ -38,14 +38,15 @@ and invariants, Grease owns orchestration and OS-visible work, and native Androi
 is a narrow platform adapter. Python/Ithon may be disposable comparison tools;
 they are not IB runtime acceptance.
 
-## Preserve Android prepaint update identity
+## Preserve Android update identity
 
-The installable Android prepaint harness must keep its package name, persistent
-test signer, and nondecreasing version code across builds. Do not let Gradle
-fall back to a runner-local debug key, and do not uninstall an existing copy to
-hide a signer or downgrade mismatch. Replacement installation without uninstall
-is required Android acceptance for this harness. Keep the public/test signing
-identity separate from any production or store signing identity.
+Every installable Android harness in this repository must keep its package name,
+persistent test signer, and nondecreasing version code across builds. This
+includes prepaint, WebView acceptance, and later device fixtures. Do not let
+Gradle fall back to a runner-local debug key, and do not uninstall an existing
+copy to hide a signer or downgrade mismatch. Replacement installation without
+uninstall is required Android acceptance for each harness. Keep the public/test
+signing identity separate from any production or store signing identity.
 
 ## Test the layer being claimed
 
