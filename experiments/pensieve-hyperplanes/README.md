@@ -12,7 +12,8 @@ The primary input here is distilled Pensieve body text. The experiment remains d
 - Long bodies are represented by deterministic windows spread across the document rather than by a title, URL, or only the first few hundred tokens.
 - Embeddings and fitted planes are derived state. The retained model state is explicit: embedding provenance, plane normal, offset, thresholds, support rows, provisional-unlabeled rows, slack diagnostics, proposal-policy hash, and input hashes.
 - Missing membership remains unlabeled. Unlabeled rows may be sampled provisionally as comparison rows for a plane; that does not assert that they are negative.
-- Development and held-out rows are excluded from plane fitting and provisional-unlabeled sampling.
+- Semantic labels and fit partitions are separate inputs. An optional complete `id → partition` map can mark every row as `fit`, `development`, or `held_out`, including rows with no semantic label.
+- Development and held-out rows are excluded from plane fitting and provisional-unlabeled sampling even when they are unlabeled. A semantic label whose role disagrees with its partition is rejected.
 - Filing destinations remain a separate policy layer. Hyperplane margins do not rank destinations across concepts.
 
 ## Deterministic integration check
