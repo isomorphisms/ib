@@ -107,7 +107,6 @@ jobs:
             set -eu
             adb install -r downloaded-apk/app-debug.apk
             adb install -r downloaded-apk/app-debug.apk
-            adb shell am start -W -n org.isomorphisms.ib.prepaint/.PrepaintActivity \
-              | tee /tmp/ib-prepaint-start.txt
+            adb shell am start -W -n org.isomorphisms.ib.prepaint/.PrepaintActivity | tee /tmp/ib-prepaint-start.txt
             grep -Fq 'Status: ok' /tmp/ib-prepaint-start.txt
             test -n "$(adb shell pidof org.isomorphisms.ib.prepaint | tr -d '\r')"
