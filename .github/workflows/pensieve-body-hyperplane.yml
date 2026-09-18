@@ -46,6 +46,9 @@ jobs:
             transformers==4.45.2 \
             huggingface-hub==0.25.2
 
+      - name: Verify unlabeled partition isolation
+        run: python experiments/pensieve-hyperplanes/test_body_probe_partitions.py
+
       - name: Stage public paper bodies in a disposable Pensieve-shaped fixture
         run: |
           rm -rf /tmp/ib-body-live
