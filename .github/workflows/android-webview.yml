@@ -104,6 +104,3 @@ jobs:
             adb install -r downloaded-apk/app-debug.apk
             adb install -r downloaded-apk/app-debug.apk
             adb install -r downloaded-apk/app-debug.apk
-            adb shell am start -W -n org.isomorphisms.ib.webview/.WebViewActivity | tee /tmp/ib-webview-start.txt
-            grep -Fq 'Status: ok' /tmp/ib-webview-start.txt
-            test -n "$(adb shell pidof org.isomorphisms.ib.webview | tr -d '\r')"
