@@ -136,6 +136,42 @@ def load_partitions(path: Path, ids: list[str]) -> dict[str, str]:
     return partitions
 
 
+def validate_input_manifest(
+    manifest: dict, input_sha256: str, input_contract: str
+) -> dict | None:
+    if manifest.get("output_sha256") != input_sha256:
+        raise ValueError("input manifest does not match the text input artifact")
+
+    if input_contract == "pensieve-body-only":
+        if manifest.get("title_or_url_used") is not False:
+            raise ValueError(
+                "pensieve-body-only input requires title_or_url_used=false"
+            )
+        return None
+
+    if input_contract == "declared-text":
+        contract = manifest.get("representation_contract")
+        if not isinstance(contract, dict) or not contract:
+            raise ValueError(
+                "declared-text input requires a nonempty representation_contract"
+            )
+        kind = contract.get("kind")
+        fields = contract.get("model_text_fields")
+        if not isinstance(kind, str) or not kind:
+            raise ValueError("representation_contract.kind must be nonempty text")
+        if (
+            not isinstance(fields, list)
+            or not fields
+            or any(not isinstance(value, str) or not value for value in fields)
+        ):
+            raise ValueError(
+                "representation_contract.model_text_fields must be a nonempty text list"
+            )
+        return contract
+
+    raise ValueError(f"unsupported input contract {input_contract!r}")
+
+
 def load_policy(path: Path) -> dict:
     policy = json.loads(path.read_text(encoding="utf-8"))
     if policy.get("format") != POLICY_FORMAT:
@@ -415,6 +451,15 @@ def main() -> int:
     parser.add_argument("--vectors", required=True)
     parser.add_argument("--input-texts", required=True)
     parser.add_argument("--input-manifest", required=True)
+    parser.add_argument(
+        "--input-contract",
+        choices=("pensieve-body-only", "declared-text"),
+        default="pensieve-body-only",
+        help=(
+            "pensieve-body-only keeps the existing no-title/no-URL assertion; "
+            "declared-text requires an explicit representation_contract"
+        ),
+    )
     parser.add_argument("--embedding-provenance", required=True)
     parser.add_argument("--labels", required=True)
     parser.add_argument(
@@ -468,14 +513,9 @@ def main() -> int:
     input_manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     embedding_provenance = json.loads(embedding_path.read_text(encoding="utf-8"))
     input_sha256 = sha256(input_path)
-    if input_manifest.get("title_or_url_used") is not False:
-        raise ValueError(
-            "body probe requires a manifest asserting title_or_url_used=false"
-        )
-    if input_manifest.get("output_sha256") != input_sha256:
-        raise ValueError(
-            "body-input manifest does not match the body-text input artifact"
-        )
+    representation_contract = validate_input_manifest(
+        input_manifest, input_sha256, args.input_contract
+    )
     if embedding_provenance.get("input_text_sha256") != input_sha256:
         raise ValueError(
             "embedding provenance does not match the body-text input artifact"
@@ -496,7 +536,9 @@ def main() -> int:
             "manifest_path": str(manifest_path),
             "manifest_sha256": sha256(manifest_path),
             "format": input_manifest.get("format"),
-            "title_or_url_used": False,
+            "input_contract": args.input_contract,
+            "title_or_url_used": input_manifest.get("title_or_url_used"),
+            "representation_contract": representation_contract,
         },
         "embedding": embedding_provenance,
         "labels": {
