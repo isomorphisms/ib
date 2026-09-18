@@ -24,7 +24,16 @@ jobs:
       SCHEME: scheme
       IDRIC_REF: 61970be77769f607cca8650bf424c0f0b22ddee7
     steps:
-      - uses: actions/checkout@v4
+      - name: Check out exact IB source revision
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      - name: Verify exact IB source revision
+        env:
+          EXPECTED_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: test "$(git rev-parse HEAD)" = "$EXPECTED_SOURCE_SHA"
 
       - name: Checkout canonical hostile-input corpus
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
@@ -38,7 +47,7 @@ jobs:
 
       - name: Restore Idriç compiler
         id: idric-cache
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@caa296126883cff596d87d8935842f9db880ef25
         with:
           path: /tmp/idric
           key: idric-${{ runner.os }}-61970be77769f607cca8650bf424c0f0b22ddee7
@@ -49,7 +58,7 @@ jobs:
 
       - name: Cache Idriç compiler
         if: steps.idric-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@caa296126883cff596d87d8935842f9db880ef25
         with:
           path: /tmp/idric
           key: idric-${{ runner.os }}-61970be77769f607cca8650bf424c0f0b22ddee7
@@ -77,15 +86,23 @@ jobs:
     env:
       PDF_HARVESTER_REF: 77d85dc6f7e89d109cb9e06f42706bc34f00e4a3
     steps:
-      - uses: actions/checkout@v4
+      - name: Check out exact IB source revision
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           submodules: true
+          persist-credentials: false
+
+      - name: Verify exact IB source revision
+        env:
+          EXPECTED_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: test "$(git rev-parse HEAD)" = "$EXPECTED_SOURCE_SHA"
 
       - name: Install system dependencies through Grease
         run: sh bin/ci_browser_foundation.grease install-dependencies
 
       - name: Restore Idriç compiler for PDF caption bridge
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@caa296126883cff596d87d8935842f9db880ef25
         with:
           path: /tmp/idric
           key: idric-${{ runner.os }}-61970be77769f607cca8650bf424c0f0b22ddee7
