@@ -3,7 +3,6 @@ plugins {
 }
 
 val stableTestKeystorePath = providers.environmentVariable("IB_TEST_KEYSTORE").orNull
-    ?: error("IB_TEST_KEYSTORE is required; refusing to build an installable APK with an ephemeral signer")
 val stableTestKeystorePassword = providers.environmentVariable("IB_TEST_KEYSTORE_PASSWORD").orNull
     ?: "wegert-debug"
 val stableTestKeyPassword = providers.environmentVariable("IB_TEST_KEY_PASSWORD").orNull
@@ -24,18 +23,22 @@ android {
     }
 
     signingConfigs {
-        create("stableTest") {
-            storeFile = rootProject.file(stableTestKeystorePath)
-            storePassword = stableTestKeystorePassword
-            keyAlias = stableTestKeyAlias
-            keyPassword = stableTestKeyPassword
-            storeType = "pkcs12"
+        stableTestKeystorePath?.let { keystorePath ->
+            create("stableTest") {
+                storeFile = rootProject.file(keystorePath)
+                storePassword = stableTestKeystorePassword
+                keyAlias = stableTestKeyAlias
+                keyPassword = stableTestKeyPassword
+                storeType = "pkcs12"
+            }
         }
     }
 
     buildTypes {
         getByName("debug") {
-            signingConfig = signingConfigs.getByName("stableTest")
+            // No environment-provided stable signer means an unsigned debug APK,
+            // never an AGP-generated machine-local debug identity.
+            signingConfig = signingConfigs.findByName("stableTest")
         }
         getByName("release") {
             isMinifyEnabled = false
