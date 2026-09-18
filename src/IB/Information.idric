@@ -157,6 +157,10 @@ html_tokens_to_information (HtmlTag tag :: rest) =
     then CloseTag name :: html_tokens_to_information rest
     else OpenTag name tag :: html_tokens_to_information rest
 
+public export
+tokenize_information_html : String → List InformationToken
+tokenize_information_html html = html_tokens_to_information (tokenize html)
+
 tag_remainder_chars : List Char → List Char
 tag_remainder_chars [] = []
 tag_remainder_chars (value :: rest) =
@@ -345,8 +349,7 @@ extract_information_tokens requested_url resolved_url tokens =
 public export
 extract_html : String → String → String → InformationView
 extract_html requested_url resolved_url html =
-  extract_information_tokens requested_url resolved_url
-    (html_tokens_to_information (tokenize html))
+  extract_information_tokens requested_url resolved_url (tokenize_information_html html)
 
 public export
 has_table_row : List String → InformationView → Bool
