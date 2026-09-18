@@ -4,6 +4,18 @@ import IB.Information
 
 %default total
 
+public export
+data DocumentEvent
+  = StartTag String String
+  | EndTag String
+  | ImpliedEndTag String
+  | TextEvent String
+
+public export
+data RecoveredDocumentLog = DocumentLog String (List DocumentEvent)
+
+data RecoveryState = RecoverState (Maybe String) (Maybe String) Bool Bool
+
 heading_tag : String → Bool
 heading_tag name = elem name ["h1", "h2", "h3", "h4", "h5", "h6"]
 
