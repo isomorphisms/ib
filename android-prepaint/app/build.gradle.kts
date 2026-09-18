@@ -2,6 +2,15 @@ plugins {
     id("com.android.application")
 }
 
+val stableTestKeystorePath = providers.environmentVariable("IB_TEST_KEYSTORE").orNull
+    ?: error("IB_TEST_KEYSTORE is required; refusing to build an installable APK with an ephemeral signer")
+val stableTestKeystorePassword = providers.environmentVariable("IB_TEST_KEYSTORE_PASSWORD").orNull
+    ?: "wegert-debug"
+val stableTestKeyPassword = providers.environmentVariable("IB_TEST_KEY_PASSWORD").orNull
+    ?: stableTestKeystorePassword
+val stableTestKeyAlias = providers.environmentVariable("IB_TEST_KEY_ALIAS").orNull
+    ?: "wegert-debug"
+
 android {
     namespace = "org.isomorphisms.ib.prepaint"
     compileSdk = 36
@@ -14,7 +23,20 @@ android {
         versionName = "0.2.0"
     }
 
+    signingConfigs {
+        create("stableTest") {
+            storeFile = rootProject.file(stableTestKeystorePath)
+            storePassword = stableTestKeystorePassword
+            keyAlias = stableTestKeyAlias
+            keyPassword = stableTestKeyPassword
+            storeType = "pkcs12"
+        }
+    }
+
     buildTypes {
+        getByName("debug") {
+            signingConfig = signingConfigs.getByName("stableTest")
+        }
         getByName("release") {
             isMinifyEnabled = false
         }
