@@ -8,6 +8,8 @@ tokenization and `InformationView`. Its first declared recovery contract is the
 pinned corpus's `document_log_subset_v0`: source fixture identity plus ordered
 tag/text events, with only the implied-end recovery needed by the useful-document
 subset. It is not a browser DOM and does not claim full WHATWG recovery.
+The recovered events feed semantic extraction directly; IB does not serialize the
+recovered log back to HTML and reparse that derived rendering.
 
 The malformed fixture exercises that contract directly. Before document
 construction can pass, the recovered log must retain its source identity and
