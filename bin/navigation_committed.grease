@@ -1,7 +1,13 @@
 #!/bin/sh
 set -eu
 
-repository_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+case $0 in
+  */*) script_directory=${0%/*} ;;
+  *) script_directory=. ;;
+esac
+# Keep the only command substitution in a bare assignment so Grease's
+# strict_errexit retains its status instead of losing a nested dirname status.
+repository_root=$(CDPATH= cd -- "$script_directory/.." && pwd)
 . "$repository_root/lib/prefetch.grease"
 . "$repository_root/lib/scientific_media.grease"
 . "$repository_root/lib/scientific_navigation_prefetch.grease"
@@ -22,7 +28,19 @@ if test "$#" -ne 1; then
 fi
 
 url=$1
-scientific_navigation_is_arxiv "$url" || exit 0
+cleaned_url=${url%%\#*}
+cleaned_url=${cleaned_url%%\?*}
+# Keep this dispatch test primitive: Grease forbids calling a function from the
+# left side of || because that construct disables errexit inside the function.
+case "$cleaned_url" in
+  http://arxiv.org/abs/*|https://arxiv.org/abs/*|\
+  http://arxiv.org/html/*|https://arxiv.org/html/*|\
+  http://arxiv.org/pdf/*|https://arxiv.org/pdf/*)
+    ;;
+  *)
+    exit 0
+    ;;
+esac
 
 niceness=${IB_SCIENTIFIC_PREFETCH_NICENESS:-20}
 worker=${IB_SCIENTIFIC_PREFETCH_WORKER:-}

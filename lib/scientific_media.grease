@@ -276,7 +276,7 @@ unique_image_file_name() {
   suffix=2
   while test -e "$images_directory/$candidate"; do
     candidate=$(printf '%s_%02d.%s' "$stem" "$suffix" "$extension")
-    suffix=$((suffix + 1))
+    suffix=$(expr "$suffix" + 1)
   done
   printf '%s\n' "$candidate"
 }
@@ -299,7 +299,7 @@ download_html_images_in_order() {
   separator=$(printf '\037')
   while IFS="$separator" read -r image_source caption_text alt_text image_tag; do
     test -n "$image_source" || continue
-    order=$((order + 1))
+    order=$(expr "$order" + 1)
 
     image_tag_file_name=$(printf 'image_tag_%04d.html' "$order")
     printf '%s\n' "$image_tag" > "$image_tags_directory/$image_tag_file_name"
@@ -384,7 +384,7 @@ record_pdf_images_in_order() {
 
   order=0
   find "$extraction_directory" -type f -name 'image-*' -print | LC_ALL=C sort | while IFS= read -r extracted_path; do
-    order=$((order + 1))
+    order=$(expr "$order" + 1)
     extension=${extracted_path##*.}
     temporary_file_name=$(printf 'temporary_image_%04d.%s' "$order" "$extension")
     mv "$extracted_path" "$images_directory/$temporary_file_name"
