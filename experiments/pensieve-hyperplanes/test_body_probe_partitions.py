@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import importlib.util
+import sys
 from pathlib import Path
 
 import numpy as np
@@ -13,6 +14,7 @@ SPEC = importlib.util.spec_from_file_location("body_probe", HERE / "body_probe.p
 if SPEC is None or SPEC.loader is None:
     raise RuntimeError("cannot load body_probe.py")
 body_probe = importlib.util.module_from_spec(SPEC)
+sys.modules[SPEC.name] = body_probe
 SPEC.loader.exec_module(body_probe)
 
 
