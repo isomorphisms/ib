@@ -42,6 +42,15 @@ If `getWebViewRenderProcess()` returns null, the receipt says isolated renderer
 recovery is unavailable on that provider/device. The fixture does not substitute
 `chrome://crash` or pretend host-process death is renderer-process death.
 
+## Update identity
+
+The package name and version code are part of the acceptance boundary. CI signs
+the installable debug artifact with the repository's stable public test signer
+and verifies repeated `adb install -r` replacement without uninstalling. A
+local build without the configured stable signer is deliberately left unsigned
+rather than receiving a machine-local Gradle debug identity. The test signer is
+not a production or store signing identity.
+
 ## Evidence boundary
 
 This first slice can provide four separate observations:
