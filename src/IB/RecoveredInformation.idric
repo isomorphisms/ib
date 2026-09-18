@@ -161,20 +161,16 @@ has_implied_end : String → RecoveredDocumentLog → Bool
 has_implied_end wanted (DocumentLog _ events) =
   has_implied_end_event wanted events
 
-render_event : DocumentEvent → String
-render_event (StartTag _ tag) = "<" ++ tag ++ ">"
-render_event (EndTag name) = "</" ++ name ++ ">"
-render_event (ImpliedEndTag name) = "</" ++ name ++ ">"
-render_event (TextEvent text) = text
-
-render_events : List DocumentEvent → String
-render_events [] = ""
-render_events (event :: rest) = render_event event ++ render_events rest
+information_token : DocumentEvent → InformationToken
+information_token (StartTag name tag) = OpenTag name tag
+information_token (EndTag name) = CloseTag name
+information_token (ImpliedEndTag name) = CloseTag name
+information_token (TextEvent text) = TextToken text
 
 public export
 information_from_log : String → String → RecoveredDocumentLog → InformationView
 information_from_log requested_url resolved_url (DocumentLog _ events) =
-  extract_html requested_url resolved_url (render_events events)
+  extract_information_tokens requested_url resolved_url (map information_token events)
 
 public export
 extract_recovered_html : String → String → String → String → InformationView
