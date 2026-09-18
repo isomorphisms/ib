@@ -44,6 +44,11 @@ IB storage inspector or a later browser shell.
 The boundary check rejects `android.webkit`, `WebView`, an Internet permission, or
 a debug APK larger than 2 MiB.
 
+`sh tests/verify_typed_model.sh` exercises the parser without Android and proves
+that the checked wire variants remain distinct block types. It also compiles two
+intentionally invalid consumers and requires rejection: an arbitrary string-kind
+block and an integer outside the six-case heading-level type.
+
 ## Boundary
 
 Idriç owns HTML extraction, URL policy, ICU execution, and the `InformationView`.
