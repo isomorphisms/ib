@@ -105,9 +105,8 @@ jobs:
           disable-animations: true
           script: |
             set -eu
-            apk=downloaded-apk/app-debug.apk
-            adb install -r "$apk"
-            adb install -r "$apk"
+            adb install -r downloaded-apk/app-debug.apk
+            adb install -r downloaded-apk/app-debug.apk
             adb shell am start -W -n org.isomorphisms.ib.prepaint/.PrepaintActivity \
               | tee /tmp/ib-prepaint-start.txt
             grep -Fq 'Status: ok' /tmp/ib-prepaint-start.txt
