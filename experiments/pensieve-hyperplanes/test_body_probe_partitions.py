@@ -18,7 +18,53 @@ sys.modules[SPEC.name] = body_probe
 SPEC.loader.exec_module(body_probe)
 
 
+def check_representation_contracts() -> None:
+    checksum = "a" * 64
+
+    body_probe.validate_input_manifest(
+        {"output_sha256": checksum, "title_or_url_used": False},
+        checksum,
+        "pensieve-body-only",
+    )
+    declared = body_probe.validate_input_manifest(
+        {
+            "output_sha256": checksum,
+            "representation_contract": {
+                "kind": "youtube-title-plus-channel",
+                "model_text_fields": ["video_title", "channel_title"],
+            },
+        },
+        checksum,
+        "declared-text",
+    )
+    assert declared is not None
+    assert declared["kind"] == "youtube-title-plus-channel"
+
+    try:
+        body_probe.validate_input_manifest(
+            {"output_sha256": checksum},
+            checksum,
+            "declared-text",
+        )
+    except ValueError as error:
+        assert "representation_contract" in str(error)
+    else:
+        raise AssertionError("declared text without a representation contract was accepted")
+
+    try:
+        body_probe.validate_input_manifest(
+            {"output_sha256": checksum, "title_or_url_used": True},
+            checksum,
+            "pensieve-body-only",
+        )
+    except ValueError as error:
+        assert "title_or_url_used=false" in str(error)
+    else:
+        raise AssertionError("body-only input with title/url use was accepted")
+
+
 def main() -> int:
+    check_representation_contracts()
     ids = [
         "fit-positive-a",
         "fit-positive-b",
