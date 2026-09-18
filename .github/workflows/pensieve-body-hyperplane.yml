@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - '0.2/pensieve-body-hyperplanes'
+      - '0.2/takeout-*'
   pull_request:
     branches:
       - '0.2/pensieve-arxiv'
