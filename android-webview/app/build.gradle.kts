@@ -2,6 +2,14 @@ plugins {
     id("com.android.application")
 }
 
+val stableTestKeystorePath = providers.environmentVariable("IB_TEST_KEYSTORE").orNull
+val stableTestKeystorePassword = providers.environmentVariable("IB_TEST_KEYSTORE_PASSWORD").orNull
+    ?: "wegert-debug"
+val stableTestKeyPassword = providers.environmentVariable("IB_TEST_KEY_PASSWORD").orNull
+    ?: stableTestKeystorePassword
+val stableTestKeyAlias = providers.environmentVariable("IB_TEST_KEY_ALIAS").orNull
+    ?: "wegert-debug"
+
 android {
     namespace = "org.isomorphisms.ib.webview"
     compileSdk = 36
@@ -14,7 +22,24 @@ android {
         versionName = "0.1.0"
     }
 
+    signingConfigs {
+        stableTestKeystorePath?.let { keystorePath ->
+            create("stableTest") {
+                storeFile = rootProject.file(keystorePath)
+                storePassword = stableTestKeystorePassword
+                keyAlias = stableTestKeyAlias
+                keyPassword = stableTestKeyPassword
+                storeType = "pkcs12"
+            }
+        }
+    }
+
     buildTypes {
+        getByName("debug") {
+            // No environment-provided stable signer means an unsigned debug APK,
+            // never an AGP-generated machine-local debug identity.
+            signingConfig = signingConfigs.findByName("stableTest")
+        }
         getByName("release") {
             isMinifyEnabled = false
         }
