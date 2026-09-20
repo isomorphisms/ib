@@ -38,11 +38,25 @@ build_idric() {
     printf '%s\n' 'prefix=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)'
     printf '%s\n' 'IDRIS2_PREFIX="$prefix/bootstrap-build"'
     printf '%s\n' 'CHEZ="$prefix/.tools/bin/scheme"'
-    printf '%s\n' 'export IDRIS2_PREFIX CHEZ'
-    printf '%s\n' 'exec "$prefix/build/exec/idris2" "$@"'
+    printf '%s\n' 'app="$prefix/build/exec/idris2_app"'
+    printf '%s\n' 'LD_LIBRARY_PATH="$app${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"'
+    printf '%s\n' 'DYLD_LIBRARY_PATH="$app${DYLD_LIBRARY_PATH:+:$DYLD_LIBRARY_PATH}"'
+    printf '%s\n' 'IDRIS2_INC_SRC="$app"'
+    printf '%s\n' 'export IDRIS2_PREFIX CHEZ LD_LIBRARY_PATH DYLD_LIBRARY_PATH IDRIS2_INC_SRC'
+    printf '%s\n' 'exec "$CHEZ" --program "$app/idris2.so" "$@"'
   } >"$idric_prefix/bin/idris2"
   chmod +x "$idric_prefix/bin/idris2"
-  "$idric_prefix/bin/idris2" --version
+
+  # Prove that neither the source tree nor the original prefix is required by
+  # the cached compiler. The cache is restored in a different runner process.
+  source_hold=/tmp/Idric.build-source
+  relocated_prefix="${idric_prefix}.relocated"
+  rm -rf "$source_hold" "$relocated_prefix"
+  mv /tmp/Idric "$source_hold"
+  mv "$idric_prefix" "$relocated_prefix"
+  "$relocated_prefix/bin/idris2" --version
+  mv "$relocated_prefix" "$idric_prefix"
+  rm -rf "$source_hold"
 }
 
 verify_pdf_harvester() {
