@@ -71,6 +71,10 @@ Renderer death is also different from form reconstruction. If a renderer disappe
 - requests important renderer priority even when the WebView is hidden;
 - treats launcher and notification re-entry as a request to expose and sample the existing page, never as an implicit reload;
 - appends progress to an app-private on-disk journal;
+- copies that bounded journal to the clipboard on explicit **Copy receipt** so the
+  physical-phone run can be reviewed without ADB or Wireless debugging;
+- records the host PID with samples so process continuity is observable inside
+  the same receipt;
 - requires an explicit user reload after renderer death instead of silently replaying an edited form.
 
 This adapter does **not** yet prove:
@@ -106,11 +110,17 @@ Example explicit launch after installing the branch APK:
 Tap **Background** as soon as waiting becomes pointless. Returning to the task should show whether the same process continued to advance. **Sample** records a fresh compact timing/count snapshot. **Reload** is explicit because a reload can destroy live form state.
 
 The foreground notification is the user-visible lifetime of this experiment.
-Its **Stop** action removes the foreground service. Returning through Android
-Recents, the **IB Large Page** launcher, or the notification must expose the
-same Activity and WebView. Launcher re-entry records
-`launcher-reentry existing-page-preserved` and must not emit a second `run` or
-`navigation started` entry.
+On Android 13+ the activity requests notification permission before relying on
+that re-entry path. Its **Stop** action removes the foreground service.
+Returning through Android Recents, the **IB Large Page** launcher, or the
+notification must expose the same Activity and WebView. Launcher and
+notification re-entry record `launcher-reentry existing-page-preserved` and
+must not emit a second `run` or `navigation started` entry.
+
+After the three re-entry legs, **Copy receipt** places the bounded journal on the
+clipboard for direct paste into the review conversation. The acceptance flow
+must not depend on ADB, same-phone Wireless debugging, `run-as`, or another
+screen-switch-sensitive extraction mechanism.
 
 ## Acceptance questions
 
