@@ -103,7 +103,7 @@ public final class IncrementalBackgroundContractTest {
     private static String read(String relative_path) throws IOException {
         Path direct = Path.of(relative_path);
         Path resolved = Files.exists(direct) ? direct : Path.of("app").resolve(relative_path);
-        return Files.readString(resolved, StandardCharsets.UTF_8);
+        return new String(Files.readAllBytes(resolved), StandardCharsets.UTF_8);
     }
 
     private static String method(String source, String start_marker, String end_marker) {
