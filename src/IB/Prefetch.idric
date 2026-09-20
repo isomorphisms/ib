@@ -48,12 +48,12 @@ take_prefetch_targets (S remaining) (target :: rest) =
 -- Callers supply targets in priority order.  The core removes duplicate URLs
 -- and enforces the caller's resource budget without inventing crawl policy.
 public export
-bounded_prefetch : Nat → List PrefetchTarget → List PrefetchTarget
+bounded_prefetch : Number → List PrefetchTarget → List PrefetchTarget
 bounded_prefetch budget targets =
   take_prefetch_targets budget (deduplicate_prefetch_targets targets)
 
 public export
-reading_target_count : List PrefetchTarget → Nat
+reading_target_count : List PrefetchTarget → Number
 reading_target_count [] = 0
 reading_target_count (target :: rest) =
   case prefetch_target_retention target of

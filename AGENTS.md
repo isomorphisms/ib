@@ -6,6 +6,11 @@ Apply the shared evidence and acceptance guardrails in
 Before changing browser objects, ownership, interfaces, or implementation
 boundaries, read [`README.md`](README.md) and [`docs/architecture.md`](docs/architecture.md).
 
+Idriç-facing vocabulary is owned by `isomorphisms/Idric/STYLE.md`. In
+maintained `.idric` public declarations, use `Number` rather than inherited
+`Nat`; use `List` or a domain collection rather than `Vect`. Run
+`tests/idric-public-vocabulary.sh` after changing public Idriç surfaces.
+
 ## Do not invent a parallel browser model
 
 Inspect the current owner of a concept before introducing another resource,

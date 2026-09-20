@@ -5,25 +5,25 @@ import IB.History
 %default total
 
 public export
-data IndexRow = Row String (List Nat)
+data IndexRow = Row String (List Number)
 
 public export
 row_key : IndexRow → String
 row_key (Row key _) = key
 
 public export
-row_entries : IndexRow → List Nat
+row_entries : IndexRow → List Number
 row_entries (Row _ entries) = entries
 
 public export
-data HistoryIndices = Indices (List HistoryEntry) (List Nat) (List IndexRow) (List IndexRow) (List IndexRow) (List IndexRow)
+data HistoryIndices = Indices (List HistoryEntry) (List Number) (List IndexRow) (List IndexRow) (List IndexRow) (List IndexRow)
 
 public export
 index_entries : HistoryIndices → List HistoryEntry
 index_entries (Indices entries _ _ _ _ _) = entries
 
 public export
-index_chronology : HistoryIndices → List Nat
+index_chronology : HistoryIndices → List Number
 index_chronology (Indices _ chronology _ _ _ _) = chronology
 
 public export
@@ -110,7 +110,7 @@ build_indices input =
       (index_maybe_string entry_query entries)
 
 public export
-row_count : String → List IndexRow → Nat
+row_count : String → List IndexRow → Number
 row_count key [] = 0
 row_count key (Row existing entries :: rest) =
   if key == existing then length entries else row_count key rest
