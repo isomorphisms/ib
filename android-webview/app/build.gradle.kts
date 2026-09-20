@@ -11,15 +11,15 @@ val stableTestKeyAlias = providers.environmentVariable("IB_TEST_KEY_ALIAS").orNu
     ?: "wegert-debug"
 
 android {
-    namespace = "org.isomorphisms.ib.prepaint"
+    namespace = "org.isomorphisms.ib.webview"
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "org.isomorphisms.ib.prepaint"
+        applicationId = "org.isomorphisms.ib.webview"
         minSdk = 26
         targetSdk = 36
-        versionCode = 2
-        versionName = "0.2.0"
+        versionCode = 1
+        versionName = "0.1.0"
     }
 
     signingConfigs {
@@ -55,28 +55,34 @@ dependencies {
     testImplementation("junit:junit:4.13.2")
 }
 
-tasks.register("verifyPrepaintBoundary") {
-    dependsOn("assembleDebug")
+tasks.register("verifyWebViewBoundary") {
+    dependsOn("testDebugUnitTest", "assembleDebug")
     doLast {
         val implementationFiles = fileTree("src/main") {
             include("**/*.java", "**/*.xml")
         }
         val implementation = implementationFiles.files.joinToString("\n") { it.readText() }
-        check(!implementation.contains("android.webkit")) {
-            "The prepaint harness must not depend on android.webkit."
+
+        check(implementation.contains("onRenderProcessGone")) {
+            "The acceptance harness must observe renderer death explicitly."
         }
-        check(!implementation.contains("WebView")) {
-            "The prepaint harness must not contain a WebView."
+        check(implementation.contains("RENDERER_PRIORITY_IMPORTANT")) {
+            "Protected transactions must request important renderer priority."
         }
-        check(!file("src/main/AndroidManifest.xml").readText()
-            .contains("android.permission.INTERNET")) {
-            "The prepaint harness must not request Internet access."
+        check(implementation.contains("setSaveEnabled(false)")) {
+            "The WebView hierarchy must not become the hidden form persistence mechanism."
+        }
+        check(!implementation.contains(".saveState(")) {
+            "Do not use WebView.saveState() as acceptance evidence."
+        }
+        check(!implementation.contains("getSharedPreferences")) {
+            "The first fixture must not persist form state through SharedPreferences."
+        }
+        check(implementation.contains("android:allowBackup=\"false\"")) {
+            "The acceptance app must not back up fixture state."
         }
 
         val apks = fileTree("build/outputs/apk/debug") { include("*.apk") }.files
         check(apks.size == 1) { "Expected exactly one debug APK, found ${apks.size}." }
-        check(apks.single().length() <= 2L * 1024L * 1024L) {
-            "Debug APK exceeds the 2 MiB harness budget."
-        }
     }
 }

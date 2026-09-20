@@ -1,0 +1,66 @@
+module OccurrenceSmoke
+
+import IB.Occurrence
+
+%default total
+
+sample_source : AuthoritativeText
+sample_source = SourceText "fixture:known-reading:sherlock-adventures" "Holmes one.\nWatson two.\nHolmes three.\nAdler four."
+
+sample_fragments : List SourceFragment
+sample_fragments = [
+  Fragment "f0001" "fixture:known-reading:sherlock-adventures" 0 12,
+  Fragment "f0002" "fixture:known-reading:sherlock-adventures" 12 24,
+  Fragment "f0003" "fixture:known-reading:sherlock-adventures" 24 38,
+  Fragment "f0004" "fixture:known-reading:sherlock-adventures" 38 49
+  ]
+
+sample_strand : Strand
+sample_strand = MaterializedStrand
+  "document-order:sherlock-adventures"
+  ["f0001", "f0002", "f0003", "f0004"]
+
+unicode_source : AuthoritativeText
+unicode_source = SourceText "fixture:unicode" "東京と京都"
+
+unicode_fragments : List SourceFragment
+unicode_fragments = [Fragment "u0001" "fixture:unicode" 0 5]
+
+unicode_strand : Strand
+unicode_strand = MaterializedStrand "document-order:unicode" ["u0001"]
+
+occurrence_at_index : Nat → List Occurrence → Maybe Occurrence
+occurrence_at_index Z [] = Nothing
+occurrence_at_index Z (value :: _) = Just value
+occurrence_at_index (S index) [] = Nothing
+occurrence_at_index (S index) (_ :: rest) = occurrence_at_index index rest
+
+window_count : Nat → Nat → Maybe Occurrence → Strand → Nat
+window_count before after Nothing strand = 0
+window_count before after (Just occurrence) strand =
+  case context_fragment_ids before after occurrence strand of
+    Nothing ⇒ 0
+    Just ids ⇒ length ids
+
+window_available : Nat → Nat → Maybe Occurrence → Strand → Bool
+window_available before after Nothing strand = False
+window_available before after (Just occurrence) strand =
+  case context_fragment_ids before after occurrence strand of
+    Nothing ⇒ False
+    Just _ ⇒ True
+
+main : IO ()
+main = do
+  let holmes = search_occurrences "Holmes" sample_source sample_fragments sample_strand
+  let crossing = search_occurrences "one.\nWatson" sample_source sample_fragments sample_strand
+  let unicode = search_occurrences "京都" unicode_source unicode_fragments unicode_strand
+  let stale = MaterializedStrand
+        "document-order:sherlock-adventures:changed"
+        ["f0002", "f0001", "f0003", "f0004"]
+  putStrLn ("occurrence-count=" ++ show (length holmes))
+  putStrLn ("matching-fragment-count=" ++ show (length (matching_fragment_ids "Holmes" sample_source sample_fragments sample_strand)))
+  putStrLn ("cross-boundary-count=" ++ show (length crossing))
+  putStrLn ("first-window-count=" ++ show (window_count 1 1 (occurrence_at_index 0 holmes) sample_strand))
+  putStrLn ("second-window-count=" ++ show (window_count 1 1 (occurrence_at_index 1 holmes) sample_strand))
+  putStrLn ("stale-window=" ++ show (window_available 1 1 (occurrence_at_index 0 holmes) stale))
+  putStrLn ("unicode-count=" ++ show (length unicode))

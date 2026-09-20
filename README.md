@@ -33,6 +33,8 @@ indexes and later model hooks
 
 A tab or renderer is a temporary view onto this persistent state.  Neither is part of the 0.2 acceptance boundary.
 
+Live authenticated transaction state is not disposable merely because the renderer is temporary. Ordinary sleeping or eviction must not silently destroy an active login/session or in-progress form while another tab or app is used to retrieve information; see `docs/architecture.md` and #59.
+
 Three future reader-support contracts are recorded separately:
 
 - [`docs/reading-feedback.md`](docs/reading-feedback.md): opening is not reading, passive interaction is evidence rather than proof of comprehension, and completed items may deliberately remain in a rereading/reminder rotation.

@@ -31,6 +31,12 @@ view_items (View _ _ _ value) = value
 
 data HtmlToken = HtmlText String | HtmlTag String
 
+public export
+data InformationToken
+  = OpenTag String String
+  | CloseTag String
+  | TextToken String
+
 data Capture
   = NoCapture
   | CaptureTitle
@@ -140,6 +146,20 @@ tag_name tag =
   case drop_space_chars (unpack tag) of
     '/' :: rest ⇒ pack (lower_chars (tag_name_chars (drop_space_chars rest)))
     rest ⇒ pack (lower_chars (tag_name_chars rest))
+
+html_tokens_to_information : List HtmlToken → List InformationToken
+html_tokens_to_information [] = []
+html_tokens_to_information (HtmlText text :: rest) =
+  TextToken text :: html_tokens_to_information rest
+html_tokens_to_information (HtmlTag tag :: rest) =
+  let name = tag_name tag in
+  if is_closing_tag tag
+    then CloseTag name :: html_tokens_to_information rest
+    else OpenTag name tag :: html_tokens_to_information rest
+
+public export
+tokenize_information_html : String → List InformationToken
+tokenize_information_html html = html_tokens_to_information (tokenize html)
 
 tag_remainder_chars : List Char → List Char
 tag_remainder_chars [] = []
@@ -261,62 +281,75 @@ update_skip name closing (Skipping target depth) =
       else Skipping target (S depth)
     else Skipping target depth
 
-collect_information : List HtmlToken → SkipState → Capture → List Char →
+collect_information : List InformationToken → SkipState → Capture → List Char →
   Maybe (List String) → String → List InformationItem → (String, List InformationItem)
 collect_information [] skip capture chars row title items =
   let text = clean_text (pack (reverse chars)) in
   let (final_title, final_items, final_row) = finish_capture capture text title items row in
   (final_title, reverse (finish_open_row final_row final_items))
-collect_information (HtmlText text :: rest) (Skipping target depth) capture chars row title items =
+collect_information (TextToken text :: rest) (Skipping target depth) capture chars row title items =
   collect_information rest (Skipping target depth) capture chars row title items
-collect_information (HtmlText text :: rest) NotSkipping NoCapture chars row title items =
+collect_information (TextToken text :: rest) NotSkipping NoCapture chars row title items =
   collect_information rest NotSkipping NoCapture [] row title (add_standalone_text text row items)
-collect_information (HtmlText text :: rest) NotSkipping capture chars row title items =
+collect_information (TextToken text :: rest) NotSkipping capture chars row title items =
   collect_information rest NotSkipping capture (append_capture_text text chars) row title items
-collect_information (HtmlTag tag :: rest) skip capture chars row title items =
-  let name = tag_name tag in
-  let closing = is_closing_tag tag in
+collect_information (OpenTag name tag :: rest) skip capture chars row title items =
   case skip of
     Skipping target depth ⇒
-      collect_information rest (update_skip name closing (Skipping target depth)) capture chars row title items
+      collect_information rest (update_skip name False (Skipping target depth)) capture chars row title items
     NotSkipping ⇒
       case capture of
         NoCapture ⇒
-          if not closing && skipped_tag name
+          if skipped_tag name
             then collect_information rest (Skipping name Z) NoCapture chars row title items
-            else if name == "title" && not closing
+            else if name == "title"
               then collect_information rest NotSkipping CaptureTitle [] row title items
-              else if heading_tag name && not closing
+              else if heading_tag name
                 then collect_information rest NotSkipping (CaptureHeading name) [] row title items
-                else if (name == "p" || name == "li") && not closing
+                else if name == "p" || name == "li"
                   then collect_information rest NotSkipping (CaptureText name) [] row title items
-                  else if name == "a" && not closing
+                  else if name == "a"
                     then collect_information rest NotSkipping (CaptureLink (attribute_or_empty "href" tag)) [] row title items
-                    else if name == "form" && not closing
+                    else if name == "form"
                       then collect_information rest NotSkipping (CaptureForm (attribute_or_empty "action" tag)) [] row title items
-                      else if name == "tr" && not closing
+                      else if name == "tr"
                         then collect_information rest NotSkipping NoCapture [] (Just []) title (finish_open_row row items)
-                        else if name == "tr" && closing
-                          then collect_information rest NotSkipping NoCapture [] Nothing title (finish_open_row row items)
-                          else if (name == "td" || name == "th") && not closing
-                            then case row of
-                              Nothing ⇒ collect_information rest NotSkipping NoCapture [] row title items
-                              Just _ ⇒ collect_information rest NotSkipping (CaptureCell name) [] row title items
-                            else collect_information rest NotSkipping NoCapture [] row title items
+                        else if name == "td" || name == "th"
+                          then case row of
+                            Nothing ⇒ collect_information rest NotSkipping NoCapture [] row title items
+                            Just _ ⇒ collect_information rest NotSkipping (CaptureCell name) [] row title items
+                          else collect_information rest NotSkipping NoCapture [] row title items
         _ ⇒
-          if closing && name == capture_target capture
+          if skipped_tag name
+            then collect_information rest (Skipping name Z) capture chars row title items
+            else collect_information rest NotSkipping capture chars row title items
+collect_information (CloseTag name :: rest) skip capture chars row title items =
+  case skip of
+    Skipping target depth ⇒
+      collect_information rest (update_skip name True (Skipping target depth)) capture chars row title items
+    NotSkipping ⇒
+      case capture of
+        NoCapture ⇒
+          if name == "tr"
+            then collect_information rest NotSkipping NoCapture [] Nothing title (finish_open_row row items)
+            else collect_information rest NotSkipping NoCapture [] row title items
+        _ ⇒
+          if name == capture_target capture
             then let text = clean_text (pack (reverse chars)) in
               let (next_title, next_items, next_row) = finish_capture capture text title items row in
               collect_information rest NotSkipping NoCapture [] next_row next_title next_items
-            else if not closing && skipped_tag name
-              then collect_information rest (Skipping name Z) capture chars row title items
-              else collect_information rest NotSkipping capture chars row title items
+            else collect_information rest NotSkipping capture chars row title items
+
+public export
+extract_information_tokens : String → String → List InformationToken → InformationView
+extract_information_tokens requested_url resolved_url tokens =
+  let (title, items) = collect_information tokens NotSkipping NoCapture [] Nothing "" [] in
+  View requested_url resolved_url title items
 
 public export
 extract_html : String → String → String → InformationView
 extract_html requested_url resolved_url html =
-  let (title, items) = collect_information (tokenize html) NotSkipping NoCapture [] Nothing "" [] in
-  View requested_url resolved_url title items
+  extract_information_tokens requested_url resolved_url (tokenize_information_html html)
 
 public export
 has_table_row : List String → InformationView → Bool

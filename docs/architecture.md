@@ -15,6 +15,7 @@ The browser core owns:
 - resource, tab, event, and task identity;
 - navigation and search history;
 - sleeping and waking policy;
+- authenticated site-session and protected-transaction policy;
 - task and investigation frontiers;
 - saved representations and snapshot references;
 - user organization, assertions, corrections, and active choices;
@@ -83,6 +84,18 @@ Sleeping is the ordinary state of an old tab, not an exceptional recovery path.
 A sleeping tab has no renderer session and consumes approximately the cost of persistent metadata plus bounded indexes and caches. Waking attaches a renderer only when a task needs one and reconstructs the best available view from stored records.
 
 A 10,000-resource or history corpus does not imply 10,000 logical tabs or live documents. The current developer fixture deliberately separates 10,000 known URLs, 32 logical tabs, and a 3–10-tab resident working set. Steady-state renderer RAM should follow the resident set, not corpus size.
+
+## Protected live sessions
+
+Sleeping is not appropriate for every active tab. Some tabs are live authenticated transactions: a government or benefits form, banking or healthcare workflow, or another fragile interaction where the user may need to open another tab or app to retrieve information before continuing.
+
+A protected live session is browser-owned policy over the tab, renderer, and authentication/session state. Ordinary renderer eviction must prefer unprotected work before discarding a protected transaction. Cookies, site-session material, navigation position, and other state required to continue the transaction must not be treated as disposable merely because the current renderer process owns an implementation handle to them.
+
+On a low-memory device, opening another tab or app must not silently destroy a protected transaction and force the user to begin again. If renderer or process death is unavoidable, IB should reconstruct the strongest safe continuation it can from browser-owned state and report any restoration limit explicitly.
+
+This requirement does not promise exact JavaScript-heap continuity across renderer changes or process death. It also does not justify blindly persisting passwords, account numbers, or other sensitive field contents. The security and persistence boundary for protected transactions must be explicit.
+
+Acceptance must distinguish at least session-cookie survival, form-state survival, live-renderer survival, and reconstruction after renderer death. Evidence for one is not evidence for the others. See #59.
 
 ## Renderer swapping
 
