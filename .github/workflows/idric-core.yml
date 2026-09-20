@@ -37,7 +37,7 @@ jobs:
         run: test "$(git rev-parse HEAD)" = "$EXPECTED_SOURCE_SHA"
 
       - name: Reject new noncanonical Idriç vocabulary
-        uses: isomorphisms/ai-ci/idric-style@084a17160bccb8e807902cc8af465f2d7f31800f
+        uses: isomorphisms/ai-ci/idric-style@084a1710d7257b4857b9c04aa1fc27f143365511
 
       - name: Checkout canonical hostile-input corpus
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
