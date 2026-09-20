@@ -13,14 +13,36 @@ install_dependencies() {
 }
 
 build_idric() {
-  rm -rf /tmp/Idric
+  rm -rf /tmp/Idric "$idric_prefix"
   git init -q /tmp/Idric
   git -C /tmp/Idric remote add origin https://github.com/isomorphisms/Idric.git
   git -C /tmp/Idric fetch --depth 1 origin "$idric_ref"
   git -C /tmp/Idric checkout --detach -q FETCH_HEAD
   test "$(git -C /tmp/Idric rev-parse HEAD)" = "$idric_ref"
-  SCHEME=chezscheme make -C /tmp/Idric bootstrap PREFIX="$idric_prefix"
-  SCHEME=chezscheme make -C /tmp/Idric install PREFIX="$idric_prefix"
+  # The maintained Chez path needs the common C support library, not the
+  # optional RefC/GMP support built by the aggregate support targets.
+  make -C /tmp/Idric/_/support/c
+  sh /tmp/Idric/_/edric scheme >/dev/null
+  PATH="/tmp/Idric/_/.tools/bin:$PATH" \
+    SCHEME=/tmp/Idric/_/.tools/bin/scheme \
+    CHEZ=/tmp/Idric/_/.tools/bin/scheme \
+    make -C /tmp/Idric/_ \
+      bootstrap MAKE="$repository_root/bin/idric-chez-make"
+
+  mkdir -p "$idric_prefix/bin"
+  cp -a /tmp/Idric/_/.tools "$idric_prefix/.tools"
+  cp -a /tmp/Idric/_/bootstrap-build "$idric_prefix/bootstrap-build"
+  cp -a /tmp/Idric/_/build "$idric_prefix/build"
+  {
+    printf '%s\n' '#!/bin/sh' 'set -eu'
+    printf '%s\n' 'prefix=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)'
+    printf '%s\n' 'IDRIS2_PREFIX="$prefix/bootstrap-build"'
+    printf '%s\n' 'CHEZ="$prefix/.tools/bin/scheme"'
+    printf '%s\n' 'export IDRIS2_PREFIX CHEZ'
+    printf '%s\n' 'exec "$prefix/build/exec/idris2" "$@"'
+  } >"$idric_prefix/bin/idris2"
+  chmod +x "$idric_prefix/bin/idris2"
+  "$idric_prefix/bin/idris2" --version
 }
 
 verify_pdf_harvester() {

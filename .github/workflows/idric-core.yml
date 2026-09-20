@@ -110,7 +110,7 @@ jobs:
         uses: actions/cache/restore@caa296126883cff596d87d8935842f9db880ef25
         with:
           path: /tmp/idric
-          key: idric-${{ runner.os }}-61970be77769f607cca8650bf424c0f0b22ddee7
+          key: idric-${{ runner.os }}-bd9fbe1e68ce9b3dd3981fcd3e1abf9e50bd350e
 
       - name: Verify PDF harvester pin
         run: sh bin/ci_browser_foundation.grease verify-pdf-harvester
