@@ -97,7 +97,20 @@ page. **Reload** is an explicit user action because replaying or discarding an
 in-progress form is not a renderer-recovery implementation detail.
 
 The unattended-load acceptance run is ten minutes in another app. Returning
-through both Android Recents and the **IB Large Page** icon must retain the same
-run and JavaScript heap, show no second navigation start, and show whether the
-five-second resource/control samples advanced while IB was off-screen. Build,
-installation, and notification presence do not substitute for that run.
+through Android Recents, the **IB Large Page** icon, and the foreground
+notification must retain the same run and JavaScript heap, show no second
+navigation start, and show whether the five-second resource/control samples
+advanced while IB was off-screen. On Android 13+ the activity requests
+notification permission so the notification re-entry path can actually be
+exercised.
+
+After the re-entry legs, tap **Copy receipt**. It copies the current app-private
+journal to the clipboard so the physical-phone evidence can be pasted directly
+into the review conversation. ADB, Wireless debugging, `run-as`, and filesystem
+extraction are not part of this acceptance path. The copied journal still
+contains only the already-bounded diagnostic fields: timing/count samples,
+coarse lifecycle events, the heap canary, and host PID; it does not add form
+values, credentials, query strings, or resource URLs.
+
+Build, installation, notification presence, or copying the journal do not
+substitute for the ten-minute physical run.
