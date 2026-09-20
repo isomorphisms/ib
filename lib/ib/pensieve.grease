@@ -32,6 +32,19 @@ ib_require_icu() {
     ib_fail "ICU not found; set IB_ICU to the ICU executable"
 }
 
+arxiv_identifier_is_valid() {
+  identifier=$1
+
+  case "$identifier" in
+    ''|*[!A-Za-z0-9._/-]*)
+      return 1
+      ;;
+  esac
+
+  printf '%s\n' "$identifier" |
+    LC_ALL=C grep -Eq '^([0-9]{2}(0[1-9]|1[0-2])\.[0-9]{4,5}|[A-Za-z][A-Za-z0-9.-]*/[0-9]{2}(0[1-9]|1[0-2])[0-9]{3})(v[1-9][0-9]*)?$'
+}
+
 arxiv_identifier_from_input() {
   input=$1
   cleaned=${input%%\#*}
@@ -59,16 +72,61 @@ arxiv_identifier_from_input() {
       ;;
   esac
 
-  case "$identifier" in
-    ''|*[!A-Za-z0-9._/-]*)
-      ib_fail "not an arXiv identifier: $input"
-      return 1
-      ;;
-  esac
+  if ! arxiv_identifier_is_valid "$identifier"; then
+    ib_fail "not an arXiv identifier: $input"
+    return 1
+  fi
 
   printf '%s\n' "$identifier"
 }
 
+ib_arxiv_item_path() {
+  root=$1
+  identifier=$2
+
+  if ! arxiv_identifier_is_valid "$identifier"; then
+    ib_fail "unsafe arXiv identifier: $identifier"
+    return 1
+  fi
+
+  mkdir -p "$root" || {
+    ib_fail "could not create arXiv root: $root"
+    return 1
+  }
+  root_resolved=$(CDPATH= cd -P -- "$root" 2>/dev/null && pwd -P) || {
+    ib_fail "could not resolve arXiv root: $root"
+    return 1
+  }
+
+  candidate="$root_resolved/$identifier"
+  parent=$(dirname "$candidate")
+  mkdir -p "$parent" || {
+    ib_fail "could not create arXiv item parent: $parent"
+    return 1
+  }
+  parent_resolved=$(CDPATH= cd -P -- "$parent" 2>/dev/null && pwd -P) || {
+    ib_fail "could not resolve arXiv item parent: $parent"
+    return 1
+  }
+
+  case "$parent_resolved" in
+    "$root_resolved"|"$root_resolved"/*)
+      ;;
+    *)
+      ib_fail "arXiv item escapes storage root: $identifier"
+      return 1
+      ;;
+  esac
+
+  leaf=$(basename "$candidate")
+  candidate="$parent_resolved/$leaf"
+  if test -L "$candidate"; then
+    ib_fail "refusing symlink arXiv item path: $candidate"
+    return 1
+  fi
+
+  printf '%s\n' "$candidate"
+}
 arxiv_abs_url() {
   printf 'https://arxiv.org/abs/%s\n' "$1"
 }
@@ -273,7 +331,7 @@ ib_fetch_arxiv_figures() {
 ib_fetch_arxiv() {
   input=$1
   identifier=$(arxiv_identifier_from_input "$input") || return 1
-  cauldron="$(ib_cauldron)/arxiv/$identifier"
+  cauldron=$(ib_arxiv_item_path "$(ib_cauldron)/arxiv" "$identifier") || return 1
 
   if test -f "$cauldron/complete"; then
     printf '%s\n' "$cauldron"
@@ -340,8 +398,8 @@ ib_fetch_arxiv() {
 ib_distill_arxiv() {
   input=$1
   identifier=$(arxiv_identifier_from_input "$input") || return 1
-  cauldron="$(ib_cauldron)/arxiv/$identifier"
-  pensieve="$(ib_pensieve)/arxiv/$identifier"
+  cauldron=$(ib_arxiv_item_path "$(ib_cauldron)/arxiv" "$identifier") || return 1
+  pensieve=$(ib_arxiv_item_path "$(ib_pensieve)/arxiv" "$identifier") || return 1
 
   test -f "$cauldron/complete" || {
     ib_fail "nothing complete in the Cauldron for $identifier"
