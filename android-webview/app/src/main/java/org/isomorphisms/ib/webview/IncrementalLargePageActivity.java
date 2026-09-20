@@ -1,12 +1,18 @@
 package org.isomorphisms.ib.webview;
 
+import android.Manifest;
 import android.app.Activity;
+import android.content.ClipData;
+import android.content.ClipboardManager;
+import android.content.Context;
 import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.Process;
 import android.os.SystemClock;
 import android.webkit.CookieManager;
 import android.webkit.JavascriptInterface;
@@ -27,6 +33,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 
 public final class IncrementalLargePageActivity extends Activity {
+    private static final int NOTIFICATION_PERMISSION_REQUEST = 74;
     private static final String DEFAULT_URL =
         "https://console.cloud.google.com/agent-platform/studio/multimodal"
             + "?project=isomorphismes-youtube-shorts"
@@ -52,6 +59,7 @@ public final class IncrementalLargePageActivity extends Activity {
     private int last_progress_bucket = -1;
     private boolean form_dirty;
     private boolean destroyed;
+    private boolean notification_permission_requested;
 
     @Override
     protected void onCreate(Bundle saved_instance_state) {
@@ -67,9 +75,11 @@ public final class IncrementalLargePageActivity extends Activity {
         journal_file = create_journal_file();
 
         build_ui();
-        record("run", "target=" + safe_target_identity(target_url));
-        IncrementalLoadService.start(this);
-        record("liveness", "foreground-service-requested");
+        record(
+            "run",
+            "target=" + safe_target_identity(target_url) + " host-pid=" + Process.myPid()
+        );
+        ensure_incremental_service();
         attach_webview();
         web_view.loadUrl(target_url);
         handler.postDelayed(periodic_sample, 5000);
@@ -78,9 +88,29 @@ public final class IncrementalLargePageActivity extends Activity {
     @Override
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
-        IncrementalLoadService.start(this);
+        ensure_incremental_service();
         record("activity", "launcher-reentry existing-page-preserved");
         sample_page("launcher-reentry");
+    }
+
+    @Override
+    public void onRequestPermissionsResult(
+        int request_code,
+        String[] permissions,
+        int[] grant_results
+    ) {
+        super.onRequestPermissionsResult(request_code, permissions, grant_results);
+        if (request_code != NOTIFICATION_PERMISSION_REQUEST) {
+            return;
+        }
+
+        boolean granted =
+            grant_results.length > 0 && grant_results[0] == PackageManager.PERMISSION_GRANTED;
+        record(
+            "liveness",
+            "notification-permission=" + (granted ? "granted" : "not-granted")
+        );
+        start_incremental_service();
     }
 
     @Override
@@ -142,6 +172,14 @@ public final class IncrementalLargePageActivity extends Activity {
         controls.addView(sample, weighted_button_params());
         root.addView(controls);
 
+        LinearLayout receipt_controls = new LinearLayout(this);
+        receipt_controls.setOrientation(LinearLayout.HORIZONTAL);
+
+        Button copy_receipt = button("Copy receipt");
+        copy_receipt.setOnClickListener(view -> copy_journal_to_clipboard());
+        receipt_controls.addView(copy_receipt, weighted_button_params());
+        root.addView(receipt_controls);
+
         status = new TextView(this);
         status.setTextSize(11);
         status.setMinLines(5);
@@ -162,6 +200,37 @@ public final class IncrementalLargePageActivity extends Activity {
         );
 
         setContentView(root);
+    }
+
+    private void ensure_incremental_service() {
+        if (
+            Build.VERSION.SDK_INT >= 33
+                && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)
+                    != PackageManager.PERMISSION_GRANTED
+                && !notification_permission_requested
+        ) {
+            notification_permission_requested = true;
+            record("liveness", "notification-permission-requested");
+            requestPermissions(
+                new String[] {Manifest.permission.POST_NOTIFICATIONS},
+                NOTIFICATION_PERMISSION_REQUEST
+            );
+            return;
+        }
+        start_incremental_service();
+    }
+
+    private void start_incremental_service() {
+        IncrementalLoadService.start(this);
+        boolean notification_granted =
+            Build.VERSION.SDK_INT < 33
+                || checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)
+                    == PackageManager.PERMISSION_GRANTED;
+        record(
+            "liveness",
+            "foreground-service-requested notification-permission="
+                + (notification_granted ? "granted" : "not-granted")
+        );
     }
 
     private void attach_webview() {
@@ -318,8 +387,29 @@ public final class IncrementalLargePageActivity extends Activity {
             + "})()";
         web_view.evaluateJavascript(
             script,
-            result -> record("sample", "reason=" + reason + " " + result)
+            result -> record(
+                "sample",
+                "reason=" + reason + " host-pid=" + Process.myPid() + " " + result
+            )
         );
+    }
+
+    private void copy_journal_to_clipboard() {
+        record("receipt", "copy-request host-pid=" + Process.myPid());
+        try {
+            String journal = new String(
+                java.nio.file.Files.readAllBytes(journal_file.toPath()),
+                StandardCharsets.UTF_8
+            );
+            ClipboardManager clipboard =
+                (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+            clipboard.setPrimaryClip(
+                ClipData.newPlainText("IB incremental large-page receipt", journal)
+            );
+            append_status("receipt copied; paste it into chat");
+        } catch (IOException exception) {
+            append_status("receipt copy failed: " + exception.getClass().getSimpleName());
+        }
     }
 
     private File create_journal_file() {
