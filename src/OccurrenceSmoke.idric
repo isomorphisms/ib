@@ -53,6 +53,9 @@ repeated_identifier_fragments = [
 invalid_range_fragments : List SourceFragment
 invalid_range_fragments = [Fragment "i0001" "fixture:duplicate" 4 4]
 
+unmapped_hit_fragments : List SourceFragment
+unmapped_hit_fragments = [Fragment "g0001" "fixture:duplicate" 0 4]
+
 occurrence_at_index : Number → List Occurrence → Maybe Occurrence
 occurrence_at_index Z [] = Nothing
 occurrence_at_index Z (value :: _) = Just value
@@ -165,6 +168,14 @@ main = do
           duplicate_source
           invalid_range_fragments
           (MaterializedStrand "document-order:invalid" ["i0001"])))
+  putStrLn
+    ("unmapped-hit-search=" ++
+      render_search
+        (search_occurrences
+          "echo"
+          duplicate_source
+          unmapped_hit_fragments
+          (MaterializedStrand "document-order:gap" ["g0001"])))
   putStrLn
     ("missing-strand-search=" ++
       render_search

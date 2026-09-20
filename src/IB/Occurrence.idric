@@ -138,12 +138,16 @@ occurrence_at wanted_source fragments strand coordinate =
         Nothing ⇒ Nothing
         Just position ⇒ Just (Hit coordinate position found_fragment)
 
-collect_occurrences : String → List SourceFragment → Strand → List SourceCoordinate → List Occurrence
-collect_occurrences wanted_source fragments strand [] = []
+collect_occurrences :
+  String → List SourceFragment → Strand → List SourceCoordinate → Maybe (List Occurrence)
+collect_occurrences wanted_source fragments strand [] = Just []
 collect_occurrences wanted_source fragments strand (coordinate :: rest) =
   case occurrence_at wanted_source fragments strand coordinate of
-    Nothing ⇒ collect_occurrences wanted_source fragments strand rest
-    Just occurrence ⇒ occurrence :: collect_occurrences wanted_source fragments strand rest
+    Nothing ⇒ Nothing
+    Just occurrence ⇒
+      case collect_occurrences wanted_source fragments strand rest of
+        Nothing ⇒ Nothing
+        Just occurrences ⇒ Just (occurrence :: occurrences)
 
 seen_fragment : String → List String → Bool
 seen_fragment wanted [] = False
@@ -205,12 +209,11 @@ search_occurrences :
   String → AuthoritativeText → List SourceFragment → Strand → Maybe (List Occurrence)
 search_occurrences wanted source fragments strand =
   if fragment_map_valid source fragments && strand_valid_for fragments strand
-    then Just
-      (collect_occurrences
-        (source_id source)
-        fragments
-        strand
-        (literal_offsets wanted source))
+    then collect_occurrences
+      (source_id source)
+      fragments
+      strand
+      (literal_offsets wanted source)
     else Nothing
 
 unique_occurrence_fragments : List String → List Occurrence → List String
