@@ -97,13 +97,8 @@ exercise_core() {
   test -x ./build/exec/ib-occurrence-smoke
   ! grep -q '^Error:' /tmp/idric-occurrence-compile.txt
   ./build/exec/ib-occurrence-smoke | tee /tmp/ib-occurrence-smoke.txt
-  grep -Fx 'occurrence-count=2' /tmp/ib-occurrence-smoke.txt
-  grep -Fx 'matching-fragment-count=2' /tmp/ib-occurrence-smoke.txt
-  grep -Fx 'cross-boundary-count=1' /tmp/ib-occurrence-smoke.txt
-  grep -Fx 'first-window-count=2' /tmp/ib-occurrence-smoke.txt
-  grep -Fx 'second-window-count=3' /tmp/ib-occurrence-smoke.txt
-  grep -Fx 'stale-window=False' /tmp/ib-occurrence-smoke.txt
-  grep -Fx 'unicode-count=1' /tmp/ib-occurrence-smoke.txt
+  cmp "$repository_root/tests/fixtures/occurrence-smoke.expected" \
+    /tmp/ib-occurrence-smoke.txt
 }
 
 exercise_workbench() {
