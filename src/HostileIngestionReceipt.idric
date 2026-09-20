@@ -3,6 +3,7 @@ module Main
 import IB.Information
 import IB.RecoveredInformation
 import System
+import System.FFI
 import System.File
 
 emit_meta : String → String → IO ()
@@ -65,6 +66,7 @@ document_contract_holds fixture view =
     then has_table_row ["A", "B"] view
     else True
 
+covering
 run : String → String → String → String → String → String → String → String → IO ()
 run fixture path expected_title expected_link_text expected_link_href
     corpus_repository_revision implementation_revision executable_sha256 = do
@@ -120,6 +122,7 @@ usage = do
     "usage: ib-hostile-ingestion FIXTURE PATH TITLE LINK_TEXT LINK_HREF CORPUS_REPOSITORY_REVISION IMPLEMENTATION_REVISION EXECUTABLE_SHA256"
   exitFailure
 
+covering
 main : IO ()
 main = do
   arguments ← getArgs

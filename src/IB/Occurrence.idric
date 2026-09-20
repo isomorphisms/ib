@@ -16,7 +16,7 @@ source_text (SourceText _ value) = value
 
 -- Source ranges are half-open: source_start <= coordinate < source_end.
 public export
-data SourceFragment = Fragment String String Nat Nat
+data SourceFragment = Fragment String String Number Number
 
 public export
 fragment_id : SourceFragment → String
@@ -27,11 +27,11 @@ fragment_source_id : SourceFragment → String
 fragment_source_id (Fragment _ value _ _) = value
 
 public export
-fragment_source_start : SourceFragment → Nat
+fragment_source_start : SourceFragment → Number
 fragment_source_start (Fragment _ _ value _) = value
 
 public export
-fragment_source_end : SourceFragment → Nat
+fragment_source_end : SourceFragment → Number
 fragment_source_end (Fragment _ _ _ value) = value
 
 -- A strand is source-agnostic.  The occurrence path uses a document-order
@@ -51,14 +51,14 @@ strand_fragment_ids (MaterializedStrand _ value) = value
 -- on the supplied materialized strand.  The fragment id remains the durable
 -- identity.
 public export
-data Occurrence = Hit Nat Nat String
+data Occurrence = Hit Number Number String
 
 public export
-occurrence_source_start : Occurrence → Nat
+occurrence_source_start : Occurrence → Number
 occurrence_source_start (Hit value _ _) = value
 
 public export
-occurrence_strand_position : Occurrence → Nat
+occurrence_strand_position : Occurrence → Number
 occurrence_strand_position (Hit _ value _) = value
 
 public export
@@ -80,7 +80,7 @@ literal_offsets_from position wanted chars@(_ :: rest) =
 
 -- Empty text is not treated as an occurrence at every source coordinate.
 public export
-literal_offsets : String → AuthoritativeText → List Nat
+literal_offsets : String → AuthoritativeText → List Number
 literal_offsets wanted source =
   if wanted == ""
     then []
@@ -180,7 +180,7 @@ fragment_id_at (S position) (_ :: rest) = fragment_id_at position rest
 -- position/id pair fails rather than silently returning context around a
 -- different fragment.
 public export
-context_fragment_ids : Nat → Nat → Occurrence → Strand → Maybe (List String)
+context_fragment_ids : Number → Number → Occurrence → Strand → Maybe (List String)
 context_fragment_ids before after occurrence strand =
   let position = occurrence_strand_position occurrence in
   let ids = strand_fragment_ids strand in

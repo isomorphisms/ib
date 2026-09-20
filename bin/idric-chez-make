@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+# Idriç's aggregate support install includes RefC/GMP. IB's accepted compiler
+# path is Chez. Narrow only the recursive `make -C support install` call while
+# leaving every other bootstrap make invocation unchanged.
+support_directory=false
+aggregate_install=false
+previous=''
+for argument in "$@"; do
+  if [[ $previous == -C && $argument == support ]]; then
+    support_directory=true
+  fi
+  if [[ $argument == install ]]; then
+    aggregate_install=true
+  fi
+  previous=$argument
+done
+
+if $support_directory && $aggregate_install; then
+  narrowed=()
+  for argument in "$@"; do
+    if [[ $argument == install ]]; then
+      narrowed+=(
+        install-docs install-racket install-gambit install-js
+        install-c install-chez
+      )
+    else
+      narrowed+=("$argument")
+    fi
+  done
+  exec make "${narrowed[@]}" MAKE="$0"
+fi
+
+exec make "$@" MAKE="$0"
