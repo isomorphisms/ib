@@ -3,7 +3,7 @@ set -eu
 
 repository_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 idric_prefix=${IDRIC_PREFIX:-/tmp/idric}
-idric_ref=${IDRIC_REF:-61970be77769f607cca8650bf424c0f0b22ddee7}
+idric_ref=${IDRIC_REF:-a8c24b10c143e97f8b24fc90a929eeee1e8f0392}
 pdf_harvester_ref=${PDF_HARVESTER_REF:-77d85dc6f7e89d109cb9e06f42706bc34f00e4a3}
 aici_ref=${AICI_REF:-c1e423d506f6adfc8c1c9659a4faaf94ae84eaf0}
 
@@ -61,13 +61,8 @@ exercise_core() {
   test -x ./build/exec/ib-occurrence-smoke
   ! grep -q '^Error:' /tmp/idric-occurrence-compile.txt
   ./build/exec/ib-occurrence-smoke | tee /tmp/ib-occurrence-smoke.txt
-  grep -Fx 'occurrence-count=2' /tmp/ib-occurrence-smoke.txt
-  grep -Fx 'matching-fragment-count=2' /tmp/ib-occurrence-smoke.txt
-  grep -Fx 'cross-boundary-count=1' /tmp/ib-occurrence-smoke.txt
-  grep -Fx 'first-window-count=2' /tmp/ib-occurrence-smoke.txt
-  grep -Fx 'second-window-count=3' /tmp/ib-occurrence-smoke.txt
-  grep -Fx 'stale-window=False' /tmp/ib-occurrence-smoke.txt
-  grep -Fx 'unicode-count=1' /tmp/ib-occurrence-smoke.txt
+  cmp "$repository_root/tests/fixtures/occurrence-smoke.expected" \
+    /tmp/ib-occurrence-smoke.txt
 }
 
 exercise_workbench() {

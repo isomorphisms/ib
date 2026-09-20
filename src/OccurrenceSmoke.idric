@@ -29,38 +29,147 @@ unicode_fragments = [Fragment "u0001" "fixture:unicode" 0 5]
 unicode_strand : Strand
 unicode_strand = MaterializedStrand "document-order:unicode" ["u0001"]
 
-occurrence_at_index : Nat → List Occurrence → Maybe Occurrence
+duplicate_source : AuthoritativeText
+duplicate_source = SourceText "fixture:duplicate" "echo echo"
+
+duplicate_fragments : List SourceFragment
+duplicate_fragments = [Fragment "d0001" "fixture:duplicate" 0 9]
+
+duplicate_strand : Strand
+duplicate_strand = MaterializedStrand "document-order:duplicate" ["d0001"]
+
+overlapping_fragments : List SourceFragment
+overlapping_fragments = [
+  Fragment "o0001" "fixture:duplicate" 0 6,
+  Fragment "o0002" "fixture:duplicate" 5 9
+  ]
+
+repeated_identifier_fragments : List SourceFragment
+repeated_identifier_fragments = [
+  Fragment "r0001" "fixture:duplicate" 0 4,
+  Fragment "r0001" "fixture:duplicate" 5 9
+  ]
+
+invalid_range_fragments : List SourceFragment
+invalid_range_fragments = [Fragment "i0001" "fixture:duplicate" 4 4]
+
+occurrence_at_index : Number → List Occurrence → Maybe Occurrence
 occurrence_at_index Z [] = Nothing
 occurrence_at_index Z (value :: _) = Just value
 occurrence_at_index (S index) [] = Nothing
 occurrence_at_index (S index) (_ :: rest) = occurrence_at_index index rest
 
-window_count : Nat → Nat → Maybe Occurrence → Strand → Nat
-window_count before after Nothing strand = 0
-window_count before after (Just occurrence) strand =
-  case context_fragment_ids before after occurrence strand of
-    Nothing ⇒ 0
-    Just ids ⇒ length ids
+render_numbers : List Number → String
+render_numbers [] = ""
+render_numbers [value] = show value
+render_numbers (value :: rest) = show value ++ "," ++ render_numbers rest
 
-window_available : Nat → Nat → Maybe Occurrence → Strand → Bool
-window_available before after Nothing strand = False
-window_available before after (Just occurrence) strand =
+render_identifiers : List String → String
+render_identifiers [] = ""
+render_identifiers [value] = value
+render_identifiers (value :: rest) = value ++ "," ++ render_identifiers rest
+
+render_occurrence : Occurrence → String
+render_occurrence (Hit coordinate position identifier) =
+  show coordinate ++ ":" ++ show position ++ ":" ++ identifier
+
+render_occurrences : List Occurrence → String
+render_occurrences [] = ""
+render_occurrences [value] = render_occurrence value
+render_occurrences (value :: rest) =
+  render_occurrence value ++ "," ++ render_occurrences rest
+
+render_search : Maybe (List Occurrence) → String
+render_search Nothing = "INVALID"
+render_search (Just occurrences) = render_occurrences occurrences
+
+render_matching_fragments : Maybe (List String) → String
+render_matching_fragments Nothing = "INVALID"
+render_matching_fragments (Just identifiers) = render_identifiers identifiers
+
+render_context : Number → Number → Maybe Occurrence → Strand → String
+render_context before after Nothing strand = "MISSING"
+render_context before after (Just occurrence) strand =
   case context_fragment_ids before after occurrence strand of
-    Nothing ⇒ False
-    Just _ ⇒ True
+    Nothing ⇒ "INVALID"
+    Just identifiers ⇒ render_identifiers identifiers
 
 main : IO ()
 main = do
   let holmes = search_occurrences "Holmes" sample_source sample_fragments sample_strand
   let crossing = search_occurrences "one.\nWatson" sample_source sample_fragments sample_strand
   let unicode = search_occurrences "京都" unicode_source unicode_fragments unicode_strand
+  let duplicate = search_occurrences "echo" duplicate_source duplicate_fragments duplicate_strand
   let stale = MaterializedStrand
         "document-order:sherlock-adventures:changed"
         ["f0002", "f0001", "f0003", "f0004"]
-  putStrLn ("occurrence-count=" ++ show (length holmes))
-  putStrLn ("matching-fragment-count=" ++ show (length (matching_fragment_ids "Holmes" sample_source sample_fragments sample_strand)))
-  putStrLn ("cross-boundary-count=" ++ show (length crossing))
-  putStrLn ("first-window-count=" ++ show (window_count 1 1 (occurrence_at_index 0 holmes) sample_strand))
-  putStrLn ("second-window-count=" ++ show (window_count 1 1 (occurrence_at_index 1 holmes) sample_strand))
-  putStrLn ("stale-window=" ++ show (window_available 1 1 (occurrence_at_index 0 holmes) stale))
-  putStrLn ("unicode-count=" ++ show (length unicode))
+  let missing_fragment_strand = MaterializedStrand
+        "document-order:sherlock-adventures:missing"
+        ["f0001", "f0002", "f0004"]
+  let repeated_identifier_strand = MaterializedStrand
+        "document-order:sherlock-adventures:duplicate"
+        ["f0001", "f0002", "f0003", "f0003", "f0004"]
+  putStrLn ("holmes-offsets=" ++ render_numbers (literal_offsets "Holmes" sample_source))
+  putStrLn ("holmes-hits=" ++ render_search holmes)
+  putStrLn
+    ("holmes-fragments=" ++
+      render_matching_fragments
+        (matching_fragment_ids "Holmes" sample_source sample_fragments sample_strand))
+  putStrLn ("cross-boundary-hits=" ++ render_search crossing)
+  case holmes of
+    Nothing ⇒ do
+      putStrLn "first-window=MISSING"
+      putStrLn "second-window=MISSING"
+      putStrLn "stale-window=MISSING"
+    Just occurrences ⇒ do
+      putStrLn
+        ("first-window=" ++
+          render_context 1 1 (occurrence_at_index 0 occurrences) sample_strand)
+      putStrLn
+        ("second-window=" ++
+          render_context 1 1 (occurrence_at_index 1 occurrences) sample_strand)
+      putStrLn
+        ("stale-window=" ++
+          render_context 1 1 (occurrence_at_index 0 occurrences) stale)
+  putStrLn ("unicode-hits=" ++ render_search unicode)
+  putStrLn ("duplicate-hits=" ++ render_search duplicate)
+  putStrLn
+    ("duplicate-fragments=" ++
+      render_matching_fragments
+        (matching_fragment_ids
+          "echo"
+          duplicate_source
+          duplicate_fragments
+          duplicate_strand))
+  putStrLn
+    ("overlap-search=" ++
+      render_search
+        (search_occurrences
+          "echo"
+          duplicate_source
+          overlapping_fragments
+          (MaterializedStrand "document-order:overlap" ["o0001", "o0002"])))
+  putStrLn
+    ("repeated-fragment-search=" ++
+      render_search
+        (search_occurrences
+          "echo"
+          duplicate_source
+          repeated_identifier_fragments
+          (MaterializedStrand "document-order:repeated" ["r0001"])))
+  putStrLn
+    ("invalid-range-search=" ++
+      render_search
+        (search_occurrences
+          "echo"
+          duplicate_source
+          invalid_range_fragments
+          (MaterializedStrand "document-order:invalid" ["i0001"])))
+  putStrLn
+    ("missing-strand-search=" ++
+      render_search
+        (search_occurrences "Holmes" sample_source sample_fragments missing_fragment_strand))
+  putStrLn
+    ("repeated-strand-search=" ++
+      render_search
+        (search_occurrences "Holmes" sample_source sample_fragments repeated_identifier_strand))
