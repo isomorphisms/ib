@@ -33,6 +33,31 @@ public final class IncrementalBackgroundContractTest {
     }
 
     @Test
+    public void rejects_activity_without_picture_in_picture_support() {
+        expect_rejection(
+            minimal_manifest().replace(" android:supportsPictureInPicture=\"true\"", ""),
+            safe_activity(),
+            safe_launcher(),
+            safe_service(),
+            "incremental page activity must support Picture-in-Picture"
+        );
+    }
+
+    @Test
+    public void rejects_activity_that_does_not_check_picture_in_picture_feature() {
+        expect_rejection(
+            minimal_manifest(),
+            safe_activity().replace(
+                "FEATURE_PICTURE_IN_PICTURE",
+                "FEATURE_CAMERA"
+            ),
+            safe_launcher(),
+            safe_service(),
+            "incremental page must remain visibly attached in Picture-in-Picture"
+        );
+    }
+
+    @Test
     public void rejects_launcher_reentry_that_reloads_the_page() {
         expect_rejection(
             minimal_manifest(),
@@ -82,6 +107,34 @@ public final class IncrementalBackgroundContractTest {
         );
     }
 
+    @Test
+    public void rejects_deliberately_hidden_background_loading() {
+        expect_rejection(
+            minimal_manifest(),
+            safe_activity().replace(
+                "enterPictureInPictureMode(picture_in_picture_params());",
+                "moveTaskToBack(true);"
+            ),
+            safe_launcher(),
+            safe_service(),
+            "incremental page must remain visibly attached in Picture-in-Picture"
+        );
+    }
+
+    @Test
+    public void rejects_missing_android_12_auto_enter() {
+        expect_rejection(
+            minimal_manifest(),
+            safe_activity().replace(
+                "setAutoEnterEnabled(true)",
+                "setAutoEnterEnabled(false)"
+            ),
+            safe_launcher(),
+            safe_service(),
+            "incremental page must auto-enter Picture-in-Picture when the user leaves"
+        );
+    }
+
     private static void verify(
         String manifest,
         String activity,
@@ -91,6 +144,13 @@ public final class IncrementalBackgroundContractTest {
         require(
             manifest.contains("android:launchMode=\"singleTask\""),
             "incremental page activity must be singleTask"
+        );
+        require(
+            manifest.contains("android:supportsPictureInPicture=\"true\"")
+                && manifest.contains(
+                    "screenSize|smallestScreenSize|screenLayout|orientation"
+                ),
+            "incremental page activity must support Picture-in-Picture"
         );
         require(
             manifest.contains("android:name=\".IncrementalLoadService\"")
@@ -131,6 +191,16 @@ public final class IncrementalBackgroundContractTest {
                 )
                 && activity.contains("__ib_incremental_heap_canary"),
             "incremental page must protect both host and renderer processes"
+        );
+        require(
+            activity.contains("FEATURE_PICTURE_IN_PICTURE")
+                && activity.contains("enterPictureInPictureMode(")
+                && !activity.contains("moveTaskToBack(true)"),
+            "incremental page must remain visibly attached in Picture-in-Picture"
+        );
+        require(
+            activity.contains("setAutoEnterEnabled(true)"),
+            "incremental page must auto-enter Picture-in-Picture when the user leaves"
         );
         require(
             service.contains("startForeground(")
@@ -186,7 +256,9 @@ public final class IncrementalBackgroundContractTest {
     private static String minimal_manifest() {
         return "<uses-permission android:name=\"android.permission.POST_NOTIFICATIONS\" />"
             + "<activity android:name=\".IncrementalLargePageActivity\""
-            + " android:launchMode=\"singleTask\" android:process=\":incremental\" />"
+            + " android:launchMode=\"singleTask\" android:process=\":incremental\""
+            + " android:supportsPictureInPicture=\"true\""
+            + " android:configChanges=\"screenSize|smallestScreenSize|screenLayout|orientation\" />"
             + "<service android:name=\".IncrementalLoadService\""
             + " android:foregroundServiceType=\"dataSync\""
             + " android:process=\":incremental\" />";
@@ -197,7 +269,10 @@ public final class IncrementalBackgroundContractTest {
             + "requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS},74);"
             + "view.setRendererPriorityPolicy(WebView.RENDERER_PRIORITY_IMPORTANT, false);"
             + "String marker=\"__ib_incremental_heap_canary\";"
-            + "copy_journal_to_clipboard();clipboard.setPrimaryClip(clip);}"
+            + "copy_journal_to_clipboard();clipboard.setPrimaryClip(clip);"
+            + "String feature=\"FEATURE_PICTURE_IN_PICTURE\";"
+            + "setAutoEnterEnabled(true);"
+            + "enterPictureInPictureMode(picture_in_picture_params());}"
             + " protected void onNewIntent(){sample_page(\"launcher-reentry\");}"
             + " protected void onResume(){}";
     }

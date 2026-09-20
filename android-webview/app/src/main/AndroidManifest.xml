@@ -19,10 +19,12 @@
 
         <activity
             android:name=".IncrementalLargePageActivity"
+            android:configChanges="screenSize|smallestScreenSize|screenLayout|orientation"
             android:exported="true"
             android:label="IB Incremental Page"
             android:launchMode="singleTask"
-            android:process=":incremental" />
+            android:process=":incremental"
+            android:supportsPictureInPicture="true" />
 
         <service
             android:name=".IncrementalLoadService"

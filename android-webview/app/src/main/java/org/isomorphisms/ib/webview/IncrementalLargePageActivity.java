@@ -2,11 +2,13 @@ package org.isomorphisms.ib.webview;
 
 import android.Manifest;
 import android.app.Activity;
+import android.app.PictureInPictureParams;
 import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.content.res.Configuration;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -14,6 +16,8 @@ import android.os.Handler;
 import android.os.Looper;
 import android.os.Process;
 import android.os.SystemClock;
+import android.util.Rational;
+import android.view.View;
 import android.webkit.CookieManager;
 import android.webkit.JavascriptInterface;
 import android.webkit.RenderProcessGoneDetail;
@@ -51,6 +55,9 @@ public final class IncrementalLargePageActivity extends Activity {
     };
 
     private LinearLayout web_container;
+    private TextView heading;
+    private LinearLayout controls;
+    private LinearLayout receipt_controls;
     private TextView status;
     private WebView web_view;
     private File journal_file;
@@ -60,6 +67,7 @@ public final class IncrementalLargePageActivity extends Activity {
     private boolean form_dirty;
     private boolean destroyed;
     private boolean notification_permission_requested;
+    private boolean picture_in_picture_available;
 
     @Override
     protected void onCreate(Bundle saved_instance_state) {
@@ -75,9 +83,14 @@ public final class IncrementalLargePageActivity extends Activity {
         journal_file = create_journal_file();
 
         build_ui();
+        configure_picture_in_picture();
         record(
             "run",
             "target=" + safe_target_identity(target_url) + " host-pid=" + Process.myPid()
+        );
+        record(
+            "liveness",
+            "picture-in-picture-available=" + picture_in_picture_available
         );
         ensure_incremental_service();
         attach_webview();
@@ -124,12 +137,38 @@ public final class IncrementalLargePageActivity extends Activity {
     @Override
     protected void onPause() {
         if (status != null) {
-            record("activity", "background");
+            record(
+                "activity",
+                isInPictureInPictureMode()
+                    ? "picture-in-picture-paused"
+                    : "hidden"
+            );
         }
-        // Deliberately do not pause WebView timers here.  This experiment asks
-        // whether a slow page can keep making progress while its task is not in
-        // the foreground.  Android may still throttle or kill the process.
+        // Deliberately do not pause WebView timers here.  Picture-in-picture
+        // keeps the document visibly attached while another app is foreground.
         super.onPause();
+    }
+
+    @Override
+    public void onUserLeaveHint() {
+        super.onUserLeaveHint();
+        if (Build.VERSION.SDK_INT < 31) {
+            enter_visible_background("user-leave");
+        }
+    }
+
+    @Override
+    public void onPictureInPictureModeChanged(
+        boolean in_picture_in_picture,
+        Configuration new_configuration
+    ) {
+        super.onPictureInPictureModeChanged(in_picture_in_picture, new_configuration);
+        int chrome_visibility = in_picture_in_picture ? View.GONE : View.VISIBLE;
+        heading.setVisibility(chrome_visibility);
+        controls.setVisibility(chrome_visibility);
+        receipt_controls.setVisibility(chrome_visibility);
+        status.setVisibility(chrome_visibility);
+        record("activity", "picture-in-picture=" + in_picture_in_picture);
     }
 
     @Override
@@ -147,23 +186,23 @@ public final class IncrementalLargePageActivity extends Activity {
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
 
-        TextView heading = new TextView(this);
+        heading = new TextView(this);
         heading.setText("IB incremental large-page render");
         heading.setTextSize(19);
         heading.setPadding(dp(12), dp(10), dp(12), dp(4));
         root.addView(heading);
 
-        LinearLayout controls = new LinearLayout(this);
+        controls = new LinearLayout(this);
         controls.setOrientation(LinearLayout.HORIZONTAL);
 
         Button reload = button("Reload");
         reload.setOnClickListener(view -> explicit_reload());
         controls.addView(reload, weighted_button_params());
 
-        Button background = button("Background");
+        Button background = button("Keep loading");
         background.setOnClickListener(view -> {
-            record("user", "background-requested");
-            moveTaskToBack(true);
+            record("user", "visible-background-requested");
+            enter_visible_background("button");
         });
         controls.addView(background, weighted_button_params());
 
@@ -172,7 +211,7 @@ public final class IncrementalLargePageActivity extends Activity {
         controls.addView(sample, weighted_button_params());
         root.addView(controls);
 
-        LinearLayout receipt_controls = new LinearLayout(this);
+        receipt_controls = new LinearLayout(this);
         receipt_controls.setOrientation(LinearLayout.HORIZONTAL);
 
         Button copy_receipt = button("Copy receipt");
@@ -230,6 +269,46 @@ public final class IncrementalLargePageActivity extends Activity {
             "liveness",
             "foreground-service-requested notification-permission="
                 + (notification_granted ? "granted" : "not-granted")
+        );
+    }
+
+    private void configure_picture_in_picture() {
+        picture_in_picture_available = getPackageManager().hasSystemFeature(
+            PackageManager.FEATURE_PICTURE_IN_PICTURE
+        );
+        if (!picture_in_picture_available) {
+            append_status(
+                "Picture-in-Picture is unavailable; hidden WebView survival cannot be guaranteed"
+            );
+            return;
+        }
+        setPictureInPictureParams(picture_in_picture_params());
+    }
+
+    private PictureInPictureParams picture_in_picture_params() {
+        PictureInPictureParams.Builder builder = new PictureInPictureParams.Builder()
+            .setAspectRatio(new Rational(1, 1));
+        if (Build.VERSION.SDK_INT >= 31) {
+            builder.setAutoEnterEnabled(true);
+            builder.setSeamlessResizeEnabled(false);
+        }
+        return builder.build();
+    }
+
+    private void enter_visible_background(String reason) {
+        if (!picture_in_picture_available || isInPictureInPictureMode()) {
+            record(
+                "liveness",
+                "picture-in-picture-entry reason=" + reason
+                    + " available=" + picture_in_picture_available
+                    + " already-active=" + isInPictureInPictureMode()
+            );
+            return;
+        }
+        boolean entered = enterPictureInPictureMode(picture_in_picture_params());
+        record(
+            "liveness",
+            "picture-in-picture-entry reason=" + reason + " entered=" + entered
         );
     }
 

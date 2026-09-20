@@ -10,8 +10,8 @@ android {
         applicationId = "org.isomorphisms.ib.webview"
         minSdk = 26
         targetSdk = 36
-        versionCode = 2
-        versionName = "0.2.0"
+        versionCode = 3
+        versionName = "0.3.0"
     }
 
     buildTypes {
@@ -43,6 +43,15 @@ tasks.register("verifyWebViewBoundary") {
         }
         check(implementation.contains("RENDERER_PRIORITY_IMPORTANT")) {
             "Protected transactions must request important renderer priority."
+        }
+        check(implementation.contains("android:supportsPictureInPicture=\"true\"")) {
+            "Unattended loading must keep the WebView visibly attached in Picture-in-Picture."
+        }
+        check(implementation.contains("setAutoEnterEnabled(true)")) {
+            "Leaving the activity must enter Picture-in-Picture on Android 12+."
+        }
+        check(!implementation.contains("moveTaskToBack(true)")) {
+            "Do not deliberately hide the incremental WebView after physical renderer eviction."
         }
         check(implementation.contains("startForeground(")) {
             "Incremental background loading must keep its host process active."
