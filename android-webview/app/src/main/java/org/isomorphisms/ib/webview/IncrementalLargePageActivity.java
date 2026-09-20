@@ -1,6 +1,7 @@
 package org.isomorphisms.ib.webview;
 
 import android.app.Activity;
+import android.content.Intent;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -67,9 +68,19 @@ public final class IncrementalLargePageActivity extends Activity {
 
         build_ui();
         record("run", "target=" + safe_target_identity(target_url));
+        IncrementalLoadService.start(this);
+        record("liveness", "foreground-service-requested");
         attach_webview();
         web_view.loadUrl(target_url);
         handler.postDelayed(periodic_sample, 5000);
+    }
+
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        IncrementalLoadService.start(this);
+        record("activity", "launcher-reentry existing-page-preserved");
+        sample_page("launcher-reentry");
     }
 
     @Override
@@ -96,6 +107,9 @@ public final class IncrementalLargePageActivity extends Activity {
         destroyed = true;
         handler.removeCallbacks(periodic_sample);
         destroy_webview();
+        if (isFinishing()) {
+            IncrementalLoadService.stop(this);
+        }
         super.onDestroy();
     }
 
@@ -157,6 +171,7 @@ public final class IncrementalLargePageActivity extends Activity {
 
         WebView view = new WebView(this);
         view.setSaveEnabled(false);
+        view.setRendererPriorityPolicy(WebView.RENDERER_PRIORITY_IMPORTANT, false);
 
         WebSettings settings = view.getSettings();
         settings.setJavaScriptEnabled(true);
@@ -278,6 +293,9 @@ public final class IncrementalLargePageActivity extends Activity {
             return;
         }
         String script = "(function(){"
+            + "if(!window.__ib_incremental_heap_canary){"
+            + "window.__ib_incremental_heap_canary=String(Math.round(performance.timeOrigin))+'-'+String(Math.random()).slice(2);"
+            + "}"
             + "var n=performance.getEntriesByType('navigation')[0];"
             + "var r=performance.getEntriesByType('resource');"
             + "var p=performance.getEntriesByType('paint');"
@@ -285,6 +303,7 @@ public final class IncrementalLargePageActivity extends Activity {
             + "for(var i=0;i<p.length;i++){if(p[i].name==='first-contentful-paint'){fcp=Math.round(p[i].startTime);}}"
             + "var controls=document.querySelectorAll('input,select,textarea,button').length;"
             + "return ["
+            + "'heap='+window.__ib_incremental_heap_canary,"
             + "'ready='+document.readyState,"
             + "'resources='+r.length,"
             + "'domInteractive='+(n?Math.round(n.domInteractive):-1),"

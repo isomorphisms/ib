@@ -74,10 +74,30 @@ invoked from an application UID such as Termux.
 The adapter records coarse load progress, first committed visible content,
 `onPageFinished`, compact Performance API timing/count samples, and renderer
 death to an app-private disk journal. **Background** moves the task out of the
-foreground without deliberately pausing WebView timers, so a phone run can
-observe whether the live renderer keeps progressing while its process survives.
+foreground without deliberately pausing WebView timers. A foreground data-sync
+service in the same `:incremental` process keeps the host process active and
+shows an ongoing notification while that page remains open. The WebView also
+requests important renderer priority while visible or hidden.
+
+Opening **IB Large Page** again brings the existing incremental Activity to the
+front. It records `launcher-reentry existing-page-preserved` and samples the
+existing document; it does not create a second WebView or call `loadUrl` again.
+The notification follows the same re-entry path. Its **Stop** action removes the
+extra process protection without claiming that Android or WebView preserved the
+page.
+
+The foreground service reduces host- and renderer-process eviction. It does not
+make a hidden document visible to Chromium, disable hidden-page JavaScript
+throttling, or prove that Google Cloud Console continues task-relevant work.
+Those remain physical-device observations.
 
 For forms it records only whether an input/change event made the page dirty; it
 does not read the value. Renderer death never automatically reloads this real
 page. **Reload** is an explicit user action because replaying or discarding an
 in-progress form is not a renderer-recovery implementation detail.
+
+The unattended-load acceptance run is ten minutes in another app. Returning
+through both Android Recents and the **IB Large Page** icon must retain the same
+run and JavaScript heap, show no second navigation start, and show whether the
+five-second resource/control samples advanced while IB was off-screen. Build,
+installation, and notification presence do not substitute for that run.

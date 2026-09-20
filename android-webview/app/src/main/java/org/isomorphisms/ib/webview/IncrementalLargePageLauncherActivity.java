@@ -19,6 +19,7 @@ public final class IncrementalLargePageLauncherActivity extends Activity {
 
         Intent intent = new Intent(this, IncrementalLargePageActivity.class);
         intent.putExtra("url", TARGET_URL);
+        intent.addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT | Intent.FLAG_ACTIVITY_SINGLE_TOP);
         startActivity(intent);
         finish();
     }

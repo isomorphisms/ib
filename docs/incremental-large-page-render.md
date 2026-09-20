@@ -67,7 +67,9 @@ Renderer death is also different from form reconstruction. If a renderer disappe
 - records navigation start, coarse WebView progress, first committed visible content, page-finished callbacks, renderer death, and compact Performance API samples;
 - records counts and timings, not form values or resource URLs;
 - installs an input/change listener that records only `dirty=true`;
-- keeps its WebView active when the task is moved to the background so the experiment can observe whether progress continues while the process survives;
+- starts a foreground data-sync service in the same `:incremental` process so the host remains active while the task is off-screen;
+- requests important renderer priority even when the WebView is hidden;
+- treats launcher and notification re-entry as a request to expose and sample the existing page, never as an implicit reload;
 - appends progress to an app-private on-disk journal;
 - requires an explicit user reload after renderer death instead of silently replaying an edited form.
 
@@ -76,6 +78,7 @@ This adapter does **not** yet prove:
 - reuse of the user's Chrome/Google authenticated session;
 - successful Google sign-in inside WebView;
 - durable continuation after Android kills the incremental process;
+- unthrottled hidden-page JavaScript or equivalence to a visible Chromium page;
 - exact reconstruction of a JavaScript heap;
 - safe generic persistence of arbitrary form values;
 - that `onPageFinished` means the application is task-ready.
@@ -102,6 +105,13 @@ Example explicit launch after installing the branch APK:
 
 Tap **Background** as soon as waiting becomes pointless. Returning to the task should show whether the same process continued to advance. **Sample** records a fresh compact timing/count snapshot. **Reload** is explicit because a reload can destroy live form state.
 
+The foreground notification is the user-visible lifetime of this experiment.
+Its **Stop** action removes the foreground service. Returning through Android
+Recents, the **IB Large Page** launcher, or the notification must expose the
+same Activity and WebView. Launcher re-entry records
+`launcher-reentry existing-page-preserved` and must not emit a second `run` or
+`navigation started` entry.
+
 ## Acceptance questions
 
 The first real run should answer these separately:
@@ -116,5 +126,16 @@ The first real run should answer these separately:
 8. If the renderer dies after an edit, does IB refuse automatic replay and report the boundary?
 9. If the Android process is killed, which disk artifacts remain useful and which stages must be recomputed?
 10. Which of the observed long stages can be moved into a restartable Grease worker or satisfied by an extracted representation without waiting for the full application?
+
+The first unattended-load receipt uses a ten-minute interval in another app.
+It must bind the before/after samples to one journal and report separately:
+
+- whether the host process survived;
+- whether the same WebView/JavaScript heap survived;
+- whether resource, document, or control milestones advanced;
+- whether returning through Recents and through the launcher both preserved the page;
+- whether Android or the site throttled progress despite process survival.
+
+A green APK build establishes none of those physical-device results.
 
 The point of the experiment is not to declare the page fast after one run. It is to identify the blocking chain, make useful partial state visible, and progressively move non-interactive work out of the user's critical path.
