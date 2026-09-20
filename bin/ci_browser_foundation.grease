@@ -3,7 +3,8 @@ set -eu
 
 repository_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 idric_prefix=${IDRIC_PREFIX:-/tmp/idric}
-idric_ref=${IDRIC_REF:-a8c24b10c143e97f8b24fc90a929eeee1e8f0392}
+idric_ref=${IDRIC_REF:-61970be77769f607cca8650bf424c0f0b22ddee7}
+occurrence_idric_ref=${OCCURRENCE_IDRIC_REF:-a8c24b10c143e97f8b24fc90a929eeee1e8f0392}
 pdf_harvester_ref=${PDF_HARVESTER_REF:-77d85dc6f7e89d109cb9e06f42706bc34f00e4a3}
 aici_ref=${AICI_REF:-c1e423d506f6adfc8c1c9659a4faaf94ae84eaf0}
 
@@ -19,6 +20,17 @@ build_idric() {
   git -C /tmp/Idric fetch --depth 1 origin "$idric_ref"
   git -C /tmp/Idric checkout --detach -q FETCH_HEAD
   test "$(git -C /tmp/Idric rev-parse HEAD)" = "$idric_ref"
+  SCHEME=chezscheme make -C /tmp/Idric bootstrap PREFIX="$idric_prefix"
+  SCHEME=chezscheme make -C /tmp/Idric install PREFIX="$idric_prefix"
+}
+
+build_occurrence_idric() {
+  rm -rf /tmp/Idric
+  git init -q /tmp/Idric
+  git -C /tmp/Idric remote add origin https://github.com/isomorphisms/Idric.git
+  git -C /tmp/Idric fetch --depth 1 origin "$occurrence_idric_ref"
+  git -C /tmp/Idric checkout --detach -q FETCH_HEAD
+  test "$(git -C /tmp/Idric rev-parse HEAD)" = "$occurrence_idric_ref"
   EDRIC_TOOLCHAIN_DIR="$idric_prefix/.tools" \
     PREFIX="$idric_prefix" \
     /tmp/Idric/edric bootstrap
@@ -59,6 +71,10 @@ exercise_core() {
   grep -Fx 'prefetch-bounded=2' /tmp/ib-smoke.txt
   grep -Fx 'prefetch-reading=1' /tmp/ib-smoke.txt
 
+}
+
+exercise_occurrence() {
+  cd "$repository_root/src"
   "$idric_prefix/bin/idris2" OccurrenceSmoke.idric -o ib-occurrence-smoke \
     2>&1 | tee /tmp/idric-occurrence-compile.txt
   test -x ./build/exec/ib-occurrence-smoke
@@ -203,16 +219,18 @@ exercise_live_arxiv_prepaint() {
 case "${1:-}" in
   install-dependencies) install_dependencies ;;
   build-idric) build_idric ;;
+  build-occurrence-idric) build_occurrence_idric ;;
   verify-pdf-harvester) verify_pdf_harvester ;;
   exercise-information) exercise_information ;;
   exercise-hostile-ingestion) exercise_hostile_ingestion ;;
   exercise-core) exercise_core ;;
+  exercise-occurrence) exercise_occurrence ;;
   exercise-workbench) exercise_workbench ;;
   exercise-scientific-media) exercise_scientific_media ;;
   exercise-live-arxiv) exercise_live_arxiv ;;
   exercise-live-arxiv-prepaint) exercise_live_arxiv_prepaint ;;
   *)
-    printf 'usage: %s {install-dependencies|build-idric|verify-pdf-harvester|exercise-information|exercise-hostile-ingestion|exercise-core|exercise-workbench|exercise-scientific-media|exercise-live-arxiv|exercise-live-arxiv-prepaint}\n' "$0" >&2
+    printf 'usage: %s {install-dependencies|build-idric|build-occurrence-idric|verify-pdf-harvester|exercise-information|exercise-hostile-ingestion|exercise-core|exercise-occurrence|exercise-workbench|exercise-scientific-media|exercise-live-arxiv|exercise-live-arxiv-prepaint}\n' "$0" >&2
     exit 2
     ;;
 esac

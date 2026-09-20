@@ -22,7 +22,8 @@ jobs:
     env:
       IDRIS2_CG: chez
       SCHEME: scheme
-      IDRIC_REF: a8c24b10c143e97f8b24fc90a929eeee1e8f0392
+      IDRIC_REF: 61970be77769f607cca8650bf424c0f0b22ddee7
+      OCCURRENCE_IDRIC_REF: a8c24b10c143e97f8b24fc90a929eeee1e8f0392
     steps:
       - name: Check out exact IB source revision
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
@@ -49,23 +50,47 @@ jobs:
       - name: Install system dependencies through Grease
         run: sh bin/ci_browser_foundation.grease install-dependencies
 
-      - name: Restore Idriç compiler
-        id: idric-cache
+      - name: Restore current Idriç compiler for the occurrence contract
+        id: occurrence-idric-cache
         uses: actions/cache/restore@caa296126883cff596d87d8935842f9db880ef25
         with:
           path: /tmp/idric
           key: idric-${{ runner.os }}-a8c24b10c143e97f8b24fc90a929eeee1e8f0392
 
-      - name: Build and install Idriç compiler through Grease
-        if: steps.idric-cache.outputs.cache-hit != 'true'
-        run: sh bin/ci_browser_foundation.grease build-idric
+      - name: Build current Idriç compiler through its follower entry point
+        if: steps.occurrence-idric-cache.outputs.cache-hit != 'true'
+        run: sh bin/ci_browser_foundation.grease build-occurrence-idric
 
-      - name: Cache Idriç compiler
-        if: steps.idric-cache.outputs.cache-hit != 'true'
+      - name: Cache current Idriç compiler
+        if: steps.occurrence-idric-cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@caa296126883cff596d87d8935842f9db880ef25
         with:
           path: /tmp/idric
           key: idric-${{ runner.os }}-a8c24b10c143e97f8b24fc90a929eeee1e8f0392
+
+      - name: Exercise the occurrence contract with current Idriç
+        run: sh bin/ci_browser_foundation.grease exercise-occurrence
+
+      - name: Remove the occurrence-only compiler before established contracts
+        run: rm -rf /tmp/idric
+
+      - name: Restore established Idriç compiler for existing IB contracts
+        id: established-idric-cache
+        uses: actions/cache/restore@caa296126883cff596d87d8935842f9db880ef25
+        with:
+          path: /tmp/idric
+          key: idric-${{ runner.os }}-61970be77769f607cca8650bf424c0f0b22ddee7
+
+      - name: Build and install established Idriç compiler through Grease
+        if: steps.established-idric-cache.outputs.cache-hit != 'true'
+        run: sh bin/ci_browser_foundation.grease build-idric
+
+      - name: Cache established Idriç compiler
+        if: steps.established-idric-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@caa296126883cff596d87d8935842f9db880ef25
+        with:
+          path: /tmp/idric
+          key: idric-${{ runner.os }}-61970be77769f607cca8650bf424c0f0b22ddee7
 
       - name: Exercise HTML-first information renderer
         run: sh bin/ci_browser_foundation.grease exercise-information
@@ -109,7 +134,7 @@ jobs:
         uses: actions/cache/restore@caa296126883cff596d87d8935842f9db880ef25
         with:
           path: /tmp/idric
-          key: idric-${{ runner.os }}-a8c24b10c143e97f8b24fc90a929eeee1e8f0392
+          key: idric-${{ runner.os }}-61970be77769f607cca8650bf424c0f0b22ddee7
 
       - name: Verify PDF harvester pin
         run: sh bin/ci_browser_foundation.grease verify-pdf-harvester
