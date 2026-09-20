@@ -47,6 +47,31 @@ public final class IncrementalBackgroundContractTest {
     }
 
     @Test
+    public void rejects_manifest_without_notification_permission() {
+        expect_rejection(
+            minimal_manifest().replace(
+                "<uses-permission android:name=\"android.permission.POST_NOTIFICATIONS\" />",
+                ""
+            ),
+            safe_activity(),
+            safe_launcher(),
+            safe_service(),
+            "incremental notification permission must be declared"
+        );
+    }
+
+    @Test
+    public void rejects_activity_without_phone_visible_receipt() {
+        expect_rejection(
+            minimal_manifest(),
+            safe_activity().replace("clipboard.setPrimaryClip(", "clipboard.skipPrimaryClip("),
+            safe_launcher(),
+            safe_service(),
+            "physical receipt must be copyable without ADB"
+        );
+    }
+
+    @Test
     public void rejects_service_that_never_enters_the_foreground() {
         expect_rejection(
             minimal_manifest(),
@@ -74,9 +99,23 @@ public final class IncrementalBackgroundContractTest {
             "activity and foreground service must share the incremental process"
         );
         require(
+            manifest.contains("android.permission.POST_NOTIFICATIONS"),
+            "incremental notification permission must be declared"
+        );
+        require(
             launcher.contains("FLAG_ACTIVITY_REORDER_TO_FRONT")
                 && launcher.contains("FLAG_ACTIVITY_SINGLE_TOP"),
             "launcher must bring the existing incremental activity forward"
+        );
+        require(
+            activity.contains("Manifest.permission.POST_NOTIFICATIONS")
+                && activity.contains("requestPermissions("),
+            "incremental notification permission must be requested at runtime"
+        );
+        require(
+            activity.contains("copy_journal_to_clipboard")
+                && activity.contains("setPrimaryClip("),
+            "physical receipt must be copyable without ADB"
         );
 
         String reentry = method(activity, "protected void onNewIntent", "protected void onResume");
@@ -145,7 +184,8 @@ public final class IncrementalBackgroundContractTest {
     }
 
     private static String minimal_manifest() {
-        return "<activity android:name=\".IncrementalLargePageActivity\""
+        return "<uses-permission android:name=\"android.permission.POST_NOTIFICATIONS\" />"
+            + "<activity android:name=\".IncrementalLargePageActivity\""
             + " android:launchMode=\"singleTask\" android:process=\":incremental\" />"
             + "<service android:name=\".IncrementalLoadService\""
             + " android:foregroundServiceType=\"dataSync\""
@@ -154,8 +194,10 @@ public final class IncrementalBackgroundContractTest {
 
     private static String safe_activity() {
         return "void onCreate(){IncrementalLoadService.start(this);"
+            + "requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS},74);"
             + "view.setRendererPriorityPolicy(WebView.RENDERER_PRIORITY_IMPORTANT, false);"
-            + "String marker=\"__ib_incremental_heap_canary\";}"
+            + "String marker=\"__ib_incremental_heap_canary\";"
+            + "copy_journal_to_clipboard();clipboard.setPrimaryClip(clip);}"
             + " protected void onNewIntent(){sample_page(\"launcher-reentry\");}"
             + " protected void onResume(){}";
     }
