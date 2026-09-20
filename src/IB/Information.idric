@@ -429,7 +429,7 @@ take_items (S amount) [] = []
 take_items (S amount) (item :: rest) = item :: take_items amount rest
 
 public export
-phone_lines : Nat → Nat → InformationView → List String
+phone_lines : Number → Number → InformationView → List String
 phone_lines max_items width (View _ resolved_url title items) =
   clip_text width ("title: " ++ title) ::
   clip_text width ("url: " ++ resolved_url) ::
