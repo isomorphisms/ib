@@ -1,0 +1,173 @@
+name: IB Pensieve body hyperplane
+
+on:
+  push:
+    branches:
+      - '0.2/pensieve-body-hyperplanes'
+  pull_request:
+    branches:
+      - '0.2/pensieve-arxiv'
+    paths:
+      - 'bin/pensieve_hyperplane_inputs.grease'
+      - 'experiments/pensieve-hyperplanes/**'
+      - 'tests/test_pensieve_hyperplane_hook.grease'
+      - '.github/workflows/pensieve-body-hyperplane.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  body-input-hook:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Exercise rebuildable after-distill body input
+        run: sh tests/test_pensieve_hyperplane_hook.grease
+
+  real-body-probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install PDF extraction and pinned experiment dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y poppler-utils
+          python -m pip install \
+            numpy==1.26.4 \
+            scikit-learn==1.5.2 \
+            onnxruntime==1.19.2 \
+            transformers==4.45.2 \
+            huggingface-hub==0.25.2
+
+      - name: Stage public paper bodies in a disposable Pensieve-shaped fixture
+        run: |
+          rm -rf /tmp/ib-body-live
+          mkdir -p /tmp/ib-body-live/pensieve
+          python experiments/pensieve-hyperplanes/stage_live_pensieve_fixture.py \
+            --pensieve /tmp/ib-body-live/pensieve \
+            --ids experiments/pensieve-hyperplanes/live-corpus.ids \
+            --manifest /tmp/ib-body-live/stage-manifest.json
+
+      - name: Build body-only distributed text sketches
+        run: |
+          python experiments/pensieve-hyperplanes/build_pensieve_inputs.py \
+            --pensieve /tmp/ib-body-live/pensieve \
+            --ids experiments/pensieve-hyperplanes/live-corpus.ids \
+            --output /tmp/ib-body-live/body-inputs.tsv \
+            --manifest /tmp/ib-body-live/body-inputs.manifest.json \
+            --max-words 160 \
+            --windows 5
+
+      - name: Embed real body sketches with pinned mxbai ONNX weights
+        run: |
+          python experiments/pensieve-hyperplanes/embed_mxbai_onnx.py \
+            --input-texts /tmp/ib-body-live/body-inputs.tsv \
+            --vectors /tmp/ib-body-live/body-vectors.npz \
+            --provenance /tmp/ib-body-live/embedding-provenance.json \
+            --max-input-tokens 256
+
+      - name: Fit positive-unlabeled body hyperplanes with frozen proposal policy
+        run: |
+          python experiments/pensieve-hyperplanes/body_probe.py \
+            --vectors /tmp/ib-body-live/body-vectors.npz \
+            --input-texts /tmp/ib-body-live/body-inputs.tsv \
+            --input-manifest /tmp/ib-body-live/body-inputs.manifest.json \
+            --embedding-provenance /tmp/ib-body-live/embedding-provenance.json \
+            --labels experiments/pensieve-hyperplanes/live-labels.tsv \
+            --proposal-policy experiments/pensieve-hyperplanes/proposal-policy-v2.json \
+            --concept piecewise-linear-network-geometry \
+            --bags 16 \
+            --unlabeled-per-positive 0.5 \
+            --output /tmp/ib-body-live/body-probe.json
+
+      - name: Validate isolation and print frozen-policy test summary
+        run: |
+          python - <<'PY' > /tmp/ib-body-live/summary.txt
+          import json
+
+          with open('/tmp/ib-body-live/body-probe.json', encoding='utf-8') as stream:
+              report = json.load(stream)
+          result = report['concepts'][0]
+          protected = {
+              'arxiv:2305.00241',
+              'arxiv:2206.08615',
+              'arxiv:2006.00978',
+              'arxiv:2104.13478',
+              'arxiv:1806.07366',
+          }
+
+          assert report['body_input']['title_or_url_used'] is False
+          assert result['fit_positive_count'] == 2
+          assert result['development_positive_count'] == 1
+          assert result['held_out_positive_count'] == 2
+          assert result['held_out_negative_count'] == 2
+          assert result['fit_eligible_unlabeled_count'] == 3
+          assert result['retained_unique_plane_count'] == 3
+          assert result['proposal_policy']['name'] == 'development-calibrated-unanimous-70pct-fit-floor'
+          assert result['proposal_policy']['score_floor_fraction_of_fit_positive_floor'] == 0.7
+          assert result['proposal_policy']['minimum_zero_surface_vote_fraction'] == 1.0
+          for plane in result['planes']:
+              assert protected.isdisjoint(plane['fit_positive_ids'])
+              assert protected.isdisjoint(plane['explicit_negative_ids'])
+              assert protected.isdisjoint(plane['provisional_unlabeled_ids'])
+              assert len(plane['normal']) == 384
+              assert isinstance(plane['offset'], float)
+
+          print(f"concept={result['concept']}")
+          print(f"fit_positive_count={result['fit_positive_count']}")
+          print(f"development_positive_count={result['development_positive_count']}")
+          print(f"held_out_positive_count={result['held_out_positive_count']}")
+          print(f"held_out_negative_count={result['held_out_negative_count']}")
+          print(f"fit_eligible_unlabeled_count={result['fit_eligible_unlabeled_count']}")
+          print(f"retained_unique_plane_count={result['retained_unique_plane_count']}")
+          print(f"strict_fit_positive_floor={result['strict_fit_positive_floor']:.9f}")
+          print(f"proposal_threshold={result['proposal_policy']['proposal_threshold']:.9f}")
+          print(f"development_positive_recall={result['development_positive_recall']}")
+          print(f"held_out_positive_recall={result['held_out_positive_recall']}")
+          print(f"held_out_negative_false_proposal_rate={result['held_out_negative_false_proposal_rate']}")
+          print(f"strict_held_out_positive_recall={result['strict_held_out_positive_recall']}")
+          cosine = result['plane_normal_cosine']
+          if cosine:
+              print(f"plane_normal_cosine_min={cosine['minimum']:.6f}")
+              print(f"plane_normal_cosine_median={cosine['median']:.6f}")
+              print(f"plane_normal_cosine_max={cosine['maximum']:.6f}")
+          print('ranking:')
+          for rank, row in enumerate(result['ranking'], start=1):
+              flags = []
+              for key in (
+                  'fit_positive',
+                  'development_positive',
+                  'development_negative',
+                  'held_out_positive',
+                  'held_out_negative',
+              ):
+                  if row[key]:
+                      flags.append(key)
+              print(
+                  f"  {rank}: {row['id']} score={row['score']:.9f} "
+                  f"zero_vote={row['zero_surface_vote_fraction']:.3f} "
+                  f"strict={row['strict_proposed']} proposed={row['proposed']} "
+                  f"roles={','.join(flags) or 'unlabeled'}"
+              )
+          PY
+          cat /tmp/ib-body-live/summary.txt
+
+      - name: Preserve reproducible derived evidence without paper bodies
+        uses: actions/upload-artifact@v4
+        with:
+          name: ib-pensieve-real-body-hyperplane
+          path: |
+            /tmp/ib-body-live/stage-manifest.json
+            /tmp/ib-body-live/body-inputs.manifest.json
+            /tmp/ib-body-live/body-vectors.npz
+            /tmp/ib-body-live/embedding-provenance.json
+            /tmp/ib-body-live/body-probe.json
+            /tmp/ib-body-live/summary.txt
+          if-no-files-found: error

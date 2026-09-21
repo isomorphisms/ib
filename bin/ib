@@ -1,0 +1,68 @@
+#!/bin/sh
+set -eu
+
+repository_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+. "$repository_root/lib/ib/pensieve.grease"
+
+usage() {
+  cat >&2 <<'EOF'
+usage:
+  ib fetch ARXIV-ID-OR-URL...
+  ib distill ARXIV-ID-OR-URL...
+  ib add ARXIV-ID-OR-URL...
+  ib search TEXT
+  ib reindex
+  ib paths
+EOF
+  exit 2
+}
+
+test "$#" -gt 0 || usage
+command=$1
+shift
+
+case "$command" in
+  fetch)
+    test "$#" -gt 0 || usage
+    for input in "$@"; do
+      ib_fetch_arxiv "$input"
+    done
+    ;;
+
+  distill)
+    test "$#" -gt 0 || usage
+    for input in "$@"; do
+      ib_distill_arxiv "$input"
+    done
+    ;;
+
+  add)
+    test "$#" -gt 0 || usage
+    for input in "$@"; do
+      ib_fetch_arxiv "$input" >/dev/null
+      ib_distill_arxiv "$input"
+    done
+    ib_reindex_exact_text >/dev/null
+    ;;
+
+  search)
+    test "$#" -eq 1 || usage
+    ib_search_exact_text "$1"
+    ;;
+
+  reindex)
+    test "$#" -eq 0 || usage
+    ib_reindex_exact_text
+    ;;
+
+  paths)
+    test "$#" -eq 0 || usage
+    printf 'home\t%s\n' "$(ib_home)"
+    printf 'cauldron\t%s\n' "$(ib_cauldron)"
+    printf 'pensieve\t%s\n' "$(ib_pensieve)"
+    ;;
+
+  *)
+    usage
+    ;;
+esac

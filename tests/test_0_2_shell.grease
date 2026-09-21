@@ -1,0 +1,93 @@
+#!/bin/sh
+set -eu
+
+repository_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+. "$repository_root/lib/ib/pensieve.grease"
+
+fail() {
+  printf '0.2 smoke: %s\n' "$*" >&2
+  exit 1
+}
+
+assert_identifier() {
+  input=$1
+  expected=$2
+  actual=$(arxiv_identifier_from_input "$input")
+  test "$actual" = "$expected" ||
+    fail "identifier mismatch: $input -> $actual, expected $expected"
+}
+
+assert_invalid_identifier() {
+  input=$1
+  if arxiv_identifier_from_input "$input" >/dev/null 2>&1; then
+    fail "unsafe identifier was accepted: $input"
+  fi
+}
+
+assert_identifier 'https://arxiv.org/abs/2203.11355' '2203.11355'
+assert_identifier 'https://arxiv.org/pdf/1901.09021.pdf' '1901.09021'
+assert_identifier 'arxiv:1606.05336v2' '1606.05336v2'
+assert_identifier 'https://ar5iv.labs.arxiv.org/html/math/0506432' 'math/0506432'
+
+for input in \
+  '../../target' \
+  '../target' \
+  '2203.11355/../../target' \
+  'https://arxiv.org/abs/../../target' \
+  'math/0506432/../../target' \
+  'math//0506432' \
+  '2213.11355' \
+  '2203.11355v0'
+do
+  assert_invalid_identifier "$input"
+done
+
+work=$(mktemp -d "${TMPDIR:-/tmp}/ib-0.2-smoke.XXXXXX")
+trap 'rm -rf "$work"' EXIT HUP INT TERM
+export IB_HOME="$work/state"
+
+escaped="$IB_HOME/target"
+mkdir -p "$escaped"
+printf '%s\n' keep > "$escaped/sentinel"
+if "$repository_root/bin/ib" fetch '../../target' >/dev/null 2>&1; then
+  fail 'fetch accepted a path-traversal identifier'
+fi
+test -f "$escaped/sentinel" ||
+  fail 'path-traversal refusal allowed data outside the arXiv root to be removed'
+
+outside="$work/outside"
+mkdir -p "$outside" "$IB_HOME/cauldron/arxiv" "$IB_HOME/pensieve/arxiv"
+
+ln -s "$outside" "$IB_HOME/cauldron/arxiv/math"
+if ib_arxiv_item_path "$(ib_cauldron)/arxiv" 'math/0506432' >/dev/null 2>&1; then
+  fail 'Cauldron containment accepted a valid ID through an escaping symlink'
+fi
+rm "$IB_HOME/cauldron/arxiv/math"
+
+ln -s "$outside" "$IB_HOME/pensieve/arxiv/math"
+if ib_arxiv_item_path "$(ib_pensieve)/arxiv" 'math/0506432' >/dev/null 2>&1; then
+  fail 'Pensieve containment accepted a valid ID through an escaping symlink'
+fi
+rm "$IB_HOME/pensieve/arxiv/math"
+
+text_directory="$IB_HOME/pensieve/arxiv/2203.11355/text"
+mkdir -p "$text_directory"
+printf '%s\n' 'A local note about Bergman kernels and holomorphic functions.' > "$text_directory/from-html.txt"
+printf '%s\n' 'another representation' > "$text_directory/from-pdf.txt"
+
+index=$("$repository_root/bin/ib" reindex)
+test -f "$index" || fail 'reindex did not create the index file'
+count=$(wc -l < "$index" | tr -d ' ')
+test "$count" = 2 || fail "expected two indexed text files, found $count"
+
+result=$("$repository_root/bin/ib" search 'Bergman kernels')
+printf '%s\n' "$result" | grep -F 'from-html.txt' >/dev/null ||
+  fail 'local search did not find the Pensieve text'
+
+paths=$("$repository_root/bin/ib" paths)
+printf '%s\n' "$paths" | grep -F "$IB_HOME/cauldron" >/dev/null ||
+  fail 'paths did not report the Cauldron'
+printf '%s\n' "$paths" | grep -F "$IB_HOME/pensieve" >/dev/null ||
+  fail 'paths did not report the Pensieve'
+
+printf 'ib 0.2 shell smoke: PASS\n'

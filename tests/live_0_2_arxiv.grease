@@ -1,0 +1,14 @@
+#!/bin/sh
+set -eu
+
+repository_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+fixture="$repository_root/tests/fixtures/arxiv-0.2.urls"
+
+while IFS= read -r url; do
+  test -n "$url" || continue
+  printf 'adding %s\n' "$url"
+  "$repository_root/bin/ib" add "$url"
+done < "$fixture"
+
+printf '\nPensieve text files:\n'
+"$repository_root/bin/ib" reindex
