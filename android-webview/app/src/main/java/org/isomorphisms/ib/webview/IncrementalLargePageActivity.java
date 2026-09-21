@@ -27,7 +27,9 @@ import android.webkit.WebResourceRequest;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
+import android.text.InputType;
 import android.widget.Button;
+import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
@@ -39,11 +41,7 @@ import java.nio.charset.StandardCharsets;
 public final class IncrementalLargePageActivity extends Activity {
     private static final int NOTIFICATION_PERMISSION_REQUEST = 74;
     private static final String DEFAULT_URL =
-        "https://console.cloud.google.com/agent-platform/studio/multimodal"
-            + "?project=isomorphismes-youtube-shorts"
-            + "&supportedpurview=project"
-            + "&model=gemini-3.7-flash"
-            + "&region=global";
+        "https://console.cloud.google.com/auth/scopes?project=cockswain&authuser=5";
 
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final Runnable periodic_sample = new Runnable() {
@@ -56,6 +54,8 @@ public final class IncrementalLargePageActivity extends Activity {
 
     private LinearLayout web_container;
     private TextView heading;
+    private LinearLayout address_controls;
+    private EditText url_input;
     private LinearLayout controls;
     private LinearLayout receipt_controls;
     private TextView status;
@@ -165,6 +165,7 @@ public final class IncrementalLargePageActivity extends Activity {
         super.onPictureInPictureModeChanged(in_picture_in_picture, new_configuration);
         int chrome_visibility = in_picture_in_picture ? View.GONE : View.VISIBLE;
         heading.setVisibility(chrome_visibility);
+        address_controls.setVisibility(chrome_visibility);
         controls.setVisibility(chrome_visibility);
         receipt_controls.setVisibility(chrome_visibility);
         status.setVisibility(chrome_visibility);
@@ -191,6 +192,36 @@ public final class IncrementalLargePageActivity extends Activity {
         heading.setTextSize(19);
         heading.setPadding(dp(12), dp(10), dp(12), dp(4));
         root.addView(heading);
+
+        address_controls = new LinearLayout(this);
+        address_controls.setOrientation(LinearLayout.HORIZONTAL);
+
+        url_input = new EditText(this);
+        url_input.setSingleLine(true);
+        url_input.setInputType(
+            InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_URI
+        );
+        url_input.setText(target_url);
+        url_input.setSelectAllOnFocus(true);
+        address_controls.addView(
+            url_input,
+            new LinearLayout.LayoutParams(
+                0,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                1.0f
+            )
+        );
+
+        Button go = button("Go");
+        go.setOnClickListener(view -> navigate_to_entered_url());
+        address_controls.addView(
+            go,
+            new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            )
+        );
+        root.addView(address_controls);
 
         controls = new LinearLayout(this);
         controls.setOrientation(LinearLayout.HORIZONTAL);
@@ -413,6 +444,29 @@ public final class IncrementalLargePageActivity extends Activity {
                 LinearLayout.LayoutParams.MATCH_PARENT
             )
         );
+    }
+
+    private void navigate_to_entered_url() {
+        String requested = url_input.getText().toString().trim();
+        if (requested.isEmpty()) {
+            append_status("enter a URL first");
+            return;
+        }
+
+        Uri parsed = Uri.parse(requested);
+        String scheme = parsed.getScheme();
+        if (!"https".equalsIgnoreCase(scheme) && !"http".equalsIgnoreCase(scheme)) {
+            append_status("URL must start with http:// or https://");
+            return;
+        }
+
+        target_url = requested;
+        form_dirty = false;
+        if (web_view == null) {
+            attach_webview();
+        }
+        record("user", "navigate target=" + safe_target_identity(target_url));
+        web_view.loadUrl(target_url);
     }
 
     private void explicit_reload() {
