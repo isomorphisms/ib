@@ -2,11 +2,13 @@ package org.isomorphisms.ib.webview;
 
 import android.Manifest;
 import android.app.Activity;
+import android.app.PendingIntent;
 import android.app.PictureInPictureParams;
 import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Context;
 import android.content.Intent;
+import android.content.IntentSender;
 import android.content.pm.PackageManager;
 import android.content.res.Configuration;
 import android.net.Uri;
@@ -33,13 +35,26 @@ import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
+import com.google.android.gms.auth.api.identity.AuthorizationClient;
+import com.google.android.gms.auth.api.identity.AuthorizationRequest;
+import com.google.android.gms.auth.api.identity.AuthorizationResult;
+import com.google.android.gms.auth.api.identity.Identity;
+import com.google.android.gms.common.api.ApiException;
+import com.google.android.gms.common.api.Scope;
+
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.net.HttpURLConnection;
+import java.net.URL;
 import java.nio.charset.StandardCharsets;
+import java.util.Collections;
 
 public final class IncrementalLargePageActivity extends Activity {
     private static final int NOTIFICATION_PERMISSION_REQUEST = 74;
+    private static final int DRIVE_AUTHORIZATION_REQUEST = 75;
+    private static final String DRIVE_SCOPE =
+        "https://www.googleapis.com/auth/drive.readonly";
     private static final String DEFAULT_URL =
         "https://console.cloud.google.com/auth/scopes?project=cockswain&authuser=5";
 
@@ -68,6 +83,11 @@ public final class IncrementalLargePageActivity extends Activity {
     private boolean destroyed;
     private boolean notification_permission_requested;
     private boolean picture_in_picture_available;
+    private AuthorizationClient drive_authorization_client;
+    private Button drive_authorize_button;
+    private String drive_auth_client_id;
+    private String drive_auth_state;
+    private int drive_auth_port;
 
     @Override
     protected void onCreate(Bundle saved_instance_state) {
@@ -83,6 +103,8 @@ public final class IncrementalLargePageActivity extends Activity {
         journal_file = create_journal_file();
 
         build_ui();
+        drive_authorization_client = Identity.getAuthorizationClient(this);
+        boolean drive_handoff = handle_drive_authorization_intent(getIntent());
         configure_picture_in_picture();
         record(
             "run",
@@ -94,7 +116,11 @@ public final class IncrementalLargePageActivity extends Activity {
         );
         ensure_incremental_service();
         attach_webview();
-        web_view.loadUrl(target_url);
+        if (!drive_handoff) {
+            web_view.loadUrl(target_url);
+        } else {
+            append_status("Google consent will use Play services, not the WebView");
+        }
         handler.postDelayed(periodic_sample, 5000);
     }
 
@@ -103,6 +129,10 @@ public final class IncrementalLargePageActivity extends Activity {
         super.onNewIntent(intent);
         setIntent(intent);
         ensure_incremental_service();
+
+        if (handle_drive_authorization_intent(intent)) {
+            return;
+        }
 
         String supplied_url = intent.getStringExtra("url");
         if (supplied_url != null && !supplied_url.trim().isEmpty()) {
@@ -134,6 +164,25 @@ public final class IncrementalLargePageActivity extends Activity {
             "notification-permission=" + (granted ? "granted" : "not-granted")
         );
         start_incremental_service();
+    }
+
+    @Override
+    protected void onActivityResult(int request_code, int result_code, Intent data) {
+        super.onActivityResult(request_code, result_code, data);
+        if (request_code != DRIVE_AUTHORIZATION_REQUEST) {
+            return;
+        }
+        if (result_code != RESULT_OK || data == null) {
+            drive_authorization_failed("cancelled");
+            return;
+        }
+        try {
+            AuthorizationResult result =
+                drive_authorization_client.getAuthorizationResultFromIntent(data);
+            handle_drive_authorization_result(result);
+        } catch (ApiException exception) {
+            drive_authorization_failed(exception.getClass().getSimpleName());
+        }
     }
 
     @Override
@@ -254,6 +303,11 @@ public final class IncrementalLargePageActivity extends Activity {
 
         receipt_controls = new LinearLayout(this);
         receipt_controls.setOrientation(LinearLayout.HORIZONTAL);
+
+        drive_authorize_button = button("Authorize Drive");
+        drive_authorize_button.setEnabled(false);
+        drive_authorize_button.setOnClickListener(view -> start_drive_authorization());
+        receipt_controls.addView(drive_authorize_button, weighted_button_params());
 
         Button copy_receipt = button("Copy receipt");
         copy_receipt.setOnClickListener(view -> copy_journal_to_clipboard());
@@ -456,6 +510,226 @@ public final class IncrementalLargePageActivity extends Activity {
         );
     }
 
+    private boolean handle_drive_authorization_intent(Intent intent) {
+        if (!Intent.ACTION_VIEW.equals(intent.getAction())) {
+            return false;
+        }
+        Uri uri = intent.getData();
+        if (
+            uri == null
+                || !"ib".equals(uri.getScheme())
+                || !"google-drive-authorize".equals(uri.getHost())
+        ) {
+            return false;
+        }
+
+        String client_id = uri.getQueryParameter("client_id");
+        String scope = uri.getQueryParameter("scope");
+        String state = uri.getQueryParameter("state");
+        String port_text = uri.getQueryParameter("port");
+        int port = parse_loopback_port(port_text);
+        if (
+            !valid_google_client_id(client_id)
+                || !DRIVE_SCOPE.equals(scope)
+                || !valid_state(state)
+                || port == 0
+        ) {
+            clear_drive_authorization_request();
+            record("drive-auth", "handoff-rejected");
+            append_status("Drive authorization handoff rejected");
+            return true;
+        }
+
+        drive_auth_client_id = client_id;
+        drive_auth_state = state;
+        drive_auth_port = port;
+        drive_authorize_button.setEnabled(true);
+        record("drive-auth", "handoff-ready scope=drive.readonly");
+        append_status("Drive authorization handoff ready; tap Authorize Drive");
+        return true;
+    }
+
+    private void start_drive_authorization() {
+        if (
+            drive_auth_client_id == null
+                || drive_auth_state == null
+                || drive_auth_port == 0
+        ) {
+            append_status("No Drive authorization handoff is pending");
+            return;
+        }
+
+        drive_authorize_button.setEnabled(false);
+        AuthorizationRequest request = AuthorizationRequest.builder()
+            .setRequestedScopes(Collections.singletonList(new Scope(DRIVE_SCOPE)))
+            .requestOfflineAccess(drive_auth_client_id)
+            .setPrompt(AuthorizationRequest.Prompt.CONSENT)
+            .build();
+        record("drive-auth", "request-started scope=drive.readonly");
+        drive_authorization_client.authorize(request)
+            .addOnSuccessListener(result -> {
+                if (result.hasResolution()) {
+                    PendingIntent pending_intent = result.getPendingIntent();
+                    if (pending_intent == null) {
+                        drive_authorization_failed("missing-resolution");
+                        return;
+                    }
+                    try {
+                        startIntentSenderForResult(
+                            pending_intent.getIntentSender(),
+                            DRIVE_AUTHORIZATION_REQUEST,
+                            null,
+                            0,
+                            0,
+                            0
+                        );
+                    } catch (IntentSender.SendIntentException exception) {
+                        drive_authorization_failed(
+                            exception.getClass().getSimpleName()
+                        );
+                    }
+                    return;
+                }
+                handle_drive_authorization_result(result);
+            })
+            .addOnFailureListener(
+                exception -> drive_authorization_failed(
+                    exception.getClass().getSimpleName()
+                )
+            );
+    }
+
+    private void handle_drive_authorization_result(AuthorizationResult result) {
+        if (!result.getGrantedScopes().contains(DRIVE_SCOPE)) {
+            drive_authorization_failed("required-scope-not-granted");
+            return;
+        }
+        String authorization_code = result.getServerAuthCode();
+        if (authorization_code == null || authorization_code.isEmpty()) {
+            drive_authorization_failed("missing-server-auth-code");
+            return;
+        }
+        record("drive-auth", "server-code-received scope=drive.readonly");
+        deliver_drive_authorization_code(authorization_code);
+    }
+
+    private void deliver_drive_authorization_code(String authorization_code) {
+        final String state = drive_auth_state;
+        final int port = drive_auth_port;
+        new Thread(() -> {
+            HttpURLConnection connection = null;
+            try {
+                Uri callback = new Uri.Builder()
+                    .scheme("http")
+                    .encodedAuthority("127.0.0.1:" + port)
+                    .path("/google-drive-callback")
+                    .appendQueryParameter("code", authorization_code)
+                    .appendQueryParameter("state", state)
+                    .build();
+                connection = (HttpURLConnection) new URL(callback.toString()).openConnection();
+                connection.setConnectTimeout(5000);
+                connection.setReadTimeout(5000);
+                connection.setUseCaches(false);
+                connection.setInstanceFollowRedirects(false);
+                connection.setRequestMethod("GET");
+                connection.setRequestProperty("Cache-Control", "no-store");
+                int response_code = connection.getResponseCode();
+                if (response_code != 200) {
+                    throw new IOException("loopback response " + response_code);
+                }
+                runOnUiThread(() -> {
+                    record("drive-auth", "loopback-delivered");
+                    clear_drive_authorization_request();
+                    append_status("Drive authorization delivered to the local credential writer");
+                });
+            } catch (Exception exception) {
+                String failure = exception.getClass().getSimpleName();
+                runOnUiThread(() -> drive_authorization_failed(failure));
+            } finally {
+                if (connection != null) {
+                    connection.disconnect();
+                }
+            }
+        }, "ib-drive-auth-loopback").start();
+    }
+
+    private void drive_authorization_failed(String reason) {
+        record("drive-auth", "failed reason=" + clean(reason));
+        if (drive_auth_client_id != null) {
+            drive_authorize_button.setEnabled(true);
+        }
+        append_status("Drive authorization failed: " + clean(reason));
+    }
+
+    private void clear_drive_authorization_request() {
+        drive_auth_client_id = null;
+        drive_auth_state = null;
+        drive_auth_port = 0;
+        if (drive_authorize_button != null) {
+            drive_authorize_button.setEnabled(false);
+        }
+    }
+
+    private static int parse_loopback_port(String text) {
+        if (text == null || text.isEmpty() || text.length() > 5) {
+            return 0;
+        }
+        int value = 0;
+        for (int index = 0; index < text.length(); index++) {
+            char character = text.charAt(index);
+            if (character < '0' || character > '9') {
+                return 0;
+            }
+            value = value * 10 + (character - '0');
+        }
+        return value >= 1 && value <= 65535 ? value : 0;
+    }
+
+    private static boolean valid_google_client_id(String text) {
+        if (
+            text == null
+                || text.length() < 30
+                || text.length() > 512
+                || !text.endsWith(".apps.googleusercontent.com")
+        ) {
+            return false;
+        }
+        for (int index = 0; index < text.length(); index++) {
+            char character = text.charAt(index);
+            if (
+                (character >= 'a' && character <= 'z')
+                    || (character >= 'A' && character <= 'Z')
+                    || (character >= '0' && character <= '9')
+                    || character == '.'
+                    || character == '_'
+                    || character == '-'
+            ) {
+                continue;
+            }
+            return false;
+        }
+        return true;
+    }
+
+    private static boolean valid_state(String text) {
+        if (text == null || text.length() < 32 || text.length() > 256) {
+            return false;
+        }
+        for (int index = 0; index < text.length(); index++) {
+            char character = text.charAt(index);
+            if (
+                (character >= 'a' && character <= 'z')
+                    || (character >= 'A' && character <= 'Z')
+                    || (character >= '0' && character <= '9')
+                    || character == '_'
+                    || character == '-'
+            ) {
+                continue;
+            }
+            return false;
+        }
+        return true;
+    }
     private void navigate_to_entered_url() {
         String requested = url_input.getText().toString().trim();
         if (requested.isEmpty()) {
