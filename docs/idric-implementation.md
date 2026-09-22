@@ -11,6 +11,9 @@ The initial source modules deliberately keep the executable boundary small:
 - `IB.Storage` classifies schema-shaped paths and defines which records may be generically inspected.
 - `IB.Inspect` summarizes physical rows without following or interpreting renderer state.
 - `IB.ScientificMedia` owns HTML-before-PDF source preference and the evidence order for image naming.
+- `IB.LongViewTask` owns protected task/tab/navigation continuity across renderer,
+  Activity, and host-process replacement, including the ordinary durable record
+  shared with the Android platform adapter.
 
 ## Grease boundary
 

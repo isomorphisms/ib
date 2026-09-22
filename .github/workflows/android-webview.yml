@@ -18,6 +18,7 @@ jobs:
   build-apk:
     runs-on: ubuntu-latest
     env:
+      IB_SOURCE_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
       IB_TEST_KEYSTORE: ${{ github.workspace }}/.test-signing/_/build/app/wegert-debug.keystore
       IB_TEST_KEYSTORE_PASSWORD: wegert-debug
       IB_TEST_KEY_PASSWORD: wegert-debug

@@ -1,0 +1,366 @@
+module IB.LongViewTask
+
+import Data.String
+
+-- Long-view tasks refine the existing browser-owned task, tab, and history
+-- identities.  Renderer and Android process identities are attachments to
+-- those durable objects, never replacements for them.
+
+export
+data DurableIdentity = IdentityBeginning Char (List Char)
+
+contains_record_separator : List Char → Bool
+contains_record_separator [] = False
+contains_record_separator ('\t' :: _) = True
+contains_record_separator ('\n' :: _) = True
+contains_record_separator ('\r' :: _) = True
+contains_record_separator (_ :: rest) = contains_record_separator rest
+
+contains_address_secret_delimiter : List Char → Bool
+contains_address_secret_delimiter [] = False
+contains_address_secret_delimiter ('?' :: _) = True
+contains_address_secret_delimiter ('#' :: _) = True
+contains_address_secret_delimiter (_ :: rest) = contains_address_secret_delimiter rest
+
+export
+durable_identity : String → Maybe DurableIdentity
+durable_identity value =
+  case unpack value of
+    [] ⇒ Nothing
+    first :: rest ⇒
+      if contains_record_separator (first :: rest)
+        then Nothing
+        else Just (IdentityBeginning first rest)
+
+export
+identity_text : DurableIdentity → String
+identity_text (IdentityBeginning first rest) = pack (first :: rest)
+
+export
+data NeutralAddress = NeutralWebAddress DurableIdentity
+
+export
+neutral_address : String → Maybe NeutralAddress
+neutral_address value =
+  if contains_address_secret_delimiter (unpack value)
+    then Nothing
+    else map NeutralWebAddress (durable_identity value)
+
+export
+neutral_address_text : NeutralAddress → String
+neutral_address_text (NeutralWebAddress value) = identity_text value
+
+public export
+choice tab_protection one_of
+  ordinary_tab
+  protected_authenticated_transaction
+
+public export
+choice persistence_policy one_of
+  renderer_lifetime_only
+  durable_browser_task
+
+export
+persistence_for : tab_protection → persistence_policy
+persistence_for ordinary_tab = renderer_lifetime_only
+persistence_for protected_authenticated_transaction = durable_browser_task
+
+public export
+choice address_reconstruction one_of
+  exact_neutral_address
+  potentially_sensitive_url_material_redacted
+  no_safe_navigation
+
+public export
+choice continuity_kind one_of
+  live_renderer_survival
+  activity_recreation
+  renderer_replacement
+  host_process_restart
+  remote_site_blocked
+
+public export
+choice session_result one_of
+  session_not_proven
+  authenticated_session_confirmed
+  authenticated_session_unavailable
+
+public export
+choice form_result one_of
+  no_permitted_form_state
+  permitted_form_state_available
+  permitted_form_state_restored
+  form_step_must_be_repeated
+
+public export
+choice heap_result one_of
+  live_heap_observed
+  recreated_heap_observed
+  heap_not_available
+
+public export
+choice reconstruction_result one_of
+  live_page
+  reconstruction_pending
+  reconstructed_page_not_yet_confirmed
+  reconstructed_page_confirmed
+  reconstruction_incomplete
+
+public export
+choice authorization_phase one_of
+  authorization_not_started
+  authorization_waiting_for_user
+  authorization_waiting_for_return
+  authorization_returned_without_code_storage
+  authorization_expired
+  authorization_invalidated
+
+public export
+record AuthorizationContinuation where
+  constructor RestartableAuthorization
+  transaction_identity : DurableIdentity
+  adapter_identity : DurableIdentity
+  provider_identity : DurableIdentity
+  client_identity : DurableIdentity
+  requested_scopes : List DurableIdentity
+  redirect_target : NeutralAddress
+  state_reference : Maybe DurableIdentity
+  nonce_reference : Maybe DurableIdentity
+  pkce_verifier_reference : Maybe DurableIdentity
+  pkce_challenge_reference : Maybe DurableIdentity
+  phase : authorization_phase
+  expires_at : Maybe Integer
+
+public export
+record LongViewTask where
+  constructor ProtectedLongView
+  task_identity : DurableIdentity
+  tab_identity : DurableIdentity
+  navigation_identity : DurableIdentity
+  neutral_url : Maybe NeutralAddress
+  origin : Maybe NeutralAddress
+  address_recovery : address_reconstruction
+  continuity : continuity_kind
+  session : session_result
+  form : form_result
+  heap : heap_result
+  reconstruction : reconstruction_result
+  renderer_identity : Maybe DurableIdentity
+  host_process_identity : DurableIdentity
+  host_generation : Number
+  activity_generation : Number
+  renderer_generation : Number
+  authorization : Maybe AuthorizationContinuation
+
+export
+start_protected_task :
+  DurableIdentity → DurableIdentity → DurableIdentity →
+  Maybe NeutralAddress → Maybe NeutralAddress → address_reconstruction →
+  DurableIdentity → LongViewTask
+start_protected_task task tab navigation neutral_url origin address_recovery host =
+  ProtectedLongView
+    task tab navigation neutral_url origin address_recovery
+    live_renderer_survival session_not_proven no_permitted_form_state
+    heap_not_available reconstruction_pending Nothing host 1 1 0 Nothing
+
+rebuild_task :
+  continuity_kind → session_result → form_result → heap_result →
+  reconstruction_result → Maybe DurableIdentity → DurableIdentity →
+  Number → Number → Number → LongViewTask → LongViewTask
+rebuild_task continuity session form heap reconstruction renderer host
+             host_generation activity_generation renderer_generation task =
+  ProtectedLongView
+    task.task_identity task.tab_identity task.navigation_identity
+    task.neutral_url task.origin task.address_recovery continuity session form
+    heap reconstruction renderer host host_generation activity_generation
+    renderer_generation task.authorization
+
+export
+attach_renderer : DurableIdentity → LongViewTask → LongViewTask
+attach_renderer renderer task =
+  rebuild_task
+    renderer_replacement task.session task.form heap_not_available
+    reconstructed_page_not_yet_confirmed (Just renderer)
+    task.host_process_identity task.host_generation task.activity_generation
+    (task.renderer_generation + 1) task
+
+export
+attach_initial_renderer : DurableIdentity → LongViewTask → LongViewTask
+attach_initial_renderer renderer task =
+  rebuild_task
+    live_renderer_survival task.session task.form heap_not_available live_page
+    (Just renderer) task.host_process_identity task.host_generation
+    task.activity_generation (task.renderer_generation + 1) task
+
+export
+renderer_was_lost : LongViewTask → LongViewTask
+renderer_was_lost task =
+  rebuild_task
+    renderer_replacement session_not_proven
+    (case task.form of
+       permitted_form_state_available ⇒ permitted_form_state_available
+       _ ⇒ form_step_must_be_repeated)
+    heap_not_available reconstruction_pending Nothing
+    task.host_process_identity task.host_generation task.activity_generation
+    task.renderer_generation task
+
+export
+activity_was_recreated : LongViewTask → LongViewTask
+activity_was_recreated task =
+  rebuild_task
+    activity_recreation session_not_proven task.form heap_not_available
+    reconstruction_pending Nothing task.host_process_identity
+    task.host_generation (task.activity_generation + 1)
+    task.renderer_generation task
+
+export
+host_process_restarted : DurableIdentity → LongViewTask → LongViewTask
+host_process_restarted host task =
+  rebuild_task
+    host_process_restart session_not_proven task.form heap_not_available
+    reconstruction_pending Nothing host (task.host_generation + 1)
+    (task.activity_generation + 1) task.renderer_generation task
+
+export
+reconstruction_committed : LongViewTask → LongViewTask
+reconstruction_committed task =
+  rebuild_task
+    task.continuity task.session
+    (case task.form of
+       permitted_form_state_available ⇒ permitted_form_state_restored
+       other ⇒ other)
+    task.heap reconstructed_page_not_yet_confirmed task.renderer_identity
+    task.host_process_identity task.host_generation task.activity_generation
+    task.renderer_generation task
+
+export
+confirm_authenticated_continuation : LongViewTask → LongViewTask
+confirm_authenticated_continuation task =
+  rebuild_task
+    task.continuity authenticated_session_confirmed task.form task.heap
+    reconstructed_page_confirmed task.renderer_identity
+    task.host_process_identity task.host_generation task.activity_generation
+    task.renderer_generation task
+
+export
+mark_remote_site_blocked : LongViewTask → LongViewTask
+mark_remote_site_blocked task =
+  rebuild_task
+    remote_site_blocked authenticated_session_unavailable task.form task.heap
+    reconstruction_incomplete task.renderer_identity
+    task.host_process_identity task.host_generation task.activity_generation
+    task.renderer_generation task
+
+export
+observe_live_heap : LongViewTask → LongViewTask
+observe_live_heap task =
+  rebuild_task
+    task.continuity task.session task.form
+    (case task.continuity of
+       live_renderer_survival ⇒ live_heap_observed
+       _ ⇒ recreated_heap_observed)
+    task.reconstruction task.renderer_identity task.host_process_identity
+    task.host_generation task.activity_generation task.renderer_generation task
+
+continuity_text : continuity_kind → String
+continuity_text live_renderer_survival = "live-renderer-survival"
+continuity_text activity_recreation = "activity-recreation"
+continuity_text renderer_replacement = "renderer-replacement"
+continuity_text host_process_restart = "host-process-restart"
+continuity_text remote_site_blocked = "remote-site-blocked"
+
+session_text : session_result → String
+session_text session_not_proven = "not-proven"
+session_text authenticated_session_confirmed = "authenticated-confirmed"
+session_text authenticated_session_unavailable = "unavailable"
+
+form_text : form_result → String
+form_text no_permitted_form_state = "none-permitted"
+form_text permitted_form_state_available = "permitted-available"
+form_text permitted_form_state_restored = "permitted-restored"
+form_text form_step_must_be_repeated = "repeat-required"
+
+heap_text : heap_result → String
+heap_text live_heap_observed = "live-observed"
+heap_text recreated_heap_observed = "recreated-observed"
+heap_text heap_not_available = "not-available"
+
+reconstruction_text : reconstruction_result → String
+reconstruction_text live_page = "live-page"
+reconstruction_text reconstruction_pending = "pending"
+reconstruction_text reconstructed_page_not_yet_confirmed = "page-not-confirmed"
+reconstruction_text reconstructed_page_confirmed = "confirmed"
+reconstruction_text reconstruction_incomplete = "incomplete"
+
+address_reconstruction_text : address_reconstruction → String
+address_reconstruction_text exact_neutral_address = "exact-neutral"
+address_reconstruction_text potentially_sensitive_url_material_redacted = "path-query-or-fragment-redacted"
+address_reconstruction_text no_safe_navigation = "unavailable"
+
+maybe_identity_text : Maybe DurableIdentity → String
+maybe_identity_text Nothing = ""
+maybe_identity_text (Just value) = identity_text value
+
+maybe_address_text : Maybe NeutralAddress → String
+maybe_address_text Nothing = ""
+maybe_address_text (Just value) = neutral_address_text value
+
+maybe_integer_text : Maybe Integer → String
+maybe_integer_text Nothing = "0"
+maybe_integer_text (Just value) = show value
+
+authorization_phase_text : authorization_phase → String
+authorization_phase_text authorization_not_started = "not-started"
+authorization_phase_text authorization_waiting_for_user = "waiting-for-user"
+authorization_phase_text authorization_waiting_for_return = "waiting-for-return"
+authorization_phase_text authorization_returned_without_code_storage = "returned-without-code-storage"
+authorization_phase_text authorization_expired = "expired"
+authorization_phase_text authorization_invalidated = "invalidated"
+
+field : String → String → String
+field name value = name ++ "\t" ++ value ++ "\n"
+
+scope_fields : List DurableIdentity → String
+scope_fields [] = ""
+scope_fields (scope :: rest) =
+  field "authorization_scope" (identity_text scope) ++ scope_fields rest
+
+-- The ordinary record contains references to protected OAuth state, never the
+-- state value, nonce, PKCE verifier, authorization code, or tokens themselves.
+authorization_fields : Maybe AuthorizationContinuation → String
+authorization_fields Nothing = field "authorization_adapter" "none"
+authorization_fields (Just authorization) =
+  field "authorization_adapter" (identity_text authorization.adapter_identity) ++
+  field "authorization_transaction_id" (identity_text authorization.transaction_identity) ++
+  field "authorization_provider_id" (identity_text authorization.provider_identity) ++
+  field "authorization_client_id" (identity_text authorization.client_identity) ++
+  scope_fields authorization.requested_scopes ++
+  field "authorization_redirect" (neutral_address_text authorization.redirect_target) ++
+  field "authorization_state_reference" (maybe_identity_text authorization.state_reference) ++
+  field "authorization_nonce_reference" (maybe_identity_text authorization.nonce_reference) ++
+  field "authorization_pkce_verifier_reference" (maybe_identity_text authorization.pkce_verifier_reference) ++
+  field "authorization_pkce_challenge_reference" (maybe_identity_text authorization.pkce_challenge_reference) ++
+  field "authorization_phase" (authorization_phase_text authorization.phase) ++
+  field "authorization_expires_at_epoch_ms" (maybe_integer_text authorization.expires_at)
+
+export
+serialize_long_view_task : LongViewTask → String
+serialize_long_view_task task =
+  field "schema" "ib-long-view-task-v1" ++
+  field "task_id" (identity_text task.task_identity) ++
+  field "tab_id" (identity_text task.tab_identity) ++
+  field "navigation_id" (identity_text task.navigation_identity) ++
+  field "neutral_url" (maybe_address_text task.neutral_url) ++
+  field "origin" (maybe_address_text task.origin) ++
+  field "address_reconstruction" (address_reconstruction_text task.address_recovery) ++
+  field "continuity" (continuity_text task.continuity) ++
+  field "session_result" (session_text task.session) ++
+  field "form_result" (form_text task.form) ++
+  field "heap_result" (heap_text task.heap) ++
+  field "reconstruction_result" (reconstruction_text task.reconstruction) ++
+  field "renderer_id" (maybe_identity_text task.renderer_identity) ++
+  field "host_process_id" (identity_text task.host_process_identity) ++
+  field "host_generation" (show task.host_generation) ++
+  field "activity_generation" (show task.activity_generation) ++
+  field "renderer_generation" (show task.renderer_generation) ++
+  authorization_fields task.authorization

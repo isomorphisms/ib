@@ -7,6 +7,8 @@ import IB.Inspect
 import IB.DisplayRepair
 import IB.ScientificMedia
 import IB.Prefetch
+import IB.LongViewTask
+import System
 
 %default total
 
@@ -29,6 +31,111 @@ sample_prefetch_targets = [
 first_or : Nat → List Nat → Nat
 first_or fallback [] = fallback
 first_or fallback (value :: _) = value
+
+same_identity : LongViewTask → LongViewTask → Bool
+same_identity before after =
+  identity_text before.task_identity == identity_text after.task_identity &&
+  identity_text before.tab_identity == identity_text after.tab_identity &&
+  identity_text before.navigation_identity == identity_text after.navigation_identity
+
+heap_is_not_live : heap_result → Bool
+heap_is_not_live live_heap_observed = False
+heap_is_not_live recreated_heap_observed = True
+heap_is_not_live heap_not_available = True
+
+session_is_unproven : session_result → Bool
+session_is_unproven session_not_proven = True
+session_is_unproven _ = False
+
+persistence_text : persistence_policy → String
+persistence_text renderer_lifetime_only = "renderer-lifetime-only"
+persistence_text durable_browser_task = "durable-browser-task"
+
+record LongViewEvidence where
+  constructor Evidence
+  identities_preserved : Bool
+  generations_advanced : Bool
+  false_continuity_refused : Bool
+  ordinary_tab_policy : persistence_policy
+  sensitive_url_refused : Bool
+  record_contract_matches : Bool
+
+expected_long_view_record : String
+expected_long_view_record =
+  "schema\tib-long-view-task-v1\n" ++
+  "task_id\ttask-1\n" ++
+  "tab_id\ttab-1\n" ++
+  "navigation_id\tnavigation-1\n" ++
+  "neutral_url\thttps://example.test/\n" ++
+  "origin\thttps://example.test/\n" ++
+  "address_reconstruction\texact-neutral\n" ++
+  "continuity\tlive-renderer-survival\n" ++
+  "session_result\tnot-proven\n" ++
+  "form_result\tnone-permitted\n" ++
+  "heap_result\tnot-available\n" ++
+  "reconstruction_result\tpending\n" ++
+  "renderer_id\t\n" ++
+  "host_process_id\thost-1\n" ++
+  "host_generation\t1\n" ++
+  "activity_generation\t1\n" ++
+  "renderer_generation\t0\n" ++
+  "authorization_adapter\tnone\n"
+
+long_view_evidence : Maybe LongViewEvidence
+long_view_evidence = do
+  task_id ← durable_identity "task-1"
+  tab_id ← durable_identity "tab-1"
+  navigation_id ← durable_identity "navigation-1"
+  host_1 ← durable_identity "host-1"
+  host_2 ← durable_identity "host-2"
+  renderer ← durable_identity "renderer-1"
+  address ← neutral_address "https://console.cloud.google.com/auth/scopes"
+  contract_address ← neutral_address "https://example.test/"
+  let started = start_protected_task
+        task_id tab_id navigation_id (Just address) (Just address)
+        potentially_sensitive_url_material_redacted host_1
+  let rendered = attach_initial_renderer renderer started
+  let renderer_rebuilt = attach_renderer renderer (renderer_was_lost rendered)
+  let host_rebuilt = host_process_restarted host_2 rendered
+  pure (Evidence
+    (same_identity rendered renderer_rebuilt && same_identity rendered host_rebuilt)
+    (renderer_rebuilt.renderer_generation == rendered.renderer_generation + 1 &&
+     host_rebuilt.host_generation == rendered.host_generation + 1)
+    (heap_is_not_live renderer_rebuilt.heap &&
+     heap_is_not_live host_rebuilt.heap &&
+     session_is_unproven renderer_rebuilt.session &&
+     session_is_unproven host_rebuilt.session)
+    (persistence_for ordinary_tab)
+    (case neutral_address "https://example.test/callback?code=secret" of
+       Nothing ⇒ True
+       Just _ ⇒ False)
+    (serialize_long_view_task
+       (start_protected_task
+         task_id tab_id navigation_id (Just contract_address) (Just contract_address)
+         exact_neutral_address host_1) == expected_long_view_record))
+
+evidence_passes : LongViewEvidence → Bool
+evidence_passes evidence =
+  evidence.identities_preserved &&
+  evidence.generations_advanced &&
+  evidence.false_continuity_refused &&
+  (case evidence.ordinary_tab_policy of
+     renderer_lifetime_only ⇒ True
+     durable_browser_task ⇒ False) &&
+  evidence.sensitive_url_refused &&
+  evidence.record_contract_matches
+
+long_view_report : String
+long_view_report =
+  case long_view_evidence of
+    Nothing ⇒ "long-view-construction=False"
+    Just evidence ⇒
+      "long-view-identities=" ++ show evidence.identities_preserved ++ "\n" ++
+      "long-view-generations=" ++ show evidence.generations_advanced ++ "\n" ++
+      "long-view-no-false-continuity=" ++ show evidence.false_continuity_refused ++ "\n" ++
+      "ordinary-tab-durability=" ++ persistence_text evidence.ordinary_tab_policy ++ "\n" ++
+      "sensitive-url-refused=" ++ show evidence.sensitive_url_refused ++ "\n" ++
+      "long-view-record-contract=" ++ show evidence.record_contract_matches
 
 main : IO ()
 main = do
@@ -61,3 +168,7 @@ main = do
   putStrLn ("temporary-needs-language-model=" ++ show (needs_language_model_image_name temporary_image_name))
   putStrLn ("prefetch-bounded=" ++ show (length prefetch))
   putStrLn ("prefetch-reading=" ++ show (reading_target_count prefetch))
+  putStrLn long_view_report
+  case long_view_evidence of
+    Just evidence ⇒ if evidence_passes evidence then pure () else exitFailure
+    Nothing ⇒ exitFailure

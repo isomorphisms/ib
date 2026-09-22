@@ -9,6 +9,7 @@ val stableTestKeyPassword = providers.environmentVariable("IB_TEST_KEY_PASSWORD"
     ?: stableTestKeystorePassword
 val stableTestKeyAlias = providers.environmentVariable("IB_TEST_KEY_ALIAS").orNull
     ?: "wegert-debug"
+val ibSourceHead = providers.environmentVariable("IB_SOURCE_HEAD").orNull ?: "unknown"
 
 android {
     namespace = "org.isomorphisms.ib.webview"
@@ -18,8 +19,9 @@ android {
         applicationId = "org.isomorphisms.ib.webview"
         minSdk = 26
         targetSdk = 36
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 5
+        versionName = "0.5.0"
+        buildConfigField("String", "IB_SOURCE_HEAD", "\"$ibSourceHead\"")
     }
 
     signingConfigs {
@@ -68,6 +70,21 @@ tasks.register("verifyWebViewBoundary") {
         }
         check(implementation.contains("RENDERER_PRIORITY_IMPORTANT")) {
             "Protected transactions must request important renderer priority."
+        }
+        check(implementation.contains("android:name=\".LongViewActivity\"")) {
+            "The real launcher must enter the protected long-view path."
+        }
+        check(implementation.contains("android:launchMode=\"singleTask\"")) {
+            "Live-renderer return must reuse the existing long-view activity."
+        }
+        check(implementation.contains("DurableTaskStore")) {
+            "Long-view tasks must use browser-owned durable records."
+        }
+        check(!implementation.contains("android:supportsPictureInPicture=\"true\"")) {
+            "Picture-in-Picture must not be required for long-view correctness."
+        }
+        check(!implementation.contains("android:foregroundServiceType=\"dataSync\"")) {
+            "A foreground-service survival experiment must not define long-view correctness."
         }
         check(implementation.contains("setSaveEnabled(false)")) {
             "The WebView hierarchy must not become the hidden form persistence mechanism."

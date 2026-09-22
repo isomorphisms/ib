@@ -1,4 +1,35 @@
-# IB WebView protected-transaction acceptance harness
+# IB WebView protected transactions
+
+The application launcher is now **IB Long View**, the first live browser path
+whose protected task survives both renderer replacement and IB host-process
+restart.  It uses browser-owned task, tab, and navigation identities under the
+app-private `state/` tree.  The task and security model are documented in
+[`docs/long-view-protected-tasks.md`](../docs/long-view-protected-tasks.md).
+
+The original issue #59 loopback harness remains in `WebViewActivity` as test
+equipment.  It is no longer the launcher and does not own the product model.
+
+## Long-view behavior
+
+The launcher opens a switchable real URL.  The complete URL is used only by the
+live renderer; durable state retains only a neutral scheme/host/port origin and
+records whether path, query, or fragment material was removed.  On renderer death the
+activity attaches a replacement WebView to the same task.  **Kill IB host**
+provides the separate whole-process acceptance leg; after relaunch IB discovers
+the same task, advances the host generation, and performs safe reconstruction.
+
+WebView's app profile owns cookies.  The task file does not copy them, and a
+reloaded page remains `authenticated=not-proven` until **Session works** is
+pressed.  **Needs repeat** records an explicit incomplete remote-site state.
+
+The path does not require Picture-in-Picture or a foreground service.  Important
+renderer priority remains a survival optimization, not the correctness model.
+
+**Copy receipt** produces a phone-visible receipt without query strings, field
+values, cookies, authorization codes, or heap-canary values.  Inspect the copied
+text for unexpected secrets before sharing it.
+
+## Issue #59 fixture
 
 This is a deliberately separate Android fixture for issue #59. It is not the
 prepaint viewer and it does not change the prepaint boundary.

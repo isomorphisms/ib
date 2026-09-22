@@ -4,7 +4,7 @@
 
     <application
         android:allowBackup="false"
-        android:label="IB WebView Acceptance"
+        android:label="IB"
         android:supportsRtl="true"
         android:theme="@android:style/Theme.Material.Light.NoActionBar"
         android:usesCleartextTraffic="true">
@@ -16,7 +16,13 @@
 
         <activity
             android:name=".WebViewActivity"
-            android:exported="true">
+            android:exported="true" />
+
+        <activity
+            android:name=".LongViewActivity"
+            android:exported="true"
+            android:label="IB Long View"
+            android:launchMode="singleTask">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
