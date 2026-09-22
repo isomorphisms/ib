@@ -101,7 +101,17 @@ public final class IncrementalLargePageActivity extends Activity {
     @Override
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
+        setIntent(intent);
         ensure_incremental_service();
+
+        String supplied_url = intent.getStringExtra("url");
+        if (supplied_url != null && !supplied_url.trim().isEmpty()) {
+            url_input.setText(supplied_url);
+            record("activity", "explicit-url-reentry");
+            navigate_to_entered_url();
+            return;
+        }
+
         record("activity", "launcher-reentry existing-page-preserved");
         sample_page("launcher-reentry");
     }
