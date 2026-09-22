@@ -739,8 +739,16 @@ public final class IncrementalLargePageActivity extends Activity {
 
         Uri parsed = Uri.parse(requested);
         String scheme = parsed.getScheme();
+        if (
+            "ib".equalsIgnoreCase(scheme)
+                && "google-drive-authorize".equals(parsed.getHost())
+        ) {
+            Intent handoff = new Intent(Intent.ACTION_VIEW, parsed);
+            handle_drive_authorization_intent(handoff);
+            return;
+        }
         if (!"https".equalsIgnoreCase(scheme) && !"http".equalsIgnoreCase(scheme)) {
-            append_status("URL must start with http:// or https://");
+            append_status("URL must start with http:// or https://, or be a private IB Drive handoff");
             return;
         }
 
