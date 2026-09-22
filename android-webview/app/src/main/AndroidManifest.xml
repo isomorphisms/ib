@@ -24,7 +24,15 @@
             android:label="IB Incremental Page"
             android:launchMode="singleTask"
             android:process=":incremental"
-            android:supportsPictureInPicture="true" />
+            android:supportsPictureInPicture="true">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data
+                    android:host="google-drive-authorize"
+                    android:scheme="ib" />
+            </intent-filter>
+        </activity>
 
         <service
             android:name=".IncrementalLoadService"
