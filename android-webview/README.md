@@ -71,6 +71,32 @@ to start the exact Google Cloud Studio target with `authuser=5`. This avoids
 relying on `/system/bin/am`, which some Android/Unisoc builds reject when it is
 invoked from an application UID such as Termux.
 
+### Google Drive authorization handoff
+
+The same APK can receive the private
+`ib://google-drive-authorize?...` handoff emitted by
+`cloud-storage-api`'s `google-drive-auth authorize-android` command. This URI
+is an Android VIEW intent, not a Google OAuth page and not a second browser
+path. The intent filter deliberately omits `BROWSABLE`.
+
+IB accepts only `https://www.googleapis.com/auth/drive.readonly`, requires an
+explicit **Authorize Drive** tap, and asks Google Identity Services for a
+server authorization code with offline access. If Google needs account
+selection or consent, Google Play services supplies the authorization UI.
+The Google OAuth endpoint is never loaded into this WebView.
+
+After success, IB sends the one-time server authorization code directly to the
+provided random `127.0.0.1` port with the matching state. It does not write
+the code to the journal, clipboard, WebView history, intent extras, or durable
+app storage. `cloud-storage-api` owns the token exchange and mode-0600 durable
+credential.
+
+Physical authorization requires an Android OAuth client for package
+`org.isomorphisms.ib.webview` registered with the SHA-1 of the stable private
+certificate used to sign the installed APK, plus the Web OAuth client used by
+the local token exchanger. CI compilation with a transient debug signer does
+not establish that physical OAuth identity and is not acceptance evidence for
+the live flow.
 The adapter records coarse load progress, first committed visible content,
 `onPageFinished`, compact Performance API timing/count samples, and renderer
 death to an app-private disk journal. **Keep loading** enters
