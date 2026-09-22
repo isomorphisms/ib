@@ -73,6 +73,22 @@ tasks.register("verifyWebViewBoundary") {
             "The acceptance app must not back up fixture state."
         }
 
+        check(implementation.contains("https://www.googleapis.com/auth/drive.readonly")) {
+            "Drive authorization must stay pinned to the read-only scope."
+        }
+        check(implementation.contains("requestOfflineAccess")) {
+            "The Android bridge must request a server authorization code for offline refresh."
+        }
+        check(implementation.contains("android:scheme=\"ib\"")) {
+            "The Termux-to-IB authorization handoff must use the private IB scheme."
+        }
+        check(!implementation.contains("android.intent.category.BROWSABLE")) {
+            "The private OAuth handoff must not be invokable as a browser link."
+        }
+        check(implementation.contains("127.0.0.1")) {
+            "The server authorization code must return only over local loopback."
+        }
+
         val apks = fileTree("build/outputs/apk/debug") { include("*.apk") }.files
         check(apks.size == 1) { "Expected exactly one debug APK, found ${apks.size}." }
 
