@@ -10,8 +10,8 @@ android {
         applicationId = "org.isomorphisms.ib.webview"
         minSdk = 26
         targetSdk = 36
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 4
+        versionName = "0.4.0"
     }
 
     buildTypes {
@@ -44,6 +44,21 @@ tasks.register("verifyWebViewBoundary") {
         check(implementation.contains("RENDERER_PRIORITY_IMPORTANT")) {
             "Protected transactions must request important renderer priority."
         }
+        check(implementation.contains("android:supportsPictureInPicture=\"true\"")) {
+            "Unattended loading must keep the WebView visibly attached in Picture-in-Picture."
+        }
+        check(implementation.contains("setAutoEnterEnabled(true)")) {
+            "Leaving the activity must enter Picture-in-Picture on Android 12+."
+        }
+        check(!implementation.contains("moveTaskToBack(true)")) {
+            "Do not deliberately hide the incremental WebView after physical renderer eviction."
+        }
+        check(implementation.contains("startForeground(")) {
+            "Incremental background loading must keep its host process active."
+        }
+        check(implementation.contains("android:launchMode=\"singleTask\"")) {
+            "Launcher re-entry must reuse the existing incremental page activity."
+        }
         check(implementation.contains("setSaveEnabled(false)")) {
             "The WebView hierarchy must not become the hidden form persistence mechanism."
         }
@@ -59,5 +74,6 @@ tasks.register("verifyWebViewBoundary") {
 
         val apks = fileTree("build/outputs/apk/debug") { include("*.apk") }.files
         check(apks.size == 1) { "Expected exactly one debug APK, found ${apks.size}." }
+
     }
 }

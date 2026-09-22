@@ -67,8 +67,15 @@ Renderer death is also different from form reconstruction. If a renderer disappe
 - records navigation start, coarse WebView progress, first committed visible content, page-finished callbacks, renderer death, and compact Performance API samples;
 - records counts and timings, not form values or resource URLs;
 - installs an input/change listener that records only `dirty=true`;
-- keeps its WebView active when the task is moved to the background so the experiment can observe whether progress continues while the process survives;
+- starts a foreground data-sync service in the same `:incremental` process so the host remains active while the task is off-screen;
+- requests important renderer priority even when the WebView is hidden;
+- keeps the WebView visibly attached in Picture-in-Picture when the device supports it;
+- treats launcher and notification re-entry as a request to expose and sample the existing page, never as an implicit reload;
 - appends progress to an app-private on-disk journal;
+- copies that bounded journal to the clipboard on explicit **Copy receipt** so the
+  physical-phone run can be reviewed without ADB or Wireless debugging;
+- records the host PID with samples so process continuity is observable inside
+  the same receipt;
 - requires an explicit user reload after renderer death instead of silently replaying an edited form.
 
 This adapter does **not** yet prove:
@@ -76,6 +83,8 @@ This adapter does **not** yet prove:
 - reuse of the user's Chrome/Google authenticated session;
 - successful Google sign-in inside WebView;
 - durable continuation after Android kills the incremental process;
+- unthrottled hidden-page JavaScript or equivalence to a visible Chromium page;
+- Picture-in-Picture availability on Android low-RAM devices;
 - exact reconstruction of a JavaScript heap;
 - safe generic persistence of arbitrary form values;
 - that `onPageFinished` means the application is task-ready.
@@ -100,7 +109,29 @@ Example explicit launch after installing the branch APK:
   --es url 'https://console.cloud.google.com/agent-platform/studio/multimodal?authuser=5&project=isomorphismes-youtube-shorts&supportedpurview=project&model=gemini-3.7-flash&region=global'
 ```
 
-Tap **Background** as soon as waiting becomes pointless. Returning to the task should show whether the same process continued to advance. **Sample** records a fresh compact timing/count snapshot. **Reload** is explicit because a reload can destroy live form state.
+Tap **Keep loading** as soon as waiting becomes pointless. On a device that
+supports Picture-in-Picture, the WebView remains visibly attached in a pinned
+window while another app is foreground. Android 12+ also auto-enters this mode
+when the user leaves the activity. **Sample** records a fresh compact
+timing/count snapshot. **Reload** is explicit because a reload can destroy live
+form state.
+
+Android may disable Picture-in-Picture on a low-RAM device. The adapter records
+`picture-in-picture-available=false` in that case and does not present ordinary
+hidden execution as reliable renderer protection.
+
+The foreground notification is the user-visible lifetime of this experiment.
+On Android 13+ the activity requests notification permission before relying on
+that re-entry path. Its **Stop** action removes the foreground service.
+Expanding the pinned window, opening the **IB Large Page** launcher, or using
+the notification must expose the same Activity and WebView. Launcher and
+notification re-entry record `launcher-reentry existing-page-preserved` and
+must not emit a second `run` or `navigation started` entry.
+
+After the Picture-in-Picture interval and re-entry legs, **Copy receipt** places
+the bounded journal on the clipboard for direct paste into the review
+conversation. The acceptance flow must not depend on ADB, same-phone Wireless
+debugging, `run-as`, or another screen-switch-sensitive extraction mechanism.
 
 ## Acceptance questions
 
@@ -116,5 +147,25 @@ The first real run should answer these separately:
 8. If the renderer dies after an edit, does IB refuse automatic replay and report the boundary?
 9. If the Android process is killed, which disk artifacts remain useful and which stages must be recomputed?
 10. Which of the observed long stages can be moved into a restartable Grease worker or satisfied by an extracted representation without waiting for the full application?
+
+The first hidden-mode physical run failed. Google Cloud Console reached
+`ready=interactive`, grew from 61 to 65 resource entries, and then reported
+`renderer-gone didCrash=false priority=2 form-dirty=false` when the activity
+returned at 1,097,066 ms (18 minutes 17.066 seconds). Priority 2 is WebView's
+highest public renderer priority. The receipt proves that a foreground service
+and that requested priority did not preserve a hidden renderer on the MIRO A1;
+it does not establish the exact off-screen instant at which Android killed it.
+
+The replacement unattended-load receipt uses Picture-in-Picture for at least
+25 minutes in another app, long enough to exceed the failed interval.
+It must bind the before/after samples to one journal and report separately:
+
+- whether the host process survived;
+- whether the same WebView/JavaScript heap survived;
+- whether resource, document, or control milestones advanced;
+- whether Picture-in-Picture remained present and pinned-window, launcher, and notification re-entry preserved the page;
+- whether Android or the site throttled progress despite process survival.
+
+A green APK build establishes none of those physical-device results.
 
 The point of the experiment is not to declare the page fast after one run. It is to identify the blocking chain, make useful partial state visible, and progressively move non-interactive work out of the user's critical path.

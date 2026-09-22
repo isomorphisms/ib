@@ -73,11 +73,48 @@ invoked from an application UID such as Termux.
 
 The adapter records coarse load progress, first committed visible content,
 `onPageFinished`, compact Performance API timing/count samples, and renderer
-death to an app-private disk journal. **Background** moves the task out of the
-foreground without deliberately pausing WebView timers, so a phone run can
-observe whether the live renderer keeps progressing while its process survives.
+death to an app-private disk journal. **Keep loading** enters
+Picture-in-Picture so the WebView stays visibly attached while another app is
+foreground. On Android 12+ leaving the activity also auto-enters
+Picture-in-Picture. A foreground data-sync service in the same `:incremental`
+process keeps the host process active and shows an ongoing notification while
+that page remains open. The WebView also requests important renderer priority.
+
+Opening **IB Large Page** again brings the existing incremental Activity to the
+front. It records `launcher-reentry existing-page-preserved` and samples the
+existing document; it does not create a second WebView or call `loadUrl` again.
+The notification follows the same re-entry path. Its **Stop** action removes the
+extra process protection without claiming that Android or WebView preserved the
+page.
+
+The first MIRO A1 run disproved hidden-mode survival: the renderer was killed
+without crashing at priority 2 after the activity had been away for about 18
+minutes. Priority 2 is already WebView's highest public renderer priority.
+Picture-in-Picture is therefore the next narrow experiment, not another hidden
+process flag. Android may disable Picture-in-Picture on low-RAM devices; the
+adapter reports that explicitly rather than claiming hidden survival.
 
 For forms it records only whether an input/change event made the page dirty; it
 does not read the value. Renderer death never automatically reloads this real
 page. **Reload** is an explicit user action because replaying or discarding an
 in-progress form is not a renderer-recovery implementation detail.
+
+The replacement unattended-load acceptance run is at least 25 minutes in
+another app with the pinned Picture-in-Picture window present. Expanding that
+window, then returning through the **IB Large Page** icon and the foreground
+notification must retain the same run and JavaScript heap, show no second
+navigation start or renderer-gone event, and show whether the five-second
+resource/control samples advanced. On Android 13+ the activity requests
+notification permission so the notification re-entry path can actually be
+exercised.
+
+After the re-entry legs, tap **Copy receipt**. It copies the current app-private
+journal to the clipboard so the physical-phone evidence can be pasted directly
+into the review conversation. ADB, Wireless debugging, `run-as`, and filesystem
+extraction are not part of this acceptance path. The copied journal still
+contains only the already-bounded diagnostic fields: timing/count samples,
+coarse lifecycle events, the heap canary, and host PID; it does not add form
+values, credentials, query strings, or resource URLs.
+
+Build, installation, notification presence, copying the journal, or merely
+entering Picture-in-Picture do not substitute for the 25-minute physical run.
