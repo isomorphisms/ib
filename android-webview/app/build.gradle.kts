@@ -15,6 +15,10 @@ android {
     namespace = "org.isomorphisms.ib.webview"
     compileSdk = 36
 
+    buildFeatures {
+        buildConfig = true
+    }
+
     defaultConfig {
         applicationId = "org.isomorphisms.ib.webview"
         minSdk = 26
