@@ -75,7 +75,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          cc -std=c11 -D_GNU_SOURCE -Wall -Wextra -Werror \
+          cc -std=c11 -Wall -Wextra -Werror \
             termux-uds-probe/uds_probe.c -o /tmp/ib-uds-probe-host
 
           abstract_name="ib-ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
@@ -123,7 +123,7 @@ jobs:
           cc="$ndk/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi26-clang"
           readelf="$ndk/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf"
           mkdir -p termux-uds-probe/build
-          "$cc" -std=c11 -D_GNU_SOURCE -Os -Wall -Wextra -Werror \
+          "$cc" -std=c11 -Os -Wall -Wextra -Werror \
             termux-uds-probe/uds_probe.c \
             -o termux-uds-probe/build/ib-uds-probe-armv7a
           "$readelf" -h termux-uds-probe/build/ib-uds-probe-armv7a \
