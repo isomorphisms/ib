@@ -97,47 +97,8 @@ jobs:
             echo "abstract socket name still accepted a connection after listener exit" >&2
             exit 1
           fi
-          grep -q         shell: bash
-        run: |
-          set -euo pipefail
-          sdk_root="${ANDROID_SDK_ROOT:-$ANDROID_HOME}"
-          apk=app/build/outputs/apk/debug/app-debug.apk
-          "$sdk_root/build-tools/36.0.0/apksigner" verify --print-certs "$apk" \
-            | tee /tmp/ib-webview-signing.txt
-          expected="$(printf '%s' "$IB_EXPECTED_CERT_SHA256" | tr '[:upper:]' '[:lower:]' | tr -d ':')"
-          grep -Fq "Signer #1 certificate SHA-256 digest: $expected" /tmp/ib-webview-signing.txt
-
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: ib-cross-uid-uds-probe
-          path: |
-            android-webview/app/build/outputs/apk/debug/app-debug.apk
-            android-webview/termux-uds-probe/build/ib-uds-probe-armv7a
-
-  replacement-install:
-    needs: build-apk
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
-        with:
-          name: ib-webview-protected-transaction-apk
-          path: downloaded-apk
-
-      - name: Install and replace twice without uninstall
-        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d
-        with:
-          api-level: 29
-          arch: x86_64
-          profile: pixel_2
-          disable-animations: true
-          script: |
-            set -eu
-            test -f downloaded-apk/app/build/outputs/apk/debug/app-debug.apk
-            test -f downloaded-apk/termux-uds-probe/build/ib-uds-probe-armv7a
-            adb install -r downloaded-apk/app/build/outputs/apk/debug/app-debug.apk
-            adb install -r downloaded-apk/app/build/outputs/apk/debug/app-debug.apk
-            adb install -r downloaded-apk/app/build/outputs/apk/debug/app-debug.apk
-status=error\tstage=connect' /tmp/uds-no-listener.txt
+          grep -Fq 'status=error' /tmp/uds-no-listener.txt
+          grep -Fq 'stage=connect' /tmp/uds-no-listener.txt
 
           path="/tmp/ib-uds-${GITHUB_RUN_ID}.sock"
           /tmp/ib-uds-probe-host listen path "$path" > /tmp/uds-path-listener.txt &
@@ -182,8 +143,10 @@ status=error\tstage=connect' /tmp/uds-no-listener.txt
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: ib-webview-protected-transaction-apk
-          path: android-webview/app/build/outputs/apk/debug/app-debug.apk
+          name: ib-cross-uid-uds-probe
+          path: |
+            android-webview/app/build/outputs/apk/debug/app-debug.apk
+            android-webview/termux-uds-probe/build/ib-uds-probe-armv7a
 
   replacement-install:
     needs: build-apk
@@ -191,7 +154,7 @@ status=error\tstage=connect' /tmp/uds-no-listener.txt
     steps:
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
-          name: ib-webview-protected-transaction-apk
+          name: ib-cross-uid-uds-probe
           path: downloaded-apk
 
       - name: Install and replace twice without uninstall
@@ -203,6 +166,8 @@ status=error\tstage=connect' /tmp/uds-no-listener.txt
           disable-animations: true
           script: |
             set -eu
-            adb install -r downloaded-apk/app-debug.apk
-            adb install -r downloaded-apk/app-debug.apk
-            adb install -r downloaded-apk/app-debug.apk
+            test -f downloaded-apk/app/build/outputs/apk/debug/app-debug.apk
+            test -f downloaded-apk/termux-uds-probe/build/ib-uds-probe-armv7a
+            adb install -r downloaded-apk/app/build/outputs/apk/debug/app-debug.apk
+            adb install -r downloaded-apk/app/build/outputs/apk/debug/app-debug.apk
+            adb install -r downloaded-apk/app/build/outputs/apk/debug/app-debug.apk
