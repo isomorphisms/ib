@@ -116,44 +116,28 @@ jobs:
           profile: pixel_2
           disable-animations: true
           script: |
-            set -eu
-            ib_apk="$(find downloaded-apk -name app-debug.apk -print -quit)"
-            reader_apk="$(find downloaded-apk -name result-reader-debug.apk -print -quit)"
-            test -n "$ib_apk"
-            test -n "$reader_apk"
-            adb install -r "$ib_apk"
-            adb install -r "$reader_apk"
-            adb install -r "$ib_apk"
-            adb install -r "$reader_apk"
+            test -f downloaded-apk/app/build/outputs/apk/debug/app-debug.apk
+            test -f downloaded-apk/result-reader/build/outputs/apk/debug/result-reader-debug.apk
+            adb install -r downloaded-apk/app/build/outputs/apk/debug/app-debug.apk
+            adb install -r downloaded-apk/result-reader/build/outputs/apk/debug/result-reader-debug.apk
+            adb install -r downloaded-apk/app/build/outputs/apk/debug/app-debug.apk
+            adb install -r downloaded-apk/result-reader/build/outputs/apk/debug/result-reader-debug.apk
 
-            ib_uid="$(adb shell dumpsys package org.isomorphisms.ib.webview | sed -n 's/.*userId=\([0-9][0-9]*\).*/\1/p' | head -1 | tr -d '\r')"
-            reader_uid="$(adb shell dumpsys package org.isomorphisms.ib.resultreader | sed -n 's/.*userId=\([0-9][0-9]*\).*/\1/p' | head -1 | tr -d '\r')"
-            test -n "$ib_uid"
-            test -n "$reader_uid"
-            test "$ib_uid" != "$reader_uid"
-            printf 'PASS: IB uid=%s and reader uid=%s are distinct.\n' "$ib_uid" "$reader_uid"
+            test -n "$(adb shell dumpsys package org.isomorphisms.ib.webview | sed -n 's/.*userId=\([0-9][0-9]*\).*/\1/p' | head -1 | tr -d '\r')"
+            test -n "$(adb shell dumpsys package org.isomorphisms.ib.resultreader | sed -n 's/.*userId=\([0-9][0-9]*\).*/\1/p' | head -1 | tr -d '\r')"
+            test "$(adb shell dumpsys package org.isomorphisms.ib.webview | sed -n 's/.*userId=\([0-9][0-9]*\).*/\1/p' | head -1 | tr -d '\r')" != "$(adb shell dumpsys package org.isomorphisms.ib.resultreader | sed -n 's/.*userId=\([0-9][0-9]*\).*/\1/p' | head -1 | tr -d '\r')"
+            printf '%s\n' 'PASS: IB and result reader have distinct Android UIDs.'
 
-            adb shell am start -W \
-              -n org.isomorphisms.ib.webview/.DurableResultFixtureActivity
+            adb shell am start -W -n org.isomorphisms.ib.webview/.DurableResultFixtureActivity
+            sleep 1
+            adb shell am start -W -a android.intent.action.VIEW -d content://org.isomorphisms.ib.webview.results/result/hello-v1 --ez read_twice true -n org.isomorphisms.ib.resultreader/.ResultReaderActivity
             sleep 1
 
-            result_uri='content://org.isomorphisms.ib.webview.results/result/hello-v1'
-            adb shell am start -W \
-              -a android.intent.action.VIEW \
-              -d "$result_uri" \
-              --ez read_twice true \
-              -n org.isomorphisms.ib.resultreader/.ResultReaderActivity
-            sleep 1
-
-            adb shell run-as org.isomorphisms.ib.resultreader \
-              cat files/durable-result-reader.tsv \
-              | tr -d '\r' \
-              | tee /tmp/ib-durable-result-reader.tsv
-
+            adb shell run-as org.isomorphisms.ib.resultreader cat files/durable-result-reader.tsv | tr -d '\r' | tee /tmp/ib-durable-result-reader.tsv
             grep -F 'caller-shim=separate-android-app' /tmp/ib-durable-result-reader.tsv
             grep -F 'independent-complete=true' /tmp/ib-durable-result-reader.tsv
             grep -F 'first=hello\n second=hello\n' /tmp/ib-durable-result-reader.tsv
-            grep -F "provider_uid=$ib_uid" /tmp/ib-durable-result-reader.tsv
-            grep -F "calling_uid=$reader_uid" /tmp/ib-durable-result-reader.tsv
+            grep -F "provider_uid=$(adb shell dumpsys package org.isomorphisms.ib.webview | sed -n 's/.*userId=\([0-9][0-9]*\).*/\1/p' | head -1 | tr -d '\r')" /tmp/ib-durable-result-reader.tsv
+            grep -F "calling_uid=$(adb shell dumpsys package org.isomorphisms.ib.resultreader | sed -n 's/.*userId=\([0-9][0-9]*\).*/\1/p' | head -1 | tr -d '\r')" /tmp/ib-durable-result-reader.tsv
             grep -F 'calling_package=org.isomorphisms.ib.resultreader' /tmp/ib-durable-result-reader.tsv
             printf '%s\n' 'PASS: cross-UID provider returned two complete independent descriptors.'
