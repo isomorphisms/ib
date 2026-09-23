@@ -132,3 +132,28 @@ jobs:
             test -n "$reader_uid"
             test "$ib_uid" != "$reader_uid"
             printf 'PASS: IB uid=%s and reader uid=%s are distinct.\n' "$ib_uid" "$reader_uid"
+
+            adb shell am start -W \
+              -n org.isomorphisms.ib.webview/.DurableResultFixtureActivity
+            sleep 1
+
+            result_uri='content://org.isomorphisms.ib.webview.results/result/hello-v1'
+            adb shell am start -W \
+              -a android.intent.action.VIEW \
+              -d "$result_uri" \
+              --ez read_twice true \
+              -n org.isomorphisms.ib.resultreader/.ResultReaderActivity
+            sleep 1
+
+            adb shell run-as org.isomorphisms.ib.resultreader \
+              cat files/durable-result-reader.tsv \
+              | tr -d '\r' \
+              | tee /tmp/ib-durable-result-reader.tsv
+
+            grep -F 'caller-shim=separate-android-app' /tmp/ib-durable-result-reader.tsv
+            grep -F 'independent-complete=true' /tmp/ib-durable-result-reader.tsv
+            grep -F 'first=hello\n second=hello\n' /tmp/ib-durable-result-reader.tsv
+            grep -F "provider_uid=$ib_uid" /tmp/ib-durable-result-reader.tsv
+            grep -F "calling_uid=$reader_uid" /tmp/ib-durable-result-reader.tsv
+            grep -F 'calling_package=org.isomorphisms.ib.resultreader' /tmp/ib-durable-result-reader.tsv
+            printf '%s\n' 'PASS: cross-UID provider returned two complete independent descriptors.'
