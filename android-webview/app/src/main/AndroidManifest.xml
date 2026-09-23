@@ -10,6 +10,20 @@
         android:usesCleartextTraffic="true">
 
         <activity
+            android:name=".UnixSocketProbeActivity"
+            android:exported="true"
+            android:label="IB Unix Socket Probe">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:host="uds-probe"
+                    android:scheme="ib" />
+            </intent-filter>
+        </activity>
+
+        <activity
             android:name=".PressureActivity"
             android:exported="false"
             android:process=":pressure" />
