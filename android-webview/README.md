@@ -98,3 +98,97 @@ silently conflated with durable host-process recovery.
 `android:usesCleartextTraffic="true"` is present only because the deterministic
 fixture server is HTTP on `127.0.0.1`. The harness does not browse arbitrary
 cleartext sites.
+
+## Issue #86 cross-UID Unix-domain socket experiment
+
+This fixture asks a narrow mechanism question: what actually crosses the
+MIRO A1 Android application UID boundary between IB and an ordinary Termux
+process? It is not an IB transport choice.
+
+CI builds two pieces from the same source head:
+
+- the IB APK, with a launchable `ib://uds-probe` activity;
+- `ib-uds-probe-armv7a`, a tiny ARMv7 Termux executable. It is compiled in CI;
+  no compiler or NDK is required on the phone.
+
+The fixed abstract names are:
+
+```text
+IB listener:     ib-longview-86
+Termux listener: termux-longview-86
+```
+
+The Termux probe syntax is:
+
+```sh
+./ib-uds-probe-armv7a listen  abstract NAME [hold]
+./ib-uds-probe-armv7a connect abstract NAME [hold]
+./ib-uds-probe-armv7a listen  path PATH [hold]
+./ib-uds-probe-armv7a connect path PATH [hold]
+```
+
+Every successful connection reports process PID/UID and Linux `SO_PEERCRED`
+peer PID/UID. The Android side reports the same boundary through
+`LocalSocket.getPeerCredentials()`.
+
+### Physical MIRO A1 sequence
+
+Launch the Android fixture from Termux without ADB:
+
+```sh
+termux-open-url ib://uds-probe
+```
+
+**Termux listener → IB connector**
+
+```sh
+./ib-uds-probe-armv7a listen abstract termux-longview-86
+```
+
+Then tap **IB connect to Termux abstract once**. Both sides must report the
+`ping\n` / `pong\n` exchange and each other's UID.
+
+**IB listener → Termux connector**
+
+Tap **IB listen abstract once**, then:
+
+```sh
+./ib-uds-probe-armv7a connect abstract ib-longview-86
+```
+
+Again retain both receipts. After the listener exits, repeat the connector
+command. A failed connect is the name-disappearance observation; do not
+replace it with a filesystem check.
+
+For process-death behavior, use `hold` on the Termux side and the corresponding
+**+ hold** Android button. Once both sides report the completed exchange and
+`waiting-for-peer-close`, kill one endpoint. The survivor must record EOF or
+an explicit socket error. **Kill IB host** exists for the IB-dies-first leg.
+
+For pathname comparison, first prove the creator can bind its own private path.
+The Android fixture exposes its exact app-private pathname on screen. From
+Termux, try:
+
+```sh
+./ib-uds-probe-armv7a connect path /data/user/0/org.isomorphisms.ib.webview/files/ib-longview-86.sock
+```
+
+Retain the exact errno. In the other direction, create a Termux-private
+listener:
+
+```sh
+./ib-uds-probe-armv7a listen path "$TMPDIR/ib-longview-86.sock"
+```
+
+Paste that pathname into the Android fixture if it differs from the prefilled
+Termux path, then tap **IB connect to Termux-private pathname**. Retain the
+exact Android exception or successful exchange.
+
+The expected filesystem isolation is only a hypothesis until the phone
+produces the receipt. Likewise, success or failure of abstract sockets is
+evidence about this Android/SELinux boundary, not a proposal that Grease or IB
+should expose Unix socket names.
+
+Hosted CI checks the probe logic on Linux, compiles the ARMv7 executable,
+builds/signs the APK, and verifies replacement installation. It does not claim
+cross-UID MIRO A1 acceptance.
