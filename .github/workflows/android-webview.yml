@@ -140,4 +140,18 @@ jobs:
             grep -F "provider_uid=$(adb shell dumpsys package org.isomorphisms.ib.webview | sed -n 's/.*userId=\([0-9][0-9]*\).*/\1/p' | head -1 | tr -d '\r')" /tmp/ib-durable-result-reader.tsv
             grep -F "calling_uid=$(adb shell dumpsys package org.isomorphisms.ib.resultreader | sed -n 's/.*userId=\([0-9][0-9]*\).*/\1/p' | head -1 | tr -d '\r')" /tmp/ib-durable-result-reader.tsv
             grep -F 'calling_package=org.isomorphisms.ib.resultreader' /tmp/ib-durable-result-reader.tsv
+            grep -o 'provider_generation=[0-9][0-9]*' /tmp/ib-durable-result-reader.tsv | tail -1 > /tmp/ib-provider-generation-before
+            grep -o 'provider_process_id=provider-[^,[:space:]]*' /tmp/ib-durable-result-reader.tsv | tail -1 > /tmp/ib-provider-process-before
             printf '%s\n' 'PASS: cross-UID provider returned two complete independent descriptors.'
+
+            adb shell run-as org.isomorphisms.ib.webview /system/bin/kill -9 "$(adb shell pidof org.isomorphisms.ib.webview | tr -d '\r')"
+            sleep 1
+            adb shell am start -W -a android.intent.action.VIEW -d content://org.isomorphisms.ib.webview.results/result/hello-v1 -n org.isomorphisms.ib.resultreader/.ResultReaderActivity
+            sleep 1
+            adb shell run-as org.isomorphisms.ib.resultreader cat files/durable-result-reader.tsv | tr -d '\r' | tee /tmp/ib-durable-result-reader-after-host-death.tsv
+            grep -F 'reason=launch bytes=6 payload=hello\n' /tmp/ib-durable-result-reader-after-host-death.tsv
+            grep -o 'provider_generation=[0-9][0-9]*' /tmp/ib-durable-result-reader-after-host-death.tsv | tail -1 > /tmp/ib-provider-generation-after
+            grep -o 'provider_process_id=provider-[^,[:space:]]*' /tmp/ib-durable-result-reader-after-host-death.tsv | tail -1 > /tmp/ib-provider-process-after
+            test "$(cat /tmp/ib-provider-generation-before)" != "$(cat /tmp/ib-provider-generation-after)"
+            test "$(cat /tmp/ib-provider-process-before)" != "$(cat /tmp/ib-provider-process-after)"
+            printf '%s\n' 'PASS: late reader recovered the same durable result after IB host death through a new provider generation.'
