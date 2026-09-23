@@ -120,6 +120,25 @@ tasks.register("verifyWebViewBoundary") {
         check(unixSocketProbe.contains("wait_for_peer_close")) {
             "Issue #86 must have an explicit process-death/EOF observation."
         }
+        check(unixSocketProbe.contains(
+            "socket.connect(new LocalSocketAddress(address, namespace));"
+        )) {
+            "Android LocalSocket must use the one-argument connect path that creates the fd."
+        }
+        check(!unixSocketProbe.contains(
+            "socket.connect(new LocalSocketAddress(address, namespace),"
+        )) {
+            "Do not use LocalSocket.connect(endpoint, timeout); Android does not implement it."
+        }
+        check(
+            unixSocketProbe.indexOf(
+                "socket.connect(new LocalSocketAddress(address, namespace));"
+            ) < unixSocketProbe.indexOf(
+                "socket.setSoTimeout(hold ? 0 : 5000);"
+            )
+        ) {
+            "Socket options must be applied after LocalSocket has created its fd."
+        }
         check(manifest.contains("android:name=\".UnixSocketProbeActivity\"")) {
             "Issue #86 must have a phone-launchable fixture activity."
         }
