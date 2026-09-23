@@ -193,8 +193,8 @@ public final class ResultReaderActivity extends Activity {
 
     private void copy_receipt() {
         try {
-            String receipt = java.nio.file.Files.readString(
-                receipt_file.toPath(),
+            String receipt = new String(
+                java.nio.file.Files.readAllBytes(receipt_file.toPath()),
                 StandardCharsets.UTF_8
             );
             ClipboardManager clipboard =
