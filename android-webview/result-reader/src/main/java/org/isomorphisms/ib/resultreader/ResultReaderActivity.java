@@ -56,7 +56,11 @@ public final class ResultReaderActivity extends Activity {
             record("refused", "reason=unexpected-uri uri=" + safe(requested));
             return;
         }
-        read_once(requested, "launch");
+        if (getIntent().getBooleanExtra("read_twice", false)) {
+            read_twice(requested);
+        } else {
+            read_once(requested, "launch");
+        }
     }
 
     private void build_ui() {
