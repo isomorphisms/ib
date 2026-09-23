@@ -292,8 +292,8 @@ public final class UnixSocketProbeActivity extends Activity {
 
         executor.execute(() -> {
             try (LocalSocket socket = new LocalSocket(LocalSocket.SOCKET_STREAM)) {
+                socket.connect(new LocalSocketAddress(address, namespace));
                 socket.setSoTimeout(hold ? 0 : 5000);
-                socket.connect(new LocalSocketAddress(address, namespace), 3000);
                 append_receipt(
                     "operation=connect\tstatus=connected\t" + peer_credentials(socket)
                 );
