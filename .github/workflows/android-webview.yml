@@ -52,7 +52,7 @@ jobs:
           packages: ''
 
       - name: Install Android platform
-        run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
+        run: sdkmanager "platforms;android-36" "build-tools;36.0.0" "ndk;27.2.12479018"
 
       - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a
         with:
@@ -70,6 +70,104 @@ jobs:
 
       - name: Test, lint, and build debug APK
         run: gradle --no-daemon :app:testDebugUnitTest :app:lintDebug :app:verifyWebViewBoundary
+
+      - name: Exercise Unix-socket probe logic on Linux
+        shell: bash
+        run: |
+          set -euo pipefail
+          cc -std=c11 -D_GNU_SOURCE -Wall -Wextra -Werror \
+            termux-uds-probe/uds_probe.c -o /tmp/ib-uds-probe-host
+
+          abstract_name="ib-ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          /tmp/ib-uds-probe-host listen abstract "$abstract_name" > /tmp/uds-listener.txt &
+          listener_pid=$!
+          for _ in $(seq 1 50); do
+            grep -q 'ready=true' /tmp/uds-listener.txt && break
+            sleep 0.05
+          done
+          grep -q 'ready=true' /tmp/uds-listener.txt
+          /tmp/ib-uds-probe-host connect abstract "$abstract_name" > /tmp/uds-connector.txt
+          wait "$listener_pid"
+          grep -q 'exchange=pass' /tmp/uds-listener.txt
+          grep -q 'exchange=pass' /tmp/uds-connector.txt
+          grep -q 'peer_uid=' /tmp/uds-listener.txt
+          grep -q 'peer_uid=' /tmp/uds-connector.txt
+
+          if /tmp/ib-uds-probe-host connect abstract "$abstract_name" > /tmp/uds-no-listener.txt 2>&1; then
+            echo "abstract socket name still accepted a connection after listener exit" >&2
+            exit 1
+          fi
+          grep -q         shell: bash
+        run: |
+          set -euo pipefail
+          sdk_root="${ANDROID_SDK_ROOT:-$ANDROID_HOME}"
+          apk=app/build/outputs/apk/debug/app-debug.apk
+          "$sdk_root/build-tools/36.0.0/apksigner" verify --print-certs "$apk" \
+            | tee /tmp/ib-webview-signing.txt
+          expected="$(printf '%s' "$IB_EXPECTED_CERT_SHA256" | tr '[:upper:]' '[:lower:]' | tr -d ':')"
+          grep -Fq "Signer #1 certificate SHA-256 digest: $expected" /tmp/ib-webview-signing.txt
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: ib-cross-uid-uds-probe
+          path: |
+            android-webview/app/build/outputs/apk/debug/app-debug.apk
+            android-webview/termux-uds-probe/build/ib-uds-probe-armv7a
+
+  replacement-install:
+    needs: build-apk
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: ib-webview-protected-transaction-apk
+          path: downloaded-apk
+
+      - name: Install and replace twice without uninstall
+        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d
+        with:
+          api-level: 29
+          arch: x86_64
+          profile: pixel_2
+          disable-animations: true
+          script: |
+            set -eu
+            test -f downloaded-apk/app/build/outputs/apk/debug/app-debug.apk
+            test -f downloaded-apk/termux-uds-probe/build/ib-uds-probe-armv7a
+            adb install -r downloaded-apk/app/build/outputs/apk/debug/app-debug.apk
+            adb install -r downloaded-apk/app/build/outputs/apk/debug/app-debug.apk
+            adb install -r downloaded-apk/app/build/outputs/apk/debug/app-debug.apk
+status=error\tstage=connect' /tmp/uds-no-listener.txt
+
+          path="/tmp/ib-uds-${GITHUB_RUN_ID}.sock"
+          /tmp/ib-uds-probe-host listen path "$path" > /tmp/uds-path-listener.txt &
+          path_listener_pid=$!
+          for _ in $(seq 1 50); do
+            grep -q 'ready=true' /tmp/uds-path-listener.txt && break
+            sleep 0.05
+          done
+          grep -q 'ready=true' /tmp/uds-path-listener.txt
+          /tmp/ib-uds-probe-host connect path "$path" > /tmp/uds-path-connector.txt
+          wait "$path_listener_pid"
+          grep -q 'exchange=pass' /tmp/uds-path-listener.txt
+          grep -q 'exchange=pass' /tmp/uds-path-connector.txt
+          test ! -e "$path"
+
+      - name: Build ARMv7 Termux probe
+        shell: bash
+        run: |
+          set -euo pipefail
+          sdk_root="${ANDROID_SDK_ROOT:-$ANDROID_HOME}"
+          ndk="$sdk_root/ndk/27.2.12479018"
+          cc="$ndk/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi26-clang"
+          readelf="$ndk/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf"
+          mkdir -p termux-uds-probe/build
+          "$cc" -std=c11 -D_GNU_SOURCE -Os -Wall -Wextra -Werror \
+            termux-uds-probe/uds_probe.c \
+            -o termux-uds-probe/build/ib-uds-probe-armv7a
+          "$readelf" -h termux-uds-probe/build/ib-uds-probe-armv7a \
+            | tee /tmp/ib-uds-probe-elf.txt
+          grep -q 'Machine:.*ARM' /tmp/ib-uds-probe-elf.txt
 
       - name: Verify APK signer
         shell: bash
