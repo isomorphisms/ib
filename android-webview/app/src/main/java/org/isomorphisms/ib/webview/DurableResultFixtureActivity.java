@@ -123,12 +123,6 @@ public final class DurableResultFixtureActivity extends Activity {
     }
 
     private int package_uid(String package_name) throws PackageManager.NameNotFoundException {
-        if (Build.VERSION.SDK_INT >= 33) {
-            return getPackageManager().getPackageUid(
-                package_name,
-                PackageManager.PackageInfoFlags.of(0)
-            );
-        }
         return getPackageManager().getPackageUid(package_name, 0);
     }
 
@@ -156,8 +150,8 @@ public final class DurableResultFixtureActivity extends Activity {
 
     private void copy_receipt() {
         try {
-            String receipt = java.nio.file.Files.readString(
-                receipt_file.toPath(),
+            String receipt = new String(
+                java.nio.file.Files.readAllBytes(receipt_file.toPath()),
                 StandardCharsets.UTF_8
             );
             ClipboardManager clipboard =
