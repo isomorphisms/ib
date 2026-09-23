@@ -53,7 +53,7 @@ public final class DurableResultStore {
         Path generation_path = root.resolve("provider-generation");
         long previous = 0;
         if (Files.exists(generation_path)) {
-            String text = Files.readString(generation_path, StandardCharsets.US_ASCII).trim();
+            String text = new String(\n                Files.readAllBytes(generation_path),\n                StandardCharsets.US_ASCII\n            ).trim();
             if (!text.isEmpty()) {
                 previous = Long.parseLong(text);
             }
