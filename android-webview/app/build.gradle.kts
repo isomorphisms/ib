@@ -23,8 +23,8 @@ android {
         applicationId = "org.isomorphisms.ib.webview"
         minSdk = 26
         targetSdk = 36
-        versionCode = 5
-        versionName = "0.5.0"
+        versionCode = 7
+        versionName = "0.7.0"
         buildConfigField("String", "IB_SOURCE_HEAD", "\"$ibSourceHead\"")
     }
 
@@ -101,6 +101,30 @@ tasks.register("verifyWebViewBoundary") {
         }
         check(implementation.contains("android:allowBackup=\"false\"")) {
             "The acceptance app must not back up fixture state."
+        }
+
+        val unixSocketProbe = file(
+            "src/main/java/org/isomorphisms/ib/webview/UnixSocketProbeActivity.java"
+        ).readText()
+        val manifest = file("src/main/AndroidManifest.xml").readText()
+
+        check(unixSocketProbe.contains("Namespace.ABSTRACT")) {
+            "Issue #86 must exercise Linux abstract Unix sockets."
+        }
+        check(unixSocketProbe.contains("Namespace.FILESYSTEM")) {
+            "Issue #86 must exercise pathname Unix sockets."
+        }
+        check(unixSocketProbe.contains("getPeerCredentials()")) {
+            "Issue #86 must record peer credentials when Android exposes them."
+        }
+        check(unixSocketProbe.contains("wait_for_peer_close")) {
+            "Issue #86 must have an explicit process-death/EOF observation."
+        }
+        check(manifest.contains("android:name=\".UnixSocketProbeActivity\"")) {
+            "Issue #86 must have a phone-launchable fixture activity."
+        }
+        check(manifest.contains("android:host=\"uds-probe\"")) {
+            "The Termux-facing entry point must not require ADB."
         }
 
         val apks = fileTree("build/outputs/apk/debug") { include("*.apk") }.files
