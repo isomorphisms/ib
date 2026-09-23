@@ -120,6 +120,7 @@ public final class ResultReaderActivity extends Activity {
             ParcelFileDescriptor first = open(uri);
             ParcelFileDescriptor second = open(uri)
         ) {
+            String metadata = query_metadata(uri);
             byte[] first_bytes = read_descriptor(first);
             byte[] second_bytes = read_descriptor(second);
             boolean complete = Arrays.equals(first_bytes, "hello\n".getBytes(StandardCharsets.UTF_8))
@@ -131,6 +132,7 @@ public final class ResultReaderActivity extends Activity {
                     + " independent-complete=" + complete
                     + " first=" + quoted(first_bytes)
                     + " second=" + quoted(second_bytes)
+                    + " " + metadata
             );
         } catch (SecurityException exception) {
             record(
