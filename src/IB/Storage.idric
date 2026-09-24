@@ -43,6 +43,13 @@ is_tab_record ["tabs", _, "history.log"] = True
 is_tab_record ["tabs", _, "view.txt"] = True
 is_tab_record _ = False
 
+is_task_record : List String → Bool
+is_task_record ["tasks", _, "task.txt"] = True
+is_task_record ["tasks", _, "roots"] = True
+is_task_record ["tasks", _, "resource-edges"] = True
+is_task_record ["tasks", _, "frontier"] = True
+is_task_record _ = False
+
 secret_part : String → Bool
 secret_part part = elem part [
   "auth", "authentication", "cookie", "cookies", "credential", "credentials",
@@ -58,7 +65,7 @@ public export
 classify_path : String → storage_kind
 classify_path path =
   let parts = path_parts path in
-    if parts == ["visits.jsonl"] || is_tab_record parts
+    if parts == ["visits.jsonl"] || is_tab_record parts || is_task_record parts
       then canonical
       else if has_secret parts
         then secret
@@ -83,7 +90,7 @@ public export
 transparent_path : String → Bool
 transparent_path path =
   let parts = path_parts path in
-    parts == ["visits.jsonl"] || is_tab_record parts ||
+    parts == ["visits.jsonl"] || is_tab_record parts || is_task_record parts ||
       case parts of
         ["indexes", name] ⇒ transparent_index name
         _ ⇒ False
