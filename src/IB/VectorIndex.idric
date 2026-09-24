@@ -1,0 +1,128 @@
+module IB.VectorIndex
+
+import IB.Storage
+
+%default total
+
+public export
+choice vector_metric one_of
+  cosine
+  dot_product
+
+public export
+vector_metric_text : vector_metric → String
+vector_metric_text cosine = "cosine"
+vector_metric_text dot_product = "dot"
+
+public export
+record VectorBackend where
+  constructor Backend
+  backend_name : String
+  backend_program : String
+  scalar_name : String
+  contract_version : Nat
+
+public export
+flat_f32_exact : VectorBackend
+flat_f32_exact = Backend "flat-f32-exact" "ib-vector-index" "f32" 2
+
+public export
+record VectorIndexSpec where
+  constructor IndexSpec
+  backend : VectorBackend
+  collection : String
+  embedding_model : String
+  dimensions : Nat
+  metric : vector_metric
+
+safe_component : String → Bool
+safe_component value =
+  value /= "." && value /= ".." && safe_relative_path value &&
+    path_parts value == [value]
+
+public export
+vector_index_relative_directory : VectorIndexSpec → Maybe String
+vector_index_relative_directory spec =
+  if safe_component (collection spec) && safe_component (embedding_model spec)
+    then Just ("organizing-the-information/vector-spaces/" ++
+      embedding_model spec ++ "/" ++ collection spec)
+    else Nothing
+
+public export
+data BackendCommand = Run String (List String)
+
+public export
+command_program : BackendCommand → String
+command_program (Run program _) = program
+
+public export
+command_arguments : BackendCommand → List String
+command_arguments (Run _ arguments) = arguments
+
+index_directory : String → VectorIndexSpec → Maybe String
+index_directory "" _ = Nothing
+index_directory view_root spec =
+  case vector_index_relative_directory spec of
+    Nothing ⇒ Nothing
+    Just relative ⇒ Just (view_root ++ "/" ++ relative)
+
+public export
+build_command : String → VectorIndexSpec → Maybe BackendCommand
+build_command view_root spec =
+  case index_directory view_root spec of
+    Nothing ⇒ Nothing
+    Just directory ⇒
+      if dimensions spec == 0
+        then Nothing
+        else Just (Run
+          (backend_program (backend spec))
+          [ "build"
+          , directory
+          , show (dimensions spec)
+          , vector_metric_text (metric spec)
+          ])
+
+public export
+query_command : String → VectorIndexSpec → Nat → Maybe BackendCommand
+query_command view_root spec result_count =
+  case index_directory view_root spec of
+    Nothing ⇒ Nothing
+    Just directory ⇒
+      if dimensions spec == 0 || result_count == 0
+        then Nothing
+        else Just (Run
+          (backend_program (backend spec))
+          ["query", directory, show result_count])
+
+public export
+query_text_command : String → VectorIndexSpec → Nat → Maybe BackendCommand
+query_text_command view_root spec result_count =
+  case index_directory view_root spec of
+    Nothing ⇒ Nothing
+    Just directory ⇒
+      if dimensions spec == 0 || result_count == 0
+        then Nothing
+        else Just (Run
+          (backend_program (backend spec))
+          ["query-text", directory, show result_count])
+
+public export
+compile_cache_command : String → VectorIndexSpec → Maybe BackendCommand
+compile_cache_command view_root spec =
+  case index_directory view_root spec of
+    Nothing ⇒ Nothing
+    Just directory ⇒ Just (Run
+      (backend_program (backend spec))
+      ["compile-cache", directory])
+
+public export
+column_command : String → VectorIndexSpec → Nat → Maybe BackendCommand
+column_command view_root spec coordinate =
+  case index_directory view_root spec of
+    Nothing ⇒ Nothing
+    Just directory ⇒
+      if dimensions spec == 0 || coordinate == 0 || coordinate > dimensions spec
+        then Nothing
+        else Just (Run
+          (backend_program (backend spec))
+          ["column", directory, show coordinate])

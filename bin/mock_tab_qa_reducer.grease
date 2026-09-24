@@ -1,0 +1,68 @@
+#!/bin/sh
+set -eu
+
+reducer_name=mock-single-member-weighted-reducer-v1
+
+inspect_reducer() {
+  printf '%s\n' \
+    "reducer=$reducer_name" \
+    'available=True' \
+    'ensemble=single-member-test-double' \
+    'member-count=1' \
+    'xgboost=False'
+}
+
+reduce_candidate() {
+  retrieval_score=$1
+  source_document=$2
+  report=${IB_TAB_QA_REDUCER_REPORT:?IB_TAB_QA_REDUCER_REPORT must name the reducer report}
+  candidate=$(sed -n '1p')
+
+  test -n "$candidate" || {
+    printf 'mock reducer: model candidate is empty\n' >&2
+    return 1
+  }
+  test -s "$source_document" || {
+    printf 'mock reducer: source document is unavailable\n' >&2
+    return 1
+  }
+  awk -v value="$retrieval_score" 'BEGIN {
+    numeric = value ~ /^[-+]?([0-9]+([.][0-9]*)?|[.][0-9]+)([eE][-+]?[0-9]+)?$/
+    exit !numeric
+  }' || {
+    printf 'mock reducer: retrieval score is not numeric\n' >&2
+    return 1
+  }
+
+  printf '%s\n' \
+    "reducer=$reducer_name" \
+    'ensemble-stage-ran=True' \
+    'member-count=1' \
+    'checks-run=3' \
+    'candidate-nonempty=True' \
+    'source-readable=True' \
+    'score-numeric=True' \
+    "aggregate-score=$retrieval_score" > "$report"
+
+  # This one-member reducer deliberately preserves the model text. A later
+  # voting, bagging, rank-aggregation, or XGBoost adapter occupies this stage.
+  printf '%s\n' "$candidate"
+}
+
+case "${1:-}" in
+  inspect)
+    test "$#" -eq 1 || exit 2
+    inspect_reducer
+    ;;
+  reduce)
+    test "$#" -eq 3 || {
+      printf 'usage: %s reduce RETRIEVAL_SCORE SOURCE_DOCUMENT < candidate.txt\n' "$0" >&2
+      exit 2
+    }
+    reduce_candidate "$2" "$3"
+    ;;
+  *)
+    printf 'usage: %s {inspect|reduce RETRIEVAL_SCORE SOURCE_DOCUMENT}\n' "$0" >&2
+    exit 2
+    ;;
+esac

@@ -1,0 +1,47 @@
+name: Pinned embedding model views
+
+on:
+  pull_request:
+    paths:
+      - 'models/embedding/**'
+      - 'bin/ib_embedding_model.grease'
+      - 'bin/ib_vector_view.grease'
+      - 'experiments/embedding-models/**'
+      - 'native/vector-index/**'
+      - 'tests/fixtures/embedding-*.tsv'
+      - 'tests/live_embedding_models.sh'
+      - '.github/workflows/embedding-models.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  end-to-end:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: experiments/embedding-models/requirements.txt
+
+      - name: Install pinned comparison adapter
+        run: pip install -r experiments/embedding-models/requirements.txt
+
+      - name: Compile filesystem index
+        run: make -C native/vector-index
+
+      - uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/ib-embedding-models
+          key: ib-embedding-models-${{ hashFiles('models/embedding/*.model') }}
+
+      - name: Fetch, verify, embed, index, and retrieve with both model views
+        run: |
+          mkdir -p '${{ runner.temp }}/ib-embedding-models'
+          tests/live_embedding_models.sh \
+            native/vector-index/ib-vector-index \
+            python \
+            '${{ runner.temp }}/ib-embedding-models'
