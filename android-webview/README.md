@@ -29,6 +29,70 @@ renderer priority remains a survival optimization, not the correctness model.
 values, cookies, authorization codes, or heap-canary values.  Inspect the copied
 text for unexpected secrets before sharing it.
 
+
+## Issue #84 durable-result provider experiment
+
+This branch adds a deliberately tiny test of a different lifetime boundary:
+whether an app-private durable result can outlive the IB process and later be
+read by another Android application without moving the result into shared
+storage.
+
+The IB package commits exactly one immutable fixture result:
+
+```text
+result-id: hello-v1
+bytes: hello\n
+storage: app-private files/durable-results/
+```
+
+`DurableResultProvider` is not the store. It is a non-exported Android
+`ContentProvider` that can hand a fresh read-only `ParcelFileDescriptor` to
+a package holding an explicit URI grant. A separate APK,
+`org.isomorphisms.ib.resultreader`, is the caller shim. It has a distinct
+Android UID and reads through `ContentResolver`, not through IB's private
+filesystem.
+
+The provider increments a durable provider-generation counter every time a new
+provider process is created. The reader queries that metadata before opening
+the result, so a physical receipt can distinguish "same provider process" from
+"new provider process reading the same stored result."
+
+### MIRO A1 run
+
+Install both APKs from the same workflow artifact. No ADB is required for the
+phone run.
+
+From Termux:
+
+```sh
+termux-open-url ib://durable-result-fixture
+```
+
+The fixture commits the result and grants the reader package access. Then:
+
+```sh
+termux-open-url content://org.isomorphisms.ib.webview.results/result/hello-v1
+```
+
+The reader opens the result through Android IPC and records its own UID plus
+the provider PID, UID, process identity, generation, and calling package/UID.
+**Open two independent readers** obtains two descriptors before reading either
+one and verifies that both see the complete `hello\n` bytes.
+
+For the process-death leg, read once, reopen the IB fixture, tap **Kill IB
+host**, then invoke the content URI again. A successful late read with a higher
+provider generation proves the stored result did not depend on the old provider
+process.
+
+Force-stop and reboot are deliberately physical questions. If Android revokes
+the URI grant, the reader records `permission-denied` and tells the user to
+reopen `ib://durable-result-fixture`; do not turn that permission lifetime
+into a claim that the result bytes were lost.
+
+The two receipts are independently copyable. CI proves only that the packages
+build, use different application UIDs in an emulator install, and preserve the
+static storage/descriptor boundary. It does not claim MIRO A1 acceptance.
+
 ## Issue #59 fixture
 
 This is a deliberately separate Android fixture for issue #59. It is not the
