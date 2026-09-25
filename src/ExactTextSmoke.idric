@@ -1,0 +1,22 @@
+module ExactTextSmoke
+
+import IB.ExactText
+
+%default total
+
+emit_fixture : String → String → String → IO ()
+emit_fixture label wanted text = do
+  putStrLn (label ++ "-contains=" ++ show (contains_string wanted text))
+  putStrLn (label ++ "-positions=" ++ show (match_positions wanted text))
+  putStrLn (label ++ "-count=" ++ show (match_count wanted text))
+
+main : IO ()
+main = do
+  emit_fixture "absent" "needle" "haystack"
+  emit_fixture "beginning" "browser" "browser body"
+  emit_fixture "middle" "needle" "xxneedleyy"
+  emit_fixture "end" "needle" "xxneedle"
+  emit_fixture "overlap" "aba" "ababa"
+  emit_fixture "one-byte" "a" "banana"
+  emit_fixture "repeated-prefix" "aaaaab" "aaaaaaaaab"
+  emit_fixture "empty" "" "abc"

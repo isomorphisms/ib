@@ -1,0 +1,61 @@
+name: Exact text semantic oracle
+
+on:
+  pull_request:
+    paths:
+      - 'src/IB/ExactText.idric'
+      - 'src/ExactTextSmoke.idric'
+      - 'docs/exact-text-search.md'
+      - '.github/workflows/exact-text.yml'
+      - 'bin/ci_browser_foundation.grease'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  oracle:
+    runs-on: ubuntu-latest
+    env:
+      IDRIS2_CG: chez
+      SCHEME: scheme
+      IDRIC_REF: 61970be77769f607cca8650bf424c0f0b22ddee7
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install compiler dependencies
+        run: sh bin/ci_browser_foundation.grease install-dependencies
+
+      - name: Restore Idric compiler
+        id: idric-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: /tmp/idric
+          key: idric-${{ runner.os }}-61970be77769f607cca8650bf424c0f0b22ddee7
+
+      - name: Build and install Idric compiler
+        if: steps.idric-cache.outputs.cache-hit != 'true'
+        run: sh bin/ci_browser_foundation.grease build-idric
+
+      - name: Compile exact text oracle
+        run: |
+          cd src
+          /tmp/idric/bin/idris2 ExactTextSmoke.idric -o ib-exact-text 2>&1 | tee /tmp/exact-text-compile.txt
+          test -x ./build/exec/ib-exact-text
+          ! grep -q '^Error:' /tmp/exact-text-compile.txt
+
+      - name: Check exact positions and counts
+        run: |
+          src/build/exec/ib-exact-text | tee /tmp/exact-text.txt
+          grep -Fx 'absent-contains=False' /tmp/exact-text.txt
+          grep -Fx 'absent-positions=[]' /tmp/exact-text.txt
+          grep -Fx 'absent-count=0' /tmp/exact-text.txt
+          grep -Fx 'beginning-positions=[0]' /tmp/exact-text.txt
+          grep -Fx 'middle-positions=[2]' /tmp/exact-text.txt
+          grep -Fx 'end-positions=[2]' /tmp/exact-text.txt
+          grep -Fx 'overlap-positions=[0, 2]' /tmp/exact-text.txt
+          grep -Fx 'overlap-count=2' /tmp/exact-text.txt
+          grep -Fx 'one-byte-positions=[1, 3, 5]' /tmp/exact-text.txt
+          grep -Fx 'repeated-prefix-positions=[4]' /tmp/exact-text.txt
+          grep -Fx 'empty-positions=[0, 1, 2, 3]' /tmp/exact-text.txt
+          grep -Fx 'empty-count=4' /tmp/exact-text.txt
