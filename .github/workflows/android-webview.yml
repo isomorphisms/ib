@@ -130,6 +130,7 @@ jobs:
 
             adb shell am start -W -n org.isomorphisms.ib.webview/.DurableResultFixtureActivity
             sleep 1
+            adb shell run-as org.isomorphisms.ib.webview cat files/receipts/durable-result-fixture.tsv
             adb shell am start -W -a android.intent.action.VIEW -d content://org.isomorphisms.ib.webview.results/result/hello-v1 --ez read_twice true -n org.isomorphisms.ib.resultreader/.ResultReaderActivity
             sleep 1
 
@@ -224,6 +225,7 @@ jobs:
             adb shell am force-stop org.isomorphisms.ib.webview
             adb shell am start -W -n org.isomorphisms.ib.webview/.LongViewActivity --es fixture heavy
             for attempt in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do adb shell "run-as org.isomorphisms.ib.webview sh -c 'cat files/receipts/*/*.tsv 2>/dev/null'" | tr -d '\r' > /tmp/ib-longview-before.tsv || true; grep -F 'first-useful' /tmp/ib-longview-before.tsv | grep -F 'durable-result=committed' >/dev/null && break; sleep 1; done
+            cat /tmp/ib-longview-before.tsv
             grep -F 'first-useful' /tmp/ib-longview-before.tsv | grep -F 'marker=heavy-v1' | grep -F 'durable-result=committed'
             grep -F 'first-useful' /tmp/ib-longview-before.tsv | grep -F 'renderer-pss=not-measured'
             for attempt in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do adb shell "run-as org.isomorphisms.ib.webview sh -c 'cat files/receipts/*/*.tsv 2>/dev/null'" | tr -d '\r' > /tmp/ib-longview-before.tsv || true; grep -F 'heavy-metrics' /tmp/ib-longview-before.tsv | grep -F 'point=page-finished' >/dev/null && break; sleep 1; done
@@ -264,6 +266,7 @@ jobs:
             adb shell pidof org.isomorphisms.ib.webview | tr -d '\r' > /tmp/ib-longview-host-before
             test -s /tmp/ib-longview-host-before
             for attempt in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do adb shell "run-as org.isomorphisms.ib.webview sh -c 'cat files/receipts/*/*.tsv 2>/dev/null'" | tr -d '\r' > /tmp/ib-longview-renderer.tsv || true; grep -F 'renderer-gone' /tmp/ib-longview-renderer.tsv >/dev/null && grep -F 'retained-result' /tmp/ib-longview-renderer.tsv | grep -F 'reason=renderer-loss' | grep -F 'exact=true' | grep -F 'reacquired=false' >/dev/null && break; sleep 1; done
+            cat /tmp/ib-longview-renderer.tsv
             grep -F 'first-useful' /tmp/ib-longview-renderer.tsv | grep -F 'durable-result=committed'
             grep -F 'renderer' /tmp/ib-longview-renderer.tsv | grep -F 'acceptance-termination-after-first-useful=true'
             grep -F 'renderer-gone' /tmp/ib-longview-renderer.tsv
