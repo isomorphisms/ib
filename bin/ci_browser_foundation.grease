@@ -168,6 +168,7 @@ exercise_core() {
   sh -n bin/accept_android_longview_worker.grease
   sh -n tests/test_android_longview_worker.grease
   sh tests/test_android_longview_worker.grease
+  cd "$repository_root/src"
   "$idric_prefix/bin/idris2" PaintBudgetSmoke.idric -o ib-paint-budget-smoke \
     2>&1 | tee /tmp/idric-paint-budget-compile.txt
   test -x ./build/exec/ib-paint-budget-smoke
