@@ -13,13 +13,17 @@ media identity, observation identity and reservation receipt. These are decoded
 Current backend/media/observation identities must match those admitted.
 
 `publication_for : SpaceLedger → PublicationRequest → PublicationLocation →
-Maybe PublicationRequest` uses the existing `admission_for` decision; it emits
-the unchanged request only when admission and identity checks pass. Denied
+Maybe AdmittedPublication` uses the existing `admission_for` decision and
+`reserve_peak` transition; it emits the unchanged request together with the
+reserved ledger only when admission and identity checks pass. Denied
 observations have no publication action. The adapter consumes an already
 admitted request and enforces bounded immutable file publication; it cannot
 turn an unavailable observation into admission.
 
-The acceptance program imports the real `IB.StorageAdmission` and
+The admission owner must serialize/thread the returned ledger, as with the
+existing reservation API. An E4 caller with an already-held reservation must
+carry its settled admitted action rather than call this function to charge the
+same reservation twice. The acceptance program imports the real `IB.StorageAdmission` and
 `IB.WorkerLifecycle` implementations. Its IO writes a TSV action plan, which
 the existing Grease ordinary-file acceptance driver executes against actual
 files. The driver counts adapter invocations and compares complete bytes.

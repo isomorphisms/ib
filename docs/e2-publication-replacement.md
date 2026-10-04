@@ -9,7 +9,11 @@ commit, and it does not substitute the old work-bounds smoke baseline.
 
 `IB.StorageAdmission.publication_for` applies existing per-volume admission
 and binds the unchanged result identity, byte limit, backend/media identity,
-observation identity and reservation receipt. `lib/result_publication.grease`
+observation identity and reservation receipt. It returns the reserved ledger
+using the existing `reserve_peak` transition; the admission owner threads that
+ledger across subsequent requests. An E4 caller that already owns a reservation
+must carry its existing admitted action and must not charge it again here.
+`lib/result_publication.grease`
 only transports that already-admitted action to the existing ordinary-file
 adapter. It rejects missing/refused/malformed actions and changed identities
 without invoking publication. It has no capacity policy or fallback volume.

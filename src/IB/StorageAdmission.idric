@@ -130,8 +130,14 @@ record PublicationLocation where
   observation_identity : Text
 
 public export
+record AdmittedPublication where
+  constructor ReservedPublication
+  request : PublicationRequest
+  reserved_ledger : SpaceLedger
+
+public export
 publication_for :
-  SpaceLedger → PublicationRequest → PublicationLocation → Maybe PublicationRequest
+  SpaceLedger → PublicationRequest → PublicationLocation → Maybe AdmittedPublication
 publication_for ledger request location =
   case admission_for ledger request.byte_limit of
     admitted ⇒
@@ -143,6 +149,9 @@ publication_for ledger request location =
           request.backend_identity ≟ location.backend_identity &&
           request.media_identity ≟ location.media_identity &&
           request.observation_identity ≟ location.observation_identity
-          then Just request
+          then
+            case reserve_peak request.byte_limit ledger of
+              Nothing ⇒ Nothing
+              Just reserved ⇒ Just (ReservedPublication request reserved)
           else Nothing
     _ ⇒ Nothing

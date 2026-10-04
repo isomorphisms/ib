@@ -16,11 +16,21 @@ emit : Text → SpaceLedger → PublicationLocation → IO ()
 emit name ledger observed =
   case publication_for ledger (request name) observed of
     Nothing ⇒ putStrLn (name ++ "\trefuse")
-    Just accepted_request ⇒
-      putStrLn
-        (accepted_request.result_identity ++ "\tpublish\t" ++ show accepted_request.byte_limit ++
-         "\t" ++ accepted_request.backend_identity ++ "\t" ++ accepted_request.media_identity ++
-         "\t" ++ accepted_request.observation_identity ++ "\t" ++ accepted_request.reservation_receipt)
+    Just accepted ⇒
+      let accepted_request = accepted.request in
+        putStrLn
+          (accepted_request.result_identity ++ "\tpublish\t" ++ show accepted_request.byte_limit ++
+           "\t" ++ accepted_request.backend_identity ++ "\t" ++ accepted_request.media_identity ++
+           "\t" ++ accepted_request.observation_identity ++ "\t" ++ accepted_request.reservation_receipt)
+
+publication_reservations_are_bounded : Bool
+publication_reservations_are_bounded =
+  case publication_for (Ledger measured_writable (Just 200) 100 0) (request "first") location of
+    Nothing ⇒ False
+    Just first ⇒
+      case publication_for first.reserved_ledger (request "second") location of
+        Nothing ⇒ True
+        Just _ ⇒ False
 
 committed_survives_authority_loss : Bool
 committed_survives_authority_loss =
@@ -51,7 +61,9 @@ acceptance = do
   emit "stale-identity" (Ledger measured_writable (Just 1000) 100 0)
     (ObservedPublicationLocation "ordinary" "card-a" "observation-2")
   putStrLn ("committed-after-authority-loss\t" ++ show committed_survives_authority_loss)
-  if committed_survives_authority_loss then pure () else exitFailure
+  putStrLn ("publication-reservation-concurrent\t" ++ show publication_reservations_are_bounded)
+  if committed_survives_authority_loss && publication_reservations_are_bounded
+    then pure () else exitFailure
 
 main : IO ()
 main = do

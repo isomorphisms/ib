@@ -28,8 +28,9 @@ else
   status=$?
   exit "$status"
 fi
-test "$(wc -l <"$work/actions" | tr -d '[:space:]')" = 10
+test "$(wc -l <"$work/actions" | tr -d '[:space:]')" = 11
 grep -Fx 'committed-after-authority-loss	True' "$work/actions" >/dev/null
+grep -Fx 'publication-reservation-concurrent	True' "$work/actions" >/dev/null
 mkdir "$work/card"
 ib_store_init "$work/card" card-a
 printf 'accepted bytes\n' >"$work/source"
