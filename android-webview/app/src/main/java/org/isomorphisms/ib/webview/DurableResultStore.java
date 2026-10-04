@@ -36,7 +36,10 @@ public final class DurableResultStore {
         }
 
         public void publish(Path temporary, Path target) throws IOException {
-            Files.createLink(target, temporary);
+            // Both are directories containing a complete payload. Unix rename
+            // cannot replace a nonempty directory, even with ATOMIC_MOVE.
+            // Do not fall back to a copy or a regular-file overwrite rename.
+            Files.move(temporary, target, StandardCopyOption.ATOMIC_MOVE);
         }
     };
 
@@ -66,26 +69,36 @@ public final class DurableResultStore {
         // snapshot, including the bytes used to verify an idempotent retry.
         byte[] snapshot = Arrays.copyOf(bytes, bytes.length);
         Files.createDirectories(root);
-        Path target = result_path(result_id);
-        if (Files.exists(target)) {
-            verify_equal(target, snapshot);
-            return target;
+        Path result = result_path(result_id);
+        if (Files.exists(result, LinkOption.NOFOLLOW_LINKS)) {
+            verify_equal(result, snapshot);
+            return result;
         }
 
+        Path target = root.resolve(result_id + ".committed");
         Path temporary = root.resolve("." + result_id + "." + UUID.randomUUID() + ".tmp");
+        Files.createDirectory(temporary);
+        Path staged_bytes = temporary.resolve("bytes");
+        Path committed_bytes = target.resolve("bytes");
         try {
-            publication_io.stage(temporary, snapshot);
-            Files.setPosixFilePermissions(temporary, PosixFilePermissions.fromString("r--------"));
+            publication_io.stage(staged_bytes, snapshot);
+            Files.setPosixFilePermissions(staged_bytes, PosixFilePermissions.fromString("r--------"));
             try {
-                // ATOMIC_MOVE may replace an existing target even without
-                // REPLACE_EXISTING. A hard link is atomic create-if-absent.
+                // Android app SELinux denies hard links. The nonempty result
+                // directory supplies the no-replacement invariant instead.
                 publication_io.publish(temporary, target);
-            } catch (java.nio.file.FileAlreadyExistsException exception) {
-                // Verify the winner below; unequal writers must lose.
+            } catch (IOException exception) {
+                // Providers may report EEXIST or ENOTEMPTY differently. Only a
+                // complete winner can make a failed publication idempotent.
+                if (!Files.isDirectory(target, LinkOption.NOFOLLOW_LINKS)
+                    || !Files.isRegularFile(committed_bytes, LinkOption.NOFOLLOW_LINKS)) {
+                    throw exception;
+                }
             }
-            verify_equal(target, snapshot);
-            return target;
+            verify_equal(committed_bytes, snapshot);
+            return committed_bytes;
         } finally {
+            Files.deleteIfExists(staged_bytes);
             Files.deleteIfExists(temporary);
         }
     }
@@ -134,7 +147,17 @@ public final class DurableResultStore {
 
     private Path result_path(String result_id) {
         validate_result_id(result_id);
-        return root.resolve(result_id + ".txt");
+        Path legacy = root.resolve(result_id + ".txt");
+        // Preserve retained results written by the consolidated Longview app.
+        // Their bytes are verified, never migrated or rewritten on a retry.
+        if (Files.exists(legacy, LinkOption.NOFOLLOW_LINKS)) {
+            return legacy;
+        }
+        Path committed = root.resolve(result_id + ".committed");
+        if (!Files.isDirectory(committed, LinkOption.NOFOLLOW_LINKS)) {
+            return committed; // require_result/verify_equal refuse this entry.
+        }
+        return committed.resolve("bytes");
     }
 
     private static void validate_result_id(String result_id) {

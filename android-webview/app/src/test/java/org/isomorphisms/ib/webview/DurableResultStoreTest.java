@@ -47,7 +47,9 @@ public final class DurableResultStoreTest {
                 await(release);
                 if (overwrite_mutant) {
                     // Known-bad real filesystem primitive from the old adapter.
-                    Files.move(temporary, target, java.nio.file.StandardCopyOption.ATOMIC_MOVE);
+                    Files.createDirectories(target);
+                    Files.move(temporary.resolve("bytes"), target.resolve("bytes"),
+                        java.nio.file.StandardCopyOption.ATOMIC_MOVE);
                 } else {
                     DurableResultStore.FILESYSTEM.publish(temporary, target);
                 }
@@ -155,7 +157,7 @@ public final class DurableResultStoreTest {
         } catch (IOException expected_no_space) {
             assertTrue(expected_no_space.getMessage().contains("ENOSPC"));
         }
-        assertFalse(Files.exists(root.resolve("durable-results/no-space.txt")));
+        assertFalse(Files.exists(root.resolve("durable-results/no-space.committed")));
         try (java.util.stream.Stream<Path> paths = Files.list(root.resolve("durable-results"))) {
             assertEquals(0, paths.count());
         }
@@ -231,6 +233,25 @@ public final class DurableResultStoreTest {
         } catch (IllegalArgumentException expected_invalid_id) {
             // Expected.
         }
+    }
+
+    @Test
+    public void legacy_committed_file_remains_readable_and_immutable() throws Exception {
+        Path root = Files.createTempDirectory("ib-durable-legacy");
+        Files.createDirectory(root.resolve("durable-results"));
+        Path legacy = root.resolve("durable-results/hello-v1.txt");
+        Files.write(legacy, DurableResultStore.RESULT_BYTES);
+        DurableResultStore store = new DurableResultStore(root);
+        assertEquals(legacy, store.commit_fixture());
+        assertArrayEquals(DurableResultStore.RESULT_BYTES, store.read_bounded("hello-v1", 64));
+        try {
+            store.commit_immutable("hello-v1", bytes("different\n"));
+            fail("legacy bytes were replaced");
+        } catch (IOException expected_conflict) {
+            assertTrue(expected_conflict.getMessage().contains("differs"));
+        }
+        assertArrayEquals(DurableResultStore.RESULT_BYTES, Files.readAllBytes(legacy));
+        assertFalse(Files.exists(root.resolve("durable-results/hello-v1.committed")));
     }
 
     @Test

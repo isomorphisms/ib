@@ -34,11 +34,19 @@ another initializer's marker. Unsupported hard links fail closed with an I/O
 failure; no rename-overwrite fallback is allowed. This is an ordinary-file
 backend requirement, not a claim that FAT/exFAT supplies hard links.
 
-The Android app-private `DurableResultStore` uses the same atomic creation
-primitive and a bounded private snapshot of caller-owned bytes. Staging cleanup
-runs even if the I/O write fails. It refuses oversized reads before returning
-bytes. Provider grants, Binder/PFD boundaries, retained information, renderer
-loss, package identity and signing remain on the consolidated Longview line.
+The Android app-private `DurableResultStore` uses an atomic directory rename
+and a bounded private snapshot of caller-owned bytes. It stages the complete,
+synced read-only payload inside a unique directory, then atomically renames that
+directory to `<result>.committed`. A committed directory is always nonempty;
+Unix rename cannot replace it. No regular-file overwrite rename or nonatomic
+fallback is permitted. Unsupported atomic moves fail closed. This avoids the
+hard-link operation that an Android app sandbox can deny. The Unix directory
+restriction is documented in [rename(2)](https://man7.org/linux/man-pages/man2/rename.2.html).
+Legacy `<result>.txt` results from the baseline remain readable and are verified
+without migration or rewriting. Staging cleanup runs even if the I/O write
+fails. It refuses oversized reads before returning bytes. Provider grants,
+Binder/PFD boundaries, retained information, renderer loss, package identity
+and signing remain on the consolidated Longview line.
 
 `ib_store_read_bounded` requires an explicit limit. The existing three-argument
 reader now has the same 4096-byte ceiling as the Android fixture; consumers of
@@ -69,7 +77,8 @@ return the exact failed-child status; the same compiled exit-37 probe tests
 that logging boundary.
 
 Android unit tests call the actual `DurableResultStore` with real files and
-atomic links. The filesystem seam controls only schedules and explicit faults.
+atomic nonempty-directory publication. The filesystem seam controls only
+schedules and explicit faults.
 Both writers stage before either is released; the first must finish before the
 second publishes, deterministically exposing overwrite races. A known-bad
 real atomic-rename primitive must fail the same success-count assertion.
@@ -77,7 +86,8 @@ Two staged unequal writers must yield exactly one success; two equal writers
 must both succeed; interrupted staging is invisible; simulated staging ENOSPC
 cleans up and never invokes publication; bounded reads refuse; a mutable caller
 array cannot rewrite its committed snapshot; independent reconstructed readers
-return the same bytes. Existing emulator acceptance must still prove retained
+return the same bytes. A legacy committed-file regression prevents a storage
+layout change from losing baseline results. Existing emulator acceptance must still prove retained
 results after renderer/host loss and cross-UID provider reads.
 
 ## Evidence limits
