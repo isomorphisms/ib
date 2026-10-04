@@ -168,6 +168,15 @@ exercise_core() {
   sh -n bin/accept_android_longview_worker.grease
   sh -n tests/test_android_longview_worker.grease
   sh tests/test_android_longview_worker.grease
+  "$idric_prefix/bin/idris2" PaintBudgetSmoke.idric -o ib-paint-budget-smoke \
+    2>&1 | tee /tmp/idric-paint-budget-compile.txt
+  test -x ./build/exec/ib-paint-budget-smoke
+  ! grep -q '^Error:' /tmp/idric-paint-budget-compile.txt
+  ./build/exec/ib-paint-budget-smoke | tee /tmp/ib-paint-budget-smoke.txt
+  grep -Fx 'paint-budget-cheap-full=True' /tmp/ib-paint-budget-smoke.txt
+  grep -Fx 'paint-budget-expensive-reduced=True' /tmp/ib-paint-budget-smoke.txt
+  grep -Fx 'paint-budget-pathological-reused=True' /tmp/ib-paint-budget-smoke.txt
+  grep -Fx 'paint-budget-pathological-deferred=True' /tmp/ib-paint-budget-smoke.txt
 }
 
 exercise_workbench() {
