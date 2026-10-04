@@ -31,10 +31,22 @@ public final class PrepaintDocumentTest {
         assertEquals(2, document.revisions.get(0).blocks.size());
         assertEquals(5, document.revisions.get(1).sequence);
         assertTrue(document.revisions.get(1).complete);
-        assertEquals(PrepaintDocument.Block.IMAGE,
-                document.revisions.get(1).blocks.get(0).kind);
-        assertEquals("/full-figure",
-                document.revisions.get(1).blocks.get(0).values.get(3));
+        assertTrue(document.revisions.get(0).blocks.get(0)
+                instanceof PrepaintDocument.HeadingBlock);
+        PrepaintDocument.HeadingBlock heading = (PrepaintDocument.HeadingBlock)
+                document.revisions.get(0).blocks.get(0);
+        assertEquals(PrepaintDocument.HeadingLevel.ONE, heading.level);
+        assertEquals("Status", heading.text);
+        assertTrue(document.revisions.get(0).blocks.get(1)
+                instanceof PrepaintDocument.RowBlock);
+        PrepaintDocument.RowBlock row = (PrepaintDocument.RowBlock)
+                document.revisions.get(0).blocks.get(1);
+        assertEquals(2, row.cells.size());
+        assertTrue(document.revisions.get(1).blocks.get(0)
+                instanceof PrepaintDocument.ImageBlock);
+        PrepaintDocument.ImageBlock image = (PrepaintDocument.ImageBlock)
+                document.revisions.get(1).blocks.get(0);
+        assertEquals("/full-figure", image.linkTarget);
     }
 
     @Test
@@ -45,8 +57,9 @@ public final class PrepaintDocumentTest {
                 + "text\tone\\ttwo\\nthree\\\\four\n"
                 + "end\n");
 
-        assertEquals("one\ttwo\nthree\\four",
-                document.revisions.get(0).blocks.get(0).values.get(0));
+        PrepaintDocument.TextBlock text = (PrepaintDocument.TextBlock)
+                document.revisions.get(0).blocks.get(0);
+        assertEquals("one\ttwo\nthree\\four", text.text);
     }
 
     @Test
@@ -57,7 +70,9 @@ public final class PrepaintDocumentTest {
                 + "image\tcontent://image\talternate\tcaption\n"
                 + "end\n");
 
-        assertEquals("", document.revisions.get(0).blocks.get(0).values.get(3));
+        PrepaintDocument.ImageBlock image = (PrepaintDocument.ImageBlock)
+                document.revisions.get(0).blocks.get(0);
+        assertEquals("", image.linkTarget);
     }
 
     @Test
@@ -79,13 +94,15 @@ public final class PrepaintDocumentTest {
                 "First paragraph.\nStill first.\n\nSecond paragraph.\n",
                 "notes.txt");
 
-        assertEquals(PrepaintDocument.TEXT_SOURCE, document.sourceKind);
+        assertEquals(PrepaintDocument.SourceKind.PLAIN_TEXT, document.sourceKind);
         assertEquals("notes.txt", document.revisions.get(0).title);
         assertEquals(2, document.revisions.get(0).blocks.size());
-        assertEquals("First paragraph.\nStill first.",
-                document.revisions.get(0).blocks.get(0).values.get(0));
-        assertEquals("Second paragraph.",
-                document.revisions.get(0).blocks.get(1).values.get(0));
+        PrepaintDocument.TextBlock first = (PrepaintDocument.TextBlock)
+                document.revisions.get(0).blocks.get(0);
+        PrepaintDocument.TextBlock second = (PrepaintDocument.TextBlock)
+                document.revisions.get(0).blocks.get(1);
+        assertEquals("First paragraph.\nStill first.", first.text);
+        assertEquals("Second paragraph.", second.text);
     }
 
     @Test
@@ -95,12 +112,13 @@ public final class PrepaintDocumentTest {
                 "urls.txt");
 
         assertEquals(2, document.revisions.get(0).blocks.size());
-        assertEquals(PrepaintDocument.Block.LINK,
-                document.revisions.get(0).blocks.get(0).kind);
-        assertEquals("https://example.com/one",
-                document.revisions.get(0).blocks.get(0).values.get(1));
-        assertEquals(PrepaintDocument.Block.LINK,
-                document.revisions.get(0).blocks.get(1).kind);
+        assertTrue(document.revisions.get(0).blocks.get(0)
+                instanceof PrepaintDocument.LinkBlock);
+        PrepaintDocument.LinkBlock first = (PrepaintDocument.LinkBlock)
+                document.revisions.get(0).blocks.get(0);
+        assertEquals("https://example.com/one", first.target);
+        assertTrue(document.revisions.get(0).blocks.get(1)
+                instanceof PrepaintDocument.LinkBlock);
     }
 
     @Test

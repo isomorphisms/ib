@@ -26,7 +26,7 @@ contains_string : String → String → Bool
 contains_string wanted text =
   contains_chars (unpack wanted) (unpack text)
 
-match_positions_from : Nat → List Char → List Char → List Nat
+match_positions_from : Number → List Char → List Char → List Number
 match_positions_from offset wanted [] =
   if starts_with wanted [] then [offset] else []
 match_positions_from offset wanted text@(_ :: rest) =
@@ -36,10 +36,10 @@ match_positions_from offset wanted text@(_ :: rest) =
 -- Positions are zero-based character positions and overlapping matches count.
 -- The empty pattern matches every character boundary, including the end.
 public export
-match_positions : String → String → List Nat
+match_positions : String → String → List Number
 match_positions wanted text =
   match_positions_from 0 (unpack wanted) (unpack text)
 
 public export
-match_count : String → String → Nat
+match_count : String → String → Number
 match_count wanted text = length (match_positions wanted text)

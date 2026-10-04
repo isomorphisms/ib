@@ -1,0 +1,22 @@
+module ProtectedLongViewTask
+
+import IB.LongViewTask
+
+task_after_host_restart : Maybe LongViewTask
+task_after_host_restart = do
+  task ← durable_identity "task-1"
+  tab ← durable_identity "tab-1"
+  navigation ← durable_identity "navigation-1"
+  host_1 ← durable_identity "host-1"
+  host_2 ← durable_identity "host-2"
+  address ← neutral_address "https://console.cloud.google.com/auth/scopes"
+  let started = start_protected_task
+        task tab navigation (Just address) (Just address)
+        potentially_sensitive_url_material_redacted host_1
+  pure (host_process_restarted host_2 started)
+
+main : IO ()
+main =
+  case task_after_host_restart of
+    Nothing ⇒ putStrLn "protected-long-view-task=construction-failed"
+    Just task ⇒ putStrLn (serialize_long_view_task task)

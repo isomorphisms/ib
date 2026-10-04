@@ -1,6 +1,6 @@
 # Grease adapter for the vendored PDF.Figure semantics.
 # Poppler supplies image files and page-layout rectangles; figure/caption
-# association itself is performed by Idric through PDF.Figure.
+# association itself is performed by Idriç through PDF.Figure.
 
 pdf_layout_image_rows() {
   layout_xml=$1
@@ -87,7 +87,7 @@ caption_for_pdf_image() {
 
 # Override the byte-only PDF fallback from scientific_media.grease. The output
 # manifest shape is unchanged; only the previously blank caption field gains
-# data when the vendored Idric association rule finds a caption.
+# data when the vendored Idriç association rule finds a caption.
 record_pdf_images_in_order() {
   pdf_path=$1
   output_directory=$2

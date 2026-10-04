@@ -21,14 +21,16 @@ jobs:
       SCHEME: scheme
       IDRIC_REF: 61970be77769f607cca8650bf424c0f0b22ddee7
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       - name: Install compiler dependencies
         run: sh bin/ci_browser_foundation.grease install-dependencies
 
       - name: Restore Idric compiler
         id: idric-cache
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
         with:
           path: /tmp/idric
           key: idric-${{ runner.os }}-61970be77769f607cca8650bf424c0f0b22ddee7
