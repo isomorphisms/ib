@@ -14,6 +14,7 @@ The primary input here is distilled Pensieve body text. The experiment remains d
 - Missing membership remains unlabeled. Unlabeled rows may be sampled provisionally as comparison rows for a plane; that does not assert that they are negative.
 - Semantic labels and fit partitions are separate inputs. An optional complete `id → partition` map can mark every row as `fit`, `development`, or `held_out`, including rows with no semantic label.
 - Development and held-out rows are excluded from plane fitting and provisional-unlabeled sampling even when they are unlabeled. A semantic label whose role disagrees with its partition is rejected.
+- The default `pensieve-body-only` input contract still requires `title_or_url_used=false`. An external corpus may instead use `--input-contract declared-text`, but its input manifest must state a nonempty `representation_contract` and the exact fields used as model text. This changes only the representation boundary, not the affine-plane fit.
 - Filing destinations remain a separate policy layer. Hyperplane margins do not rank destinations across concepts.
 
 ## Deterministic integration check
