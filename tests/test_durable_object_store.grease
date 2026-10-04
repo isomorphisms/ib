@@ -175,6 +175,36 @@ run_race() {
 run_race race-unequal "$work/conflict" "$IB_STORE_OBJECT_CONFLICT"
 run_race race-equal "$source_file" 0
 
+# Terminate our own disposable child while its complete staging inode is
+# blocked before publication. A leftover tail still cannot satisfy a read.
+interrupted="$work/interrupted"
+mkdir "$interrupted" "$interrupted/card"
+ib_store_init "$interrupted/card" card-a
+mkfifo "$interrupted/gate-stopped"
+"${IB_STORE_TEST_SHELL:-grease}" "$0" race-writer "$interrupted" "$source_file" interrupted stopped \
+  >"$interrupted/writer.out" 2>"$interrupted/writer.err" &
+staged_pid=$!
+attempts=0
+until test -f "$interrupted/ready-stopped"; do
+  attempts=$((attempts + 1))
+  if test "$attempts" -gt 100; then
+    printf 'interruption child did not reach staging barrier\n' >&2
+    kill "$staged_pid" 2>/dev/null || :
+    exit 1
+  fi
+  sleep 0.1
+done
+kill -TERM "$staged_pid"
+if wait "$staged_pid"; then
+  printf 'interrupted staging child unexpectedly succeeded\n' >&2
+  exit 1
+else
+  interrupted_status=$?
+fi
+test "$interrupted_status" -eq 143
+expect_status "$IB_STORE_OBJECT_ABSENT" ib_store_read "$interrupted/card" card-a interrupted
+test -n "$(ls -A "$interrupted/card/.ib-staging")"
+
 # Logical object identity does not contain the current mount path.
 moved="$work/remounted-card"
 mv "$root" "$moved"

@@ -49,7 +49,8 @@ larger admitted ordinary-file results must pass their actual explicit bound.
 The real ordinary-file adapter is driven on disposable files. Two writers are
 held after staging and before publication; the first commits and the second
 must return object-conflict (70) for unequal bytes or success for equal bytes.
-Staged data remains unreadable. Source growth is injected after observation
+Staged data remains unreadable, including after terminating a launched
+disposable writer before publication. Source growth is injected after observation
 inside the copy primitive, and a partial staging write simulates No space left
 on device (ENOSPC); neither may create a published object. Refused bounded reads
 emit no prefix, committed bytes stay unchanged, replacement media fails lookup,
