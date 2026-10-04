@@ -46,17 +46,30 @@ process-interruption acceptance contract.
 Source inspection of the exact pinned compiler
 `bd9fbe1e68ce9b3dd3981fcd3e1abf9e50bd350e`,
 `Parser/Lexer/Source.idr`, found no lowering for the canonical Boolean equality
-glyph. `EqualitySpelling.idric` preserves that attempt. It is not claimed
-compiled; newer compiler source supports the glyph but upgrading this Longview
+glyph. `EqualitySpelling.idric` preserves that attempt. The first production
+use at `f0ae644237693409ce7ef89a7af38f3acb5bee53` failed hosted compilation
+with `Undefined name ≟` in job 111526940515 of run 37233165624. The archived
+standalone file itself is not claimed compiled. Newer compiler source supports
+the glyph but upgrading this Longview
 pin is outside scope. The production function uses the pinned compiler's
 supported `compare : Text → Text → Ordering` and accepts only `EQ`; this keeps
 the language/semantic owner and has no host-language fallback. Smallest language
 work: adopt the existing glyph lowering on a separately verified compiler pin,
 with this exact equality attempt as acceptance.
 
-Pending exact-head hosted compilation/execution when this record is created.
-The first local execution boundary is unavailable Idriç/Grease runtimes;
-hosted compilation will determine whether the typed publication boundary is
-supported by the pinned compiler. No language fallback is authorized or
-implemented. Acceptance requires the real compiled policy's emitted actions
-to result in exactly one allowed adapter invocation and zero denied ones.
+The production policy compiled and executed at
+`253794cba59c40df4e758e445f49bb48fd0c7cd9` under that unchanged compiler pin.
+Foundation run 37234493165, job 111530795102, passed the actual emitted-action
+acceptance with exactly one allowed adapter invocation and zero denied ones,
+reservation accounting, committed-state preservation and both exact exit-37
+probes. The real ordinary-file adapter also passed its hosted POSIX
+compatibility race/growth/interruption/bounds/fault tests. Local restoration of
+overwrite rename is rejected with conflict expected 70 versus actual success 0.
+
+At the same source, Android run 37234493282, build job 111530795224, passed
+production DurableResultStore unit tests, including rejection of the real
+overwrite primitive, lint, package boundary and stable signer checks. The
+separate emulator stages are identified by that workflow rather than inferred
+from unit tests. No host-language policy fallback was implemented. Actual
+Grease runtime execution remains unverified because this local/hosted consumer
+path uses the inherited POSIX compatibility interpreter.
