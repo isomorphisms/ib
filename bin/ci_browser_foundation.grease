@@ -104,7 +104,7 @@ exercise_core() {
   grep -Fx 'prefetch-bounded=2' /tmp/ib-smoke.txt
   grep -Fx 'prefetch-reading=1' /tmp/ib-smoke.txt
 
-  run_logged /tmp/idric-occurrence-compile.txt "$idric_prefix/bin/idris2" OccurrenceSmoke.idric -o ib-occurrence-smoke \
+  run_logged /tmp/idric-occurrence-compile.txt "$idric_prefix/bin/idris2" OccurrenceSmoke.idric -o ib-occurrence-smoke
   test -x ./build/exec/ib-occurrence-smoke
   ! grep -q '^Error:' /tmp/idric-occurrence-compile.txt
   run_logged /tmp/ib-occurrence-smoke.txt ./build/exec/ib-occurrence-smoke
@@ -112,7 +112,7 @@ exercise_core() {
     /tmp/ib-occurrence-smoke.txt
 
   run_logged /tmp/idric-storage-admission-compile.txt "$idric_prefix/bin/idris2" StorageAdmissionSmoke.idric \
-    -o ib-storage-admission-smoke \
+    -o ib-storage-admission-smoke
   test -x ./build/exec/ib-storage-admission-smoke
   ! grep -q '^Error:' /tmp/idric-storage-admission-compile.txt
   run_logged /tmp/ib-storage-admission-smoke.txt ./build/exec/ib-storage-admission-smoke
@@ -123,7 +123,7 @@ exercise_core() {
   grep -Fx 'storage-admission-negative-rejected=True' /tmp/ib-storage-admission-smoke.txt
 
   run_logged /tmp/idric-work-bounds-compile.txt "$idric_prefix/bin/idris2" WorkBoundsSmoke.idric \
-    -o ib-work-bounds-smoke \
+    -o ib-work-bounds-smoke
   test -x ./build/exec/ib-work-bounds-smoke
   ! grep -q '^Error:' /tmp/idric-work-bounds-compile.txt
   run_logged /tmp/ib-work-bounds-smoke.txt ./build/exec/ib-work-bounds-smoke
@@ -136,14 +136,14 @@ exercise_core() {
   grep -Fx 'work-bounds-negative=True' /tmp/ib-work-bounds-smoke.txt
 
   run_logged /tmp/idric-binder-compile.txt "$idric_prefix/bin/idris2" BinderSmoke.idric \
-    -o ib-binder-smoke \
+    -o ib-binder-smoke
   test -x ./build/exec/ib-binder-smoke
   ! grep -q '^Error:' /tmp/idric-binder-compile.txt
   run_logged /tmp/ib-binder-smoke.txt ./build/exec/ib-binder-smoke
   grep -Fx 'binder-provider=shizuku' /tmp/ib-binder-smoke.txt
 
   run_logged /tmp/idric-worker-lifecycle-compile.txt "$idric_prefix/bin/idris2" WorkerLifecycleSmoke.idric \
-    -o ib-worker-lifecycle-smoke \
+    -o ib-worker-lifecycle-smoke
   test -x ./build/exec/ib-worker-lifecycle-smoke
   ! grep -q '^Error:' /tmp/idric-worker-lifecycle-compile.txt
   run_logged /tmp/ib-worker-lifecycle-smoke.txt ./build/exec/ib-worker-lifecycle-smoke
@@ -208,7 +208,7 @@ exercise_core() {
   sh -n tests/test_android_longview_worker.grease
   sh tests/test_android_longview_worker.grease
   cd "$repository_root/src"
-  run_logged /tmp/idric-paint-budget-compile.txt "$idric_prefix/bin/idris2" PaintBudgetSmoke.idric -o ib-paint-budget-smoke \
+  run_logged /tmp/idric-paint-budget-compile.txt "$idric_prefix/bin/idris2" PaintBudgetSmoke.idric -o ib-paint-budget-smoke
   test -x ./build/exec/ib-paint-budget-smoke
   ! grep -q '^Error:' /tmp/idric-paint-budget-compile.txt
   run_logged /tmp/ib-paint-budget-smoke.txt ./build/exec/ib-paint-budget-smoke
@@ -239,10 +239,10 @@ exercise_workbench() {
 build_information_programs() {
   test -x "$idric_prefix/bin/idris2" || build_idric
   cd "$repository_root/src"
-  run_logged /tmp/idric-information-compile.txt "$idric_prefix/bin/idris2" InformationSmoke.idric -o ib-information-smoke \
+  run_logged /tmp/idric-information-compile.txt "$idric_prefix/bin/idris2" InformationSmoke.idric -o ib-information-smoke
   test -x ./build/exec/ib-information-smoke
   ! grep -q '^Error:' /tmp/idric-information-compile.txt
-  run_logged /tmp/idric-arxiv-prepaint-compile.txt "$idric_prefix/bin/idris2" ArxivPrepaint.idric -o ib-arxiv-prepaint \
+  run_logged /tmp/idric-arxiv-prepaint-compile.txt "$idric_prefix/bin/idris2" ArxivPrepaint.idric -o ib-arxiv-prepaint
   test -x ./build/exec/ib-arxiv-prepaint
   ! grep -q '^Error:' /tmp/idric-arxiv-prepaint-compile.txt
 }
