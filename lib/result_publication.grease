@@ -1,0 +1,41 @@
+# Grease orchestration for an already-decided Idriç publication action.
+# This is a transport boundary, not a second admission policy. A missing or
+# refused action never invokes the ordinary-file adapter.
+IB_PUBLICATION_NOT_ADMITTED=74
+IB_PUBLICATION_IDENTITY_MISMATCH=75
+
+ib_publish_admitted_result() {
+  if test "$#" -ne 6; then
+    return "$IB_STORE_INVALID_INPUT"
+  fi
+  publication_root=$1
+  publication_source=$2
+  publication_action=$3
+  publication_expected_backend=$4
+  publication_expected_media=$5
+  publication_expected_observation=$6
+  test -f "$publication_action" || return "$IB_PUBLICATION_NOT_ADMITTED"
+  test "$(wc -l <"$publication_action" | tr -d '[:space:]')" = 1 ||
+    return "$IB_STORE_INVALID_INPUT"
+  IFS="$(printf '\t')" read -r publication_result publication_decision \
+    publication_limit publication_backend publication_media \
+    publication_observation publication_reservation publication_extra \
+    <"$publication_action" || return "$IB_STORE_INVALID_INPUT"
+  test "$publication_decision" = publish || return "$IB_PUBLICATION_NOT_ADMITTED"
+  test -z "$publication_extra" || return "$IB_STORE_INVALID_INPUT"
+  ib_store_valid_atom "$publication_result" || return "$IB_STORE_INVALID_INPUT"
+  ib_store_valid_atom "$publication_backend" || return "$IB_STORE_INVALID_INPUT"
+  ib_store_valid_atom "$publication_media" || return "$IB_STORE_INVALID_INPUT"
+  ib_store_valid_atom "$publication_observation" || return "$IB_STORE_INVALID_INPUT"
+  ib_store_valid_atom "$publication_reservation" || return "$IB_STORE_INVALID_INPUT"
+  ib_store_decimal_normalize "$publication_limit" >/dev/null || return "$IB_STORE_INVALID_INPUT"
+  if test "$publication_backend" != "$publication_expected_backend" ||
+      test "$publication_media" != "$publication_expected_media" ||
+      test "$publication_observation" != "$publication_expected_observation"; then
+    return "$IB_PUBLICATION_IDENTITY_MISMATCH"
+  fi
+  # Media identity is the store marker; backend identity selects this adapter
+  # outside this function. No path is selected or substituted here.
+  ib_store_publish_bounded "$publication_root" "$publication_media" \
+    "$publication_result" "$publication_source" "$publication_limit"
+}

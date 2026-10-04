@@ -149,10 +149,34 @@ exercise_core() {
   grep -Fx 'worker-attempt-limit=True' /tmp/ib-worker-lifecycle-smoke.txt
   grep -Fx 'worker-process-identity=True' /tmp/ib-worker-lifecycle-smoke.txt
 
+  # Publication uses the actual Idriç admission and worker-state modules.
+  # Redirect first, then display: preserve failed compiler/child exit status.
+  if "$idric_prefix/bin/idris2" ResultPublicationAcceptance.idric \
+      -o ib-result-publication-acceptance >/tmp/idric-result-publication-compile.txt 2>&1; then
+    cat /tmp/idric-result-publication-compile.txt
+  else
+    status=$?
+    cat /tmp/idric-result-publication-compile.txt >&2
+    exit "$status"
+  fi
+  test -x ./build/exec/ib-result-publication-acceptance
+  ! grep -q '^Error:' /tmp/idric-result-publication-compile.txt
+  sh "$repository_root/tests/test_result_publication.grease" \
+    "$repository_root/src/build/exec/ib-result-publication-acceptance"
+  if IB_PUBLICATION_EXIT_PROBE=1 sh "$repository_root/tests/test_result_publication.grease" \
+      "$repository_root/src/build/exec/ib-result-publication-acceptance"; then
+    printf 'failed policy child became a green parent\n' >&2
+    exit 1
+  else
+    status=$?
+  fi
+  test "$status" -eq 37
+
   cd "$repository_root"
   sh -n lib/durable_object_store.grease
   sh -n tests/test_durable_object_store.grease
-  sh tests/test_durable_object_store.grease
+  # Inherited POSIX compatibility execution; this is not a Grease runtime receipt.
+  IB_STORE_TEST_SHELL=sh sh tests/test_durable_object_store.grease
   sh -n lib/android_shizuku_worker_provider.grease
   sh -n lib/android_shizuku_capabilities_provider.grease
   sh -n lib/android_binder_host.grease

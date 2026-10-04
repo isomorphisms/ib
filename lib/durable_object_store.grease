@@ -102,7 +102,8 @@ ib_store_init() {
     return 0
   fi
 
-  ib_store_marker_tmp="$ib_store_root/.ib-backend-id.$$"
+  ib_store_marker_tmp=$(mktemp "$ib_store_root/.ib-staging/backend.XXXXXXXX") ||
+    return "$IB_STORE_IO_FAILURE"
   umask 077
   if ! printf '%s\n' "$ib_store_backend" >"$ib_store_marker_tmp"; then
     rm -f "$ib_store_marker_tmp"
@@ -112,10 +113,14 @@ ib_store_init() {
     rm -f "$ib_store_marker_tmp"
     return "$IB_STORE_IO_FAILURE"
   }
-  if ! mv "$ib_store_marker_tmp" "$ib_store_marker"; then
+  # link is atomic create-if-absent. Concurrent initializers cannot relabel
+  # already selected media; unsupported hard links fail closed.
+  if ! ln "$ib_store_marker_tmp" "$ib_store_marker" 2>/dev/null; then
     rm -f "$ib_store_marker_tmp"
-    return "$IB_STORE_IO_FAILURE"
+    ib_store_require_backend "$ib_store_root" "$ib_store_backend"
+    return $?
   fi
+  rm -f "$ib_store_marker_tmp" || return "$IB_STORE_IO_FAILURE"
   sync || return "$IB_STORE_IO_FAILURE"
 }
 
@@ -171,17 +176,21 @@ ib_store_publish_bounded() {
     return "$IB_STORE_LIMIT_EXCEEDED"
   fi
 
-  ib_store_tmp="$ib_store_root/.ib-staging/$ib_store_object.$$"
+  ib_store_tmp=$(mktemp "$ib_store_root/.ib-staging/$ib_store_object.XXXXXXXX") ||
+    return "$IB_STORE_IO_FAILURE"
   ib_store_final="$ib_store_root/objects/$ib_store_object"
-  rm -f "$ib_store_tmp"
   umask 077
-  if ! cp "$ib_store_source" "$ib_store_tmp"; then
+  # Copy at most the observed size. A producer growing after observation must
+  # neither spend unadmitted staging space nor silently publish a prefix.
+  if ! head -c "$ib_store_source_bytes" "$ib_store_source" >"$ib_store_tmp"; then
     rm -f "$ib_store_tmp"
     return "$IB_STORE_IO_FAILURE"
   fi
 
   ib_store_copied_bytes=$(wc -c <"$ib_store_tmp" | tr -d '[:space:]')
-  if test "$ib_store_copied_bytes" != "$ib_store_source_bytes"; then
+  ib_store_after_bytes=$(wc -c <"$ib_store_source" | tr -d '[:space:]')
+  if test "$ib_store_copied_bytes" != "$ib_store_source_bytes" ||
+      test "$ib_store_after_bytes" != "$ib_store_source_bytes"; then
     rm -f "$ib_store_tmp"
     printf 'source-changed expected=%s copied=%s\n' \
       "$ib_store_source_bytes" "$ib_store_copied_bytes" >&2
@@ -198,18 +207,37 @@ ib_store_publish_bounded() {
     return "$IB_STORE_OBJECT_CONFLICT"
   fi
 
-  # Staging is never readable through ib_store_read. sync requests durability
-  # before the same-filesystem rename; the second sync requests persistence of
-  # the publication. Fine-grained power-loss receipts remain a future native
-  # adapter gate rather than a claim made by this shell implementation.
+  # No open committed inode is ever rewritten by this adapter. A hard link
+  # publishes the complete synced inode in one create-if-absent operation.
+  # There is no check/rename race and no overwrite fallback.
+  if ! chmod 400 "$ib_store_tmp"; then
+    rm -f "$ib_store_tmp"
+    return "$IB_STORE_IO_FAILURE"
+  fi
   sync || {
     rm -f "$ib_store_tmp"
     return "$IB_STORE_IO_FAILURE"
   }
-  if ! mv "$ib_store_tmp" "$ib_store_final"; then
+  if ib_store_require_backend "$ib_store_root" "$ib_store_backend"; then
+    :
+  else
+    ib_store_backend_status=$?
     rm -f "$ib_store_tmp"
+    return "$ib_store_backend_status"
+  fi
+  if ! ln "$ib_store_tmp" "$ib_store_final" 2>/dev/null; then
+    if test -f "$ib_store_final" && cmp -s "$ib_store_tmp" "$ib_store_final"; then
+      rm -f "$ib_store_tmp"
+      return 0
+    fi
+    rm -f "$ib_store_tmp"
+    if test -e "$ib_store_final"; then
+      printf 'object-conflict id=%s\n' "$ib_store_object" >&2
+      return "$IB_STORE_OBJECT_CONFLICT"
+    fi
     return "$IB_STORE_IO_FAILURE"
   fi
+  rm -f "$ib_store_tmp" || return "$IB_STORE_IO_FAILURE"
   sync || return "$IB_STORE_IO_FAILURE"
 }
 
@@ -217,9 +245,21 @@ ib_store_read() {
   if test "$#" -ne 3; then
     return "$IB_STORE_INVALID_INPUT"
   fi
+  ib_store_read_bounded "$1" "$2" "$3" 4096
+}
+
+# Refuse before emitting a byte. Only the publication namespace is readable;
+# adapter-committed inodes are immutable, so independent opens see equal bytes.
+ib_store_read_bounded() {
+  if test "$#" -ne 4; then
+    return "$IB_STORE_INVALID_INPUT"
+  fi
   ib_store_root=$1
   ib_store_backend=$2
   ib_store_object=$3
+  ib_store_read_limit=$4
+  ib_store_decimal_normalize "$ib_store_read_limit" >/dev/null ||
+    return "$IB_STORE_INVALID_INPUT"
   ib_store_valid_atom "$ib_store_object" || return "$IB_STORE_INVALID_INPUT"
   ib_store_require_backend "$ib_store_root" "$ib_store_backend" || return $?
   ib_store_final="$ib_store_root/objects/$ib_store_object"
@@ -227,5 +267,8 @@ ib_store_read() {
     printf 'object-absent id=%s\n' "$ib_store_object" >&2
     return "$IB_STORE_OBJECT_ABSENT"
   fi
-  cat "$ib_store_final"
+  ib_store_read_bytes=$(wc -c <"$ib_store_final" | tr -d '[:space:]')
+  ib_store_decimal_leq "$ib_store_read_bytes" "$ib_store_read_limit" ||
+    return "$IB_STORE_LIMIT_EXCEEDED"
+  head -c "$ib_store_read_bytes" "$ib_store_final"
 }

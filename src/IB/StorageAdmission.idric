@@ -1,5 +1,7 @@
 module IB.StorageAdmission
 
+import Data.Text
+
 -- Per-volume admission state. Capacity observations and browser commitments are
 -- deliberately separate: a reservation is accounting, not a filesystem
 -- allocation guarantee.
@@ -107,3 +109,40 @@ replace_observation observation available ledger =
     available
     ledger.safety_floor_bytes
     ledger.unreflected_commitments_bytes
+
+-- A decoded admission request retains all identities unchanged across the
+-- worker/adapter boundary. It is not a filesystem allocation guarantee.
+public export
+record PublicationRequest where
+  constructor RequestedPublication
+  result_identity : Text
+  byte_limit : Integer
+  backend_identity : Text
+  media_identity : Text
+  observation_identity : Text
+  reservation_receipt : Text
+
+public export
+record PublicationLocation where
+  constructor ObservedPublicationLocation
+  backend_identity : Text
+  media_identity : Text
+  observation_identity : Text
+
+public export
+publication_for :
+  SpaceLedger → PublicationRequest → PublicationLocation → Maybe PublicationRequest
+publication_for ledger request location =
+  case admission_for ledger request.byte_limit of
+    admitted ⇒
+      if request.result_identity ≟ "" || request.reservation_receipt ≟ "" ||
+         request.backend_identity ≟ "" || request.media_identity ≟ "" ||
+         request.observation_identity ≟ ""
+        then Nothing
+        else if
+          request.backend_identity ≟ location.backend_identity &&
+          request.media_identity ≟ location.media_identity &&
+          request.observation_identity ≟ location.observation_identity
+          then Just request
+          else Nothing
+    _ ⇒ Nothing

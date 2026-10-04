@@ -1,0 +1,63 @@
+module ResultPublicationAcceptance
+
+import Data.Text
+import IB.StorageAdmission
+import IB.WorkerLifecycle
+import IB.LongViewTask
+import System
+
+request : Text → PublicationRequest
+request result = RequestedPublication result 64 "ordinary" "card-a" "observation-1" "reservation-1"
+
+location : PublicationLocation
+location = ObservedPublicationLocation "ordinary" "card-a" "observation-1"
+
+emit : Text → SpaceLedger → PublicationLocation → IO ()
+emit name ledger observed =
+  case publication_for ledger (request name) observed of
+    Nothing ⇒ putStrLn (name ++ "\trefuse")
+    Just admitted ⇒
+      putStrLn
+        (admitted.result_identity ++ "\tpublish\t" ++ show admitted.byte_limit ++
+         "\t" ++ admitted.backend_identity ++ "\t" ++ admitted.media_identity ++
+         "\t" ++ admitted.observation_identity ++ "\t" ++ admitted.reservation_receipt)
+
+committed_survives_authority_loss : Bool
+committed_survives_authority_loss =
+  case (durable_identity "work-1", durable_identity "result-1") of
+    (Just work, Just result) ⇒
+      case plan_worker work result restartable_bounded_observation 2 of
+        Nothing ⇒ False
+        Just task ⇒
+          let lost = worker_authority_was_lost (commit_worker_result task) in
+          lost.committed_result &&
+          case recovery_for lost of
+            no_restart_needed ⇒ True
+            _ ⇒ False
+    _ ⇒ False
+
+acceptance : IO ()
+acceptance = do
+  emit "allowed" (Ledger measured_writable (Just 1000) 100 0) location
+  emit "unknown" (Ledger capacity_unknown Nothing 100 0) location
+  emit "stale" (Ledger observation_stale (Just 1000) 100 0) location
+  emit "denied" (Ledger writer_denied (Just 1000) 100 0) location
+  emit "read-only" (Ledger writer_read_only (Just 1000) 100 0) location
+  emit "absent" (Ledger volume_absent Nothing 100 0) location
+  emit "backend-mismatch" (Ledger measured_writable (Just 1000) 100 0)
+    (ObservedPublicationLocation "other" "card-a" "observation-1")
+  emit "media-mismatch" (Ledger measured_writable (Just 1000) 100 0)
+    (ObservedPublicationLocation "ordinary" "card-b" "observation-1")
+  emit "stale-identity" (Ledger measured_writable (Just 1000) 100 0)
+    (ObservedPublicationLocation "ordinary" "card-a" "observation-2")
+  putStrLn ("committed-after-authority-loss\t" ++ show committed_survives_authority_loss)
+  if committed_survives_authority_loss then pure () else exitFailure
+
+main : IO ()
+main = do
+  arguments ← getArgs
+  case arguments of
+    [_ , "fail-after-action"] ⇒ do
+      emit "allowed" (Ledger measured_writable (Just 1000) 100 0) location
+      exitWith (ExitFailure 37)
+    _ ⇒ acceptance

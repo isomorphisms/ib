@@ -1,0 +1,92 @@
+#!/usr/bin/env grease
+set -eu
+
+repository_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+. "$repository_root/lib/durable_object_store.grease"
+. "$repository_root/lib/result_publication.grease"
+test "$#" -eq 1
+policy_program=$1
+test -x "$policy_program"
+work=$(mktemp -d)
+trap 'rm -rf "$work"' EXIT HUP INT TERM
+
+if test "${IB_PUBLICATION_EXIT_PROBE:-}" = 1; then
+  if "$policy_program" fail-after-action >"$work/actions"; then
+    printf 'required failing child unexpectedly passed\n' >&2
+    exit 1
+  else
+    status=$?
+    exit "$status"
+  fi
+fi
+
+# Direct invocation preserves the exact failed-child exit. No tee pipeline can
+# make a partial policy action plan into a successful parent.
+if "$policy_program" >"$work/actions"; then
+  :
+else
+  status=$?
+  exit "$status"
+fi
+test "$(wc -l <"$work/actions" | tr -d '[:space:]')" = 10
+grep -Fx 'committed-after-authority-loss	True' "$work/actions" >/dev/null
+mkdir "$work/card"
+ib_store_init "$work/card" card-a
+printf 'accepted bytes\n' >"$work/source"
+
+# Count calls to the real adapter, not successes or model transitions. The
+# body is saved unchanged under a test-local name before instrumentation.
+adapter_body=$(sed -n '/^ib_store_publish_bounded() {/,/^}/p' \
+  "$repository_root/lib/durable_object_store.grease" | \
+  sed '1s/ib_store_publish_bounded/actual_store_publish_bounded/')
+eval "$adapter_body"
+ib_store_publish_bounded() {
+  printf 'invoke\n' >>"$work/invocations"
+  actual_store_publish_bounded "$@"
+}
+
+awk -F '\t' '$1 == "allowed"' "$work/actions" >"$work/action"
+ib_publish_admitted_result "$work/card" "$work/source" "$work/action" ordinary card-a observation-1
+ib_store_read "$work/card" card-a allowed >"$work/read"
+cmp "$work/source" "$work/read"
+test "$(wc -l <"$work/invocations" | tr -d '[:space:]')" = 1
+
+for denied in unknown stale denied read-only absent backend-mismatch media-mismatch stale-identity; do
+  awk -F '\t' -v identity="$denied" '$1 == identity' "$work/actions" >"$work/action"
+  test "$(cat "$work/action")" = "$(printf '%s\trefuse' "$denied")"
+  if ib_publish_admitted_result "$work/card" "$work/source" "$work/action" ordinary card-a observation-1 \
+      >"$work/refused.out" 2>"$work/refused.err"; then
+    printf 'denied observation invoked publication: %s\n' "$denied" >&2
+    exit 1
+  else
+    status=$?
+  fi
+  test "$status" -eq "$IB_PUBLICATION_NOT_ADMITTED"
+  test ! -s "$work/refused.out"
+  test ! -e "$work/card/objects/$denied"
+  test "$(wc -l <"$work/invocations" | tr -d '[:space:]')" = 1
+done
+
+# Even a once-admitted action cannot cross a changed transport identity.
+awk -F '\t' '$1 == "allowed"' "$work/actions" >"$work/action"
+for changed in backend media observation; do
+  backend=ordinary
+  media=card-a
+  observation=observation-1
+  case "$changed" in
+    backend) backend=other ;;
+    media) media=card-b ;;
+    observation) observation=observation-2 ;;
+  esac
+  if ib_publish_admitted_result "$work/card" "$work/source" "$work/action" "$backend" "$media" "$observation"; then
+    printf 'stale admitted identity invoked publication\n' >&2
+    exit 1
+  else
+    status=$?
+  fi
+  test "$status" -eq "$IB_PUBLICATION_IDENTITY_MISMATCH"
+  test "$(wc -l <"$work/invocations" | tr -d '[:space:]')" = 1
+done
+ib_store_read "$work/card" card-a allowed >"$work/read-again"
+cmp "$work/read" "$work/read-again"
+printf 'result publication actual-policy acceptance: ok\n'
