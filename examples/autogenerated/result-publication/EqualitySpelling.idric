@@ -1,0 +1,8 @@
+module EqualitySpelling
+
+import Data.Text
+
+-- Preserved canonical spelling attempt. The pinned compiler does not lower
+-- this glyph; the maintained implementation uses its supported Text compare.
+same_text : Text → Text → Bool
+same_text left right = left ≟ right

@@ -63,7 +63,10 @@ one admitted publication and zero invocations for unknown, stale, denied,
 read-only, absent, backend-mismatched, media-mismatched or stale-identity cases.
 It also asserts the existing committed-worker state survives later authority
 loss. A deliberately partial plan followed by exit 37 must make the parent
-return exactly 37, with no publication attempt.
+return exactly 37, with no publication attempt. The foundation driver's former
+compiler/runtime `tee` pipelines now capture output before displaying it and
+return the exact failed-child status; the same compiled exit-37 probe tests
+that logging boundary.
 
 Android unit tests call the actual `DurableResultStore` with real files and
 atomic links. The filesystem seam controls only schedules and explicit faults.

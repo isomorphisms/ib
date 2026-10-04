@@ -7,6 +7,18 @@ idric_ref=${IDRIC_REF:-bd9fbe1e68ce9b3dd3981fcd3e1abf9e50bd350e}
 pdf_harvester_ref=${PDF_HARVESTER_REF:-77d85dc6f7e89d109cb9e06f42706bc34f00e4a3}
 aici_ref=${AICI_REF:-c1e423d506f6adfc8c1c9659a4faaf94ae84eaf0}
 
+run_logged() {
+  command_log=$1
+  shift
+  if "$@" >"$command_log" 2>&1; then
+    cat "$command_log"
+  else
+    status=$?
+    cat "$command_log" >&2
+    return "$status"
+  fi
+}
+
 install_dependencies() {
   sudo apt-get update
   sudo apt-get install -y chezscheme curl xmlstarlet busybox poppler-utils
@@ -69,10 +81,10 @@ verify_pdf_harvester() {
 
 exercise_core() {
   cd "$repository_root/src"
-  "$idric_prefix/bin/idris2" Smoke.idric -o ib-smoke 2>&1 | tee /tmp/idric-compile.txt
+  run_logged /tmp/idric-compile.txt "$idric_prefix/bin/idris2" Smoke.idric -o ib-smoke
   test -x ./build/exec/ib-smoke
   ! grep -q '^Error:' /tmp/idric-compile.txt
-  ./build/exec/ib-smoke | tee /tmp/ib-smoke.txt
+  run_logged /tmp/ib-smoke.txt ./build/exec/ib-smoke
   grep -Fx 'ingest=3' /tmp/ib-smoke.txt
   grep -Fx 'duplicate-url-count=2' /tmp/ib-smoke.txt
   grep -Fx 'newest-order=2' /tmp/ib-smoke.txt
@@ -92,32 +104,29 @@ exercise_core() {
   grep -Fx 'prefetch-bounded=2' /tmp/ib-smoke.txt
   grep -Fx 'prefetch-reading=1' /tmp/ib-smoke.txt
 
-  "$idric_prefix/bin/idris2" OccurrenceSmoke.idric -o ib-occurrence-smoke \
-    2>&1 | tee /tmp/idric-occurrence-compile.txt
+  run_logged /tmp/idric-occurrence-compile.txt "$idric_prefix/bin/idris2" OccurrenceSmoke.idric -o ib-occurrence-smoke \
   test -x ./build/exec/ib-occurrence-smoke
   ! grep -q '^Error:' /tmp/idric-occurrence-compile.txt
-  ./build/exec/ib-occurrence-smoke | tee /tmp/ib-occurrence-smoke.txt
+  run_logged /tmp/ib-occurrence-smoke.txt ./build/exec/ib-occurrence-smoke
   cmp "$repository_root/tests/fixtures/occurrence-smoke.expected" \
     /tmp/ib-occurrence-smoke.txt
 
-  "$idric_prefix/bin/idris2" StorageAdmissionSmoke.idric \
+  run_logged /tmp/idric-storage-admission-compile.txt "$idric_prefix/bin/idris2" StorageAdmissionSmoke.idric \
     -o ib-storage-admission-smoke \
-    2>&1 | tee /tmp/idric-storage-admission-compile.txt
   test -x ./build/exec/ib-storage-admission-smoke
   ! grep -q '^Error:' /tmp/idric-storage-admission-compile.txt
-  ./build/exec/ib-storage-admission-smoke | tee /tmp/ib-storage-admission-smoke.txt
+  run_logged /tmp/ib-storage-admission-smoke.txt ./build/exec/ib-storage-admission-smoke
   grep -Fx 'storage-admission-concurrent=True' /tmp/ib-storage-admission-smoke.txt
   grep -Fx 'storage-admission-reflected=True' /tmp/ib-storage-admission-smoke.txt
   grep -Fx 'storage-admission-wide=True' /tmp/ib-storage-admission-smoke.txt
   grep -Fx 'storage-admission-distinct-failures=True' /tmp/ib-storage-admission-smoke.txt
   grep -Fx 'storage-admission-negative-rejected=True' /tmp/ib-storage-admission-smoke.txt
 
-  "$idric_prefix/bin/idris2" WorkBoundsSmoke.idric \
+  run_logged /tmp/idric-work-bounds-compile.txt "$idric_prefix/bin/idris2" WorkBoundsSmoke.idric \
     -o ib-work-bounds-smoke \
-    2>&1 | tee /tmp/idric-work-bounds-compile.txt
   test -x ./build/exec/ib-work-bounds-smoke
   ! grep -q '^Error:' /tmp/idric-work-bounds-compile.txt
-  ./build/exec/ib-work-bounds-smoke | tee /tmp/ib-work-bounds-smoke.txt
+  run_logged /tmp/ib-work-bounds-smoke.txt ./build/exec/ib-work-bounds-smoke
   grep -Fx 'work-bounds-raw=True' /tmp/ib-work-bounds-smoke.txt
   grep -Fx 'work-bounds-expanded=True' /tmp/ib-work-bounds-smoke.txt
   grep -Fx 'work-bounds-diagnostics=True' /tmp/ib-work-bounds-smoke.txt
@@ -126,20 +135,18 @@ exercise_core() {
   grep -Fx 'work-bounds-dishonest-length=True' /tmp/ib-work-bounds-smoke.txt
   grep -Fx 'work-bounds-negative=True' /tmp/ib-work-bounds-smoke.txt
 
-  "$idric_prefix/bin/idris2" BinderSmoke.idric \
+  run_logged /tmp/idric-binder-compile.txt "$idric_prefix/bin/idris2" BinderSmoke.idric \
     -o ib-binder-smoke \
-    2>&1 | tee /tmp/idric-binder-compile.txt
   test -x ./build/exec/ib-binder-smoke
   ! grep -q '^Error:' /tmp/idric-binder-compile.txt
-  ./build/exec/ib-binder-smoke | tee /tmp/ib-binder-smoke.txt
+  run_logged /tmp/ib-binder-smoke.txt ./build/exec/ib-binder-smoke
   grep -Fx 'binder-provider=shizuku' /tmp/ib-binder-smoke.txt
 
-  "$idric_prefix/bin/idris2" WorkerLifecycleSmoke.idric \
+  run_logged /tmp/idric-worker-lifecycle-compile.txt "$idric_prefix/bin/idris2" WorkerLifecycleSmoke.idric \
     -o ib-worker-lifecycle-smoke \
-    2>&1 | tee /tmp/idric-worker-lifecycle-compile.txt
   test -x ./build/exec/ib-worker-lifecycle-smoke
   ! grep -q '^Error:' /tmp/idric-worker-lifecycle-compile.txt
-  ./build/exec/ib-worker-lifecycle-smoke | tee /tmp/ib-worker-lifecycle-smoke.txt
+  run_logged /tmp/ib-worker-lifecycle-smoke.txt ./build/exec/ib-worker-lifecycle-smoke
   grep -Fx 'worker-caller-independence=True' /tmp/ib-worker-lifecycle-smoke.txt
   grep -Fx 'worker-kill-restartable=True' /tmp/ib-worker-lifecycle-smoke.txt
   grep -Fx 'worker-authority-wait=True' /tmp/ib-worker-lifecycle-smoke.txt
@@ -171,6 +178,14 @@ exercise_core() {
     status=$?
   fi
   test "$status" -eq 37
+  if run_logged /tmp/ib-publication-failed-child.txt \
+      "$repository_root/src/build/exec/ib-result-publication-acceptance" fail-after-action; then
+    printf 'logging changed a failed required child into success\n' >&2
+    exit 1
+  else
+    status=$?
+  fi
+  test "$status" -eq 37
 
   cd "$repository_root"
   sh -n lib/durable_object_store.grease
@@ -193,11 +208,10 @@ exercise_core() {
   sh -n tests/test_android_longview_worker.grease
   sh tests/test_android_longview_worker.grease
   cd "$repository_root/src"
-  "$idric_prefix/bin/idris2" PaintBudgetSmoke.idric -o ib-paint-budget-smoke \
-    2>&1 | tee /tmp/idric-paint-budget-compile.txt
+  run_logged /tmp/idric-paint-budget-compile.txt "$idric_prefix/bin/idris2" PaintBudgetSmoke.idric -o ib-paint-budget-smoke \
   test -x ./build/exec/ib-paint-budget-smoke
   ! grep -q '^Error:' /tmp/idric-paint-budget-compile.txt
-  ./build/exec/ib-paint-budget-smoke | tee /tmp/ib-paint-budget-smoke.txt
+  run_logged /tmp/ib-paint-budget-smoke.txt ./build/exec/ib-paint-budget-smoke
   grep -Fx 'paint-budget-cheap-full=True' /tmp/ib-paint-budget-smoke.txt
   grep -Fx 'paint-budget-expensive-reduced=True' /tmp/ib-paint-budget-smoke.txt
   grep -Fx 'paint-budget-pathological-reused=True' /tmp/ib-paint-budget-smoke.txt
@@ -210,10 +224,10 @@ exercise_workbench() {
   sh tests/test_real_world_url_fixture.grease
 
   cd "$repository_root/src"
-  "$idric_prefix/bin/idris2" Workbench.idric -o ib-workbench 2>&1 | tee /tmp/idric-workbench-compile.txt
+  run_logged /tmp/idric-workbench-compile.txt "$idric_prefix/bin/idris2" Workbench.idric -o ib-workbench
   test -x ./build/exec/ib-workbench
   ! grep -q '^Error:' /tmp/idric-workbench-compile.txt
-  ./build/exec/ib-workbench | tee /tmp/ib-workbench.txt
+  run_logged /tmp/ib-workbench.txt ./build/exec/ib-workbench
   grep -Fx 'fixture-urls=10000' /tmp/ib-workbench.txt
   grep -Fx 'fixture-42=ib://fixture/42' /tmp/ib-workbench.txt
   grep -Fx 'logical-tabs=32' /tmp/ib-workbench.txt
@@ -225,12 +239,10 @@ exercise_workbench() {
 build_information_programs() {
   test -x "$idric_prefix/bin/idris2" || build_idric
   cd "$repository_root/src"
-  "$idric_prefix/bin/idris2" InformationSmoke.idric -o ib-information-smoke \
-    2>&1 | tee /tmp/idric-information-compile.txt
+  run_logged /tmp/idric-information-compile.txt "$idric_prefix/bin/idris2" InformationSmoke.idric -o ib-information-smoke \
   test -x ./build/exec/ib-information-smoke
   ! grep -q '^Error:' /tmp/idric-information-compile.txt
-  "$idric_prefix/bin/idris2" ArxivPrepaint.idric -o ib-arxiv-prepaint \
-    2>&1 | tee /tmp/idric-arxiv-prepaint-compile.txt
+  run_logged /tmp/idric-arxiv-prepaint-compile.txt "$idric_prefix/bin/idris2" ArxivPrepaint.idric -o ib-arxiv-prepaint \
   test -x ./build/exec/ib-arxiv-prepaint
   ! grep -q '^Error:' /tmp/idric-arxiv-prepaint-compile.txt
 }
@@ -238,7 +250,7 @@ build_information_programs() {
 exercise_information() {
   build_information_programs
   cd "$repository_root"
-  src/build/exec/ib-information-smoke | tee /tmp/ib-information-smoke.txt
+  run_logged /tmp/ib-information-smoke.txt src/build/exec/ib-information-smoke
   grep -Fx 'information-title=Build console' /tmp/ib-information-smoke.txt
   grep -Fx 'early-table-header=True' /tmp/ib-information-smoke.txt
   grep -Fx 'early-table-data=True' /tmp/ib-information-smoke.txt
@@ -266,8 +278,8 @@ exercise_hostile_ingestion() {
     -o /tmp/aici-ingestion "$aici_root/ingestion/src/aici_ingestion.c"
 
   cd "$repository_root/src"
-  "$idric_prefix/bin/idris2" HostileIngestionReceipt.idric \
-    -o ib-hostile-ingestion 2>&1 | tee /tmp/idric-hostile-ingestion-compile.txt
+  run_logged /tmp/idric-hostile-ingestion-compile.txt "$idric_prefix/bin/idris2" HostileIngestionReceipt.idric \
+    -o ib-hostile-ingestion
   test -x build/exec/ib-hostile-ingestion
   ! grep -q '^Error:' /tmp/idric-hostile-ingestion-compile.txt
 

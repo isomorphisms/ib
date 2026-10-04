@@ -17,7 +17,7 @@ emit name ledger observed =
   case publication_for ledger (request name) observed of
     Nothing ⇒ putStrLn (name ++ "\trefuse")
     Just accepted ⇒
-      let accepted_request = accepted.request in
+      let accepted_request = accepted.publication_request in
         putStrLn
           (accepted_request.result_identity ++ "\tpublish\t" ++ show accepted_request.byte_limit ++
            "\t" ++ accepted_request.backend_identity ++ "\t" ++ accepted_request.media_identity ++

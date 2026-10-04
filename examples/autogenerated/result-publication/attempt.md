@@ -43,6 +43,17 @@ process-interruption acceptance contract.
 
 ## Result and language work
 
+Source inspection of the exact pinned compiler
+`bd9fbe1e68ce9b3dd3981fcd3e1abf9e50bd350e`,
+`Parser/Lexer/Source.idr`, found no lowering for the canonical Boolean equality
+glyph. `EqualitySpelling.idric` preserves that attempt. It is not claimed
+compiled; newer compiler source supports the glyph but upgrading this Longview
+pin is outside scope. The production function uses the pinned compiler's
+supported `compare : Text → Text → Ordering` and accepts only `EQ`; this keeps
+the language/semantic owner and has no host-language fallback. Smallest language
+work: adopt the existing glyph lowering on a separately verified compiler pin,
+with this exact equality attempt as acceptance.
+
 Pending exact-head hosted compilation/execution when this record is created.
 The first local execution boundary is unavailable Idriç/Grease runtimes;
 hosted compilation will determine whether the typed publication boundary is

@@ -132,8 +132,16 @@ record PublicationLocation where
 public export
 record AdmittedPublication where
   constructor ReservedPublication
-  request : PublicationRequest
+  publication_request : PublicationRequest
   reserved_ledger : SpaceLedger
+
+-- The pinned compiler predates the canonical Boolean-equality glyph.
+-- Use its supported Text ordering without changing the compiler pin.
+same_publication_text : Text → Text → Bool
+same_publication_text left right =
+  case compare left right of
+    EQ ⇒ True
+    _ ⇒ False
 
 public export
 publication_for :
@@ -141,14 +149,16 @@ publication_for :
 publication_for ledger request location =
   case admission_for ledger request.byte_limit of
     admitted ⇒
-      if request.result_identity ≟ "" || request.reservation_receipt ≟ "" ||
-         request.backend_identity ≟ "" || request.media_identity ≟ "" ||
-         request.observation_identity ≟ ""
+      if same_publication_text request.result_identity "" ||
+         same_publication_text request.reservation_receipt "" ||
+         same_publication_text request.backend_identity "" ||
+         same_publication_text request.media_identity "" ||
+         same_publication_text request.observation_identity ""
         then Nothing
         else if
-          request.backend_identity ≟ location.backend_identity &&
-          request.media_identity ≟ location.media_identity &&
-          request.observation_identity ≟ location.observation_identity
+          same_publication_text request.backend_identity location.backend_identity &&
+          same_publication_text request.media_identity location.media_identity &&
+          same_publication_text request.observation_identity location.observation_identity
           then
             case reserve_peak request.byte_limit ledger of
               Nothing ⇒ Nothing
