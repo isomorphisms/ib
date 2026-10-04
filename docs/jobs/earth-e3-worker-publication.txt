@@ -3,15 +3,15 @@ Earth E3 — Bind owned worker completion to the replacement E2 publication path
 Repository: isomorphisms/IB.
 
 Verified starting identities:
-E2_SOURCE_SHA=253794cba59c40df4e758e445f49bb48fd0c7cd9
-https://github.com/isomorphisms/ib/commit/253794cba59c40df4e758e445f49bb48fd0c7cd9
+E2_SOURCE_SHA=b731444de8bed8455f36a56998a10cbb38cabe97
+https://github.com/isomorphisms/ib/commit/b731444de8bed8455f36a56998a10cbb38cabe97
 ACTUAL_PROGRAM_ACCEPTANCE_SOURCE_SHA=ea322cd1c2dcc9021efddd089b2593bd4b40dd6b
 https://github.com/isomorphisms/ib/commit/ea322cd1c2dcc9021efddd089b2593bd4b40dd6b
 Baseline Android receipt:
 https://github.com/isomorphisms/ib/actions/runs/37214517467
 E2 foundation/Android receipts:
-https://github.com/isomorphisms/ib/actions/runs/37234493165
-https://github.com/isomorphisms/ib/actions/runs/37234493282
+https://github.com/isomorphisms/ib/actions/runs/37235523461
+https://github.com/isomorphisms/ib/actions/runs/37235523508
 
 E2 source is in isomorphisms/IB PR #115, “Reconstruct immutable-result publication acceptance on Longview”:
 https://github.com/isomorphisms/ib/pull/115
@@ -49,7 +49,8 @@ Required implementation:
    nonreplayable state changes. Never add automatic state-changing replay.
 3. Transport the already-admitted result identity, byte limit, backend/media
    identity, observation identity and reservation receipt unchanged. Use E2's
-   immutable adapters; do not reintroduce overwrite rename or let an adapter
+   immutable adapters; preserve Android's nonempty-directory/legacy-file
+   boundary. Do not reintroduce regular-file overwrite rename or let an adapter
    admit work. Thread the reserved ledger; do not double-charge a held E4
    reservation. If actual retained-result admission is still absent, fail
    closed at that specific boundary rather than inventing E4 semantics.

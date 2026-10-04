@@ -3,15 +3,15 @@ Moon E2-B — Map the replacement publication contract across acceptance surface
 Repository: isomorphisms/IB.
 
 Exact prerequisite:
-E2_SOURCE_SHA=253794cba59c40df4e758e445f49bb48fd0c7cd9
-https://github.com/isomorphisms/ib/commit/253794cba59c40df4e758e445f49bb48fd0c7cd9
+E2_SOURCE_SHA=b731444de8bed8455f36a56998a10cbb38cabe97
+https://github.com/isomorphisms/ib/commit/b731444de8bed8455f36a56998a10cbb38cabe97
 Source PR: isomorphisms/IB PR #115, “Reconstruct immutable-result publication acceptance on Longview”
 https://github.com/isomorphisms/ib/pull/115
 
 Refresh live state, materialize this exact source in an isolated clean checkout,
 and verify its exact-head foundation and Android acceptance before editing.
-The foundation run is https://github.com/isomorphisms/ib/actions/runs/37234493165;
-the Android run is https://github.com/isomorphisms/ib/actions/runs/37234493282.
+The foundation run is https://github.com/isomorphisms/ib/actions/runs/37235523461;
+the Android run is https://github.com/isomorphisms/ib/actions/runs/37235523508.
 If either source or required acceptance is unavailable, stop at that concrete
 prerequisite; a branch name or old green run cannot replace it.
 
@@ -24,7 +24,9 @@ Settled contract:
   media identity, observation identity and reservation receipt unchanged.
 - An already-held E4 reservation must not be charged a second time.
 - Grease transports the admitted action; ordinary-file and Android adapters
-  only publish bounded immutable bytes. No fallback volume or overwrite rename.
+  only publish bounded immutable bytes. Ordinary files use hard-link creation;
+  Android uses atomic nonempty-directory publication and preserves legacy files.
+  No fallback volume or regular-file overwrite rename.
 - Unknown/stale/denied/read-only/absent observations yield no publication action.
 - Committed result state remains committed after later authority loss.
 

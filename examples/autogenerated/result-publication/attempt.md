@@ -70,6 +70,25 @@ At the same source, Android run 37234493282, build job 111530795224, passed
 production DurableResultStore unit tests, including rejection of the real
 overwrite primitive, lint, package boundary and stable signer checks. The
 separate emulator stages are identified by that workflow rather than inferred
-from unit tests. No host-language policy fallback was implemented. Actual
+from unit tests. Those stages failed: the app could not commit its first result
+and the reader therefore had no grant. Diagnostic source
+`b3de3e3f80b4b684d557eb27e672b5c447464070`, run 37235216146,
+heavy-page job 111533011151, exposed `AccessDeniedException` at the hard-link
+operation on Android API 29. The hard-link Android implementation is not an
+accepted E2 source.
+
+Replacement candidate `b731444de8bed8455f36a56998a10cbb38cabe97` uses atomic
+nonempty-directory publication in the Android adapter, while the ordinary-file
+adapter retains hard links. The same deterministic race acceptance now rejects
+regular-file overwrite inside the directory. A new legacy-file regression
+preserves baseline retained results without migration. Foundation run
+37235523461 passed; Android build job 111533720609 of run 37235523508 passed
+unit, lint, boundary and stable signer checks. All three emulator jobs also
+passed: renderer-loss 111533935352, whole-host-loss 111533935323 and
+replacement/cross-UID/Binder/live-PFD 111533935373. This exact source is the
+accepted E2 replacement. The source receipt and two downstream handoffs pin it
+without historical prerequisites.
+
+No host-language policy fallback was implemented. Actual
 Grease runtime execution remains unverified because this local/hosted consumer
 path uses the inherited POSIX compatibility interpreter.
