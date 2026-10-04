@@ -16,11 +16,11 @@ emit : Text → SpaceLedger → PublicationLocation → IO ()
 emit name ledger observed =
   case publication_for ledger (request name) observed of
     Nothing ⇒ putStrLn (name ++ "\trefuse")
-    Just admitted ⇒
+    Just accepted_request ⇒
       putStrLn
-        (admitted.result_identity ++ "\tpublish\t" ++ show admitted.byte_limit ++
-         "\t" ++ admitted.backend_identity ++ "\t" ++ admitted.media_identity ++
-         "\t" ++ admitted.observation_identity ++ "\t" ++ admitted.reservation_receipt)
+        (accepted_request.result_identity ++ "\tpublish\t" ++ show accepted_request.byte_limit ++
+         "\t" ++ accepted_request.backend_identity ++ "\t" ++ accepted_request.media_identity ++
+         "\t" ++ accepted_request.observation_identity ++ "\t" ++ accepted_request.reservation_receipt)
 
 committed_survives_authority_loss : Bool
 committed_survives_authority_loss =
