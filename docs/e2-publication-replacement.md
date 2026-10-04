@@ -70,6 +70,9 @@ that logging boundary.
 
 Android unit tests call the actual `DurableResultStore` with real files and
 atomic links. The filesystem seam controls only schedules and explicit faults.
+Both writers stage before either is released; the first must finish before the
+second publishes, deterministically exposing overwrite races. A known-bad
+real atomic-rename primitive must fail the same success-count assertion.
 Two staged unequal writers must yield exactly one success; two equal writers
 must both succeed; interrupted staging is invisible; simulated staging ENOSPC
 cleans up and never invokes publication; bounded reads refuse; a mutable caller
