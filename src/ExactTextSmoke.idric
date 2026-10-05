@@ -2,9 +2,7 @@ module ExactTextSmoke
 
 import IB.ExactText
 
-%default total
-
-emit_fixture : String → String → String → IO ()
+emit_fixture : Text → Text → Text → IO ()
 emit_fixture label wanted text = do
   putStrLn (label ++ "-contains=" ++ show (contains_string wanted text))
   putStrLn (label ++ "-positions=" ++ show (match_positions wanted text))

@@ -19,7 +19,7 @@ jobs:
     env:
       IDRIS2_CG: chez
       SCHEME: scheme
-      IDRIC_REF: bd9fbe1e68ce9b3dd3981fcd3e1abf9e50bd350e
+      IDRIC_REF: 7050c116326c9c8e8d0a56c2db7baf2119cbae19
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
@@ -33,7 +33,7 @@ jobs:
         uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
         with:
           path: /tmp/idric
-          key: idric-relocatable-v2-${{ runner.os }}-bd9fbe1e68ce9b3dd3981fcd3e1abf9e50bd350e
+          key: idric-relocatable-v2-${{ runner.os }}-7050c116326c9c8e8d0a56c2db7baf2119cbae19
 
       - name: Build and install Idric compiler
         if: steps.idric-cache.outputs.cache-hit != 'true'
