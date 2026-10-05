@@ -170,6 +170,8 @@ exercise_core() {
   grep -Fx 'worker-stale-authority-rejected=True' /tmp/ib-worker-lifecycle-smoke.txt
   grep -Fx 'worker-ambiguous-completion-rejected=True' /tmp/ib-worker-lifecycle-smoke.txt
   grep -Fx 'worker-authority-retains-attempt=True' /tmp/ib-worker-lifecycle-smoke.txt
+  grep -Fx 'worker-authority-retry-requires-resolution=True' /tmp/ib-worker-lifecycle-smoke.txt
+  grep -Fx 'worker-authority-gone-can-retry=True' /tmp/ib-worker-lifecycle-smoke.txt
   grep -Fx 'worker-committed-after-authority-loss=True' /tmp/ib-worker-lifecycle-smoke.txt
   grep -Fx 'worker-attempt-monotone=True' /tmp/ib-worker-lifecycle-smoke.txt
   grep -Fx 'worker-old-attempt-completion-rejected=True' /tmp/ib-worker-lifecycle-smoke.txt
