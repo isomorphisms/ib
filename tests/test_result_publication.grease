@@ -28,7 +28,8 @@ else
   status=$?
   exit "$status"
 fi
-test "$(wc -l <"$work/actions" | tr -d '[:space:]')" = 11
+test "$(wc -l <"$work/actions" | tr -d '[:space:]')" = 12
+grep -Fx 'worker-completion-bound	True' "$work/actions" >/dev/null
 grep -Fx 'committed-after-authority-loss	True' "$work/actions" >/dev/null
 grep -Fx 'publication-reservation-concurrent	True' "$work/actions" >/dev/null
 mkdir "$work/card"
