@@ -7,8 +7,8 @@ case $0 in
 esac
 repository_root=$(CDPATH= cd -- "$script_directory/.." && pwd)
 
-# Stub the current provider at its narrow edge. This test proves that callers
-# bind to ib_binder_* rather than to Shizuku names.
+# Stub the current provider at its narrow edge. This proves that generic callers
+# bind to ib_binder_* while the full attempt tuple crosses unchanged.
 ib_shizuku_authority() { printf '%s\n' 'shell'; }
 ib_shizuku_identity() { printf '%s\n' 'identity-via-provider'; }
 ib_shizuku_process_snapshot() { printf '%s\n' 'processes-via-provider'; }
@@ -24,21 +24,36 @@ ib_shizuku_signal_owned() {
 }
 ib_shizuku_package_pids() { test "$1" = org.isomorphisms.ib; printf '%s\n' 4242; }
 ib_shizuku_force_stop_package() { test "$1" = org.isomorphisms.ib; }
+
+check_worker_attempt() {
+  test "$1" = work-1
+  test "$2" = result-1
+  test "$3" = launch-1
+  test "$4" = boot-a
+  test "$5" = 2000
+  test "$6" = 123
+  test "$7" = 999
+  test "$8" = worker
+  test "$9" = 7
+  test "${10}" = attempt-1
+  test "${11}" = 1
+}
 ib_shizuku_worker_start() {
   test "$1" = work-1
   test "$2" = result-1
-  test "$3" = immediate
-  printf 'worker\t123\t999\tworker\n'
+  test "$3" = launch-1
+  test "$4" = 7
+  test "$5" = attempt-1
+  test "$6" = 1
+  test "$7" = immediate
+  printf 'worker\tlaunch-1\tboot-a\t2000\t123\t999\tworker\t7\tattempt-1\t1\n'
 }
-ib_shizuku_worker_status() { test "$1" = work-1; printf '%s\n' committed; }
-ib_shizuku_worker_read_result() { test "$1" = result-1; printf '%s\n' result-via-provider; }
-ib_shizuku_worker_observe() {
-  test "$1" = work-1
-  test "$2" = result-1
-  test "$3" = 123
-  test "$4" = 999
-  test "$5" = worker
-  printf '%s\n' committed
+ib_shizuku_worker_status() { check_worker_attempt "$@"; printf '%s\n' committed; }
+ib_shizuku_worker_read_result() { check_worker_attempt "$@"; printf '%s\n' result-via-provider; }
+ib_shizuku_worker_observe() { check_worker_attempt "$@"; printf '%s\n' committed; }
+ib_shizuku_worker_signal_owned() {
+  check_worker_attempt "${1}" "${2}" "${3}" "${4}" "${5}" "${6}" "${7}" "${8}" "${9}" "${10}" "${11}"
+  test "${12:-TERM}" = TERM
 }
 ib_shizuku_capabilities_remote_snapshot() { printf '%s\n' capability-via-provider; }
 ib_shizuku_capabilities_open_app_report() { printf '%s\n' app-report-via-provider; }
@@ -56,10 +71,19 @@ test "$(ib_binder_process_identity 123)" = "$(printf '123\t999\tworker')"
 ib_binder_signal_owned 123 999 worker TERM
 test "$(ib_binder_package_pids org.isomorphisms.ib)" = 4242
 ib_binder_force_stop_package org.isomorphisms.ib
-test "$(ib_binder_worker_start work-1 result-1 immediate)" = "$(printf 'worker\t123\t999\tworker')"
-test "$(ib_binder_worker_status work-1)" = committed
-test "$(ib_binder_worker_read_result result-1)" = result-via-provider
-test "$(ib_binder_worker_observe work-1 result-1 123 999 worker)" = committed
+
+attempt_args='work-1 result-1 launch-1 boot-a 2000 123 999 worker 7 attempt-1 1'
+test "$(ib_binder_worker_start work-1 result-1 launch-1 7 attempt-1 1 immediate)" = \
+  "$(printf 'worker\tlaunch-1\tboot-a\t2000\t123\t999\tworker\t7\tattempt-1\t1')"
+# shellcheck disable=SC2086
+test "$(ib_binder_worker_status $attempt_args)" = committed
+# shellcheck disable=SC2086
+test "$(ib_binder_worker_read_result $attempt_args)" = result-via-provider
+# shellcheck disable=SC2086
+test "$(ib_binder_worker_observe $attempt_args)" = committed
+# shellcheck disable=SC2086
+ib_binder_worker_signal_owned $attempt_args TERM
+
 test "$(ib_binder_capabilities_remote_snapshot)" = capability-via-provider
 test "$(ib_binder_capabilities_open_app_report)" = app-report-via-provider
 
