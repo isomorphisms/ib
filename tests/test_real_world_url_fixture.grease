@@ -1,0 +1,43 @@
+#!/bin/sh
+set -eu
+
+repository_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+fixture="$repository_root/tests/fixtures/real_world_urls.txt"
+
+fail() {
+  printf 'real-world URL fixture: %s\n' "$1" >&2
+  exit 1
+}
+
+test -f "$fixture" || fail 'fixture is missing'
+
+line_count=$(wc -l < "$fixture" | tr -d '[:space:]')
+test "$line_count" -ge 200 || fail "expected at least 200 sanitized URLs, found $line_count"
+
+if grep -Env '^https?://[^[:space:]]+$' "$fixture"; then
+  fail 'every fixture row must be one absolute HTTP(S) URL with no whitespace'
+fi
+
+if grep -Eiq '(checkout|SecondaryValidation|SessionExpired|/invitees/|bookwithme|teams\.microsoft\.com|online\.dfcufinancial\.com|pay\.homedepotconsumer\.accountonline\.com|track-mg\.mobilize\.us|ReferralUpdate|campuscommunicator\.com/document/link|checkout\.babylist\.com|myuofmhealth\.org|bellesa\.co|dropbox\.com/scl/fi/|google\.com/url\?|/fast_download/|washtenaw\.my\.salesforce-sites\.com/engage/TargetX_Engage__Engage|schools\.mybrightwheel\.com/sign-up/confirmation|^https?://t\.co/)' "$fixture"; then
+  fail 'account, invitation, checkout, opaque redirect, private-share, or direct-download URL leaked into fixture'
+fi
+
+if grep -Eiq '[?&](crid|dib|dib_tag|sp_csd|linkCode|tag|linkId|language|ref_|srsltid|twclid|utm_[^=]*|_gl|_gcl_au|source|usg|rlkey|st|auto_redirect|edge_redirect|skip_shop_pay)=' "$fixture"; then
+  fail 'tracking or affiliate query parameter leaked into fixture'
+fi
+
+if grep -Ei '^https://www\.amazon\.com/.*\?' "$fixture"; then
+  fail 'Amazon fixture URLs must be canonical product URLs without affiliate/search parameters'
+fi
+
+playlist_count=$(grep -Ec '^https://www\.youtube\.com/playlist\?list=' "$fixture" || true)
+test "$playlist_count" -ge 10 || fail "expected public YouTube playlist coverage, found $playlist_count"
+
+non_playlist_youtube=$(grep -Ec '^https://www\.youtube\.com/' "$fixture" || true)
+test "$non_playlist_youtube" -eq "$playlist_count" || fail 'YouTube rows in this fixture must be canonical playlist URLs'
+
+duplicate_groups=$(sort "$fixture" | uniq -d | wc -l | tr -d '[:space:]')
+test "$duplicate_groups" -ge 4 || fail 'history-like duplicate URL rows were accidentally deduplicated'
+
+printf 'real-world URL fixture: ok (%s rows, %s playlists, %s duplicate groups)\n' \
+  "$line_count" "$playlist_count" "$duplicate_groups"

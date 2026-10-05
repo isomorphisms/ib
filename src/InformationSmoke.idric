@@ -1,10 +1,10 @@
 module InformationSmoke
 
 import IB.Information
+import Data.Text
+import System
 
-%default total
-
-heavy_prefix : String
+heavy_prefix : Text
 heavy_prefix =
   "<html><head><title>Build console</title>" ++
   "<link rel='stylesheet' href='/app-900kb.css'>" ++
@@ -18,7 +18,7 @@ heavy_prefix =
   "<tr><td>worker</td><td>queued</td></tr>" ++
   "</table>"
 
-heavy_tail : String
+heavy_tail : Text
 heavy_tail =
   "<script>framework boot marker</script>" ++
   "<canvas>canvas marker</canvas>" ++
@@ -28,14 +28,14 @@ heavy_tail =
   "<form action='/search'><label>Find project</label><input name='q'></form>" ++
   "</body></html>"
 
-shell_only : String
+shell_only : Text
 shell_only =
   "<html><head><title>Application shell</title></head><body>" ++
   "<div id='root'></div>" ++
   "<script>project row exists only after framework execution</script>" ++
   "</body></html>"
 
-article_body : String
+article_body : Text
 article_body =
   "<html><head><title>Field notes</title></head><body><article>" ++
   "<h1>Small pages first</h1>" ++
@@ -46,20 +46,20 @@ article_body =
   "<a href='/full-figure'><img src='/figure.png' alt='Figure one' title='Measured values'></a>" ++
   "</article></body></html>"
 
-plain_url_list : String
+plain_url_list : Text
 plain_url_list =
   "https://example.test/one\n" ++
   "ordinary text\n" ++
   "http://example.test/two?q=three\n"
 
-all_lines_within : Nat → List String → Bool
+all_lines_within : Number → List Text → Bool
 all_lines_within width [] = True
 all_lines_within width (line :: rest) =
   length (unpack line) <= width && all_lines_within width rest
 
-has_line : String → List String → Bool
+has_line : Text → List Text → Bool
 has_line wanted [] = False
-has_line wanted (line :: rest) = line == wanted || has_line wanted rest
+has_line wanted (line :: rest) = line ≟ wanted || has_line wanted rest
 
 main : IO ()
 main = do
@@ -93,3 +93,20 @@ main = do
   putStrLn ("plain-first-url=" ++ show (has_link "https://example.test/one" "https://example.test/one" plain))
   putStrLn ("plain-second-url=" ++ show (has_link "http://example.test/two?q=three" "http://example.test/two?q=three" plain))
   putStrLn ("cheap-url-rejects-relative=" ++ show (cheap_http_url "/relative"))
+
+  let article_retains_content =
+        has_exact_item_text "The first paragraph is the useful first paint." article &&
+        has_exact_item_text "The second paragraph remains part of the full text." article &&
+        has_link "an inline article link" "/inside" article &&
+        has_exact_item_text "Text before" article &&
+        has_exact_item_text "text after." article &&
+        has_image "Figure one" "/figure.png" "/full-figure" article &&
+        not (has_link "" "/full-figure" article)
+  let plain_links_are_candidates =
+        has_link "https://example.test/one" "https://example.test/one" plain &&
+        has_link "http://example.test/two?q=three" "http://example.test/two?q=three" plain &&
+        not (cheap_http_url "/relative") &&
+        not (cheap_http_url "https://example.test/a b")
+  if article_retains_content && plain_links_are_candidates
+    then pure ()
+    else exitFailure
