@@ -244,10 +244,15 @@ expected_attempt=\$(printf 'attempt\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s
   "\$launch" "\$expected_boot" "\$expected_uid" "\$pid" "\$expected_start" "\$expected_name" \
   "\$host_generation" "\$attempt_id" "\$attempt_number" "\$result")
 test "\$(cat "\$attempt_file")" = "\$expected_attempt" || exit 72
-current_boot=\$(tr -d '\\r\\n' </proc/sys/kernel/random/boot_id) || exit 44
-current_uid=\$(id -u) || exit 44
-test "\$current_boot" = "\$expected_boot" || exit 72
-test "\$current_uid" = "\$expected_uid" || exit 72
+EOF
+}
+
+ib_shizuku_worker_live_guard_suffix() {
+  cat <<'EOF'
+current_boot=$(tr -d '\r\n' </proc/sys/kernel/random/boot_id) || exit 44
+current_uid=$(id -u) || exit 44
+test "$current_boot" = "$expected_boot" || exit 72
+test "$current_uid" = "$expected_uid" || exit 72
 EOF
 }
 
@@ -257,6 +262,7 @@ ib_shizuku_worker_status() {
     return 2
   }
   prefix=$(ib_shizuku_worker_attempt_command_prefix "$@") || return 2
+  live_guard=$(ib_shizuku_worker_live_guard_suffix) || return 2
   command_text="# IB_LONGVIEW_WORKER_STATUS_V2
 set -eu
 $prefix
@@ -264,7 +270,11 @@ status=\"\$root/work/\$work.status\"
 test -f \"\$status\" || exit 68
 bytes=\$(wc -c <\"\$status\" | tr -d '[:space:]')
 test \"\$bytes\" -le 64 || exit 69
-cat \"\$status\""
+state=\$(cat \"\$status\")
+if test \"\$state\" = running; then
+$live_guard
+fi
+printf '%s\\n' \"\$state\""
   ib_shizuku_run_bounded 5 "$command_text"
 }
 
@@ -302,6 +312,7 @@ ib_shizuku_worker_observe() {
     return 2
   }
   prefix=$(ib_shizuku_worker_attempt_command_prefix "$@") || return 2
+  live_guard=$(ib_shizuku_worker_live_guard_suffix) || return 2
   command_text="# IB_LONGVIEW_WORKER_OBSERVE_V2
 set -eu
 $prefix
@@ -323,6 +334,7 @@ if test -f \"\$final\"; then
   printf 'committed\\n'
   exit 0
 fi
+$live_guard
 stat=/proc/\$pid/stat
 comm=/proc/\$pid/comm
 if test -r \"\$stat\" && test -r \"\$comm\"; then
@@ -357,9 +369,11 @@ ib_shizuku_worker_signal_owned() {
       ;;
   esac
   prefix=$(ib_shizuku_worker_attempt_command_prefix "${1}" "${2}" "${3}" "${4}" "${5}" "${6}" "${7}" "${8}" "${9}" "${10}" "${11}") || return 2
+  live_guard=$(ib_shizuku_worker_live_guard_suffix) || return 2
   command_text="# IB_LONGVIEW_WORKER_SIGNAL_V2
 set -eu
 $prefix
+$live_guard
 status=\"\$root/work/\$work.status\"
 test -f \"\$status\" || exit 68
 test \"\$(cat \"\$status\")\" = running || exit 72
