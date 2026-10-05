@@ -260,6 +260,10 @@ ib_longview_worker_signal_owned "$@" TERM
 test "$(ib_longview_worker_status "$@")" = killed
 test "$(ib_longview_worker_observe "$@")" = gone-uncommitted
 
+# A retry must advance the attempt number while the killed attempt is still
+# eligible for restart.
+expect_status 72 ib_longview_worker_start work-delayed result-delayed launch-d3 10 attempt-d3 1 delayed
+
 # A monotone retry may replace only the terminal attempt. Once it does, the old
 # completion tuple is stale and cannot observe/read/mutate the new attempt.
 retry=$(ib_longview_worker_start work-delayed result-delayed launch-d2 9 attempt-d2 2 immediate)
@@ -271,8 +275,6 @@ ib_longview_worker_read_result "$@" >"$work/retry-result"
 grep -Fx "$(printf 'attempt_id\tattempt-d2')" "$work/retry-result" >/dev/null
 grep -Fx "$(printf 'attempt_number\t2')" "$work/retry-result" >/dev/null
 
-# Attempt numbers are monotone even after terminal state.
-expect_status 72 ib_longview_worker_start work-delayed result-delayed launch-d3 10 attempt-d3 1 delayed
 # A committed durable result never starts another attempt.
 expect_status 73 ib_longview_worker_start work-delayed result-delayed launch-d3 10 attempt-d3 3 delayed
 
