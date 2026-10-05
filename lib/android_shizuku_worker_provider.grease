@@ -126,7 +126,22 @@ rm -f \"\$gate\"
   test \"\$rec_attempt\" = \"\$attempt_id\" || exit 72
   test \"\$rec_number\" = \"\$attempt_number\" || exit 72
   test \"\$rec_result\" = \"\$result\" || exit 72
+  expected_attempt=\$(printf 'attempt\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s' \
+    \"\$rec_launch\" \"\$rec_boot\" \"\$rec_uid\" \"\$rec_pid\" \"\$rec_start\" \"\$rec_name\" \
+    \"\$rec_host\" \"\$rec_attempt\" \"\$rec_number\" \"\$rec_result\")
   if test \"\$delay\" -gt 0; then sleep \"\$delay\"; fi
+
+  # Completion shares the short control lock with start and owned signal.
+  completion_waits=0
+  until mkdir \"\$lock\" 2>/dev/null; do
+    completion_waits=\$((completion_waits + 1))
+    test \"\$completion_waits\" -le 100 || exit 74
+    sleep 0.01
+  done
+  trap 'rmdir \"\$lock\" 2>/dev/null || :' EXIT INT TERM
+  test \"\$(cat \"\$attempt_file\")\" = \"\$expected_attempt\" || exit 72
+  test \"\$(cat \"\$status\")\" = running || exit 72
+
   tmp=\"\$root/.ib-staging/\$result.\$\$.tmp\"
   final=\"\$root/objects/\$result\"
   {
@@ -150,6 +165,17 @@ rm -f \"\$gate\"
     printf 'failed:result-limit\\n' >\"\$status\"
     exit 69
   }
+
+  # Re-check while holding the same lock immediately before publication.
+  test \"\$(cat \"\$attempt_file\")\" = \"\$expected_attempt\" || {
+    rm -f \"\$tmp\"
+    exit 72
+  }
+  test \"\$(cat \"\$status\")\" = running || {
+    rm -f \"\$tmp\"
+    exit 72
+  }
+
   if test -e \"\$final\"; then
     if cmp -s \"\$tmp\" \"\$final\"; then
       rm -f \"\$tmp\"
@@ -164,6 +190,8 @@ rm -f \"\$gate\"
     sync
   fi
   printf 'committed\\n' >\"\$status\"
+  rmdir \"\$lock\"
+  trap - EXIT INT TERM
 ) </dev/null >/dev/null 2>&1 &
 pid=\$!
 stat=/proc/\$pid/stat
@@ -374,6 +402,15 @@ ib_shizuku_worker_signal_owned() {
 set -eu
 $prefix
 $live_guard
+lock=\"\$root/work/\$work.launch-lock\"
+signal_waits=0
+until mkdir \"\$lock\" 2>/dev/null; do
+  signal_waits=\$((signal_waits + 1))
+  test \"\$signal_waits\" -le 100 || exit 74
+  sleep 0.01
+done
+trap 'rmdir \"\$lock\" 2>/dev/null || :' EXIT INT TERM
+test \"\$(cat \"\$attempt_file\")\" = \"\$expected_attempt\" || exit 72
 status=\"\$root/work/\$work.status\"
 test -f \"\$status\" || exit 68
 test \"\$(cat \"\$status\")\" = running || exit 72
@@ -386,6 +423,8 @@ observed_name=\$(tr -d '\\r\\n' <\"\$comm\")
 test \"\$observed_start\" = \"\$expected_start\" || exit 45
 test \"\$observed_name\" = \"\$expected_name\" || exit 46
 kill -$signal \"\$pid\"
-printf 'killed\\n' >\"\$status\""
+printf 'killed\\n' >\"\$status\"
+rmdir \"\$lock\"
+trap - EXIT INT TERM"
   ib_shizuku_run_bounded 5 "$command_text"
 }
