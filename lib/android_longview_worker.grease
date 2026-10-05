@@ -1,8 +1,9 @@
 # Binder-facing Longview worker adapter.
 #
-# Longview owns durable work/result identity and validates caller-controlled
-# atoms. Android execution is supplied by the Binder boundary. The current
-# Binder provider is Shizuku, but no Shizuku/rish/shell command belongs here.
+# Longview owns durable work/result, launch, host-generation and attempt
+# identities. Android supplies boot/UID/process identity through the Binder
+# boundary. Every authoritative worker operation after launch carries the exact
+# attempt tuple; a PID-only or partial attempt is never sufficient.
 
 ib_longview_worker_validate_atom() {
   if test "$#" -ne 1; then
@@ -15,52 +16,94 @@ ib_longview_worker_validate_atom() {
   esac
 }
 
-ib_longview_worker_start() {
-  if test "$#" -ne 3; then
-    printf '%s\n' 'ib_longview_worker_start expects WORK_ID RESULT_ID immediate|delayed' >&2
+ib_longview_worker_validate_decimal() {
+  if test "$#" -ne 1; then
     return 2
   fi
-  ib_longview_worker_validate_atom "$1" || return 2
-  ib_longview_worker_validate_atom "$2" || return 2
-  case "$3" in
-    immediate|delayed) ;;
-    *)
-      printf 'invalid worker mode: %s\n' "$3" >&2
+  case "$1" in
+    ''|*[!0-9]*)
       return 2
       ;;
   esac
-  ib_binder_worker_start "$1" "$2" "$3"
+}
+
+ib_longview_worker_validate_positive_decimal() {
+  ib_longview_worker_validate_decimal "$1" || return 2
+  test "$1" -gt 0 || return 2
+}
+
+ib_longview_worker_start() {
+  if test "$#" -ne 7; then
+    printf '%s\n' 'ib_longview_worker_start expects WORK_ID RESULT_ID LAUNCH_ID HOST_GENERATION ATTEMPT_ID ATTEMPT_NUMBER immediate|delayed' >&2
+    return 2
+  fi
+  ib_longview_worker_validate_atom "$1" || return 2
+  ib_longview_worker_validate_atom "$2" || return 2
+  ib_longview_worker_validate_atom "$3" || return 2
+  ib_longview_worker_validate_decimal "$4" || return 2
+  ib_longview_worker_validate_atom "$5" || return 2
+  ib_longview_worker_validate_positive_decimal "$6" || return 2
+  case "$7" in
+    immediate|delayed) ;;
+    *)
+      printf 'invalid worker mode: %s\n' "$7" >&2
+      return 2
+      ;;
+  esac
+  ib_binder_worker_start "$@"
+}
+
+ib_longview_worker_validate_attempt() {
+  if test "$#" -ne 11; then
+    return 2
+  fi
+  ib_longview_worker_validate_atom "$1" || return 2
+  ib_longview_worker_validate_atom "$2" || return 2
+  ib_longview_worker_validate_atom "$3" || return 2
+  ib_longview_worker_validate_atom "$4" || return 2
+  ib_longview_worker_validate_decimal "$5" || return 2
+  ib_binder_validate_pid "$6" || return 2
+  ib_binder_validate_start_ticks "$7" || return 2
+  ib_binder_validate_process_name "$8" || return 2
+  ib_longview_worker_validate_decimal "$9" || return 2
+  ib_longview_worker_validate_atom "${10}" || return 2
+  ib_longview_worker_validate_positive_decimal "${11}" || return 2
 }
 
 ib_longview_worker_status() {
-  if test "$#" -ne 1; then
-    printf '%s\n' 'ib_longview_worker_status expects WORK_ID' >&2
+  ib_longview_worker_validate_attempt "$@" || {
+    printf '%s\n' 'ib_longview_worker_status expects the exact 11-field worker attempt identity' >&2
     return 2
-  fi
-  ib_longview_worker_validate_atom "$1" || return 2
-  ib_binder_worker_status "$1"
+  }
+  ib_binder_worker_status "$@"
 }
 
 ib_longview_worker_read_result() {
-  if test "$#" -ne 1; then
-    printf '%s\n' 'ib_longview_worker_read_result expects RESULT_ID' >&2
+  ib_longview_worker_validate_attempt "$@" || {
+    printf '%s\n' 'ib_longview_worker_read_result expects the exact 11-field worker attempt identity' >&2
     return 2
-  fi
-  ib_longview_worker_validate_atom "$1" || return 2
-  ib_binder_worker_read_result "$1"
+  }
+  ib_binder_worker_read_result "$@"
 }
 
 ib_longview_worker_observe() {
-  if test "$#" -ne 5; then
-    printf '%s\n' 'ib_longview_worker_observe expects WORK_ID RESULT_ID PID START_TICKS PROCESS_NAME' >&2
+  ib_longview_worker_validate_attempt "$@" || {
+    printf '%s\n' 'ib_longview_worker_observe expects the exact 11-field worker attempt identity' >&2
+    return 2
+  }
+  ib_binder_worker_observe "$@"
+}
+
+ib_longview_worker_signal_owned() {
+  if test "$#" -lt 11 || test "$#" -gt 12; then
+    printf '%s\n' 'ib_longview_worker_signal_owned expects exact 11-field worker attempt identity and optional SIGNAL' >&2
     return 2
   fi
-
-  ib_longview_worker_validate_atom "$1" || return 2
-  ib_longview_worker_validate_atom "$2" || return 2
-  ib_binder_validate_pid "$3" || return 2
-  ib_binder_validate_start_ticks "$4" || return 2
-  ib_binder_validate_process_name "$5" || return 2
-
-  ib_binder_worker_observe "$1" "$2" "$3" "$4" "$5"
+  ib_longview_worker_validate_attempt "${1}" "${2}" "${3}" "${4}" "${5}" "${6}" "${7}" "${8}" "${9}" "${10}" "${11}" || return 2
+  if test "$#" -eq 12; then
+    case "${12}" in
+      ''|*[!A-Za-z0-9]*) return 2 ;;
+    esac
+  fi
+  ib_binder_worker_signal_owned "$@"
 }
