@@ -65,17 +65,17 @@ value	deterministic-ok
 COMPLETION
 
 ib_publish_owned_admitted_result \
-  "$work/card" "$work/source" "$work/action" ordinary card-a observation-1 \
+  "$work/card" "$work/completion" "$work/action" ordinary card-a observation-1 \
   "$work/completion" work-1 allowed launch-1 boot-a 2000 123 999 ibworker 7 attempt-1 1
 ib_store_read "$work/card" card-a allowed >"$work/read"
-cmp "$work/source" "$work/read"
+cmp "$work/completion" "$work/read"
 test "$(wc -l <"$work/invocations" | tr -d '[:space:]')" = 1
 
 # Stale or ambiguous worker completion cannot reach the E2 adapter.
 cp "$work/completion" "$work/stale-completion"
 sed 's/^boot_id	boot-a$/boot_id	boot-b/' "$work/completion" >"$work/stale-completion"
 if ib_publish_owned_admitted_result \
-    "$work/card" "$work/source" "$work/action" ordinary card-a observation-1 \
+    "$work/card" "$work/stale-completion" "$work/action" ordinary card-a observation-1 \
     "$work/stale-completion" work-1 allowed launch-1 boot-a 2000 123 999 ibworker 7 attempt-1 1 \
     >"$work/stale-worker.out" 2>"$work/stale-worker.err"; then
   printf 'stale worker completion invoked publication\n' >&2
