@@ -51,17 +51,15 @@ state/
   events/
     visits.log
 
-views/
-  organizing-the-information/
-    categories/
-      algebraic-topology/
-        tab-01T... -> ../../../../state/tabs/01T...
+categories/
+  algebraic-topology/
+    tab-01T... -> ../../state/tabs/01T...
 
-      algebraic-topology-1950s/
-        tab-01T... -> ../../../../state/tabs/01T...
+  algebraic-topology-1950s/
+    tab-01T... -> ../../state/tabs/01T...
 
-      Serre/
-        tab-01T... -> ../../../../state/tabs/01T...
+  Serre/
+    tab-01T... -> ../../state/tabs/01T...
 ```
 
 The same tab can therefore appear in `algebraic-topology`, `algebraic-topology-1950s`, `Serre`, and any other useful view without duplicating the underlying record.
@@ -96,25 +94,17 @@ Once a narrower name is unambiguous and useful to the user, redundant umbrella p
 
 Categories can remain durable without all of them being active in the current workbench.
 
-One representation uses `views/_active` as a small set of pointers to category views currently in use:
+One representation may use an underscore-prefixed control directory such as `_active` as a small set of pointers to category views currently in use:
 
 ```text
-views/
-  organizing-the-information/
-    categories/
-      algebraic-topology-1950s/
-      algebraic-topology-1970s/
-      campaign-4/
-
+categories/
   _active/
-    algebraic-topology-1950s -> ../organizing-the-information/categories/algebraic-topology-1950s
-    algebraic-topology-1970s -> ../organizing-the-information/categories/algebraic-topology-1970s
-    campaign-4               -> ../organizing-the-information/categories/campaign-4
+    algebraic-topology-1950s -> ../algebraic-topology-1950s
+    algebraic-topology-1970s -> ../algebraic-topology-1970s
+    campaign-4               -> ../campaign-4
 ```
 
 Removing a link from `_active` neither deletes nor freezes the category. It removes it from the present attention surface while leaving older interests searchable and recoverable. `_active` is not the renderer's hot-tab working set: activating a category must not wake every tab or fetch every resource in it.
-
-The separate `views/hot` control surface points at presentation targets that should receive immediate working-set attention. A hot target may be a text, Markdown, or HTML file, or a local bundle synthesized from several resources; it need not be the original fetched page or a tab record. Requested-hot and actually resident remain distinct under memory pressure. See `docs/filesystem-views.md`.
 
 ## Derived, rebuildable organization
 
@@ -133,6 +123,8 @@ The second direction matters for understanding and editing overlap even if the o
 
 ## Evidence from the 491-row exercise
 
+The complete conversational partitions were assistant-generated, not authoritative user membership artifacts. They must not become training truth. Retain only explicit human assertions tied to their source rows; absence of a recovered complete artifact remains an evidence limit.
+
 One provisional conversational classification pass over 491 real browsing rows deliberately forced a primary-purpose answer so that distinctions and candidate clusters would become visible. It was an analytical view, not a checked-in artifact, ground truth, or a requirement that IB store one primary category.
 
 The early `reading` versus `non-reading` split was likewise a useful elicitation pass, not a mandatory first classifier or a gate that every future category must descend through.
@@ -141,7 +133,7 @@ The pass separated, among other things, book acquisition from book reading or re
 
 A Brecht listing can still belong simultaneously to `book-shopping`, `Brecht`, and `theatre`; a mathematical book can belong to an acquisition view and several mathematical subjects. The exercise supports overlapping refinement precisely because the forced partition loses useful memberships.
 
-If a reproducible labeled fixture is later derived from that pass, it should retain explicit corrections rather than plausible guesses from names alone: the fixture URL `crux.jp` (earlier transcribed as `cruz.jp`) was kids'-toy shopping, and Daniel Litt's “Problems I Like” was a broken mathematics site.
+If a reproducible labeled fixture is later derived from that pass, it should retain explicit corrections rather than plausible guesses from names alone: `cruz.jp` was kids'-toy shopping, and Daniel Litt's “Problems I Like” was a broken mathematics site.
 
 Two ingestion lessons are settled:
 
@@ -152,11 +144,7 @@ Private account, authentication, messaging, password-reset, and token-bearing UR
 
 ## Implementation status
 
-The current `IB.History` and `IB.Index` slices preserve repeated URL rows and their input order. That normalized order is not yet a stable event identity across imports, merges, restarts, or sync.
-
-The first Grease filesystem slice can materialize typed tab/resource links into overlapping category directories, manage `_active`, list reverse membership, publish presentation files or bundles into `views/hot`, and prune broken links. Its deterministic fixture makes a twenty-source Markdown composite hot without a renderer or language model. See `docs/filesystem-views.md`.
-
-Category definitions, proposal records, and accepted-membership storage are not implemented yet, so these projections cannot yet be rebuilt from durable Idriç assertions. The current storage inspector classifies `views/` as derived but does not follow category symlinks. The Grease slice also does not claim that a requested-hot presentation has actually been loaded into RAM.
+The current `IB.History` and `IB.Index` slices preserve repeated URL rows and their input order. That normalized order is not yet a stable event identity across imports, merges, restarts, or sync. Category definitions, proposal records, accepted-membership storage, filesystem projections, reverse-membership inspection, and `_active` are not implemented on `main` yet. The current storage inspector also does not follow category symlinks. This note defines the boundary for that future work; its example directories are not a claim about the present schema.
 
 ## Commitment level
 
@@ -172,10 +160,9 @@ Settled boundaries:
 Current heuristics and baselines:
 
 - roughly 5–10 relevant objects as a category-promotion signal;
-- one affine inclusion scorer and separate threshold per category using positives, explicit negatives, and unlabeled material correctly;
+- one scored binary classifier per category using explicit or trusted labels;
 - over-inclusion when the alternative is failed retrieval;
-- `_active` as a filesystem-shaped category-attention control;
-- `views/hot` as a separate requested presentation working set.
+- `_active` as a filesystem-shaped working-set control.
 
 Still open:
 

@@ -1,6 +1,6 @@
 # Inference and learning boundary
 
-IB should interface cleanly with user-configured local or remote language, embedding, reranking, and summarization models without allowing a probabilistic model or provider to become the owner of browser state.
+IB should interface cleanly with one or more local language or embedding models without allowing a probabilistic model to become the owner of browser state.
 
 ## Observations and proposals, not mutations
 
@@ -46,7 +46,7 @@ Deterministic code may validate, compare, reduce, accept, or reject proposals. V
 
 When several models or resampled classifiers are useful, preserve their individual outputs before reducing them. Bagging, voting, or rank aggregation should not erase disagreement. An aggregate records its inputs, quorum, reducer, and reducer version. A missing model is not a negative vote, and disagreement is itself evidence that a category boundary or ranking is uncertain.
 
-The adapter should identify the model and task explicitly so models can be replaced, compared, or run as an ensemble without changing canonical records or callers. Browsing must remain usable when every model is absent, slow, or crashes. Local models receive only task-relevant corpus material. Remote models receive only an explicitly scoped, inspectable context export; secret and session storage and unrelated private browsing state are excluded by default.
+The adapter should identify the model and task explicitly so local models can be replaced, compared, or run as an ensemble without changing canonical records or callers. Browsing must remain usable when every model is absent, slow, or crashes. Local models receive only explicitly selected corpus material; secret and session storage are excluded by default.
 
 ## Classification baseline
 
@@ -109,7 +109,7 @@ A history-analysis view may ask: *what is this a record of about the user?* It c
 
 Those are evidence-backed interpretations, not facts about identity or belief. Every interpretation should retain links to the searches, visits, tabs, or accepted categories that support it. A repeated URL or duplicate tab is evidence of salience or revisitation, not redundant noise and not by itself proof of endorsement.
 
-Private source material and credentials remain subject to the storage and export boundaries whether inference is local or remote. A public fixture should not acquire private URLs merely because a model could classify them.
+Private source material and credentials remain subject to the storage and export boundaries even when inference runs locally. A public fixture should not acquire private URLs merely because a model could classify them.
 
 ## Implementation status
 
@@ -119,7 +119,7 @@ The generic proposal, validation, aggregation, and correction records described 
 
 Settled boundaries:
 
-- local and remote model adapters are replaceable and provider-neutral;
+- local-model adapters are replaceable;
 - model output is append-only evidence, never direct canonical mutation;
 - proposals retain provenance, model identity, scores, and source references;
 - deterministic code owns validation and acceptance;
@@ -129,20 +129,13 @@ Settled boundaries:
 Current baselines and evaluation ideas:
 
 - Float32 embeddings and exact vector search at the current 10,000-URL scale;
-- one explicit affine inclusion score and a separately recorded threshold per category using positive, explicit-negative, and unlabeled evidence correctly;
+- one scored linear decision per category using explicit or trusted labels;
 - ensembles when disagreement is useful;
 - measurable improvement after a few nearby corrections.
 
-Pinned initial embedding views:
-
-- `potion-base-2m`, a 64-coordinate static Model2Vec view for extremely cheap broad indexing;
-- `mxbai-embed-xsmall-v1-int8`, a 384-coordinate transformer view used as an independent retrieval challenger;
-- both remain replaceable, retain immutable model/file provenance, and may coexist rather than forcing one representation.
-
 Still open:
 
-- which model views are active by default on each device and how their evidence is ensembled;
-- feature weights beyond the frozen embedding output;
+- the embedding model and feature weights;
 - the online update rule;
 - acceptance thresholds and which proposals require explicit review;
 - the exact proposal serialization;

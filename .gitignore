@@ -1,4 +1,4 @@
-/build/
-/native/vector-index/ib-vector-index
-__pycache__/
-*.pyc
+android-prepaint/.gradle/
+android-prepaint/app/build/
+android-prepaint/dist/
+android-prepaint/local.properties

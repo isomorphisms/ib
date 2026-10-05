@@ -50,8 +50,6 @@ Possible states:
 - **cold** — durable metadata or task graph only;
 - **never visited** — fixture exists but has no browsing state.
 
-The filesystem `views/hot` set is a request to favor presentation targets for immediate use. It is not the same measurement as resident renderer tabs: a text or synthesized Markdown presentation may be hot without any page renderer, and memory pressure may temporarily make requested-hot differ from actually resident. See `docs/filesystem-views.md`.
-
 Opening a cold URL may promote a logical tab into the renderer working set. Memory pressure or working-set limits demote another renderer without losing browser-owned tab, event, task, or organization state.
 
 Prefetched documents remain cold or warm; prefetching seven documentation pages must not create seven live renderer sessions.
@@ -102,8 +100,6 @@ Other required distinctions include:
 - a malformed or unavailable model cannot mutate canonical history or block browsing;
 - adding a category membership does not remove another membership;
 - removing a category from `_active` creates no negative training event.
-- a focus-priority hint may reorder safe prefetch work but creates no speculative tab or renderer;
-- the configured assistant receives only the explicitly scoped, inspectable task-context bundle.
 
 If RAM grows approximately with known-resource count, or rebuilding a derived view loses a human correction, the architecture has coupled state classes that must remain separate.
 
@@ -117,6 +113,3 @@ If RAM grows approximately with known-resource count, or rebuilding a derived vi
 6. Add operative-document-link and shared-child documentation fixtures.
 7. Add proposal, validation, correction, and reversible materialization fixtures.
 8. Continue live or recorded scientific-media fixtures through Grease.
-9. Add a GitLab-shaped seventeen-link fixture: changing visual focus reprioritizes safe links, creates zero speculative tabs or renderers, and supports a cited text answer.
-10. Add a multi-paper arXiv fixture: early per-paper summaries and one cross-paper answer require no renderer per paper.
-11. Add a mock video fixture: captions and playback position enter an authorized assistant context bundle without fetching video bytes or exposing secrets.

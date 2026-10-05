@@ -6,7 +6,7 @@
 
 A tab is not a renderer process. It is a persistent navigation thread that may currently have a renderer attached. A task may span several tabs, resources, searches, and actions.
 
-IB's present product target is a personal browser/workbench, not universal web compatibility. Its first two first-class frontends are a progressively augmented visual pre-paint and a ChatGPT-like text-only-by-default task workbench. The substrate still permits additional frontends and renderer adapters so a broader browser can be built over it without owning or changing the stored model. See `docs/personal-workbench.md`.
+IB's present product target is a personal browser/workbench, not universal web compatibility. The substrate still supports multiple first-class frontends and renderer adapters so a broader browser can be built over it without owning or changing the stored model. See `docs/personal-workbench.md`.
 
 ## Ownership
 
@@ -15,6 +15,7 @@ The browser core owns:
 - resource, tab, event, and task identity;
 - navigation and search history;
 - sleeping and waking policy;
+- authenticated site-session and protected-transaction policy;
 - task and investigation frontiers;
 - saved representations and snapshot references;
 - user organization, assertions, corrections, and active choices;
@@ -31,16 +32,16 @@ A frontend projects browser and task state and issues commands. It does not beco
 ## Main layers
 
 ```text
-visual pre-paint     text task frontend      inspector/commands
-       \                    |                      /
-        +----------- browser and task core -------+
+page frontend       task workbench       inspector/commands
+       \                  |                    /
+        +--------- browser and task core -----+
                   /           |          \
        persistent store   acquisition   renderer adapters
                            / extraction    |     |     |
                            HTTP, parsers  Servo WebView text/etc.
 ```
 
-The visual pre-paint frontend, text-first task frontend, inspector, information extractor, and text renderer are distinct roles. In particular, a text-oriented renderer is not the ChatGPT-like workbench frontend.
+The page frontend, text-first task workbench, inspector, information extractor, and text renderer are distinct roles. In particular, a text-oriented renderer is not the ChatGPT-like workbench frontend.
 
 The persistent store remains intelligible and useful without a rendering engine or language model installed.
 
@@ -83,6 +84,25 @@ Sleeping is the ordinary state of an old tab, not an exceptional recovery path.
 A sleeping tab has no renderer session and consumes approximately the cost of persistent metadata plus bounded indexes and caches. Waking attaches a renderer only when a task needs one and reconstructs the best available view from stored records.
 
 A 10,000-resource or history corpus does not imply 10,000 logical tabs or live documents. The current developer fixture deliberately separates 10,000 known URLs, 32 logical tabs, and a 3–10-tab resident working set. Steady-state renderer RAM should follow the resident set, not corpus size.
+
+## Protected live sessions
+
+Sleeping is not appropriate for every active tab. Some tabs are live authenticated transactions: a government or benefits form, banking or healthcare workflow, or another fragile interaction where the user may need to open another tab or app to retrieve information before continuing.
+
+A protected live session is browser-owned policy over the tab, renderer, and authentication/session state. Ordinary renderer eviction must prefer unprotected work before discarding a protected transaction. Cookies, site-session material, navigation position, and other state required to continue the transaction must not be treated as disposable merely because the current renderer process owns an implementation handle to them.
+
+On a low-memory device, opening another tab or app must not silently destroy a protected transaction and force the user to begin again. If renderer or process death is unavoidable, IB should reconstruct the strongest safe continuation it can from browser-owned state and report any restoration limit explicitly.
+
+This requirement does not promise exact JavaScript-heap continuity across renderer changes or process death. It also does not justify blindly persisting passwords, account numbers, or other sensitive field contents. The security and persistence boundary for protected transactions must be explicit.
+
+Acceptance must distinguish at least session-cookie survival, form-state survival, live-renderer survival, and reconstruction after renderer death. Evidence for one is not evidence for the others. See #59.
+
+The first implemented product slice is the protected long-view task described
+in `long-view-protected-tasks.md`.  Its durable identity also crosses whole-host
+restart.  It intentionally restores a neutral navigation target and reuses the
+platform WebView profile without copying cookies or claiming that profile
+availability proves authentication.  Generic third-party form values remain
+excluded until a field has an explicit ordinary-state permission.
 
 ## Renderer swapping
 
@@ -139,7 +159,7 @@ IB is implemented in Idriç, with Grease for operating-system and process orches
 The current work does not promise:
 
 - universal web, MIME, renderer, or malformed-input compatibility;
-- one singular frontend that owns browser state;
+- one mandatory frontend;
 - faithful reproduction of interfaces irrelevant to the user's task;
 - preserving a JavaScript heap across renderer changes;
 - automatic understanding of every private application protocol;

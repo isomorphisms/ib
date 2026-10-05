@@ -11,14 +11,14 @@ choice physical_kind one_of
   special_file
 
 public export
-data StoreFile = FileRow String Nat physical_kind
+data StoreFile = FileRow String Number physical_kind
 
 public export
 file_path : StoreFile → String
 file_path (FileRow path _ _) = path
 
 public export
-file_bytes : StoreFile → Nat
+file_bytes : StoreFile → Number
 file_bytes (FileRow _ bytes _) = bytes
 
 public export
@@ -41,30 +41,30 @@ file_is_readable (FileRow path _ regular_file) = readable_path path
 file_is_readable _ = False
 
 public export
-file_count : List StoreFile → Nat
+file_count : List StoreFile → Number
 file_count = length
 
 public export
-total_bytes : List StoreFile → Nat
+total_bytes : List StoreFile → Number
 total_bytes [] = 0
 total_bytes (file :: rest) = file_bytes file + total_bytes rest
 
 public export
-files_of_kind : storage_kind → List StoreFile → Nat
+files_of_kind : storage_kind → List StoreFile → Number
 files_of_kind wanted [] = 0
 files_of_kind wanted (file :: rest) =
   let here = if same_storage_kind wanted (classify_path (file_path file)) then 1 else 0 in
     here + files_of_kind wanted rest
 
 public export
-bytes_of_kind : storage_kind → List StoreFile → Nat
+bytes_of_kind : storage_kind → List StoreFile → Number
 bytes_of_kind wanted [] = 0
 bytes_of_kind wanted (file :: rest) =
   let here = if same_storage_kind wanted (classify_path (file_path file)) then file_bytes file else 0 in
     here + bytes_of_kind wanted rest
 
 public export
-readable_file_count : List StoreFile → Nat
+readable_file_count : List StoreFile → Number
 readable_file_count [] = 0
 readable_file_count (file :: rest) =
   (if file_is_readable file then 1 else 0) + readable_file_count rest

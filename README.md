@@ -4,9 +4,17 @@ An experimental personal browser and task-workbench substrate built around durab
 
 IB's immediate target is one person's real browsing corpus and workflows, not general-purpose web compatibility. It optimizes the task behind navigation: learning a documentation set, recovering a fact, finding and sharing an image, comparing delivered prices, or resuming an investigation after the live browser processes are gone.
 
-The first two user frontends share the same browser-owned state: a visual frontend that immediately pre-paints the cheapest useful source-backed view, and a ChatGPT-like text-only-by-default task frontend that answers questions and offers actions over the browsing corpus. Additional page surfaces and developer inspectors may coexist later. Renderers, acquisition adapters, extractors, and models remain replaceable; none owns tabs, history, tasks, or accepted organization.
+The substrate supports multiple frontends over the same browser-owned state. A conventional page surface, a small phone frontend, a text-and-action workbench, and developer inspectors may coexist. Renderers, acquisition adapters, extractors, and models remain replaceable; none owns tabs, history, tasks, or accepted organization.
 
 The browser core owns resource, tab, event, and task identity; sleeping and waking; snapshots; organization; indexes; inference acceptance; and renderer selection. Only roughly 3–10 renderer working sets should normally be resident even when the known corpus reaches 10,000 resources.
+
+Low-memory behavior has a harder exception: an active authenticated transaction may be protected from ordinary sleeping or eviction. Opening another tab or app to retrieve information must not silently destroy the login/session or in-progress form state. See `docs/architecture.md` and #59.
+
+The first integrated protected long-view path now gives that work a durable
+task/tab/navigation identity across renderer and host-process loss.  It restores
+only a neutral URL through the existing WebView profile and reports session,
+heap, form, and reconstruction outcomes separately.  See
+`docs/long-view-protected-tasks.md`.
 
 ## Design notes
 
@@ -14,14 +22,10 @@ The browser core owns resource, tab, event, and task identity; sleeping and waki
 - `docs/personal-workbench.md` — personal scope, task frontend, user stories, and latency targets
 - `docs/prefetch-and-reading.md` — durable investigation frontiers, disposable fetches, and `~/reading`
 - `docs/tab-categorization.md` — overlapping personal categories and adaptive refinement
-- `docs/inference-and-learning.md` — configured-model proposals, explicit hyperplanes, ensembles, and human supervision
-- `docs/filesystem-views.md` — category links, `_active`, and the requested `hot/` presentation set
+- `docs/inference-and-learning.md` — local-model proposals, validation, ensembles, and correction events
 - `docs/storage-model.md` — identity levels and canonical, proposed, and derived state
+- `docs/long-view-protected-tasks.md` — durable authenticated task reconstruction
 - `docs/developer-workbench.md` — fixture and memory-pressure harness
-- `docs/vector-index.md` — readable multi-model vector views and rebuildable Float32 query caches
-- `docs/tab-qa-mock.md` — console questions over saved reading pages with replaceable processing stages
-- `experiments/category-hyperplanes/README.md` — disposable embedding and explicit affine-separator probe
-- `experiments/embedding-models/README.md` — pinned tiny ONNX models and an end-to-end filesystem-index comparison
 
 ## Implementation languages
 
@@ -33,4 +37,15 @@ Python and Ithon are not IB implementation layers. A disposable comparison may e
 
 Android or other native code is a narrow platform boundary for facilities Idriç and Grease cannot yet reach directly: NativeActivity, EGL, renderers, kernel-enforced filesystem operations, clipboard and share handoff, and similar FFI edges. Those adapters do not own browser state.
 
-The current Idriç core covers ordered history values, rebuildable indexes, storage classification and read policy, and the renderer-independent inspector model. Scientific-media work adds HTML-first arXiv harvesting, ordered image downloads, caption and alternate-text naming, PDF fallback, and a low-priority second naming pass. The task, category, and generic inference records documented above remain design boundaries rather than claims of completed implementation.
+`android-prepaint/` is a deliberately small phone-visible harness for the Idriç
+information prepaint. It uses native Android views rather than `WebView`, applies
+a fixed dark presentation to extracted text, preserves fetched image colors, and
+replaces partial projections with later complete revisions.
+
+The current Idriç core covers ordered history values, rebuildable indexes,
+storage classification and read policy, the renderer-independent inspector
+model, and the first protected long-view task transitions. Scientific-media
+work adds HTML-first arXiv harvesting, ordered image downloads, caption and
+alternate-text naming, PDF fallback, and a low-priority second naming pass.
+General task/frontier, category, and generic inference records documented above
+remain design boundaries rather than claims of completed implementation.

@@ -3,8 +3,9 @@ set -eu
 
 repository_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 idric_prefix=${IDRIC_PREFIX:-/tmp/idric}
-idric_ref=${IDRIC_REF:-61970be77769f607cca8650bf424c0f0b22ddee7}
+idric_ref=${IDRIC_REF:-bd9fbe1e68ce9b3dd3981fcd3e1abf9e50bd350e}
 pdf_harvester_ref=${PDF_HARVESTER_REF:-77d85dc6f7e89d109cb9e06f42706bc34f00e4a3}
+aici_ref=${AICI_REF:-c1e423d506f6adfc8c1c9659a4faaf94ae84eaf0}
 
 install_dependencies() {
   sudo apt-get update
@@ -12,14 +13,59 @@ install_dependencies() {
 }
 
 build_idric() {
-  rm -rf /tmp/Idric
+  rm -rf /tmp/Idric "$idric_prefix"
   git init -q /tmp/Idric
   git -C /tmp/Idric remote add origin https://github.com/isomorphisms/Idric.git
   git -C /tmp/Idric fetch --depth 1 origin "$idric_ref"
   git -C /tmp/Idric checkout --detach -q FETCH_HEAD
   test "$(git -C /tmp/Idric rev-parse HEAD)" = "$idric_ref"
-  SCHEME=chezscheme make -C /tmp/Idric bootstrap PREFIX="$idric_prefix"
-  SCHEME=chezscheme make -C /tmp/Idric install PREFIX="$idric_prefix"
+  # Both pinned source layouts are supported; keep all bootstrap paths on
+  # the same verified root rather than mixing root and historical _ paths.
+  idric_build_root=/tmp/Idric
+  if [ -f /tmp/Idric/_/Makefile ] && [ -f /tmp/Idric/_/support/c/Makefile ]; then
+    idric_build_root=/tmp/Idric/_
+  fi
+  test -f "$idric_build_root/Makefile"
+  test -f "$idric_build_root/support/c/Makefile"
+  test -f "$idric_build_root/edric"
+  # The maintained Chez path needs the common C support library, not the
+  # optional RefC/GMP support built by the aggregate support targets.
+  make -C "$idric_build_root/support/c"
+  sh "$idric_build_root/edric" scheme >/dev/null
+  PATH="$idric_build_root/.tools/bin:$PATH" \
+    SCHEME="$idric_build_root/.tools/bin/scheme" \
+    CHEZ="$idric_build_root/.tools/bin/scheme" \
+    make -C "$idric_build_root" \
+      bootstrap MAKE="$repository_root/bin/idric-chez-make"
+
+  mkdir -p "$idric_prefix/bin"
+  cp -a "$idric_build_root/.tools" "$idric_prefix/.tools"
+  cp -a "$idric_build_root/bootstrap-build" "$idric_prefix/bootstrap-build"
+  cp -a "$idric_build_root/build" "$idric_prefix/build"
+  {
+    printf '%s\n' '#!/bin/sh' 'set -eu'
+    printf '%s\n' 'prefix=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)'
+    printf '%s\n' 'IDRIS2_PREFIX="$prefix/bootstrap-build"'
+    printf '%s\n' 'CHEZ="$prefix/.tools/bin/scheme"'
+    printf '%s\n' 'app="$prefix/build/exec/idris2_app"'
+    printf '%s\n' 'LD_LIBRARY_PATH="$app${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"'
+    printf '%s\n' 'DYLD_LIBRARY_PATH="$app${DYLD_LIBRARY_PATH:+:$DYLD_LIBRARY_PATH}"'
+    printf '%s\n' 'IDRIS2_INC_SRC="$app"'
+    printf '%s\n' 'export IDRIS2_PREFIX CHEZ LD_LIBRARY_PATH DYLD_LIBRARY_PATH IDRIS2_INC_SRC'
+    printf '%s\n' 'exec "$CHEZ" --program "$app/idris2.so" "$@"'
+  } >"$idric_prefix/bin/idris2"
+  chmod +x "$idric_prefix/bin/idris2"
+
+  # Prove that neither the source tree nor the original prefix is required by
+  # the cached compiler. The cache is restored in a different runner process.
+  source_hold=/tmp/Idric.build-source
+  relocated_prefix="${idric_prefix}.relocated"
+  rm -rf "$source_hold" "$relocated_prefix"
+  mv /tmp/Idric "$source_hold"
+  mv "$idric_prefix" "$relocated_prefix"
+  "$relocated_prefix/bin/idris2" --version
+  mv "$relocated_prefix" "$idric_prefix"
+  rm -rf "$source_hold"
 }
 
 verify_pdf_harvester() {
@@ -42,7 +88,6 @@ exercise_core() {
   grep -Fx 'host-count=2' /tmp/ib-smoke.txt
   grep -Fx 'canonical=canonical' /tmp/ib-smoke.txt
   grep -Fx 'cache-fake=cache' /tmp/ib-smoke.txt
-  grep -Fx 'views=derived' /tmp/ib-smoke.txt
   grep -Fx 'secret=secret' /tmp/ib-smoke.txt
   grep -Fx 'readable-files=2' /tmp/ib-smoke.txt
   grep -Fx 'canonical-files=2' /tmp/ib-smoke.txt
@@ -55,50 +100,30 @@ exercise_core() {
   grep -Fx 'temporary-needs-language-model=True' /tmp/ib-smoke.txt
   grep -Fx 'prefetch-bounded=2' /tmp/ib-smoke.txt
   grep -Fx 'prefetch-reading=1' /tmp/ib-smoke.txt
-  grep -Fx 'vector-backend=flat-f32-exact' /tmp/ib-smoke.txt
-  grep -Fx 'vector-scalar=f32' /tmp/ib-smoke.txt
-  grep -Fx 'vector-contract=2' /tmp/ib-smoke.txt
-  grep -Fx 'vector-directory=organizing-the-information/vector-spaces/test-model/pages' /tmp/ib-smoke.txt
-  grep -Fx 'vector-format-readable=True' /tmp/ib-smoke.txt
-  grep -Fx 'vector-model-readable=True' /tmp/ib-smoke.txt
-  grep -Fx 'vector-text-readable=True' /tmp/ib-smoke.txt
-  grep -Fx 'vector-bytes-readable=False' /tmp/ib-smoke.txt
-}
 
-exercise_filesystem_views() {
-  cd "$repository_root"
-  sh -n lib/filesystem_views.grease
-  sh -n bin/ib_views.grease
-  sh -n tests/fixtures/mock_documentation_synthesizer.grease
-  sh -n tests/test_filesystem_views.grease
-  sh tests/test_filesystem_views.grease
-}
+  "$idric_prefix/bin/idris2" OccurrenceSmoke.idric -o ib-occurrence-smoke \
+    2>&1 | tee /tmp/idric-occurrence-compile.txt
+  test -x ./build/exec/ib-occurrence-smoke
+  ! grep -q '^Error:' /tmp/idric-occurrence-compile.txt
+  ./build/exec/ib-occurrence-smoke | tee /tmp/ib-occurrence-smoke.txt
+  cmp "$repository_root/tests/fixtures/occurrence-smoke.expected" \
+    /tmp/ib-occurrence-smoke.txt
 
-exercise_tab_qa() {
-  cd "$repository_root"
-  sh -n lib/tab_qa.grease
-  sh -n bin/ask_saved_pages.grease
-  sh -n bin/mock_tab_model.grease
-  sh -n bin/mock_tab_qa_reducer.grease
-  sh -n tests/test_mock_tab_model.grease
-  sh -n tests/test_tab_qa_pipeline.grease
-  make -C native/vector-index
-  sh tests/test_mock_tab_model.grease
-  sh tests/test_tab_qa_pipeline.grease
+  "$idric_prefix/bin/idris2" PaintBudgetSmoke.idric -o ib-paint-budget-smoke \
+    2>&1 | tee /tmp/idric-paint-budget-compile.txt
+  test -x ./build/exec/ib-paint-budget-smoke
+  ! grep -q '^Error:' /tmp/idric-paint-budget-compile.txt
+  ./build/exec/ib-paint-budget-smoke | tee /tmp/ib-paint-budget-smoke.txt
+  grep -Fx 'paint-budget-cheap-full=True' /tmp/ib-paint-budget-smoke.txt
+  grep -Fx 'paint-budget-expensive-reduced=True' /tmp/ib-paint-budget-smoke.txt
+  grep -Fx 'paint-budget-pathological-reused=True' /tmp/ib-paint-budget-smoke.txt
+  grep -Fx 'paint-budget-pathological-deferred=True' /tmp/ib-paint-budget-smoke.txt
 }
 
 exercise_workbench() {
   cd "$repository_root"
   sh -n tests/test_real_world_url_fixture.grease
   sh tests/test_real_world_url_fixture.grease
-  python3 -m py_compile \
-    experiments/category-hyperplanes/build_url_inputs.py \
-    experiments/category-hyperplanes/validate_recovered_labels.py
-  python3 experiments/category-hyperplanes/validate_recovered_labels.py
-  python3 experiments/category-hyperplanes/build_url_inputs.py \
-    --source tests/fixtures/real_world_urls.txt \
-    --output /tmp/ib-recovered-inputs.tsv
-  test "$(wc -l < /tmp/ib-recovered-inputs.tsv)" = 220
 
   cd "$repository_root/src"
   "$idric_prefix/bin/idris2" Workbench.idric -o ib-workbench 2>&1 | tee /tmp/idric-workbench-compile.txt
@@ -111,24 +136,6 @@ exercise_workbench() {
   grep -Fx 'churn-steps=10000' /tmp/ib-workbench.txt
   grep -Fx 'resident-at-3=3' /tmp/ib-workbench.txt
   grep -Fx 'resident-at-10=10' /tmp/ib-workbench.txt
-}
-
-exercise_file_store() {
-  cd "$repository_root"
-  "$idric_prefix/bin/idris2" --source-dir src src/FileStoreSmoke.idric -o ib-file-store-smoke \
-    2>&1 | tee /tmp/idric-file-store-compile.txt
-  test -x ./build/exec/ib-file-store-smoke
-  ! grep -q '^Error:' /tmp/idric-file-store-compile.txt
-
-  store_root="$(mktemp -d)/state"
-  ./build/exec/ib-file-store-smoke write "$store_root" | tee /tmp/ib-file-store-write.txt
-  grep -Fx 'write=ok' /tmp/ib-file-store-write.txt
-  grep -Fx 'unsafe-path=rejected' /tmp/ib-file-store-write.txt
-  grep -Fx 'noncanonical-path=rejected' /tmp/ib-file-store-write.txt
-  ./build/exec/ib-file-store-smoke read "$store_root" | tee /tmp/ib-file-store-read.txt
-  grep -Fx 'manifest-survived=True' /tmp/ib-file-store-read.txt
-  grep -Fx 'history-survived=True' /tmp/ib-file-store-read.txt
-  grep -Fx 'history-lines=2' /tmp/ib-file-store-read.txt
 }
 
 build_information_programs() {
@@ -165,6 +172,48 @@ exercise_information() {
   sh -n tests/test_arxiv_progressive_prepaint.grease
   sh tests/test_arxiv_progressive_prepaint.grease
 }
+
+exercise_hostile_ingestion() {
+  aici_root="$repository_root/.tools/ai-ci"
+  test -d "$aici_root/.git"
+  test "$(git -C "$aici_root" rev-parse HEAD)" = "$aici_ref"
+  (cd "$aici_root/ingestion/corpus-v1" && sha256sum -c CORPUS.sha256)
+  cc -std=c17 -Wall -Wextra -Werror -pedantic -O2 \
+    -o /tmp/aici-ingestion "$aici_root/ingestion/src/aici_ingestion.c"
+
+  cd "$repository_root/src"
+  "$idric_prefix/bin/idris2" HostileIngestionReceipt.idric \
+    -o ib-hostile-ingestion 2>&1 | tee /tmp/idric-hostile-ingestion-compile.txt
+  test -x build/exec/ib-hostile-ingestion
+  ! grep -q '^Error:' /tmp/idric-hostile-ingestion-compile.txt
+
+  implementation_revision=$(git -C "$repository_root" rev-parse HEAD)
+  executable_sha256=$(sha256sum \
+    build/exec/ib-hostile-ingestion_app/ib-hostile-ingestion.so | cut -d ' ' -f1)
+  corpus_root="$aici_root/ingestion/corpus-v1"
+
+  build/exec/ib-hostile-ingestion \
+    valid_utf8 "$corpus_root/bodies/valid.html" \
+    'Hostile fixture' 'reading list' /reading \
+    "$aici_ref" "$implementation_revision" "$executable_sha256" \
+    >/tmp/ib-valid-ingestion.receipt.tsv
+
+  build/exec/ib-hostile-ingestion \
+    malformed_html "$corpus_root/bodies/malformed.html" \
+    'Recovered fixture' syllabus /syllabus \
+    "$aici_ref" "$implementation_revision" "$executable_sha256" \
+    >/tmp/ib-malformed-ingestion.receipt.tsv
+
+  /tmp/aici-ingestion verify "$corpus_root" \
+    /tmp/ib-valid-ingestion.receipt.tsv consumer -
+  /tmp/aici-ingestion verify "$corpus_root" \
+    /tmp/ib-malformed-ingestion.receipt.tsv consumer -
+  grep -Fx "$(printf 'summary\tfirst_failure\tnone')" /tmp/ib-valid-ingestion.receipt.tsv
+  grep -Fx "$(printf 'summary\tfirst_failure\tnone')" /tmp/ib-malformed-ingestion.receipt.tsv
+  grep -F 'document_log_subset_v0' /tmp/ib-malformed-ingestion.receipt.tsv
+  grep -F 'expected_link_extracted' /tmp/ib-malformed-ingestion.receipt.tsv
+}
+
 
 exercise_scientific_media() {
   cd "$repository_root"
@@ -208,16 +257,14 @@ case "${1:-}" in
   build-idric) build_idric ;;
   verify-pdf-harvester) verify_pdf_harvester ;;
   exercise-information) exercise_information ;;
+  exercise-hostile-ingestion) exercise_hostile_ingestion ;;
   exercise-core) exercise_core ;;
   exercise-workbench) exercise_workbench ;;
-  exercise-file-store) exercise_file_store ;;
-  exercise-filesystem-views) exercise_filesystem_views ;;
-  exercise-tab-qa) exercise_tab_qa ;;
   exercise-scientific-media) exercise_scientific_media ;;
   exercise-live-arxiv) exercise_live_arxiv ;;
   exercise-live-arxiv-prepaint) exercise_live_arxiv_prepaint ;;
   *)
-    printf 'usage: %s {install-dependencies|build-idric|verify-pdf-harvester|exercise-information|exercise-core|exercise-workbench|exercise-file-store|exercise-filesystem-views|exercise-tab-qa|exercise-scientific-media|exercise-live-arxiv|exercise-live-arxiv-prepaint}\n' "$0" >&2
+    printf 'usage: %s {install-dependencies|build-idric|verify-pdf-harvester|exercise-information|exercise-hostile-ingestion|exercise-core|exercise-workbench|exercise-scientific-media|exercise-live-arxiv|exercise-live-arxiv-prepaint}\n' "$0" >&2
     exit 2
     ;;
 esac
