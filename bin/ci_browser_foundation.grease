@@ -157,13 +157,23 @@ exercise_core() {
   ! grep -q '^Error:' /tmp/idric-worker-lifecycle-compile.txt
   run_logged /tmp/ib-worker-lifecycle-smoke.txt ./build/exec/ib-worker-lifecycle-smoke
   grep -Fx 'worker-caller-independence=True' /tmp/ib-worker-lifecycle-smoke.txt
+  grep -Fx 'worker-running-replacement-rejected=True' /tmp/ib-worker-lifecycle-smoke.txt
+  grep -Fx 'worker-stale-launch-rejected=True' /tmp/ib-worker-lifecycle-smoke.txt
+  grep -Fx 'worker-stale-boot-rejected=True' /tmp/ib-worker-lifecycle-smoke.txt
+  grep -Fx 'worker-stale-uid-rejected=True' /tmp/ib-worker-lifecycle-smoke.txt
+  grep -Fx 'worker-stale-pid-rejected=True' /tmp/ib-worker-lifecycle-smoke.txt
+  grep -Fx 'worker-stale-start-rejected=True' /tmp/ib-worker-lifecycle-smoke.txt
+  grep -Fx 'worker-stale-generation-rejected=True' /tmp/ib-worker-lifecycle-smoke.txt
+  grep -Fx 'worker-stale-attempt-rejected=True' /tmp/ib-worker-lifecycle-smoke.txt
+  grep -Fx 'worker-stale-attempt-number-rejected=True' /tmp/ib-worker-lifecycle-smoke.txt
+  grep -Fx 'worker-stale-authority-rejected=True' /tmp/ib-worker-lifecycle-smoke.txt
+  grep -Fx 'worker-authority-retains-attempt=True' /tmp/ib-worker-lifecycle-smoke.txt
+  grep -Fx 'worker-committed-after-authority-loss=True' /tmp/ib-worker-lifecycle-smoke.txt
+  grep -Fx 'worker-attempt-monotone=True' /tmp/ib-worker-lifecycle-smoke.txt
+  grep -Fx 'worker-old-attempt-completion-rejected=True' /tmp/ib-worker-lifecycle-smoke.txt
+  grep -Fx 'worker-current-attempt-commits=True' /tmp/ib-worker-lifecycle-smoke.txt
   grep -Fx 'worker-kill-restartable=True' /tmp/ib-worker-lifecycle-smoke.txt
-  grep -Fx 'worker-authority-wait=True' /tmp/ib-worker-lifecycle-smoke.txt
-  grep -Fx 'worker-committed-no-restart=True' /tmp/ib-worker-lifecycle-smoke.txt
   grep -Fx 'worker-state-change-manual=True' /tmp/ib-worker-lifecycle-smoke.txt
-  grep -Fx 'worker-stale-attachment-rejected=True' /tmp/ib-worker-lifecycle-smoke.txt
-  grep -Fx 'worker-attempt-limit=True' /tmp/ib-worker-lifecycle-smoke.txt
-  grep -Fx 'worker-process-identity=True' /tmp/ib-worker-lifecycle-smoke.txt
 
   # Publication uses the actual Idriç admission and worker-state modules.
   # Redirect first, then display: preserve failed compiler/child exit status.
