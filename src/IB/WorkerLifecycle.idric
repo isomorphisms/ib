@@ -70,6 +70,10 @@ phase_allows_new_attempt worker_killed = True
 phase_allows_new_attempt worker_authority_unavailable = True
 phase_allows_new_attempt _ = False
 
+phase_is_running : worker_phase → Bool
+phase_is_running worker_running = True
+phase_is_running _ = False
+
 public export
 next_attempt_number : WorkerTask → Integer
 next_attempt_number task = task.attempts_started + 1
@@ -167,7 +171,7 @@ commit_worker_result observed task =
 public export
 worker_exited : ProcessAttachment → Bool → WorkerTask → Maybe WorkerTask
 worker_exited observed successful task =
-  if current_attempt_matches observed task && task.phase == worker_running
+  if current_attempt_matches observed task && phase_is_running task.phase
     then
       if task.committed_result
         then Just (worker_with_phase worker_result_committed task)
@@ -179,7 +183,7 @@ worker_exited observed successful task =
 public export
 worker_was_killed : ProcessAttachment → WorkerTask → Maybe WorkerTask
 worker_was_killed observed task =
-  if current_attempt_matches observed task && task.phase == worker_running
+  if current_attempt_matches observed task && phase_is_running task.phase
     then
       if task.committed_result
         then Just (worker_with_phase worker_result_committed task)
