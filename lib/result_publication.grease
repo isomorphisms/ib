@@ -39,3 +39,106 @@ ib_publish_admitted_result() {
   ib_store_publish_bounded "$publication_root" "$publication_media" \
     "$publication_result" "$publication_source" "$publication_limit"
 }
+
+
+# E3 binds an already-admitted E2 publication to one exact completed worker
+# attempt. This wrapper does not admit work, choose a backend, or reserve bytes.
+IB_PUBLICATION_WORKER_MISMATCH=76
+
+ib_publication_completion_has_exact_line() {
+  if test "$#" -ne 2; then
+    return "$IB_STORE_INVALID_INPUT"
+  fi
+  completion_file=$1
+  completion_line=$2
+  test "$(grep -F -x "$completion_line" "$completion_file" | wc -l | tr -d '[:space:]')" = 1
+}
+
+ib_publish_owned_admitted_result() {
+  if test "$#" -ne 18; then
+    return "$IB_STORE_INVALID_INPUT"
+  fi
+
+  publication_root=$1
+  publication_source=$2
+  publication_action=$3
+  publication_expected_backend=$4
+  publication_expected_media=$5
+  publication_expected_observation=$6
+  completion_file=$7
+  expected_work=$8
+  expected_result=$9
+  expected_launch=${10}
+  expected_boot=${11}
+  expected_uid=${12}
+  expected_pid=${13}
+  expected_start=${14}
+  expected_name=${15}
+  expected_host_generation=${16}
+  expected_attempt=${17}
+  expected_attempt_number=${18}
+
+  test -f "$completion_file" || return "$IB_PUBLICATION_WORKER_MISMATCH"
+  completion_bytes=$(wc -c <"$completion_file" | tr -d '[:space:]') ||
+    return "$IB_STORE_INVALID_INPUT"
+  case "$completion_bytes" in
+    ''|*[!0-9]*) return "$IB_STORE_INVALID_INPUT" ;;
+  esac
+  test "$completion_bytes" -le 4096 || return "$IB_PUBLICATION_WORKER_MISMATCH"
+
+  for atom in "$expected_work" "$expected_result" "$expected_launch" "$expected_boot" \
+              "$expected_name" "$expected_attempt"; do
+    ib_store_valid_atom "$atom" || return "$IB_STORE_INVALID_INPUT"
+  done
+  for decimal in "$expected_uid" "$expected_pid" "$expected_start" \
+                 "$expected_host_generation" "$expected_attempt_number"; do
+    ib_store_decimal_normalize "$decimal" >/dev/null ||
+      return "$IB_STORE_INVALID_INPUT"
+  done
+
+  test -f "$publication_action" || return "$IB_PUBLICATION_NOT_ADMITTED"
+  action_result=$(cut -f1 "$publication_action") || return "$IB_STORE_INVALID_INPUT"
+  test "$action_result" = "$expected_result" ||
+    return "$IB_PUBLICATION_WORKER_MISMATCH"
+
+  ib_publication_completion_has_exact_line "$completion_file" \
+    "$(printf 'schema\tib-longview-worker-result-v2')" ||
+    return "$IB_PUBLICATION_WORKER_MISMATCH"
+  ib_publication_completion_has_exact_line "$completion_file" \
+    "$(printf 'work_id\t%s' "$expected_work")" ||
+    return "$IB_PUBLICATION_WORKER_MISMATCH"
+  ib_publication_completion_has_exact_line "$completion_file" \
+    "$(printf 'result_id\t%s' "$expected_result")" ||
+    return "$IB_PUBLICATION_WORKER_MISMATCH"
+  ib_publication_completion_has_exact_line "$completion_file" \
+    "$(printf 'launch_id\t%s' "$expected_launch")" ||
+    return "$IB_PUBLICATION_WORKER_MISMATCH"
+  ib_publication_completion_has_exact_line "$completion_file" \
+    "$(printf 'boot_id\t%s' "$expected_boot")" ||
+    return "$IB_PUBLICATION_WORKER_MISMATCH"
+  ib_publication_completion_has_exact_line "$completion_file" \
+    "$(printf 'uid\t%s' "$expected_uid")" ||
+    return "$IB_PUBLICATION_WORKER_MISMATCH"
+  ib_publication_completion_has_exact_line "$completion_file" \
+    "$(printf 'pid\t%s' "$expected_pid")" ||
+    return "$IB_PUBLICATION_WORKER_MISMATCH"
+  ib_publication_completion_has_exact_line "$completion_file" \
+    "$(printf 'start_ticks\t%s' "$expected_start")" ||
+    return "$IB_PUBLICATION_WORKER_MISMATCH"
+  ib_publication_completion_has_exact_line "$completion_file" \
+    "$(printf 'process_name\t%s' "$expected_name")" ||
+    return "$IB_PUBLICATION_WORKER_MISMATCH"
+  ib_publication_completion_has_exact_line "$completion_file" \
+    "$(printf 'host_generation\t%s' "$expected_host_generation")" ||
+    return "$IB_PUBLICATION_WORKER_MISMATCH"
+  ib_publication_completion_has_exact_line "$completion_file" \
+    "$(printf 'attempt_id\t%s' "$expected_attempt")" ||
+    return "$IB_PUBLICATION_WORKER_MISMATCH"
+  ib_publication_completion_has_exact_line "$completion_file" \
+    "$(printf 'attempt_number\t%s' "$expected_attempt_number")" ||
+    return "$IB_PUBLICATION_WORKER_MISMATCH"
+
+  ib_publish_admitted_result "$publication_root" "$publication_source" \
+    "$publication_action" "$publication_expected_backend" \
+    "$publication_expected_media" "$publication_expected_observation"
+}
