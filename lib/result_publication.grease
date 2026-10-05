@@ -79,6 +79,8 @@ ib_publish_owned_admitted_result() {
   expected_attempt_number=${18}
 
   test -f "$completion_file" || return "$IB_PUBLICATION_WORKER_MISMATCH"
+  test "$publication_source" = "$completion_file" ||
+    return "$IB_PUBLICATION_WORKER_MISMATCH"
   completion_bytes=$(wc -c <"$completion_file" | tr -d '[:space:]') ||
     return "$IB_STORE_INVALID_INPUT"
   case "$completion_bytes" in
