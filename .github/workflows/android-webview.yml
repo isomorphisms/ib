@@ -9,6 +9,16 @@ on:
   pull_request:
     paths:
       - "android-webview/**"
+      - "src/IB/WorkerLifecycle.idric"
+      - "src/WorkerLifecycleSmoke.idric"
+      - "src/ResultPublicationAcceptance.idric"
+      - "lib/android_binder_host.grease"
+      - "lib/android_longview_worker.grease"
+      - "lib/android_shizuku_worker_provider.grease"
+      - "lib/result_publication.grease"
+      - "tests/test_android_binder_host.grease"
+      - "tests/test_android_longview_worker.grease"
+      - "tests/test_result_publication.grease"
       - ".github/workflows/android-webview.yml"
 
 permissions:
