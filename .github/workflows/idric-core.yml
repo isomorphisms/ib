@@ -16,13 +16,16 @@ on:
 permissions:
   contents: read
 
+env:
+  IDRIC_REF: 7050c116326c9c8e8d0a56c2db7baf2119cbae19
+
 jobs:
   idric-core:
     runs-on: ubuntu-latest
     env:
       IDRIS2_CG: chez
       SCHEME: scheme
-      IDRIC_REF: bd9fbe1e68ce9b3dd3981fcd3e1abf9e50bd350e
+      IDRIC_REF: 7050c116326c9c8e8d0a56c2db7baf2119cbae19
     steps:
       - name: Check out exact IB source revision
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
@@ -61,7 +64,7 @@ jobs:
         uses: actions/cache/restore@caa296126883cff596d87d8935842f9db880ef25
         with:
           path: /tmp/idric
-          key: idric-relocatable-v2-${{ runner.os }}-bd9fbe1e68ce9b3dd3981fcd3e1abf9e50bd350e
+          key: idric-relocatable-v2-${{ runner.os }}-7050c116326c9c8e8d0a56c2db7baf2119cbae19
 
       - name: Build and install Idriç compiler through Grease
         if: steps.idric-cache.outputs.cache-hit != 'true'
@@ -72,7 +75,7 @@ jobs:
         uses: actions/cache/save@caa296126883cff596d87d8935842f9db880ef25
         with:
           path: /tmp/idric
-          key: idric-relocatable-v2-${{ runner.os }}-bd9fbe1e68ce9b3dd3981fcd3e1abf9e50bd350e
+          key: idric-relocatable-v2-${{ runner.os }}-7050c116326c9c8e8d0a56c2db7baf2119cbae19
 
       - name: Exercise HTML-first information renderer
         run: sh bin/ci_browser_foundation.grease exercise-information
@@ -116,7 +119,7 @@ jobs:
         uses: actions/cache/restore@caa296126883cff596d87d8935842f9db880ef25
         with:
           path: /tmp/idric
-          key: idric-relocatable-v2-${{ runner.os }}-bd9fbe1e68ce9b3dd3981fcd3e1abf9e50bd350e
+          key: idric-relocatable-v2-${{ runner.os }}-7050c116326c9c8e8d0a56c2db7baf2119cbae19
 
       - name: Verify PDF harvester pin
         run: sh bin/ci_browser_foundation.grease verify-pdf-harvester
