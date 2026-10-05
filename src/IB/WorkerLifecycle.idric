@@ -2,8 +2,9 @@ module IB.WorkerLifecycle
 
 import IB.LongViewTask
 
--- Durable work identity is browser-owned. A PID/process start identity is only
--- an attachment to one execution attempt.
+-- Durable work identity is browser-owned. A process attachment belongs to one
+-- exact execution attempt. PID alone, or PID plus process-start identity alone,
+-- is never enough to complete or mutate that attempt.
 
 public export
 choice worker_operation_class one_of
@@ -30,10 +31,15 @@ choice worker_recovery one_of
 public export
 record ProcessAttachment where
   constructor AttachedProcess
+  launch_identity : DurableIdentity
+  boot_identity : DurableIdentity
+  process_uid : Integer
   process_id : Integer
   process_start_ticks : Integer
   process_name : DurableIdentity
   host_generation : Integer
+  attempt_identity : DurableIdentity
+  attempt_number : Integer
 
 public export
 record WorkerTask where
@@ -56,42 +62,76 @@ plan_worker work result operation maximum_attempts =
     then Just (Worker work result operation maximum_attempts 0 worker_planned Nothing False)
     else Nothing
 
+phase_allows_new_attempt : worker_phase → Bool
+phase_allows_new_attempt worker_planned = True
+phase_allows_new_attempt worker_exited_without_result = True
+phase_allows_new_attempt worker_failed = True
+phase_allows_new_attempt worker_killed = True
+phase_allows_new_attempt worker_authority_unavailable = True
+phase_allows_new_attempt _ = False
+
+public export
+next_attempt_number : WorkerTask → Integer
+next_attempt_number task = task.attempts_started + 1
+
 public export
 attach_worker_process :
-  Integer → Integer → DurableIdentity → Integer → WorkerTask → Maybe WorkerTask
-attach_worker_process pid start_ticks process_name host_generation task =
-  if pid > 1 &&
+  DurableIdentity → DurableIdentity → Integer → Integer → Integer →
+  DurableIdentity → Integer → DurableIdentity → WorkerTask → Maybe WorkerTask
+attach_worker_process launch boot uid pid start_ticks process_name host_generation
+                      attempt task =
+  if uid >= 0 &&
+     pid > 1 &&
      start_ticks >= 0 &&
      host_generation >= 0 &&
      task.attempts_started < task.maximum_attempts &&
-     not task.committed_result
-    then Just
-      (Worker
-        task.work_identity
-        task.result_identity
-        task.operation_class
-        task.maximum_attempts
-        (task.attempts_started + 1)
-        worker_running
-        (Just (AttachedProcess pid start_ticks process_name host_generation))
-        False)
+     not task.committed_result &&
+     phase_allows_new_attempt task.phase
+    then
+      let attempt_number = next_attempt_number task in
+        Just
+          (Worker
+            task.work_identity
+            task.result_identity
+            task.operation_class
+            task.maximum_attempts
+            attempt_number
+            worker_running
+            (Just
+              (AttachedProcess
+                launch
+                boot
+                uid
+                pid
+                start_ticks
+                process_name
+                host_generation
+                attempt
+                attempt_number))
+            False)
     else Nothing
 
 public export
-commit_worker_result : WorkerTask → WorkerTask
-commit_worker_result task =
-  Worker
-    task.work_identity
-    task.result_identity
-    task.operation_class
-    task.maximum_attempts
-    task.attempts_started
-    worker_result_committed
-    task.attachment
-    True
+attachment_matches : ProcessAttachment → ProcessAttachment → Bool
+attachment_matches expected observed =
+  identity_text expected.launch_identity == identity_text observed.launch_identity &&
+  identity_text expected.boot_identity == identity_text observed.boot_identity &&
+  expected.process_uid == observed.process_uid &&
+  expected.process_id == observed.process_id &&
+  expected.process_start_ticks == observed.process_start_ticks &&
+  identity_text expected.process_name == identity_text observed.process_name &&
+  expected.host_generation == observed.host_generation &&
+  identity_text expected.attempt_identity == identity_text observed.attempt_identity &&
+  expected.attempt_number == observed.attempt_number
 
-worker_without_attachment : worker_phase → WorkerTask → WorkerTask
-worker_without_attachment next_phase task =
+current_attempt_matches : ProcessAttachment → WorkerTask → Bool
+current_attempt_matches observed task =
+  case task.attachment of
+    Nothing ⇒ False
+    Just expected ⇒ attachment_matches expected observed
+
+worker_with_phase : worker_phase → WorkerTask → WorkerTask
+worker_with_phase next_phase task =
   Worker
     task.work_identity
     task.result_identity
@@ -99,31 +139,62 @@ worker_without_attachment next_phase task =
     task.maximum_attempts
     task.attempts_started
     next_phase
-    Nothing
+    task.attachment
     task.committed_result
 
 public export
-worker_exited : Bool → WorkerTask → WorkerTask
-worker_exited successful task =
-  if task.committed_result
-    then worker_without_attachment worker_result_committed task
-    else if successful
-      then worker_without_attachment worker_exited_without_result task
-      else worker_without_attachment worker_failed task
+commit_worker_result : ProcessAttachment → WorkerTask → Maybe WorkerTask
+commit_worker_result observed task =
+  if current_attempt_matches observed task &&
+     not task.committed_result &&
+     (case task.phase of
+        worker_running ⇒ True
+        worker_authority_unavailable ⇒ True
+        _ ⇒ False)
+    then
+      Just
+        (Worker
+          task.work_identity
+          task.result_identity
+          task.operation_class
+          task.maximum_attempts
+          task.attempts_started
+          worker_result_committed
+          task.attachment
+          True)
+    else Nothing
 
 public export
-worker_was_killed : WorkerTask → WorkerTask
-worker_was_killed task =
-  if task.committed_result
-    then worker_without_attachment worker_result_committed task
-    else worker_without_attachment worker_killed task
+worker_exited : ProcessAttachment → Bool → WorkerTask → Maybe WorkerTask
+worker_exited observed successful task =
+  if current_attempt_matches observed task && task.phase == worker_running
+    then
+      if task.committed_result
+        then Just (worker_with_phase worker_result_committed task)
+        else if successful
+          then Just (worker_with_phase worker_exited_without_result task)
+          else Just (worker_with_phase worker_failed task)
+    else Nothing
 
 public export
-worker_authority_was_lost : WorkerTask → WorkerTask
-worker_authority_was_lost task =
-  if task.committed_result
-    then worker_without_attachment worker_result_committed task
-    else worker_without_attachment worker_authority_unavailable task
+worker_was_killed : ProcessAttachment → WorkerTask → Maybe WorkerTask
+worker_was_killed observed task =
+  if current_attempt_matches observed task && task.phase == worker_running
+    then
+      if task.committed_result
+        then Just (worker_with_phase worker_result_committed task)
+        else Just (worker_with_phase worker_killed task)
+    else Nothing
+
+public export
+worker_authority_was_lost : ProcessAttachment → WorkerTask → Maybe WorkerTask
+worker_authority_was_lost observed task =
+  if current_attempt_matches observed task
+    then
+      if task.committed_result
+        then Just (worker_with_phase worker_result_committed task)
+        else Just (worker_with_phase worker_authority_unavailable task)
+    else Nothing
 
 public export
 recovery_for : WorkerTask → worker_recovery
@@ -152,11 +223,3 @@ same_worker_identity : WorkerTask → WorkerTask → Bool
 same_worker_identity before after =
   identity_text before.work_identity == identity_text after.work_identity &&
   identity_text before.result_identity == identity_text after.result_identity
-
-public export
-attachment_matches :
-  Integer → Integer → DurableIdentity → ProcessAttachment → Bool
-attachment_matches pid start_ticks process_name attachment =
-  attachment.process_id == pid &&
-  attachment.process_start_ticks == start_ticks &&
-  identity_text attachment.process_name == identity_text process_name
