@@ -33,6 +33,25 @@ retains_attachment expected task =
     Nothing ⇒ False
     Just actual ⇒ attachment_matches expected actual
 
+authority_retains_attempt_check : ProcessAttachment → WorkerTask → Bool
+authority_retains_attempt_check expected running =
+  case worker_authority_was_lost expected running of
+    Nothing ⇒ False
+    Just lost ⇒
+      retains_attachment expected lost && is_wait (recovery_for lost)
+
+committed_after_authority_loss_check : ProcessAttachment → WorkerTask → Bool
+committed_after_authority_loss_check expected running =
+  case commit_worker_result expected running of
+    Nothing ⇒ False
+    Just committed ⇒
+      case worker_authority_was_lost expected committed of
+        Nothing ⇒ False
+        Just lost ⇒
+          lost.committed_result &&
+          retains_attachment expected lost &&
+          is_done (recovery_for lost)
+
 main : IO ()
 main =
   case durable_identity "work-1" of
@@ -130,26 +149,10 @@ main =
                                                   let ambiguous_completion_rejected =
                                                         is_nothing
                                                           (commit_worker_result owned_one planned)
-                                                  let authority_lost =
-                                                        worker_authority_was_lost owned_one running
                                                   let authority_retains_attempt =
-                                                        case authority_lost of
-                                                          Nothing ⇒ False
-                                                          Just lost ⇒
-                                                            retains_attachment owned_one lost &&
-                                                            is_wait (recovery_for lost)
-                                                  let committed =
-                                                        commit_worker_result owned_one running
+                                                        authority_retains_attempt_check owned_one running
                                                   let committed_after_authority_loss =
-                                                        case committed of
-                                                          Nothing ⇒ False
-                                                          Just done ⇒
-                                                            case worker_authority_was_lost owned_one done of
-                                                              Nothing ⇒ False
-                                                              Just lost_done ⇒
-                                                                lost_done.committed_result &&
-                                                                retains_attachment owned_one lost_done &&
-                                                                is_done (recovery_for lost_done)
+                                                        committed_after_authority_loss_check owned_one running
                                                   let retry_matrix =
                                                         case worker_was_killed owned_one running of
                                                           Nothing ⇒ (False, False, False, False)
