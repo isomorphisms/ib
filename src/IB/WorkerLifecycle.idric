@@ -197,7 +197,9 @@ worker_authority_was_lost observed task =
     then
       if task.committed_result
         then Just (worker_with_phase worker_result_committed task)
-        else Just (worker_with_phase worker_authority_unavailable task)
+        else if phase_is_running task.phase
+          then Just (worker_with_phase worker_authority_unavailable task)
+          else Nothing
     else Nothing
 
 public export
