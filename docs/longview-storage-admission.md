@@ -47,7 +47,8 @@ the same pathname, an oversized source, and conflicting bytes for an already
 published immutable object. Equal bytes for the same object are idempotent.
 
 Publication copies into a private staging area, requests synchronization,
-renames within the same filesystem, then requests synchronization again.
+publishes using an atomic same-filesystem create-if-absent hard link, then
+requests synchronization again. No overwrite rename fallback is permitted.
 Readers only open the published object namespace, so an interrupted staging
 tail is not a result. Independent late readers can reopen the same committed
 bytes; reading does not consume them.
@@ -61,6 +62,11 @@ A card/backend identity is stored separately from its current pathname.
 Moving the same store to another mount path preserves logical object lookup.
 A different card mounted at the old path fails the expected-backend check
 instead of being treated as the original store.
+
+The replacement E2 implementation and actual-policy acceptance are described
+in [e2-publication-replacement.md](e2-publication-replacement.md). They add
+deterministic concurrent publication, bounded staging/read refusal, and a
+typed Idriç admission-action boundary for downstream E4/E3 integration.
 
 ## Future appendfat adapter
 

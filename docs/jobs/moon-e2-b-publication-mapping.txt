@@ -1,0 +1,60 @@
+Moon E2-B — Map the replacement publication contract across acceptance surfaces
+
+Repository: isomorphisms/IB.
+
+Exact prerequisite:
+E2_SOURCE_SHA=b731444de8bed8455f36a56998a10cbb38cabe97
+https://github.com/isomorphisms/ib/commit/b731444de8bed8455f36a56998a10cbb38cabe97
+Source PR: isomorphisms/IB PR #115, “Reconstruct immutable-result publication acceptance on Longview”
+https://github.com/isomorphisms/ib/pull/115
+
+Refresh live state, materialize this exact source in an isolated clean checkout,
+and verify its exact-head foundation and Android acceptance before editing.
+The foundation run is https://github.com/isomorphisms/ib/actions/runs/37235523461;
+the Android run is https://github.com/isomorphisms/ib/actions/runs/37235523508.
+If either source or required acceptance is unavailable, stop at that concrete
+prerequisite; a branch name or old green run cannot replace it.
+
+Scope: mechanical regression/receipt/documentation mapping only. Do not choose
+new admission, storage, retry, worker-identity or browser semantics.
+
+Settled contract:
+- Idriç owns admission and reserves the ledger through reserve_peak.
+- The admitted action carries result identity, byte limit, backend identity,
+  media identity, observation identity and reservation receipt unchanged.
+- An already-held E4 reservation must not be charged a second time.
+- Grease transports the admitted action; ordinary-file and Android adapters
+  only publish bounded immutable bytes. Ordinary files use hard-link creation;
+  Android uses atomic nonempty-directory publication and preserves legacy files.
+  No fallback volume or regular-file overwrite rename.
+- Unknown/stale/denied/read-only/absent observations yield no publication action.
+- Committed result state remains committed after later authority loss.
+
+Required work:
+1. Build a path-to-contract-to-assertion mapping for IB.StorageAdmission,
+   lib/result_publication.grease, lib/durable_object_store.grease,
+   ResultPublicationAcceptance.idric and DurableResultStore/Test.
+2. Carry those six already-settled fields unchanged through any existing
+   admitted worker/retained-result boundary whose actual E4 receipt is available.
+   Record that receipt's exact materializable source. If that runtime boundary
+   is absent, mark only that surface blocked; do not invent it or move policy
+   into Java/Grease. E3 owns launch/attempt binding and adapter integration.
+3. Extend mechanical regressions for field swaps/omissions, changed backend,
+   media and observation identity, and refusal before adapter invocation/output.
+   Keep reservation accounting and committed-versus-unavailable state distinct.
+4. Map concurrent unequal writers, equal-byte idempotence, source growth,
+   terminated staging, bounded reads, simulated No space left on device
+   (ENOSPC), immutable bytes and independent reads to their real-path assertions.
+5. Preserve the compiled exit-37 probe: partial output plus failed child must
+   remain failure 37 through orchestration and logging. Never use a green parent
+   or a shell mock as actual-policy acceptance.
+
+Run the existing hosted compiled-policy, ordinary-file and Android acceptance
+paths. Label inherited POSIX compatibility execution separately from actual
+Grease runtime evidence. Do not install packages or mutate a device. Preserve
+current Binder/live-PFD/retained-result/renderer-loss acceptance and signer.
+
+Publish a focused branch/PR and exact source/receipt for completed mappings;
+do not merge, release, signal physical-device processes or replay state-changing
+operations. Stop on semantic divergence and report the single necessary
+Earth/Sun decision. Do not generate another general audit or recursive queue.

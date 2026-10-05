@@ -1,5 +1,7 @@
 module IB.StorageAdmission
 
+import Data.Text
+
 -- Per-volume admission state. Capacity observations and browser commitments are
 -- deliberately separate: a reservation is accounting, not a filesystem
 -- allocation guarantee.
@@ -107,3 +109,59 @@ replace_observation observation available ledger =
     available
     ledger.safety_floor_bytes
     ledger.unreflected_commitments_bytes
+
+-- A decoded admission request retains all identities unchanged across the
+-- worker/adapter boundary. It is not a filesystem allocation guarantee.
+public export
+record PublicationRequest where
+  constructor RequestedPublication
+  result_identity : Text
+  byte_limit : Integer
+  backend_identity : Text
+  media_identity : Text
+  observation_identity : Text
+  reservation_receipt : Text
+
+public export
+record PublicationLocation where
+  constructor ObservedPublicationLocation
+  backend_identity : Text
+  media_identity : Text
+  observation_identity : Text
+
+public export
+record AdmittedPublication where
+  constructor ReservedPublication
+  publication_request : PublicationRequest
+  reserved_ledger : SpaceLedger
+
+-- The pinned compiler predates the canonical Boolean-equality glyph.
+-- Use its supported Text ordering without changing the compiler pin.
+same_publication_text : Text → Text → Bool
+same_publication_text left right =
+  case compare left right of
+    EQ ⇒ True
+    _ ⇒ False
+
+public export
+publication_for :
+  SpaceLedger → PublicationRequest → PublicationLocation → Maybe AdmittedPublication
+publication_for ledger request location =
+  case admission_for ledger request.byte_limit of
+    admitted ⇒
+      if same_publication_text request.result_identity "" ||
+         same_publication_text request.reservation_receipt "" ||
+         same_publication_text request.backend_identity "" ||
+         same_publication_text request.media_identity "" ||
+         same_publication_text request.observation_identity ""
+        then Nothing
+        else if
+          same_publication_text request.backend_identity location.backend_identity &&
+          same_publication_text request.media_identity location.media_identity &&
+          same_publication_text request.observation_identity location.observation_identity
+          then
+            case reserve_peak request.byte_limit ledger of
+              Nothing ⇒ Nothing
+              Just reserved ⇒ Just (ReservedPublication request reserved)
+          else Nothing
+    _ ⇒ Nothing

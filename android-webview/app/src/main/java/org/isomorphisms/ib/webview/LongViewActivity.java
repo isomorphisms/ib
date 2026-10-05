@@ -572,6 +572,7 @@ public final class LongViewActivity extends Activity {
                 "first-useful",
                 "marker=heavy-v1 durable-result=failed class="
                     + exception.getClass().getSimpleName()
+                    + " detail=" + clean(exception.toString())
                     + " " + heavy_metrics("first-useful")
             );
         }

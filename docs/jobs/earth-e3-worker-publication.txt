@@ -1,0 +1,74 @@
+Earth E3 — Bind owned worker completion to the replacement E2 publication path
+
+Repository: isomorphisms/IB.
+
+Verified starting identities:
+E2_SOURCE_SHA=b731444de8bed8455f36a56998a10cbb38cabe97
+https://github.com/isomorphisms/ib/commit/b731444de8bed8455f36a56998a10cbb38cabe97
+ACTUAL_PROGRAM_ACCEPTANCE_SOURCE_SHA=ea322cd1c2dcc9021efddd089b2593bd4b40dd6b
+https://github.com/isomorphisms/ib/commit/ea322cd1c2dcc9021efddd089b2593bd4b40dd6b
+Baseline Android receipt:
+https://github.com/isomorphisms/ib/actions/runs/37214517467
+E2 foundation/Android receipts:
+https://github.com/isomorphisms/ib/actions/runs/37235523461
+https://github.com/isomorphisms/ib/actions/runs/37235523508
+
+E2 source is in isomorphisms/IB PR #115, “Reconstruct immutable-result publication acceptance on Longview”:
+https://github.com/isomorphisms/ib/pull/115
+The contained acceptance baseline is isomorphisms/IB PR #114, “Consolidate Longview through the Binder boundary with retained acceptance work”:
+https://github.com/isomorphisms/ib/pull/114
+
+Refresh live GitHub state, materialize both exact commits in an isolated clean
+checkout, verify baseline containment in E2 source, and verify exact-head E2
+foundation/Android evidence. Work from E2_SOURCE_SHA, not a moving PR tip.
+Read AGENTS.md, architecture and docs/e2-publication-replacement.md.
+
+Evidence limit: the baseline is the current actual Android app/retained-result,
+cross-UID provider, live-PFD and renderer/host-loss acceptance source. Its green
+hosted runs do not prove complete E1 worker-authority adversarial acceptance or
+physical MIRO/Shizuku behavior. Do not relabel them as either.
+
+One outcome: complete the functioning worker adapter below Binder while
+preserving Idriç admission/retry ownership and Grease orchestration, and publish
+only an already-admitted bounded result through the replacement E2 boundary.
+
+Permitted scope: IB.WorkerLifecycle and its actual-program tests, the Binder
+worker/provider adapter, admitted-result transport, focused event regressions
+and receipts. Keep page/renderer behavior, retained-result semantics, existing
+runtime bounds, live-PFD behavior and signing identity intact.
+
+Required implementation:
+1. Bind owned operations and completion to launch identity, boot identity, UID,
+   PID, process-start identity, host generation, process name, attempt identity
+   and monotone attempt number. Prevent replacing a running attempt and reject
+   stale/ambiguous completion. No PID-only fallback or signaling without a safe
+   launch-owned target binding.
+2. Retain attachment and attempt evidence when authority becomes unavailable.
+   Preserve committed result state; lack of current authority is not result
+   loss. Keep retry decisions in Idriç, including manual recovery for
+   nonreplayable state changes. Never add automatic state-changing replay.
+3. Transport the already-admitted result identity, byte limit, backend/media
+   identity, observation identity and reservation receipt unchanged. Use E2's
+   immutable adapters; preserve Android's nonempty-directory/legacy-file
+   boundary. Do not reintroduce regular-file overwrite rename or let an adapter
+   admit work. Thread the reserved ledger; do not double-charge a held E4
+   reservation. If actual retained-result admission is still absent, fail
+   closed at that specific boundary rather than inventing E4 semantics.
+4. Bound actual capability calls/output and live-channel count/lifetime. Denied
+   or unavailable discovery remains unknown, never measured zero or success.
+5. Test actual programs with disposable fixtures: stale boot/UID/start/launch/
+   generation/attempt identities, running-attempt replacement, revoked
+   authority, committed result under later authority loss, ambiguous completion,
+   hung commands, stalled peers and bounded-output refusal. Couple each case to
+   the adapter call or signal it must prevent, rather than checking model labels.
+6. Re-run E2 races, bounds, ENOSPC, identity refusals, repeated reads and the
+   exact exit-37 probe. Re-run existing hosted Android retained-result,
+   renderer/host-loss and Binder/live-PFD acceptance on the resulting exact head.
+
+Do not install packages, mutate a physical MIRO device, change signer, merge,
+release or claim physical Shizuku acceptance. Stop if evidence contradicts the
+settled ownership/contract; identify one concrete contradiction, not a roadmap.
+
+Publish the focused implementation on a durable branch/PR with its new exact
+source, materializable parent identities and actual-program receipts. Finish
+with a bounded Moon adapter/event-matrix mapping only for settled verified work.

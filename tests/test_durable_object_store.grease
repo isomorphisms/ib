@@ -4,11 +4,53 @@ set -eu
 repository_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 . "$repository_root/lib/durable_object_store.grease"
 
+# A child uses the same adapter and real filesystem primitives. Only its
+# synchronization schedule is controlled; it never synthesizes publication.
+if test "${1:-}" = race-writer; then
+  race_root=$2
+  race_source=$3
+  race_identity=$4
+  race_slot=$5
+  sync() {
+    if test -n "${ib_store_tmp:-}" && test -f "$ib_store_tmp" &&
+        test ! -f "$race_root/ready-$race_slot"; then
+      : >"$race_root/ready-$race_slot"
+      read -r release <"$race_root/gate-$race_slot"
+      test "$release" = release || return 91
+    fi
+    command sync
+  }
+  if ib_store_publish_bounded "$race_root/card" card-a "$race_identity" "$race_source" 64; then
+    printf '0\n' >"$race_root/status-$race_slot"
+  else
+    status=$?
+    printf '%s\n' "$status" >"$race_root/status-$race_slot"
+    exit "$status"
+  fi
+  exit 0
+fi
+
 work=$(mktemp -d)
 cleanup() {
   rm -rf "$work"
 }
 trap cleanup EXIT HUP INT TERM
+
+expect_status() {
+  expected=$1
+  shift
+  if "$@" >"$work/refused.out" 2>"$work/refused.err"; then
+    printf 'expected refusal %s, got success\n' "$expected" >&2
+    exit 1
+  else
+    actual=$?
+  fi
+  if test "$actual" -ne "$expected"; then
+    printf 'wrong refusal: expected=%s actual=%s\n' "$expected" "$actual" >&2
+    exit 1
+  fi
+  test ! -s "$work/refused.out"
+}
 
 root="$work/card"
 mkdir "$root"
@@ -22,6 +64,7 @@ ib_store_read "$root" card-a object-1 >"$work/read-1"
 ib_store_read "$root" card-a object-1 >"$work/read-2"
 cmp "$source_file" "$work/read-1"
 cmp "$work/read-1" "$work/read-2"
+expect_status "$IB_STORE_LIMIT_EXCEEDED" ib_store_read_bounded "$root" card-a object-1 4
 
 # A torn/unpublished staging tail is not a durable object.
 printf 'unpublished tail\n' >"$root/.ib-staging/object-torn.manual"
@@ -56,6 +99,111 @@ fi
 test "$status" -eq "$IB_STORE_OBJECT_CONFLICT"
 ib_store_read "$root" card-a object-1 >"$work/read-after-conflict"
 cmp "$source_file" "$work/read-after-conflict"
+
+# Growth occurs inside the actual copy invocation, after size observation.
+# The staging copy remains bounded and a truncated prefix cannot be committed.
+head() {
+  case "$*" in
+    *"$work/growing"*) printf 'growth\n' >>"$work/growing" ;;
+  esac
+  command head "$@"
+}
+printf 'start\n' >"$work/growing"
+expect_status "$IB_STORE_SOURCE_CHANGED" ib_store_publish_bounded "$root" card-a growing "$work/growing" 64
+test ! -e "$root/objects/growing"
+unset -f head
+
+# No space left on device (ENOSPC), simulated at the staging I/O boundary.
+# The implementation sees a partial file and a failing write, never a result.
+head() {
+  printf 'partial'
+  printf 'No space left on device (ENOSPC)\n' >&2
+  return 28
+}
+expect_status "$IB_STORE_IO_FAILURE" ib_store_publish_bounded "$root" card-a no-space "$source_file" 64
+test ! -e "$root/objects/no-space"
+unset -f head
+test -z "$(ls -A "$root/.ib-staging" | sed '/object-torn.manual/d')"
+
+# A reader cannot observe a writer stalled before atomic publication. Both
+# unequal writers have staged before either is released, making the old
+# check-then-rename overwrite deterministic rather than timing-dependent.
+run_race() {
+  race_identity=$1
+  race_second=$2
+  race_expected=$3
+  race="$work/$race_identity"
+  mkdir "$race"
+  mkdir "$race/card"
+  ib_store_init "$race/card" card-a
+  mkfifo "$race/gate-a" "$race/gate-b"
+  test_shell=${IB_STORE_TEST_SHELL:-grease}
+  "$test_shell" "$0" race-writer "$race" "$source_file" "$race_identity" a >"$race/a.out" 2>"$race/a.err" &
+  first_pid=$!
+  "$test_shell" "$0" race-writer "$race" "$race_second" "$race_identity" b >"$race/b.out" 2>"$race/b.err" &
+  second_pid=$!
+  attempts=0
+  until test -f "$race/ready-a" && test -f "$race/ready-b"; do
+    attempts=$((attempts + 1))
+    if test "$attempts" -gt 100; then
+      printf 'writers did not reach publication barrier\n' >&2
+      kill "$first_pid" "$second_pid" 2>/dev/null || :
+      exit 1
+    fi
+    sleep 0.1
+  done
+  expect_status "$IB_STORE_OBJECT_ABSENT" ib_store_read "$race/card" card-a "$race_identity"
+  printf 'release\n' >"$race/gate-a"
+  wait "$first_pid"
+  ib_store_read "$race/card" card-a "$race_identity" >"$race/first-read"
+  cmp "$source_file" "$race/first-read"
+  printf 'release\n' >"$race/gate-b"
+  if wait "$second_pid"; then
+    second_status=0
+  else
+    second_status=$?
+  fi
+  if test "$second_status" -ne "$race_expected"; then
+    printf 'immutable race outcome: expected=%s actual=%s\n' "$race_expected" "$second_status" >&2
+    exit 1
+  fi
+  test "$(cat "$race/status-b")" -eq "$race_expected"
+  ib_store_read "$race/card" card-a "$race_identity" >"$race/last-read"
+  cmp "$source_file" "$race/last-read"
+  test -z "$(ls -A "$race/card/.ib-staging")"
+}
+run_race race-unequal "$work/conflict" "$IB_STORE_OBJECT_CONFLICT"
+run_race race-equal "$source_file" 0
+
+# Terminate our own disposable child while its complete staging inode is
+# blocked before publication. A leftover tail still cannot satisfy a read.
+interrupted="$work/interrupted"
+mkdir "$interrupted" "$interrupted/card"
+ib_store_init "$interrupted/card" card-a
+mkfifo "$interrupted/gate-stopped"
+"${IB_STORE_TEST_SHELL:-grease}" "$0" race-writer "$interrupted" "$source_file" interrupted stopped \
+  >"$interrupted/writer.out" 2>"$interrupted/writer.err" &
+staged_pid=$!
+attempts=0
+until test -f "$interrupted/ready-stopped"; do
+  attempts=$((attempts + 1))
+  if test "$attempts" -gt 100; then
+    printf 'interruption child did not reach staging barrier\n' >&2
+    kill "$staged_pid" 2>/dev/null || :
+    exit 1
+  fi
+  sleep 0.1
+done
+kill -TERM "$staged_pid"
+if wait "$staged_pid"; then
+  printf 'interrupted staging child unexpectedly succeeded\n' >&2
+  exit 1
+else
+  interrupted_status=$?
+fi
+test "$interrupted_status" -eq 143
+expect_status "$IB_STORE_OBJECT_ABSENT" ib_store_read "$interrupted/card" card-a interrupted
+test -n "$(ls -A "$interrupted/card/.ib-staging")"
 
 # Logical object identity does not contain the current mount path.
 moved="$work/remounted-card"

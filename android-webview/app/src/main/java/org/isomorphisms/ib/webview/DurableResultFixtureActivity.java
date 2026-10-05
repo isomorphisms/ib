@@ -117,7 +117,8 @@ public final class DurableResultFixtureActivity extends Activity {
             record("reader-missing", "package=" + READER_PACKAGE);
             append_status("install the result-reader APK, then tap prepare again");
         } catch (IOException | RuntimeException exception) {
-            record("prepare-failed", "class=" + exception.getClass().getSimpleName());
+            record("prepare-failed", "class=" + exception.getClass().getSimpleName()
+                + " detail=" + exception.toString().replace('\n', ' ').replace('\t', ' '));
             append_status("prepare failed: " + exception.getClass().getSimpleName());
         }
     }
