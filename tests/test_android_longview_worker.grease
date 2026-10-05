@@ -237,10 +237,22 @@ expect_status 71 ib_longview_worker_start work-delayed result-delayed launch-d2 
 expect_status 72 ib_longview_worker_signal_owned work-delayed result-delayed wrong-launch boot-a 2000 123 999 sh 8 attempt-d1 1 TERM
 expect_status 72 ib_longview_worker_signal_owned work-delayed result-delayed launch-d1 boot-b 2000 123 999 sh 8 attempt-d1 1 TERM
 expect_status 72 ib_longview_worker_signal_owned work-delayed result-delayed launch-d1 boot-a 2001 123 999 sh 8 attempt-d1 1 TERM
+expect_status 72 ib_longview_worker_signal_owned work-delayed result-delayed launch-d1 boot-a 2000 124 999 sh 8 attempt-d1 1 TERM
 expect_status 72 ib_longview_worker_signal_owned work-delayed result-delayed launch-d1 boot-a 2000 123 1000 sh 8 attempt-d1 1 TERM
+expect_status 72 ib_longview_worker_signal_owned work-delayed result-delayed launch-d1 boot-a 2000 123 999 other 8 attempt-d1 1 TERM
 expect_status 72 ib_longview_worker_signal_owned work-delayed result-delayed launch-d1 boot-a 2000 123 999 sh 9 attempt-d1 1 TERM
 expect_status 72 ib_longview_worker_signal_owned work-delayed result-delayed launch-d1 boot-a 2000 123 999 sh 8 attempt-d2 1 TERM
 expect_status 72 ib_longview_worker_signal_owned work-delayed result-delayed launch-d1 boot-a 2000 123 999 sh 8 attempt-d1 2 TERM
+test "$(ib_longview_worker_status "$@")" = running
+
+# Revoked/unavailable authority is neither success nor a fabricated terminal
+# state. Restoring the provider reveals the same exact running attempt.
+saved_rish=$IB_RISH_COMMAND
+IB_RISH_COMMAND="$work/not-executable"
+export IB_RISH_COMMAND
+expect_status 1 ib_longview_worker_observe "$@"
+IB_RISH_COMMAND=$saved_rish
+export IB_RISH_COMMAND
 test "$(ib_longview_worker_status "$@")" = running
 
 # Exact owned signaling succeeds; no partial Binder process identity is used.
