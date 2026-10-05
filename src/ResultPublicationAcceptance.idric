@@ -6,8 +6,12 @@ import IB.WorkerLifecycle
 import IB.LongViewTask
 import System
 
+request_with_limit : Text → Integer → PublicationRequest
+request_with_limit result byte_limit =
+  RequestedPublication result byte_limit "ordinary" "card-a" "observation-1" "reservation-1"
+
 request : Text → PublicationRequest
-request result = RequestedPublication result 64 "ordinary" "card-a" "observation-1" "reservation-1"
+request result = request_with_limit result 1024
 
 location : PublicationLocation
 location = ObservedPublicationLocation "ordinary" "card-a" "observation-1"
@@ -25,10 +29,16 @@ emit name ledger observed =
 
 publication_reservations_are_bounded : Bool
 publication_reservations_are_bounded =
-  case publication_for (Ledger measured_writable (Just 200) 100 0) (request "first") location of
+  case publication_for
+    (Ledger measured_writable (Just 200) 100 0)
+    (request_with_limit "first" 64)
+    location of
     Nothing ⇒ False
     Just first ⇒
-      case publication_for first.reserved_ledger (request "second") location of
+      case publication_for
+        first.reserved_ledger
+        (request_with_limit "second" 64)
+        location of
         Nothing ⇒ True
         Just _ ⇒ False
 
@@ -120,17 +130,17 @@ committed_survives_authority_loss =
 
 acceptance : IO ()
 acceptance = do
-  emit "allowed" (Ledger measured_writable (Just 1000) 100 0) location
+  emit "allowed" (Ledger measured_writable (Just 5000) 100 0) location
   emit "unknown" (Ledger capacity_unknown Nothing 100 0) location
   emit "stale" (Ledger observation_stale (Just 1000) 100 0) location
   emit "denied" (Ledger writer_denied (Just 1000) 100 0) location
   emit "read-only" (Ledger writer_read_only (Just 1000) 100 0) location
   emit "absent" (Ledger volume_absent Nothing 100 0) location
-  emit "backend-mismatch" (Ledger measured_writable (Just 1000) 100 0)
+  emit "backend-mismatch" (Ledger measured_writable (Just 5000) 100 0)
     (ObservedPublicationLocation "other" "card-a" "observation-1")
-  emit "media-mismatch" (Ledger measured_writable (Just 1000) 100 0)
+  emit "media-mismatch" (Ledger measured_writable (Just 5000) 100 0)
     (ObservedPublicationLocation "ordinary" "card-b" "observation-1")
-  emit "stale-identity" (Ledger measured_writable (Just 1000) 100 0)
+  emit "stale-identity" (Ledger measured_writable (Just 5000) 100 0)
     (ObservedPublicationLocation "ordinary" "card-a" "observation-2")
   putStrLn ("worker-completion-bound\t" ++ show owned_worker_completion)
   putStrLn ("committed-after-authority-loss\t" ++ show committed_survives_authority_loss)
@@ -145,6 +155,6 @@ main = do
   arguments ← getArgs
   case arguments of
     [_ , "fail-after-action"] ⇒ do
-      emit "allowed" (Ledger measured_writable (Just 1000) 100 0) location
+      emit "allowed" (Ledger measured_writable (Just 5000) 100 0) location
       exitWith (ExitFailure 37)
     _ ⇒ acceptance
