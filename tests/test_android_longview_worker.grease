@@ -30,33 +30,124 @@ if test "$#" -ne 2 || test "$1" != '-c'; then
 fi
 command_text=$2
 
+field() {
+  printf '%s\n' "$command_text" | sed -n "s/^$1=//p" | head -n 1
+}
+
+attempt_matches() {
+  work_id=$(field work)
+  result_id=$(field result)
+  launch_id=$(field launch)
+  boot_id=$(field expected_boot)
+  uid=$(field expected_uid)
+  pid=$(field pid)
+  start_ticks=$(field expected_start)
+  process_name=$(field expected_name)
+  host_generation=$(field host_generation)
+  attempt_id=$(field attempt_id)
+  attempt_number=$(field attempt_number)
+  expected=$(printf 'attempt\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s' \
+    "$launch_id" "$boot_id" "$uid" "$pid" "$start_ticks" "$process_name" \
+    "$host_generation" "$attempt_id" "$attempt_number" "$result_id")
+  test -f "$FAKE_WORKER_STATE/attempt-$work_id" || exit 68
+  test "$(cat "$FAKE_WORKER_STATE/attempt-$work_id")" = "$expected" || exit 72
+}
+
 case "$command_text" in
-  *IB_LONGVIEW_WORKER_START_V1*)
-    work_id=$(printf '%s\n' "$command_text" | sed -n 's/^work=//p')
-    result_id=$(printf '%s\n' "$command_text" | sed -n 's/^result=//p')
-    delay=$(printf '%s\n' "$command_text" | sed -n 's/^delay=//p')
+  *IB_LONGVIEW_WORKER_START_V2*)
+    work_id=$(field work)
+    result_id=$(field result)
+    launch_id=$(field launch)
+    host_generation=$(field host_generation)
+    attempt_id=$(field attempt_id)
+    attempt_number=$(field attempt_number)
+    delay=$(field delay)
     test -n "$work_id"
     test -n "$result_id"
+
+    if test "$work_id" = work-hung; then
+      sleep 10
+      exit 90
+    fi
+
+    status_file="$FAKE_WORKER_STATE/status-$work_id"
+    attempt_file="$FAKE_WORKER_STATE/attempt-$work_id"
+    if test -f "$status_file"; then
+      old_status=$(cat "$status_file")
+      test "$old_status" != running || exit 71
+      test "$old_status" != committed || exit 73
+    fi
+    if test -f "$attempt_file"; then
+      previous=$(cut -f10 "$attempt_file")
+      test "$attempt_number" -gt "$previous" || exit 72
+    fi
+
+    boot_id=boot-a
+    uid=2000
+    if test "$attempt_number" -eq 1; then
+      pid=123
+      start_ticks=999
+    else
+      pid=124
+      start_ticks=1000
+    fi
+    process_name=sh
+    printf 'attempt\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+      "$launch_id" "$boot_id" "$uid" "$pid" "$start_ticks" "$process_name" \
+      "$host_generation" "$attempt_id" "$attempt_number" "$result_id" >"$attempt_file"
+    printf 'running\n' >"$status_file"
+
     if test "$delay" = 0; then
       {
-        printf 'schema\tib-longview-worker-result-v1\n'
+        printf 'schema\tib-longview-worker-result-v2\n'
         printf 'work_id\t%s\n' "$work_id"
         printf 'result_id\t%s\n' "$result_id"
+        printf 'launch_id\t%s\n' "$launch_id"
+        printf 'boot_id\t%s\n' "$boot_id"
+        printf 'uid\t%s\n' "$uid"
+        printf 'pid\t%s\n' "$pid"
+        printf 'start_ticks\t%s\n' "$start_ticks"
+        printf 'process_name\t%s\n' "$process_name"
+        printf 'host_generation\t%s\n' "$host_generation"
+        printf 'attempt_id\t%s\n' "$attempt_id"
+        printf 'attempt_number\t%s\n' "$attempt_number"
         printf 'value\tdeterministic-ok\n'
       } >"$FAKE_WORKER_STATE/result-$result_id"
-      printf 'committed\n' >"$FAKE_WORKER_STATE/status-$work_id"
-      printf 'worker\t123\t999\tsh\n'
-    else
-      printf 'running\n' >"$FAKE_WORKER_STATE/status-$work_id"
-      printf 'worker\t124\t1000\tsh\n'
+      printf 'committed\n' >"$status_file"
     fi
+
+    printf 'worker\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+      "$launch_id" "$boot_id" "$uid" "$pid" "$start_ticks" "$process_name" \
+      "$host_generation" "$attempt_id" "$attempt_number"
     ;;
-  *IB_LONGVIEW_WORKER_OBSERVE_V1*)
-    work_id=$(printf '%s\n' "$command_text" | sed -n 's/^work=//p')
-    result_id=$(printf '%s\n' "$command_text" | sed -n 's/^result=//p')
+
+  *IB_LONGVIEW_WORKER_STATUS_V2*)
+    attempt_matches
+    work_id=$(field work)
+    test -f "$FAKE_WORKER_STATE/status-$work_id" || exit 68
+    cat "$FAKE_WORKER_STATE/status-$work_id"
+    ;;
+
+  *IB_LONGVIEW_WORKER_READ_V2*)
+    attempt_matches
+    result_id=$(field result)
+    test -f "$FAKE_WORKER_STATE/result-$result_id" || exit 68
+    bytes=$(wc -c <"$FAKE_WORKER_STATE/result-$result_id" | tr -d '[:space:]')
+    test "$bytes" -le 1024 || exit 69
+    cat "$FAKE_WORKER_STATE/result-$result_id"
+    ;;
+
+  *IB_LONGVIEW_WORKER_OBSERVE_V2*)
+    attempt_matches
+    work_id=$(field work)
+    result_id=$(field result)
+    if test "$work_id" = work-stalled; then
+      sleep 10
+      exit 90
+    fi
     if test -f "$FAKE_WORKER_STATE/result-$result_id"; then
-      grep -Fx "$(printf 'work_id\t%s' "$work_id")" "$FAKE_WORKER_STATE/result-$result_id" >/dev/null || exit 70
-      grep -Fx "$(printf 'result_id\t%s' "$result_id")" "$FAKE_WORKER_STATE/result-$result_id" >/dev/null || exit 70
+      bytes=$(wc -c <"$FAKE_WORKER_STATE/result-$result_id" | tr -d '[:space:]')
+      test "$bytes" -le 1024 || exit 69
       printf 'committed\n'
     elif test -f "$FAKE_WORKER_STATE/status-$work_id" &&
          test "$(cat "$FAKE_WORKER_STATE/status-$work_id")" = running; then
@@ -65,19 +156,14 @@ case "$command_text" in
       printf 'gone-uncommitted\n'
     fi
     ;;
-  *IB_LONGVIEW_WORKER_STATUS_V1*)
-    work_id=$(printf '%s\n' "$command_text" | sed -n 's/^work=//p')
-    test -f "$FAKE_WORKER_STATE/status-$work_id" || exit 68
-    cat "$FAKE_WORKER_STATE/status-$work_id"
+
+  *IB_LONGVIEW_WORKER_SIGNAL_V2*)
+    attempt_matches
+    work_id=$(field work)
+    test "$(cat "$FAKE_WORKER_STATE/status-$work_id")" = running || exit 72
+    printf 'killed\n' >"$FAKE_WORKER_STATE/status-$work_id"
     ;;
-  *IB_LONGVIEW_WORKER_READ_V1*)
-    result_id=$(printf '%s\n' "$command_text" | sed -n 's/^result=//p')
-    test -f "$FAKE_WORKER_STATE/result-$result_id" || exit 68
-    cat "$FAKE_WORKER_STATE/result-$result_id"
-    ;;
-  *'expected_start=1000'*'expected_name=sh'*'kill -TERM'*)
-    printf 'killed\n' >"$FAKE_WORKER_STATE/status-work-delayed"
-    ;;
+
   *)
     printf 'unexpected fake worker command\n' >&2
     exit 92
@@ -87,63 +173,133 @@ FAKE_RISH
 chmod +x "$fake_rish"
 export IB_RISH_COMMAND="$fake_rish"
 
-receipt=$(ib_longview_worker_start work-1 result-1 immediate)
-test "$receipt" = "$(printf 'worker\t123\t999\tsh')"
-test "$(ib_longview_worker_status work-1)" = committed
+expect_status() {
+  expected=$1
+  shift
+  if "$@" >"$work/refused.out" 2>"$work/refused.err"; then
+    printf 'expected refusal %s, got success\n' "$expected" >&2
+    exit 1
+  else
+    actual=$?
+  fi
+  test "$actual" -eq "$expected"
+  test ! -s "$work/refused.out"
+}
+
+receipt=$(ib_longview_worker_start work-1 result-1 launch-1 7 attempt-1 1 immediate)
+test "$receipt" = "$(printf 'worker\tlaunch-1\tboot-a\t2000\t123\t999\tsh\t7\tattempt-1\t1')"
+set -- work-1 result-1 launch-1 boot-a 2000 123 999 sh 7 attempt-1 1
+test "$(ib_longview_worker_status "$@")" = committed
 
 first="$work/read-1"
 second="$work/read-2"
-ib_longview_worker_read_result result-1 >"$first"
-ib_longview_worker_read_result result-1 >"$second"
+ib_longview_worker_read_result "$@" >"$first"
+ib_longview_worker_read_result "$@" >"$second"
 cmp "$first" "$second"
-grep -Fx "$(printf 'schema\tib-longview-worker-result-v1')" "$first" >/dev/null
-grep -Fx "$(printf 'work_id\twork-1')" "$first" >/dev/null
-grep -Fx "$(printf 'value\tdeterministic-ok')" "$first" >/dev/null
+for expected in \
+  'schema	ib-longview-worker-result-v2' \
+  'work_id	work-1' \
+  'result_id	result-1' \
+  'launch_id	launch-1' \
+  'boot_id	boot-a' \
+  'uid	2000' \
+  'pid	123' \
+  'start_ticks	999' \
+  'process_name	sh' \
+  'host_generation	7' \
+  'attempt_id	attempt-1' \
+  'attempt_number	1' \
+  'value	deterministic-ok'
+do
+  grep -Fx "$(printf '%b' "$expected")" "$first" >/dev/null
+done
 
-# A later reader is independent of the initiating rish invocation.
-receipt_again=$(ib_longview_worker_start work-1 result-1 immediate)
-test "$receipt_again" = "$(printf 'worker\t123\t999\tsh')"
-ib_longview_worker_read_result result-1 >"$work/read-after-new-caller"
-cmp "$first" "$work/read-after-new-caller"
-
-# Missing Shizuku authority is a failure, not silent success; restoring the
-# authority leaves the already committed result readable.
+# Missing authority is failure, not silent success. A committed result remains
+# readable after authority returns.
 saved_rish=$IB_RISH_COMMAND
 IB_RISH_COMMAND="$work/not-executable"
 export IB_RISH_COMMAND
-if ib_longview_worker_read_result result-1 >"$work/unavailable.out" 2>"$work/unavailable.err"; then
-  printf 'missing Shizuku authority became success\n' >&2
-  exit 1
-fi
+expect_status 1 ib_longview_worker_read_result "$@"
 IB_RISH_COMMAND=$saved_rish
 export IB_RISH_COMMAND
-ib_longview_worker_read_result result-1 >"$work/read-after-authority"
+ib_longview_worker_read_result "$@" >"$work/read-after-authority"
 cmp "$first" "$work/read-after-authority"
 
-# Delayed work yields an owned process receipt. Kill requires both PID and
-# process start identity; no PID-only signal path exists.
-delayed=$(ib_longview_worker_start work-delayed result-delayed delayed)
-test "$delayed" = "$(printf 'worker\t124\t1000\tsh')"
-test "$(ib_longview_worker_status work-delayed)" = running
-ib_binder_signal_owned 124 1000 sh TERM
-test "$(ib_longview_worker_status work-delayed)" = killed
-test "$(ib_longview_worker_observe work-delayed result-delayed 124 1000 sh)" = gone-uncommitted
-test "$(ib_longview_worker_observe work-1 result-1 123 999 sh)" = committed
-if ib_longview_worker_observe wrong-work result-1 123 999 sh \
-    >"$work/mismatch.out" 2>"$work/mismatch.err"; then
-  printf 'mismatched work/result identity was reported committed\n' >&2
-  exit 1
-else
-  status=$?
-fi
-test "$status" -eq 70
+# One running attempt cannot be replaced.
+delayed=$(ib_longview_worker_start work-delayed result-delayed launch-d1 8 attempt-d1 1 delayed)
+test "$delayed" = "$(printf 'worker\tlaunch-d1\tboot-a\t2000\t123\t999\tsh\t8\tattempt-d1\t1')"
+set -- work-delayed result-delayed launch-d1 boot-a 2000 123 999 sh 8 attempt-d1 1
+test "$(ib_longview_worker_status "$@")" = running
+expect_status 71 ib_longview_worker_start work-delayed result-delayed launch-d2 8 attempt-d2 2 delayed
+
+# Every stale component is rejected on the mutating signal path. The current
+# attempt stays running after all refusals.
+expect_status 72 ib_longview_worker_signal_owned work-delayed result-delayed wrong-launch boot-a 2000 123 999 sh 8 attempt-d1 1 TERM
+expect_status 72 ib_longview_worker_signal_owned work-delayed result-delayed launch-d1 boot-b 2000 123 999 sh 8 attempt-d1 1 TERM
+expect_status 72 ib_longview_worker_signal_owned work-delayed result-delayed launch-d1 boot-a 2001 123 999 sh 8 attempt-d1 1 TERM
+expect_status 72 ib_longview_worker_signal_owned work-delayed result-delayed launch-d1 boot-a 2000 124 999 sh 8 attempt-d1 1 TERM
+expect_status 72 ib_longview_worker_signal_owned work-delayed result-delayed launch-d1 boot-a 2000 123 1000 sh 8 attempt-d1 1 TERM
+expect_status 72 ib_longview_worker_signal_owned work-delayed result-delayed launch-d1 boot-a 2000 123 999 other 8 attempt-d1 1 TERM
+expect_status 72 ib_longview_worker_signal_owned work-delayed result-delayed launch-d1 boot-a 2000 123 999 sh 9 attempt-d1 1 TERM
+expect_status 72 ib_longview_worker_signal_owned work-delayed result-delayed launch-d1 boot-a 2000 123 999 sh 8 attempt-d2 1 TERM
+expect_status 72 ib_longview_worker_signal_owned work-delayed result-delayed launch-d1 boot-a 2000 123 999 sh 8 attempt-d1 2 TERM
+test "$(ib_longview_worker_status "$@")" = running
+
+# Revoked/unavailable authority is neither success nor a fabricated terminal
+# state. Restoring the provider reveals the same exact running attempt.
+saved_rish=$IB_RISH_COMMAND
+IB_RISH_COMMAND="$work/not-executable"
+export IB_RISH_COMMAND
+expect_status 1 ib_longview_worker_observe "$@"
+IB_RISH_COMMAND=$saved_rish
+export IB_RISH_COMMAND
+test "$(ib_longview_worker_status "$@")" = running
+
+# Exact owned signaling succeeds; no partial Binder process identity is used.
+ib_longview_worker_signal_owned "$@" TERM
+test "$(ib_longview_worker_status "$@")" = killed
+test "$(ib_longview_worker_observe "$@")" = gone-uncommitted
+
+# A retry must advance the attempt number while the killed attempt is still
+# eligible for restart.
+expect_status 72 ib_longview_worker_start work-delayed result-delayed launch-d3 10 attempt-d3 1 delayed
+
+# A monotone retry may replace only the terminal attempt. Once it does, the old
+# completion tuple is stale and cannot observe/read/mutate the new attempt.
+retry=$(ib_longview_worker_start work-delayed result-delayed launch-d2 9 attempt-d2 2 immediate)
+test "$retry" = "$(printf 'worker\tlaunch-d2\tboot-a\t2000\t124\t1000\tsh\t9\tattempt-d2\t2')"
+expect_status 72 ib_longview_worker_observe work-delayed result-delayed launch-d1 boot-a 2000 123 999 sh 8 attempt-d1 1
+set -- work-delayed result-delayed launch-d2 boot-a 2000 124 1000 sh 9 attempt-d2 2
+test "$(ib_longview_worker_observe "$@")" = committed
+ib_longview_worker_read_result "$@" >"$work/retry-result"
+grep -Fx "$(printf 'attempt_id\tattempt-d2')" "$work/retry-result" >/dev/null
+grep -Fx "$(printf 'attempt_number\t2')" "$work/retry-result" >/dev/null
+
+# A committed durable result never starts another attempt.
+expect_status 73 ib_longview_worker_start work-delayed result-delayed launch-d3 10 attempt-d3 3 delayed
+
+# Output is bounded before any prefix is returned.
+printf '%1100s' x >"$FAKE_WORKER_STATE/result-result-big"
+printf 'attempt\tlaunch-big\tboot-a\t2000\t123\t999\tsh\t1\tattempt-big\t1\tresult-big\n' \
+  >"$FAKE_WORKER_STATE/attempt-work-big"
+printf 'committed\n' >"$FAKE_WORKER_STATE/status-work-big"
+expect_status 69 ib_longview_worker_read_result \
+  work-big result-big launch-big boot-a 2000 123 999 sh 1 attempt-big 1
+
+# Provider calls are bounded if rish itself hangs or a peer stalls.
+expect_status 124 ib_longview_worker_start work-hung result-hung launch-hung 1 attempt-hung 1 delayed
+printf 'attempt\tlaunch-stalled\tboot-a\t2000\t123\t999\tsh\t1\tattempt-stalled\t1\tresult-stalled\n' \
+  >"$FAKE_WORKER_STATE/attempt-work-stalled"
+printf 'running\n' >"$FAKE_WORKER_STATE/status-work-stalled"
+expect_status 124 ib_longview_worker_observe \
+  work-stalled result-stalled launch-stalled boot-a 2000 123 999 sh 1 attempt-stalled 1
 
 before=$(wc -c <"$first")
-if ib_longview_worker_start 'work;bad' result-x immediate >/dev/null 2>&1; then
+if ib_longview_worker_start 'work;bad' result-x launch-x 1 attempt-x 1 immediate >/dev/null 2>&1; then
   printf 'unsafe work id was accepted\n' >&2
   exit 1
 fi
 after=$(wc -c <"$first")
 test "$before" -eq "$after"
 
-printf '%s\n' 'android Longview worker fixture tests: ok'
+printf '%s\n' 'android Longview worker E3 fixture tests: ok'

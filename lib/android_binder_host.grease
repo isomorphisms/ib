@@ -69,6 +69,10 @@ ib_binder_worker_observe() {
   ib_shizuku_worker_observe "$@"
 }
 
+ib_binder_worker_signal_owned() {
+  ib_shizuku_worker_signal_owned "$@"
+}
+
 # Capability observation is also selected through Binder. Provider-specific
 # provenance remains visible in the returned rows.
 ib_binder_capabilities_remote_snapshot() {

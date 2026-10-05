@@ -19,6 +19,64 @@ is_done : worker_recovery → Bool
 is_done no_restart_needed = True
 is_done _ = False
 
+is_nothing : Maybe a → Bool
+is_nothing Nothing = True
+is_nothing _ = False
+
+is_just : Maybe a → Bool
+is_just (Just _) = True
+is_just _ = False
+
+retains_attachment : ProcessAttachment → WorkerTask → Bool
+retains_attachment expected task =
+  case task.attachment of
+    Nothing ⇒ False
+    Just actual ⇒ attachment_matches expected actual
+
+authority_retains_attempt_check : ProcessAttachment → WorkerTask → Bool
+authority_retains_attempt_check expected running =
+  case worker_authority_was_lost expected running of
+    Nothing ⇒ False
+    Just lost ⇒
+      retains_attachment expected lost && is_wait (recovery_for lost)
+
+committed_after_authority_loss_check : ProcessAttachment → WorkerTask → Bool
+committed_after_authority_loss_check expected running =
+  case commit_worker_result expected running of
+    Nothing ⇒ False
+    Just committed ⇒
+      case worker_authority_was_lost expected committed of
+        Nothing ⇒ False
+        Just lost ⇒
+          lost.committed_result &&
+          retains_attachment expected lost &&
+          is_done (recovery_for lost)
+
+authority_requires_resolution_before_retry :
+  ProcessAttachment → DurableIdentity → DurableIdentity → DurableIdentity →
+  DurableIdentity → WorkerTask → Bool
+authority_requires_resolution_before_retry owned launch boot process_name attempt running =
+  case worker_authority_was_lost owned running of
+    Nothing ⇒ False
+    Just lost ⇒
+      is_nothing
+        (attach_worker_process
+          launch boot 2000 124 1000 process_name 8 attempt lost)
+
+authority_confirmed_gone_can_retry :
+  ProcessAttachment → DurableIdentity → DurableIdentity → DurableIdentity →
+  DurableIdentity → WorkerTask → Bool
+authority_confirmed_gone_can_retry owned launch boot process_name attempt running =
+  case worker_authority_was_lost owned running of
+    Nothing ⇒ False
+    Just lost ⇒
+      case worker_exited owned False lost of
+        Nothing ⇒ False
+        Just terminal ⇒
+          is_just
+            (attach_worker_process
+              launch boot 2000 124 1000 process_name 8 attempt terminal)
+
 main : IO ()
 main =
   case durable_identity "work-1" of
@@ -30,63 +88,201 @@ main =
           case durable_identity "ibworker" of
             Nothing ⇒ pure ()
             Just process_name ⇒
-              case plan_worker work result restartable_bounded_observation 2 of
+              case durable_identity "launch-1" of
                 Nothing ⇒ pure ()
-                Just planned ⇒
-                  case attach_worker_process 123 999 process_name 7 planned of
+                Just launch_one ⇒
+                  case durable_identity "launch-2" of
                     Nothing ⇒ pure ()
-                    Just running ⇒ do
-                      let caller_left = caller_disconnected running
-                      let killed = worker_was_killed caller_left
-                      let authority_lost = worker_authority_was_lost running
-                      let committed = commit_worker_result running
-                      let exited_after_commit = worker_exited True committed
-                      let nonreplayable =
-                            Worker
-                              work
-                              result
-                              nonreplayable_state_change
-                              2
-                              1
-                              worker_failed
-                              Nothing
-                              False
-                      let stale_attachment_rejected =
-                            case attach_worker_process 1 999 process_name 8 planned of
-                              Nothing ⇒ True
-                              Just _ ⇒ False
-                      let attempt_limit =
-                            case attach_worker_process 124 1000 process_name 8 killed of
-                              Nothing ⇒ False
-                              Just second ⇒
-                                case attach_worker_process 125 1001 process_name 9 second of
-                                  Nothing ⇒ True
-                                  Just _ ⇒ False
-                      let attachment_identity =
-                            case running.attachment of
-                              Nothing ⇒ False
-                              Just attachment ⇒
-                                attachment_matches 123 999 process_name attachment
+                    Just launch_two ⇒
+                      case durable_identity "boot-a" of
+                        Nothing ⇒ pure ()
+                        Just boot_a ⇒
+                          case durable_identity "boot-b" of
+                            Nothing ⇒ pure ()
+                            Just boot_b ⇒
+                              case durable_identity "attempt-1" of
+                                Nothing ⇒ pure ()
+                                Just attempt_one ⇒
+                                  case durable_identity "attempt-2" of
+                                    Nothing ⇒ pure ()
+                                    Just attempt_two ⇒
+                                      case plan_worker work result restartable_bounded_observation 2 of
+                                        Nothing ⇒ pure ()
+                                        Just planned ⇒
+                                          case attach_worker_process
+                                            launch_one boot_a 2000 123 999 process_name 7 attempt_one planned of
+                                            Nothing ⇒ pure ()
+                                            Just running ⇒
+                                              case running.attachment of
+                                                Nothing ⇒ pure ()
+                                                Just owned_one ⇒ do
+                                                  let caller_left = caller_disconnected running
+                                                  let running_replacement_rejected =
+                                                        is_nothing
+                                                          (attach_worker_process
+                                                            launch_two boot_a 2000 124 1000 process_name 8
+                                                            attempt_two running)
+                                                  let stale_launch =
+                                                        AttachedProcess launch_two boot_a 2000 123 999
+                                                          process_name 7 attempt_one 1
+                                                  let stale_boot =
+                                                        AttachedProcess launch_one boot_b 2000 123 999
+                                                          process_name 7 attempt_one 1
+                                                  let stale_uid =
+                                                        AttachedProcess launch_one boot_a 2001 123 999
+                                                          process_name 7 attempt_one 1
+                                                  let stale_pid =
+                                                        AttachedProcess launch_one boot_a 2000 124 999
+                                                          process_name 7 attempt_one 1
+                                                  let stale_start =
+                                                        AttachedProcess launch_one boot_a 2000 123 1000
+                                                          process_name 7 attempt_one 1
+                                                  let stale_name =
+                                                        AttachedProcess launch_one boot_a 2000 123 999
+                                                          attempt_two 7 attempt_one 1
+                                                  let stale_generation =
+                                                        AttachedProcess launch_one boot_a 2000 123 999
+                                                          process_name 8 attempt_one 1
+                                                  let stale_attempt =
+                                                        AttachedProcess launch_one boot_a 2000 123 999
+                                                          process_name 7 attempt_two 1
+                                                  let stale_attempt_number =
+                                                        AttachedProcess launch_one boot_a 2000 123 999
+                                                          process_name 7 attempt_one 2
+                                                  let stale_launch_rejected =
+                                                        is_nothing (commit_worker_result stale_launch running)
+                                                  let stale_boot_rejected =
+                                                        is_nothing (commit_worker_result stale_boot running)
+                                                  let stale_uid_rejected =
+                                                        is_nothing (commit_worker_result stale_uid running)
+                                                  let stale_pid_rejected =
+                                                        is_nothing (commit_worker_result stale_pid running)
+                                                  let stale_start_rejected =
+                                                        is_nothing (commit_worker_result stale_start running)
+                                                  let stale_name_rejected =
+                                                        is_nothing (commit_worker_result stale_name running)
+                                                  let stale_generation_rejected =
+                                                        is_nothing (commit_worker_result stale_generation running)
+                                                  let stale_attempt_rejected =
+                                                        is_nothing (commit_worker_result stale_attempt running)
+                                                  let stale_attempt_number_rejected =
+                                                        is_nothing
+                                                          (commit_worker_result stale_attempt_number running)
+                                                  let stale_authority_rejected =
+                                                        is_nothing
+                                                          (worker_authority_was_lost stale_boot running)
+                                                  let ambiguous_completion_rejected =
+                                                        is_nothing
+                                                          (commit_worker_result owned_one planned)
+                                                  let authority_retains_attempt =
+                                                        authority_retains_attempt_check owned_one running
+                                                  let authority_retry_requires_resolution =
+                                                        authority_requires_resolution_before_retry
+                                                          owned_one launch_two boot_a process_name
+                                                          attempt_two running
+                                                  let authority_gone_can_retry =
+                                                        authority_confirmed_gone_can_retry
+                                                          owned_one launch_two boot_a process_name
+                                                          attempt_two running
+                                                  let committed_after_authority_loss =
+                                                        committed_after_authority_loss_check owned_one running
+                                                  let retry_matrix =
+                                                        case worker_was_killed owned_one running of
+                                                          Nothing ⇒ (False, False, False, False)
+                                                          Just killed ⇒
+                                                            case attach_worker_process
+                                                              launch_two boot_a 2000 124 1000 process_name 8
+                                                              attempt_two killed of
+                                                              Nothing ⇒ (False, False, False, False)
+                                                              Just second ⇒
+                                                                case second.attachment of
+                                                                  Nothing ⇒ (False, False, False, False)
+                                                                  Just owned_two ⇒
+                                                                    ( owned_two.attempt_number == 2
+                                                                    , is_nothing
+                                                                        (commit_worker_result owned_one second)
+                                                                    , is_just
+                                                                        (commit_worker_result owned_two second)
+                                                                    , is_auto (recovery_for killed)
+                                                                    )
+                                                  let (attempt_monotone,
+                                                       stale_old_attempt_rejected,
+                                                       current_attempt_commits,
+                                                       killed_restartable) = retry_matrix
+                                                  let nonreplayable =
+                                                        Worker
+                                                          work
+                                                          result
+                                                          nonreplayable_state_change
+                                                          2
+                                                          1
+                                                          worker_failed
+                                                          Nothing
+                                                          False
 
-                      putStrLn
-                        ("worker-caller-independence=" ++
-                          show (same_worker_identity running caller_left))
-                      putStrLn
-                        ("worker-kill-restartable=" ++
-                          show (is_auto (recovery_for killed)))
-                      putStrLn
-                        ("worker-authority-wait=" ++
-                          show (is_wait (recovery_for authority_lost)))
-                      putStrLn
-                        ("worker-committed-no-restart=" ++
-                          show (is_done (recovery_for exited_after_commit)))
-                      putStrLn
-                        ("worker-state-change-manual=" ++
-                          show (is_manual (recovery_for nonreplayable)))
-                      putStrLn
-                        ("worker-stale-attachment-rejected=" ++
-                          show stale_attachment_rejected)
-                      putStrLn
-                        ("worker-attempt-limit=" ++ show attempt_limit)
-                      putStrLn
-                        ("worker-process-identity=" ++ show attachment_identity)
+                                                  putStrLn
+                                                    ("worker-caller-independence=" ++
+                                                      show (same_worker_identity running caller_left))
+                                                  putStrLn
+                                                    ("worker-running-replacement-rejected=" ++
+                                                      show running_replacement_rejected)
+                                                  putStrLn
+                                                    ("worker-stale-launch-rejected=" ++
+                                                      show stale_launch_rejected)
+                                                  putStrLn
+                                                    ("worker-stale-boot-rejected=" ++
+                                                      show stale_boot_rejected)
+                                                  putStrLn
+                                                    ("worker-stale-uid-rejected=" ++
+                                                      show stale_uid_rejected)
+                                                  putStrLn
+                                                    ("worker-stale-pid-rejected=" ++
+                                                      show stale_pid_rejected)
+                                                  putStrLn
+                                                    ("worker-stale-start-rejected=" ++
+                                                      show stale_start_rejected)
+                                                  putStrLn
+                                                    ("worker-stale-name-rejected=" ++
+                                                      show stale_name_rejected)
+                                                  putStrLn
+                                                    ("worker-stale-generation-rejected=" ++
+                                                      show stale_generation_rejected)
+                                                  putStrLn
+                                                    ("worker-stale-attempt-rejected=" ++
+                                                      show stale_attempt_rejected)
+                                                  putStrLn
+                                                    ("worker-stale-attempt-number-rejected=" ++
+                                                      show stale_attempt_number_rejected)
+                                                  putStrLn
+                                                    ("worker-stale-authority-rejected=" ++
+                                                      show stale_authority_rejected)
+                                                  putStrLn
+                                                    ("worker-ambiguous-completion-rejected=" ++
+                                                      show ambiguous_completion_rejected)
+                                                  putStrLn
+                                                    ("worker-authority-retains-attempt=" ++
+                                                      show authority_retains_attempt)
+                                                  putStrLn
+                                                    ("worker-authority-retry-requires-resolution=" ++
+                                                      show authority_retry_requires_resolution)
+                                                  putStrLn
+                                                    ("worker-authority-gone-can-retry=" ++
+                                                      show authority_gone_can_retry)
+                                                  putStrLn
+                                                    ("worker-committed-after-authority-loss=" ++
+                                                      show committed_after_authority_loss)
+                                                  putStrLn
+                                                    ("worker-attempt-monotone=" ++
+                                                      show attempt_monotone)
+                                                  putStrLn
+                                                    ("worker-old-attempt-completion-rejected=" ++
+                                                      show stale_old_attempt_rejected)
+                                                  putStrLn
+                                                    ("worker-current-attempt-commits=" ++
+                                                      show current_attempt_commits)
+                                                  putStrLn
+                                                    ("worker-kill-restartable=" ++
+                                                      show killed_restartable)
+                                                  putStrLn
+                                                    ("worker-state-change-manual=" ++
+                                                      show (is_manual (recovery_for nonreplayable)))

@@ -12,7 +12,7 @@ repository_root=$(CDPATH= cd -- "$script_directory/.." && pwd)
 . "$repository_root/lib/android_longview_worker.grease"
 
 usage() {
-  printf 'usage: %s start WORK_ID RESULT_ID immediate|delayed | status WORK_ID | read RESULT_ID\n' "$0" >&2
+  printf 'usage: %s start WORK RESULT LAUNCH HOST_GEN ATTEMPT ATTEMPT_NO immediate|delayed | status|read|observe WORK RESULT LAUNCH BOOT UID PID START NAME HOST_GEN ATTEMPT ATTEMPT_NO | signal WORK RESULT LAUNCH BOOT UID PID START NAME HOST_GEN ATTEMPT ATTEMPT_NO [SIGNAL]\n' "$0" >&2
 }
 
 command=${1:-}
@@ -24,32 +24,24 @@ shift
 
 case "$command" in
   start)
-    test "$#" -eq 3 || {
-      usage
-      exit 2
-    }
-    ib_longview_worker_start "$1" "$2" "$3"
+    test "$#" -eq 7 || { usage; exit 2; }
+    ib_longview_worker_start "$@"
     ;;
   status)
-    test "$#" -eq 1 || {
-      usage
-      exit 2
-    }
-    ib_longview_worker_status "$1"
+    test "$#" -eq 11 || { usage; exit 2; }
+    ib_longview_worker_status "$@"
     ;;
   read)
-    test "$#" -eq 1 || {
-      usage
-      exit 2
-    }
-    ib_longview_worker_read_result "$1"
+    test "$#" -eq 11 || { usage; exit 2; }
+    ib_longview_worker_read_result "$@"
     ;;
   observe)
-    test "$#" -eq 5 || {
-      usage
-      exit 2
-    }
-    ib_longview_worker_observe "$1" "$2" "$3" "$4" "$5"
+    test "$#" -eq 11 || { usage; exit 2; }
+    ib_longview_worker_observe "$@"
+    ;;
+  signal)
+    if test "$#" -ne 11 && test "$#" -ne 12; then usage; exit 2; fi
+    ib_longview_worker_signal_owned "$@"
     ;;
   *)
     usage

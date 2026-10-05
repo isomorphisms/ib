@@ -6,8 +6,12 @@ import IB.WorkerLifecycle
 import IB.LongViewTask
 import System
 
+request_with_limit : Text → Integer → PublicationRequest
+request_with_limit result byte_limit =
+  RequestedPublication result byte_limit "ordinary" "card-a" "observation-1" "reservation-1"
+
 request : Text → PublicationRequest
-request result = RequestedPublication result 64 "ordinary" "card-a" "observation-1" "reservation-1"
+request result = request_with_limit result 1024
 
 location : PublicationLocation
 location = ObservedPublicationLocation "ordinary" "card-a" "observation-1"
@@ -25,44 +29,125 @@ emit name ledger observed =
 
 publication_reservations_are_bounded : Bool
 publication_reservations_are_bounded =
-  case publication_for (Ledger measured_writable (Just 200) 100 0) (request "first") location of
+  case publication_for
+    (Ledger measured_writable (Just 200) 100 0)
+    (request_with_limit "first" 64)
+    location of
     Nothing ⇒ False
     Just first ⇒
-      case publication_for first.reserved_ledger (request "second") location of
+      case publication_for
+        first.reserved_ledger
+        (request_with_limit "second" 64)
+        location of
         Nothing ⇒ True
         Just _ ⇒ False
 
+owned_worker_completion : Bool
+owned_worker_completion =
+  case durable_identity "work-1" of
+    Nothing ⇒ False
+    Just work ⇒
+      case durable_identity "result-1" of
+        Nothing ⇒ False
+        Just result ⇒
+          case durable_identity "launch-1" of
+            Nothing ⇒ False
+            Just launch ⇒
+              case durable_identity "boot-a" of
+                Nothing ⇒ False
+                Just boot_a ⇒
+                  case durable_identity "boot-b" of
+                    Nothing ⇒ False
+                    Just boot_b ⇒
+                      case durable_identity "ibworker" of
+                        Nothing ⇒ False
+                        Just process_name ⇒
+                          case durable_identity "attempt-1" of
+                            Nothing ⇒ False
+                            Just attempt ⇒
+                              case plan_worker work result restartable_bounded_observation 2 of
+                                Nothing ⇒ False
+                                Just task ⇒
+                                  case attach_worker_process
+                                    launch boot_a 2000 123 999 process_name 7 attempt task of
+                                    Nothing ⇒ False
+                                    Just running ⇒
+                                      case running.attachment of
+                                        Nothing ⇒ False
+                                        Just owned ⇒
+                                          let stale =
+                                                AttachedProcess launch boot_b 2000 123 999
+                                                  process_name 7 attempt 1 in
+                                          case commit_worker_result stale running of
+                                            Just _ ⇒ False
+                                            Nothing ⇒
+                                              case commit_worker_result owned running of
+                                                Nothing ⇒ False
+                                                Just committed ⇒ committed.committed_result
+
 committed_survives_authority_loss : Bool
 committed_survives_authority_loss =
-  case (durable_identity "work-1", durable_identity "result-1") of
-    (Just work, Just result) ⇒
-      case plan_worker work result restartable_bounded_observation 2 of
+  case durable_identity "work-2" of
+    Nothing ⇒ False
+    Just work ⇒
+      case durable_identity "result-2" of
         Nothing ⇒ False
-        Just task ⇒
-          let lost = worker_authority_was_lost (commit_worker_result task) in
-          lost.committed_result &&
-          case recovery_for lost of
-            no_restart_needed ⇒ True
-            _ ⇒ False
-    _ ⇒ False
+        Just result ⇒
+          case durable_identity "launch-2" of
+            Nothing ⇒ False
+            Just launch ⇒
+              case durable_identity "boot-a" of
+                Nothing ⇒ False
+                Just boot ⇒
+                  case durable_identity "ibworker" of
+                    Nothing ⇒ False
+                    Just process_name ⇒
+                      case durable_identity "attempt-1" of
+                        Nothing ⇒ False
+                        Just attempt ⇒
+                          case plan_worker work result restartable_bounded_observation 2 of
+                            Nothing ⇒ False
+                            Just task ⇒
+                              case attach_worker_process
+                                launch boot 2000 124 1000 process_name 7 attempt task of
+                                Nothing ⇒ False
+                                Just running ⇒
+                                  case running.attachment of
+                                    Nothing ⇒ False
+                                    Just owned ⇒
+                                      case commit_worker_result owned running of
+                                        Nothing ⇒ False
+                                        Just committed ⇒
+                                          case worker_authority_was_lost owned committed of
+                                            Nothing ⇒ False
+                                            Just lost ⇒
+                                              if lost.committed_result
+                                                then
+                                                  case recovery_for lost of
+                                                    no_restart_needed ⇒ True
+                                                    _ ⇒ False
+                                                else False
 
 acceptance : IO ()
 acceptance = do
-  emit "allowed" (Ledger measured_writable (Just 1000) 100 0) location
+  emit "allowed" (Ledger measured_writable (Just 5000) 100 0) location
   emit "unknown" (Ledger capacity_unknown Nothing 100 0) location
   emit "stale" (Ledger observation_stale (Just 1000) 100 0) location
   emit "denied" (Ledger writer_denied (Just 1000) 100 0) location
   emit "read-only" (Ledger writer_read_only (Just 1000) 100 0) location
   emit "absent" (Ledger volume_absent Nothing 100 0) location
-  emit "backend-mismatch" (Ledger measured_writable (Just 1000) 100 0)
+  emit "backend-mismatch" (Ledger measured_writable (Just 5000) 100 0)
     (ObservedPublicationLocation "other" "card-a" "observation-1")
-  emit "media-mismatch" (Ledger measured_writable (Just 1000) 100 0)
+  emit "media-mismatch" (Ledger measured_writable (Just 5000) 100 0)
     (ObservedPublicationLocation "ordinary" "card-b" "observation-1")
-  emit "stale-identity" (Ledger measured_writable (Just 1000) 100 0)
+  emit "stale-identity" (Ledger measured_writable (Just 5000) 100 0)
     (ObservedPublicationLocation "ordinary" "card-a" "observation-2")
+  putStrLn ("worker-completion-bound\t" ++ show owned_worker_completion)
   putStrLn ("committed-after-authority-loss\t" ++ show committed_survives_authority_loss)
   putStrLn ("publication-reservation-concurrent\t" ++ show publication_reservations_are_bounded)
-  if committed_survives_authority_loss && publication_reservations_are_bounded
+  if owned_worker_completion &&
+     committed_survives_authority_loss &&
+     publication_reservations_are_bounded
     then pure () else exitFailure
 
 main : IO ()
@@ -70,6 +155,6 @@ main = do
   arguments ← getArgs
   case arguments of
     [_ , "fail-after-action"] ⇒ do
-      emit "allowed" (Ledger measured_writable (Just 1000) 100 0) location
+      emit "allowed" (Ledger measured_writable (Just 5000) 100 0) location
       exitWith (ExitFailure 37)
     _ ⇒ acceptance

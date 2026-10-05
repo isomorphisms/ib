@@ -1,6 +1,10 @@
 # Grease/POSIX-shell Shizuku provider for Binder worker operations.
 # This file owns the current rish/shell lowering. Longview must not source it
 # directly; platform assembly loads it below android_binder_host.grease.
+#
+# Worker mutation is bound to one exact attempt record:
+# launch, boot, uid, pid, process-start, process name, host generation,
+# attempt identity, monotone attempt number, and result identity.
 
 ib_shizuku_worker_validate_atom() {
   if test "$#" -ne 1; then
@@ -13,17 +17,41 @@ ib_shizuku_worker_validate_atom() {
   esac
 }
 
+ib_shizuku_worker_validate_decimal() {
+  if test "$#" -ne 1; then
+    return 2
+  fi
+  case "$1" in
+    ''|*[!0-9]*)
+      return 2
+      ;;
+  esac
+}
+
+ib_shizuku_worker_validate_positive_decimal() {
+  ib_shizuku_worker_validate_decimal "$1" || return 2
+  test "$1" -gt 0 || return 2
+}
+
 ib_shizuku_worker_start() {
-  if test "$#" -ne 3; then
-    printf '%s\n' 'ib_shizuku_worker_start expects WORK_ID RESULT_ID immediate|delayed' >&2
+  if test "$#" -ne 7; then
+    printf '%s\n' 'ib_shizuku_worker_start expects WORK_ID RESULT_ID LAUNCH_ID HOST_GENERATION ATTEMPT_ID ATTEMPT_NUMBER immediate|delayed' >&2
     return 2
   fi
 
   work_id=$1
   result_id=$2
-  mode=$3
+  launch_id=$3
+  host_generation=$4
+  attempt_id=$5
+  attempt_number=$6
+  mode=$7
   ib_shizuku_worker_validate_atom "$work_id" || return 2
   ib_shizuku_worker_validate_atom "$result_id" || return 2
+  ib_shizuku_worker_validate_atom "$launch_id" || return 2
+  ib_shizuku_worker_validate_decimal "$host_generation" || return 2
+  ib_shizuku_worker_validate_atom "$attempt_id" || return 2
+  ib_shizuku_worker_validate_positive_decimal "$attempt_number" || return 2
 
   case "$mode" in
     immediate) delay=0 ;;
@@ -34,14 +62,18 @@ ib_shizuku_worker_start() {
       ;;
   esac
 
-  # All interpolated values above are restricted atoms or one selected numeric
-  # literal. The worker program itself is fixed, reviewed command text.
-  command_text="# IB_LONGVIEW_WORKER_START_V1
+  # All interpolated values above are restricted atoms or decimal integers.
+  # The attempt lock serializes start decisions for one durable work identity.
+  command_text="# IB_LONGVIEW_WORKER_START_V2
 set -eu
 root=/data/local/tmp/ib-longview-fixture-v1
 backend=android-shizuku-shell-v1
 work=$work_id
 result=$result_id
+launch=$launch_id
+host_generation=$host_generation
+attempt_id=$attempt_id
+attempt_number=$attempt_number
 delay=$delay
 umask 077
 mkdir -p \"\$root/.ib-staging\" \"\$root/objects\" \"\$root/work\"
@@ -54,25 +86,96 @@ else
   mv \"\$marker.tmp.\$\$\" \"\$marker\"
   sync
 fi
+lock=\"\$root/work/\$work.launch-lock\"
+mkdir \"\$lock\" 2>/dev/null || exit 71
+trap 'rmdir \"\$lock\" 2>/dev/null || :' EXIT HUP INT TERM
 status=\"\$root/work/\$work.status\"
+attempt_file=\"\$root/work/\$work.attempt\"
+if test -f \"\$status\"; then
+  old_status=\$(cat \"\$status\")
+  test \"\$old_status\" != running || exit 71
+  test \"\$old_status\" != committed || exit 73
+fi
+if test -f \"\$attempt_file\"; then
+  previous_attempt=\$(cut -f10 \"\$attempt_file\")
+  case \"\$previous_attempt\" in ''|*[!0-9]*) exit 72 ;; esac
+  test \"\$attempt_number\" -gt \"\$previous_attempt\" || exit 72
+fi
+boot=\$(tr -d '\\r\\n' </proc/sys/kernel/random/boot_id) || exit 44
+uid=\$(id -u) || exit 44
+case \"\$boot\" in ''|*[!A-Za-z0-9._-]*) exit 44 ;; esac
+case \"\$uid\" in ''|*[!0-9]*) exit 44 ;; esac
 printf 'running\\n' >\"\$status\"
+gate=\"\$root/work/\$work.gate.\$attempt_number\"
+rm -f \"\$gate\"
 (
   trap '' HUP
+  waits=0
+  while ! test -f \"\$gate\"; do
+    waits=\$((waits + 1))
+    test \"\$waits\" -le 100 || exit 74
+    sleep 0.01
+  done
+  tab=\$(printf '\\t')
+  IFS=\"\$tab\" read -r record rec_launch rec_boot rec_uid rec_pid rec_start rec_name rec_host rec_attempt rec_number rec_result <\"\$attempt_file\"
+  test \"\$record\" = attempt || exit 72
+  test \"\$rec_launch\" = \"\$launch\" || exit 72
+  test \"\$rec_boot\" = \"\$boot\" || exit 72
+  test \"\$rec_uid\" = \"\$uid\" || exit 72
+  test \"\$rec_host\" = \"\$host_generation\" || exit 72
+  test \"\$rec_attempt\" = \"\$attempt_id\" || exit 72
+  test \"\$rec_number\" = \"\$attempt_number\" || exit 72
+  test \"\$rec_result\" = \"\$result\" || exit 72
+  expected_attempt=\$(printf 'attempt\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s' \
+    \"\$rec_launch\" \"\$rec_boot\" \"\$rec_uid\" \"\$rec_pid\" \"\$rec_start\" \"\$rec_name\" \
+    \"\$rec_host\" \"\$rec_attempt\" \"\$rec_number\" \"\$rec_result\")
   if test \"\$delay\" -gt 0; then sleep \"\$delay\"; fi
+
+  # Completion shares the short control lock with start and owned signal.
+  completion_waits=0
+  until mkdir \"\$lock\" 2>/dev/null; do
+    completion_waits=\$((completion_waits + 1))
+    test \"\$completion_waits\" -le 100 || exit 74
+    sleep 0.01
+  done
+  trap 'rmdir \"\$lock\" 2>/dev/null || :' EXIT INT TERM
+  test \"\$(cat \"\$attempt_file\")\" = \"\$expected_attempt\" || exit 72
+  test \"\$(cat \"\$status\")\" = running || exit 72
+
   tmp=\"\$root/.ib-staging/\$result.\$\$.tmp\"
   final=\"\$root/objects/\$result\"
   {
-    printf 'schema\\tib-longview-worker-result-v1\\n'
+    printf 'schema\\tib-longview-worker-result-v2\\n'
     printf 'work_id\\t%s\\n' \"\$work\"
     printf 'result_id\\t%s\\n' \"\$result\"
+    printf 'launch_id\\t%s\\n' \"\$rec_launch\"
+    printf 'boot_id\\t%s\\n' \"\$rec_boot\"
+    printf 'uid\\t%s\\n' \"\$rec_uid\"
+    printf 'pid\\t%s\\n' \"\$rec_pid\"
+    printf 'start_ticks\\t%s\\n' \"\$rec_start\"
+    printf 'process_name\\t%s\\n' \"\$rec_name\"
+    printf 'host_generation\\t%s\\n' \"\$rec_host\"
+    printf 'attempt_id\\t%s\\n' \"\$rec_attempt\"
+    printf 'attempt_number\\t%s\\n' \"\$rec_number\"
     printf 'value\\tdeterministic-ok\\n'
   } >\"\$tmp\"
   bytes=\$(wc -c <\"\$tmp\" | tr -d '[:space:]')
-  test \"\$bytes\" -le 256 || {
+  test \"\$bytes\" -le 1024 || {
     rm -f \"\$tmp\"
     printf 'failed:result-limit\\n' >\"\$status\"
     exit 69
   }
+
+  # Re-check while holding the same lock immediately before publication.
+  test \"\$(cat \"\$attempt_file\")\" = \"\$expected_attempt\" || {
+    rm -f \"\$tmp\"
+    exit 72
+  }
+  test \"\$(cat \"\$status\")\" = running || {
+    rm -f \"\$tmp\"
+    exit 72
+  }
+
   if test -e \"\$final\"; then
     if cmp -s \"\$tmp\" \"\$final\"; then
       rm -f \"\$tmp\"
@@ -87,107 +190,179 @@ printf 'running\\n' >\"\$status\"
     sync
   fi
   printf 'committed\\n' >\"\$status\"
+  rmdir \"\$lock\"
+  trap - EXIT INT TERM
 ) </dev/null >/dev/null 2>&1 &
 pid=\$!
 stat=/proc/\$pid/stat
 comm=/proc/\$pid/comm
-test -r \"\$stat\" && test -r \"\$comm\" || exit 44
+test -r \"\$stat\" && test -r \"\$comm\" || {
+  kill \"\$pid\" 2>/dev/null || :
+  printf 'failed:identity\\n' >\"\$status\"
+  exit 44
+}
 tail=\$(sed 's/^[0-9][0-9]* (.*) //' \"\$stat\") || exit 44
 start=\$(printf '%s\\n' \"\$tail\" | awk '{print \$20}')
 name=\$(tr -d '\\r\\n' <\"\$comm\")
 test -n \"\$start\" && test -n \"\$name\" || exit 44
-printf 'worker\\t%s\\t%s\\t%s\\n' \"\$pid\" \"\$start\" \"\$name\""
+attempt_tmp=\"\$attempt_file.tmp.\$\$\"
+printf 'attempt\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\n' \
+  \"\$launch\" \"\$boot\" \"\$uid\" \"\$pid\" \"\$start\" \"\$name\" \
+  \"\$host_generation\" \"\$attempt_id\" \"\$attempt_number\" \"\$result\" >\"\$attempt_tmp\"
+sync
+mv \"\$attempt_tmp\" \"\$attempt_file\"
+: >\"\$gate\"
+sync
+printf 'worker\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\n' \
+  \"\$launch\" \"\$boot\" \"\$uid\" \"\$pid\" \"\$start\" \"\$name\" \
+  \"\$host_generation\" \"\$attempt_id\" \"\$attempt_number\""
 
   ib_shizuku_run_bounded 5 "$command_text"
 }
 
-ib_shizuku_worker_status() {
-  if test "$#" -ne 1; then
-    printf '%s\n' 'ib_shizuku_worker_status expects WORK_ID' >&2
+ib_shizuku_worker_validate_attempt_args() {
+  if test "$#" -ne 11; then
     return 2
   fi
-  work_id=$1
-  ib_shizuku_worker_validate_atom "$work_id" || return 2
+  ib_shizuku_worker_validate_atom "$1" || return 2
+  ib_shizuku_worker_validate_atom "$2" || return 2
+  ib_shizuku_worker_validate_atom "$3" || return 2
+  ib_shizuku_worker_validate_atom "$4" || return 2
+  ib_shizuku_worker_validate_decimal "$5" || return 2
+  ib_shizuku_validate_pid "$6" || return 2
+  ib_shizuku_validate_start_ticks "$7" || return 2
+  ib_shizuku_validate_process_name "$8" || return 2
+  ib_shizuku_worker_validate_decimal "$9" || return 2
+  ib_shizuku_worker_validate_atom "${10}" || return 2
+  ib_shizuku_worker_validate_positive_decimal "${11}" || return 2
+}
 
-  command_text="# IB_LONGVIEW_WORKER_STATUS_V1
-set -eu
+ib_shizuku_worker_attempt_command_prefix() {
+  work_id=$1
+  result_id=$2
+  launch_id=$3
+  boot_id=$4
+  uid=$5
+  pid=$6
+  start_ticks=$7
+  process_name=$8
+  host_generation=$9
+  attempt_id=${10}
+  attempt_number=${11}
+  cat <<EOF
 root=/data/local/tmp/ib-longview-fixture-v1
 backend=android-shizuku-shell-v1
 work=$work_id
-marker=\"\$root/.ib-backend-id\"
-test -f \"\$marker\" || exit 67
-test \"\$(cat \"\$marker\")\" = \"\$backend\" || exit 67
+result=$result_id
+launch=$launch_id
+expected_boot=$boot_id
+expected_uid=$uid
+pid=$pid
+expected_start=$start_ticks
+expected_name=$process_name
+host_generation=$host_generation
+attempt_id=$attempt_id
+attempt_number=$attempt_number
+marker="\$root/.ib-backend-id"
+test -f "\$marker" || exit 67
+test "\$(cat "\$marker")" = "\$backend" || exit 67
+attempt_file="\$root/work/\$work.attempt"
+test -f "\$attempt_file" || exit 68
+expected_attempt=\$(printf 'attempt\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s' \
+  "\$launch" "\$expected_boot" "\$expected_uid" "\$pid" "\$expected_start" "\$expected_name" \
+  "\$host_generation" "\$attempt_id" "\$attempt_number" "\$result")
+test "\$(cat "\$attempt_file")" = "\$expected_attempt" || exit 72
+EOF
+}
+
+ib_shizuku_worker_live_guard_suffix() {
+  cat <<'EOF'
+current_boot=$(tr -d '\r\n' </proc/sys/kernel/random/boot_id) || exit 44
+current_uid=$(id -u) || exit 44
+test "$current_boot" = "$expected_boot" || exit 72
+test "$current_uid" = "$expected_uid" || exit 72
+EOF
+}
+
+ib_shizuku_worker_status() {
+  ib_shizuku_worker_validate_attempt_args "$@" || {
+    printf '%s\n' 'ib_shizuku_worker_status expects WORK_ID RESULT_ID LAUNCH_ID BOOT_ID UID PID START_TICKS PROCESS_NAME HOST_GENERATION ATTEMPT_ID ATTEMPT_NUMBER' >&2
+    return 2
+  }
+  prefix=$(ib_shizuku_worker_attempt_command_prefix "$@") || return 2
+  live_guard=$(ib_shizuku_worker_live_guard_suffix) || return 2
+  command_text="# IB_LONGVIEW_WORKER_STATUS_V2
+set -eu
+$prefix
 status=\"\$root/work/\$work.status\"
 test -f \"\$status\" || exit 68
 bytes=\$(wc -c <\"\$status\" | tr -d '[:space:]')
 test \"\$bytes\" -le 64 || exit 69
-cat \"\$status\""
+state=\$(cat \"\$status\")
+if test \"\$state\" = running; then
+$live_guard
+fi
+printf '%s\\n' \"\$state\""
   ib_shizuku_run_bounded 5 "$command_text"
 }
 
 ib_shizuku_worker_read_result() {
-  if test "$#" -ne 1; then
-    printf '%s\n' 'ib_shizuku_worker_read_result expects RESULT_ID' >&2
+  ib_shizuku_worker_validate_attempt_args "$@" || {
+    printf '%s\n' 'ib_shizuku_worker_read_result expects the exact 11-field worker attempt identity' >&2
     return 2
-  fi
-  result_id=$1
-  ib_shizuku_worker_validate_atom "$result_id" || return 2
-
-  command_text="# IB_LONGVIEW_WORKER_READ_V1
+  }
+  prefix=$(ib_shizuku_worker_attempt_command_prefix "$@") || return 2
+  command_text="# IB_LONGVIEW_WORKER_READ_V2
 set -eu
-root=/data/local/tmp/ib-longview-fixture-v1
-backend=android-shizuku-shell-v1
-result=$result_id
-marker=\"\$root/.ib-backend-id\"
-test -f \"\$marker\" || exit 67
-test \"\$(cat \"\$marker\")\" = \"\$backend\" || exit 67
+$prefix
 final=\"\$root/objects/\$result\"
 test -f \"\$final\" || exit 68
 bytes=\$(wc -c <\"\$final\" | tr -d '[:space:]')
-test \"\$bytes\" -le 256 || exit 69
+test \"\$bytes\" -le 1024 || exit 69
+grep -F -x \"\$(printf 'work_id\\t%s' \"\$work\")\" \"\$final\" >/dev/null || exit 70
+grep -F -x \"\$(printf 'result_id\\t%s' \"\$result\")\" \"\$final\" >/dev/null || exit 70
+grep -F -x \"\$(printf 'launch_id\\t%s' \"\$launch\")\" \"\$final\" >/dev/null || exit 72
+grep -F -x \"\$(printf 'boot_id\\t%s' \"\$expected_boot\")\" \"\$final\" >/dev/null || exit 72
+grep -F -x \"\$(printf 'uid\\t%s' \"\$expected_uid\")\" \"\$final\" >/dev/null || exit 72
+grep -F -x \"\$(printf 'pid\\t%s' \"\$pid\")\" \"\$final\" >/dev/null || exit 72
+grep -F -x \"\$(printf 'start_ticks\\t%s' \"\$expected_start\")\" \"\$final\" >/dev/null || exit 72
+grep -F -x \"\$(printf 'process_name\\t%s' \"\$expected_name\")\" \"\$final\" >/dev/null || exit 72
+grep -F -x \"\$(printf 'host_generation\\t%s' \"\$host_generation\")\" \"\$final\" >/dev/null || exit 72
+grep -F -x \"\$(printf 'attempt_id\\t%s' \"\$attempt_id\")\" \"\$final\" >/dev/null || exit 72
+grep -F -x \"\$(printf 'attempt_number\\t%s' \"\$attempt_number\")\" \"\$final\" >/dev/null || exit 72
 cat \"\$final\""
   ib_shizuku_run_bounded 5 "$command_text"
 }
 
-
 ib_shizuku_worker_observe() {
-  if test "$#" -ne 5; then
-    printf '%s\n' 'ib_shizuku_worker_observe expects WORK_ID RESULT_ID PID START_TICKS PROCESS_NAME' >&2
+  ib_shizuku_worker_validate_attempt_args "$@" || {
+    printf '%s\n' 'ib_shizuku_worker_observe expects the exact 11-field worker attempt identity' >&2
     return 2
-  fi
-  work_id=$1
-  result_id=$2
-  pid=$3
-  start_ticks=$4
-  process_name=$5
-
-  ib_shizuku_worker_validate_atom "$work_id" || return 2
-  ib_shizuku_worker_validate_atom "$result_id" || return 2
-  ib_shizuku_validate_pid "$pid" || return 2
-  ib_shizuku_validate_start_ticks "$start_ticks" || return 2
-  ib_shizuku_validate_process_name "$process_name" || return 2
-
-  command_text="# IB_LONGVIEW_WORKER_OBSERVE_V1
+  }
+  prefix=$(ib_shizuku_worker_attempt_command_prefix "$@") || return 2
+  live_guard=$(ib_shizuku_worker_live_guard_suffix) || return 2
+  command_text="# IB_LONGVIEW_WORKER_OBSERVE_V2
 set -eu
-root=/data/local/tmp/ib-longview-fixture-v1
-backend=android-shizuku-shell-v1
-work=$work_id
-result=$result_id
-pid=$pid
-expected_start=$start_ticks
-expected_name=$process_name
-marker=\"\$root/.ib-backend-id\"
-test -f \"\$marker\" || exit 67
-test \"\$(cat \"\$marker\")\" = \"\$backend\" || exit 67
+$prefix
 final=\"\$root/objects/\$result\"
 if test -f \"\$final\"; then
   bytes=\$(wc -c <\"\$final\" | tr -d '[:space:]')
-  test \"\$bytes\" -le 256 || exit 69
+  test \"\$bytes\" -le 1024 || exit 69
   grep -F -x \"\$(printf 'work_id\\t%s' \"\$work\")\" \"\$final\" >/dev/null || exit 70
   grep -F -x \"\$(printf 'result_id\\t%s' \"\$result\")\" \"\$final\" >/dev/null || exit 70
+  grep -F -x \"\$(printf 'launch_id\\t%s' \"\$launch\")\" \"\$final\" >/dev/null || exit 72
+  grep -F -x \"\$(printf 'boot_id\\t%s' \"\$expected_boot\")\" \"\$final\" >/dev/null || exit 72
+  grep -F -x \"\$(printf 'uid\\t%s' \"\$expected_uid\")\" \"\$final\" >/dev/null || exit 72
+  grep -F -x \"\$(printf 'pid\\t%s' \"\$pid\")\" \"\$final\" >/dev/null || exit 72
+  grep -F -x \"\$(printf 'start_ticks\\t%s' \"\$expected_start\")\" \"\$final\" >/dev/null || exit 72
+  grep -F -x \"\$(printf 'process_name\\t%s' \"\$expected_name\")\" \"\$final\" >/dev/null || exit 72
+  grep -F -x \"\$(printf 'host_generation\\t%s' \"\$host_generation\")\" \"\$final\" >/dev/null || exit 72
+  grep -F -x \"\$(printf 'attempt_id\\t%s' \"\$attempt_id\")\" \"\$final\" >/dev/null || exit 72
+  grep -F -x \"\$(printf 'attempt_number\\t%s' \"\$attempt_number\")\" \"\$final\" >/dev/null || exit 72
   printf 'committed\\n'
   exit 0
 fi
+$live_guard
 stat=/proc/\$pid/stat
 comm=/proc/\$pid/comm
 if test -r \"\$stat\" && test -r \"\$comm\"; then
@@ -203,5 +378,53 @@ if test -r \"\$stat\" && test -r \"\$comm\"; then
 else
   printf 'gone-uncommitted\\n'
 fi"
+  ib_shizuku_run_bounded 5 "$command_text"
+}
+
+ib_shizuku_worker_signal_owned() {
+  if test "$#" -lt 11 || test "$#" -gt 12; then
+    printf '%s\n' 'ib_shizuku_worker_signal_owned expects exact 11-field worker attempt identity and optional SIGNAL' >&2
+    return 2
+  fi
+  signal=TERM
+  if test "$#" -eq 12; then
+    signal=${12}
+  fi
+  ib_shizuku_worker_validate_attempt_args "${1}" "${2}" "${3}" "${4}" "${5}" "${6}" "${7}" "${8}" "${9}" "${10}" "${11}" || return 2
+  case "$signal" in
+    ''|*[!A-Za-z0-9]*)
+      return 2
+      ;;
+  esac
+  prefix=$(ib_shizuku_worker_attempt_command_prefix "${1}" "${2}" "${3}" "${4}" "${5}" "${6}" "${7}" "${8}" "${9}" "${10}" "${11}") || return 2
+  live_guard=$(ib_shizuku_worker_live_guard_suffix) || return 2
+  command_text="# IB_LONGVIEW_WORKER_SIGNAL_V2
+set -eu
+$prefix
+$live_guard
+lock=\"\$root/work/\$work.launch-lock\"
+signal_waits=0
+until mkdir \"\$lock\" 2>/dev/null; do
+  signal_waits=\$((signal_waits + 1))
+  test \"\$signal_waits\" -le 100 || exit 74
+  sleep 0.01
+done
+trap 'rmdir \"\$lock\" 2>/dev/null || :' EXIT INT TERM
+test \"\$(cat \"\$attempt_file\")\" = \"\$expected_attempt\" || exit 72
+status=\"\$root/work/\$work.status\"
+test -f \"\$status\" || exit 68
+test \"\$(cat \"\$status\")\" = running || exit 72
+stat=/proc/\$pid/stat
+comm=/proc/\$pid/comm
+test -r \"\$stat\" && test -r \"\$comm\" || exit 44
+tail=\$(sed 's/^[0-9][0-9]* (.*) //' \"\$stat\") || exit 44
+observed_start=\$(printf '%s\\n' \"\$tail\" | awk '{print \$20}')
+observed_name=\$(tr -d '\\r\\n' <\"\$comm\")
+test \"\$observed_start\" = \"\$expected_start\" || exit 45
+test \"\$observed_name\" = \"\$expected_name\" || exit 46
+kill -$signal \"\$pid\"
+printf 'killed\\n' >\"\$status\"
+rmdir \"\$lock\"
+trap - EXIT INT TERM"
   ib_shizuku_run_bounded 5 "$command_text"
 }
