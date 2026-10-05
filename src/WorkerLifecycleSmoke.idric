@@ -93,6 +93,9 @@ main =
                                                   let stale_start =
                                                         AttachedProcess launch_one boot_a 2000 123 1000
                                                           process_name 7 attempt_one 1
+                                                  let stale_name =
+                                                        AttachedProcess launch_one boot_a 2000 123 999
+                                                          attempt_two 7 attempt_one 1
                                                   let stale_generation =
                                                         AttachedProcess launch_one boot_a 2000 123 999
                                                           process_name 8 attempt_one 1
@@ -112,6 +115,8 @@ main =
                                                         is_nothing (commit_worker_result stale_pid running)
                                                   let stale_start_rejected =
                                                         is_nothing (commit_worker_result stale_start running)
+                                                  let stale_name_rejected =
+                                                        is_nothing (commit_worker_result stale_name running)
                                                   let stale_generation_rejected =
                                                         is_nothing (commit_worker_result stale_generation running)
                                                   let stale_attempt_rejected =
@@ -122,6 +127,9 @@ main =
                                                   let stale_authority_rejected =
                                                         is_nothing
                                                           (worker_authority_was_lost stale_boot running)
+                                                  let ambiguous_completion_rejected =
+                                                        is_nothing
+                                                          (commit_worker_result owned_one planned)
                                                   let authority_lost =
                                                         worker_authority_was_lost owned_one running
                                                   let authority_retains_attempt =
@@ -198,6 +206,9 @@ main =
                                                     ("worker-stale-start-rejected=" ++
                                                       show stale_start_rejected)
                                                   putStrLn
+                                                    ("worker-stale-name-rejected=" ++
+                                                      show stale_name_rejected)
+                                                  putStrLn
                                                     ("worker-stale-generation-rejected=" ++
                                                       show stale_generation_rejected)
                                                   putStrLn
@@ -209,6 +220,9 @@ main =
                                                   putStrLn
                                                     ("worker-stale-authority-rejected=" ++
                                                       show stale_authority_rejected)
+                                                  putStrLn
+                                                    ("worker-ambiguous-completion-rejected=" ++
+                                                      show ambiguous_completion_rejected)
                                                   putStrLn
                                                     ("worker-authority-retains-attempt=" ++
                                                       show authority_retains_attempt)
