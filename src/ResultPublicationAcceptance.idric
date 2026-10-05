@@ -34,64 +34,89 @@ publication_reservations_are_bounded =
 
 owned_worker_completion : Bool
 owned_worker_completion =
-  case ( durable_identity "work-1"
-       , durable_identity "result-1"
-       , durable_identity "launch-1"
-       , durable_identity "boot-a"
-       , durable_identity "boot-b"
-       , durable_identity "ibworker"
-       , durable_identity "attempt-1"
-       ) of
-    (Just work, Just result, Just launch, Just boot_a, Just boot_b, Just process_name, Just attempt) ⇒
-      case plan_worker work result restartable_bounded_observation 2 of
+  case durable_identity "work-1" of
+    Nothing ⇒ False
+    Just work ⇒
+      case durable_identity "result-1" of
         Nothing ⇒ False
-        Just task ⇒
-          case attach_worker_process launch boot_a 2000 123 999 process_name 7 attempt task of
+        Just result ⇒
+          case durable_identity "launch-1" of
             Nothing ⇒ False
-            Just running ⇒
-              case running.attachment of
+            Just launch ⇒
+              case durable_identity "boot-a" of
                 Nothing ⇒ False
-                Just owned ⇒
-                  let stale =
-                        AttachedProcess launch boot_b 2000 123 999 process_name 7 attempt 1 in
-                  case commit_worker_result stale running of
-                    Just _ ⇒ False
-                    Nothing ⇒
-                      case commit_worker_result owned running of
+                Just boot_a ⇒
+                  case durable_identity "boot-b" of
+                    Nothing ⇒ False
+                    Just boot_b ⇒
+                      case durable_identity "ibworker" of
                         Nothing ⇒ False
-                        Just committed ⇒ committed.committed_result
-    _ ⇒ False
+                        Just process_name ⇒
+                          case durable_identity "attempt-1" of
+                            Nothing ⇒ False
+                            Just attempt ⇒
+                              case plan_worker work result restartable_bounded_observation 2 of
+                                Nothing ⇒ False
+                                Just task ⇒
+                                  case attach_worker_process
+                                    launch boot_a 2000 123 999 process_name 7 attempt task of
+                                    Nothing ⇒ False
+                                    Just running ⇒
+                                      case running.attachment of
+                                        Nothing ⇒ False
+                                        Just owned ⇒
+                                          let stale =
+                                                AttachedProcess launch boot_b 2000 123 999
+                                                  process_name 7 attempt 1 in
+                                          case commit_worker_result stale running of
+                                            Just _ ⇒ False
+                                            Nothing ⇒
+                                              case commit_worker_result owned running of
+                                                Nothing ⇒ False
+                                                Just committed ⇒ committed.committed_result
 
 committed_survives_authority_loss : Bool
 committed_survives_authority_loss =
-  case ( durable_identity "work-2"
-       , durable_identity "result-2"
-       , durable_identity "launch-2"
-       , durable_identity "boot-a"
-       , durable_identity "ibworker"
-       , durable_identity "attempt-1"
-       ) of
-    (Just work, Just result, Just launch, Just boot, Just process_name, Just attempt) ⇒
-      case plan_worker work result restartable_bounded_observation 2 of
+  case durable_identity "work-2" of
+    Nothing ⇒ False
+    Just work ⇒
+      case durable_identity "result-2" of
         Nothing ⇒ False
-        Just task ⇒
-          case attach_worker_process launch boot 2000 124 1000 process_name 7 attempt task of
+        Just result ⇒
+          case durable_identity "launch-2" of
             Nothing ⇒ False
-            Just running ⇒
-              case running.attachment of
+            Just launch ⇒
+              case durable_identity "boot-a" of
                 Nothing ⇒ False
-                Just owned ⇒
-                  case commit_worker_result owned running of
+                Just boot ⇒
+                  case durable_identity "ibworker" of
                     Nothing ⇒ False
-                    Just committed ⇒
-                      case worker_authority_was_lost owned committed of
+                    Just process_name ⇒
+                      case durable_identity "attempt-1" of
                         Nothing ⇒ False
-                        Just lost ⇒
-                          lost.committed_result &&
-                          case recovery_for lost of
-                            no_restart_needed ⇒ True
-                            _ ⇒ False
-    _ ⇒ False
+                        Just attempt ⇒
+                          case plan_worker work result restartable_bounded_observation 2 of
+                            Nothing ⇒ False
+                            Just task ⇒
+                              case attach_worker_process
+                                launch boot 2000 124 1000 process_name 7 attempt task of
+                                Nothing ⇒ False
+                                Just running ⇒
+                                  case running.attachment of
+                                    Nothing ⇒ False
+                                    Just owned ⇒
+                                      case commit_worker_result owned running of
+                                        Nothing ⇒ False
+                                        Just committed ⇒
+                                          case worker_authority_was_lost owned committed of
+                                            Nothing ⇒ False
+                                            Just lost ⇒
+                                              if lost.committed_result
+                                                then
+                                                  case recovery_for lost of
+                                                    no_restart_needed ⇒ True
+                                                    _ ⇒ False
+                                                else False
 
 acceptance : IO ()
 acceptance = do
