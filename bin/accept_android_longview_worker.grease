@@ -28,62 +28,97 @@ source_head=$(git -C "$repository_root" rev-parse HEAD)
 short_head=$(printf '%s' "$source_head" | cut -c 1-12)
 authority=$(ib_binder_authority)
 identity=$(ib_binder_identity)
+invocation=$$
+host_generation=1
+attempt_number=1
 
 if test "$mode" = immediate; then
-  work_id=physical-$short_head
-  result_id=physical-$short_head-result
+  work_id=physical-$short_head-$invocation
+  result_id=physical-$short_head-$invocation-result
   worker_mode=immediate
 else
-  work_id=physical-kill-$short_head
-  result_id=physical-kill-$short_head-result
+  work_id=physical-kill-$short_head-$invocation
+  result_id=physical-kill-$short_head-$invocation-result
   worker_mode=delayed
 fi
+launch_id=launch-$short_head-$invocation
+attempt_id=attempt-$short_head-$invocation
 
-worker_receipt=$(ib_longview_worker_start "$work_id" "$result_id" "$worker_mode")
+worker_receipt=$(ib_longview_worker_start \
+  "$work_id" "$result_id" "$launch_id" "$host_generation" \
+  "$attempt_id" "$attempt_number" "$worker_mode")
 tab=$(printf '\t')
-IFS="$tab" read -r receipt_kind worker_pid worker_start worker_name <<EOF_RECEIPT
+IFS="$tab" read -r receipt_kind receipt_launch boot_id worker_uid worker_pid \
+  worker_start worker_name receipt_host receipt_attempt receipt_number <<EOF_RECEIPT
 $worker_receipt
 EOF_RECEIPT
 
 test "$receipt_kind" = worker
+test "$receipt_launch" = "$launch_id"
+test "$receipt_host" = "$host_generation"
+test "$receipt_attempt" = "$attempt_id"
+test "$receipt_number" = "$attempt_number"
+ib_longview_worker_validate_atom "$boot_id"
+ib_longview_worker_validate_decimal "$worker_uid"
 ib_binder_validate_pid "$worker_pid"
 ib_binder_validate_start_ticks "$worker_start"
 ib_binder_validate_process_name "$worker_name"
 
-printf 'schema\tib-longview-worker-physical-receipt-v1\n'
+printf 'schema\tib-longview-worker-physical-receipt-v2\n'
 printf 'source_head\t%s\n' "$source_head"
 printf 'authority\t%s\n' "$authority"
 printf 'work_id\t%s\n' "$work_id"
 printf 'result_id\t%s\n' "$result_id"
+printf 'launch_id\t%s\n' "$launch_id"
+printf 'boot_id\t%s\n' "$boot_id"
+printf 'worker_uid\t%s\n' "$worker_uid"
 printf 'worker_pid\t%s\n' "$worker_pid"
 printf 'worker_start_ticks\t%s\n' "$worker_start"
 printf 'worker_name\t%s\n' "$worker_name"
+printf 'host_generation\t%s\n' "$host_generation"
+printf 'attempt_id\t%s\n' "$attempt_id"
+printf 'attempt_number\t%s\n' "$attempt_number"
 printf '%s\n' "$identity" | while IFS= read -r line; do
   printf 'remote_identity\t%s\n' "$line"
 done
 
+set -- "$work_id" "$result_id" "$launch_id" "$boot_id" "$worker_uid" \
+  "$worker_pid" "$worker_start" "$worker_name" "$host_generation" \
+  "$attempt_id" "$attempt_number"
+
 if test "$mode" = kill; then
-  before=$(ib_longview_worker_observe     "$work_id" "$result_id" "$worker_pid" "$worker_start" "$worker_name")
+  before=$(ib_longview_worker_observe "$@")
   printf 'observation_before_signal\t%s\n' "$before"
-  ib_binder_signal_owned     "$worker_pid" "$worker_start" "$worker_name" TERM
+  ib_longview_worker_signal_owned "$@" TERM
   sleep 1
-  after=$(ib_longview_worker_observe     "$work_id" "$result_id" "$worker_pid" "$worker_start" "$worker_name")
+  after=$(ib_longview_worker_observe "$@")
   printf 'observation_after_signal\t%s\n' "$after"
+  test "$before" = running
+  test "$after" = gone-uncommitted
   exit 0
 fi
 
 # This fixture performs only a tiny deterministic write. One bounded pause
-# avoids a hot rish/ps polling loop while still giving the background worker a
+# avoids a hot rish polling loop while still giving the background worker a
 # chance to publish before the late-read check.
 sleep 1
-observation=$(ib_longview_worker_observe   "$work_id" "$result_id" "$worker_pid" "$worker_start" "$worker_name")
+observation=$(ib_longview_worker_observe "$@")
 printf 'observation\t%s\n' "$observation"
 test "$observation" = committed
 
-result=$(ib_longview_worker_read_result "$result_id")
-printf '%s\n' "$result" | grep -Fx   "$(printf 'schema\tib-longview-worker-result-v1')" >/dev/null
-printf '%s\n' "$result" | grep -Fx   "$(printf 'work_id\t%s' "$work_id")" >/dev/null
-printf '%s\n' "$result" | grep -Fx   "$(printf 'result_id\t%s' "$result_id")" >/dev/null
-printf '%s\n' "$result" | grep -Fx   "$(printf 'value\tdeterministic-ok')" >/dev/null
+result=$(ib_longview_worker_read_result "$@")
+printf '%s\n' "$result" | grep -Fx "$(printf 'schema\tib-longview-worker-result-v2')" >/dev/null
+printf '%s\n' "$result" | grep -Fx "$(printf 'work_id\t%s' "$work_id")" >/dev/null
+printf '%s\n' "$result" | grep -Fx "$(printf 'result_id\t%s' "$result_id")" >/dev/null
+printf '%s\n' "$result" | grep -Fx "$(printf 'launch_id\t%s' "$launch_id")" >/dev/null
+printf '%s\n' "$result" | grep -Fx "$(printf 'boot_id\t%s' "$boot_id")" >/dev/null
+printf '%s\n' "$result" | grep -Fx "$(printf 'uid\t%s' "$worker_uid")" >/dev/null
+printf '%s\n' "$result" | grep -Fx "$(printf 'pid\t%s' "$worker_pid")" >/dev/null
+printf '%s\n' "$result" | grep -Fx "$(printf 'start_ticks\t%s' "$worker_start")" >/dev/null
+printf '%s\n' "$result" | grep -Fx "$(printf 'process_name\t%s' "$worker_name")" >/dev/null
+printf '%s\n' "$result" | grep -Fx "$(printf 'host_generation\t%s' "$host_generation")" >/dev/null
+printf '%s\n' "$result" | grep -Fx "$(printf 'attempt_id\t%s' "$attempt_id")" >/dev/null
+printf '%s\n' "$result" | grep -Fx "$(printf 'attempt_number\t%s' "$attempt_number")" >/dev/null
+printf '%s\n' "$result" | grep -Fx "$(printf 'value\tdeterministic-ok')" >/dev/null
 
 printf 'result_begin\n%s\nresult_end\n' "$result"
