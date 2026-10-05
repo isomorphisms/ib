@@ -52,6 +52,31 @@ committed_after_authority_loss_check expected running =
           retains_attachment expected lost &&
           is_done (recovery_for lost)
 
+authority_requires_resolution_before_retry :
+  ProcessAttachment → DurableIdentity → DurableIdentity → DurableIdentity →
+  DurableIdentity → WorkerTask → Bool
+authority_requires_resolution_before_retry owned launch boot process_name attempt running =
+  case worker_authority_was_lost owned running of
+    Nothing ⇒ False
+    Just lost ⇒
+      is_nothing
+        (attach_worker_process
+          launch boot 2000 124 1000 process_name 8 attempt lost)
+
+authority_confirmed_gone_can_retry :
+  ProcessAttachment → DurableIdentity → DurableIdentity → DurableIdentity →
+  DurableIdentity → WorkerTask → Bool
+authority_confirmed_gone_can_retry owned launch boot process_name attempt running =
+  case worker_authority_was_lost owned running of
+    Nothing ⇒ False
+    Just lost ⇒
+      case worker_exited owned False lost of
+        Nothing ⇒ False
+        Just terminal ⇒
+          is_just
+            (attach_worker_process
+              launch boot 2000 124 1000 process_name 8 attempt terminal)
+
 main : IO ()
 main =
   case durable_identity "work-1" of
@@ -151,6 +176,14 @@ main =
                                                           (commit_worker_result owned_one planned)
                                                   let authority_retains_attempt =
                                                         authority_retains_attempt_check owned_one running
+                                                  let authority_retry_requires_resolution =
+                                                        authority_requires_resolution_before_retry
+                                                          owned_one launch_two boot_a process_name
+                                                          attempt_two running
+                                                  let authority_gone_can_retry =
+                                                        authority_confirmed_gone_can_retry
+                                                          owned_one launch_two boot_a process_name
+                                                          attempt_two running
                                                   let committed_after_authority_loss =
                                                         committed_after_authority_loss_check owned_one running
                                                   let retry_matrix =
@@ -229,6 +262,12 @@ main =
                                                   putStrLn
                                                     ("worker-authority-retains-attempt=" ++
                                                       show authority_retains_attempt)
+                                                  putStrLn
+                                                    ("worker-authority-retry-requires-resolution=" ++
+                                                      show authority_retry_requires_resolution)
+                                                  putStrLn
+                                                    ("worker-authority-gone-can-retry=" ++
+                                                      show authority_gone_can_retry)
                                                   putStrLn
                                                     ("worker-committed-after-authority-loss=" ++
                                                       show committed_after_authority_loss)
