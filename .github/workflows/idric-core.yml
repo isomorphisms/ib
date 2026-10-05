@@ -16,6 +16,9 @@ on:
 permissions:
   contents: read
 
+env:
+  IDRIC_REF: 7050c116326c9c8e8d0a56c2db7baf2119cbae19
+
 jobs:
   idric-core:
     runs-on: ubuntu-latest
