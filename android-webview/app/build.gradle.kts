@@ -1,3 +1,5 @@
+import java.util.zip.ZipFile
+
 plugins {
     id("com.android.application")
 }
@@ -114,7 +116,7 @@ tasks.register("verifyWebViewBoundary") {
 
         val apks = fileTree("build/outputs/apk/debug") { include("*.apk") }.files
         check(apks.size == 1) { "Expected exactly one debug APK, found ${apks.size}." }
-        java.util.zip.ZipFile(apks.single()).use { apk ->
+        ZipFile(apks.single()).use { apk ->
             check(apk.entries().asSequence().none { it.name.startsWith("lib/") }) {
                 "This authorization APK must remain native-ABI neutral."
             }
