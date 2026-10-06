@@ -1,0 +1,30 @@
+name: universal merge gate
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  merge-gate:
+    name: merge-gate
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out exact IB pull-request head
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+
+      - name: Prove exact IB checkout
+        shell: sh
+        env:
+          EXPECTED_HEAD: ${{ github.event.pull_request.head.sha }}
+        run: test "$(git rev-parse HEAD)" = "$EXPECTED_HEAD"
+
+      - name: Keep the public Idriç boundary valid on every change
+        shell: sh
+        run: |
+          sh tests/idric-public-vocabulary-self-test.sh
+          sh tests/idric-public-vocabulary.sh

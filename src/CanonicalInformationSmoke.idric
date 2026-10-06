@@ -58,7 +58,7 @@ version1_result (Just version1_text) =
 
 strand_report : Strand → String
 strand_report strand =
-  let partial = prepaint_from_strand first_revision PartialRevision strand in
+  let partial_prepaint = prepaint_from_strand first_revision PartialRevision strand in
   let complete = prepaint_from_strand (next_revision first_revision) CompleteRevision strand in
   unlines
     [ "canonical-information=constructed"
@@ -66,9 +66,9 @@ strand_report strand =
     , "canonical-row-cells=" ++ show (length (table_row_cells (table_row "first" ["second"])))
     , "empty-image-refused=" ++ show empty_image_refused
     , "seventh-heading-refused=" ++ show seventh_heading_refused
-    , "revision-zero=" ++ show (revision_sequence_value partial.sequence)
+    , "revision-zero=" ++ show (revision_sequence_value partial_prepaint.sequence)
     , "nonincreasing-revision-refused=" ++ show (nonincreasing_revision_refused strand)
-    , version1_result (serialize_version1 [partial, complete])
+    , version1_result (serialize_version1 [partial_prepaint, complete])
     ]
 
 fixture_report : Maybe Strand → String
