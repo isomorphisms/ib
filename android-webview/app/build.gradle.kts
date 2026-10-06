@@ -1,3 +1,5 @@
+import java.util.zip.ZipFile
+
 plugins {
     id("com.android.application")
 }
@@ -23,8 +25,8 @@ android {
         applicationId = "org.isomorphisms.ib.webview"
         minSdk = 26
         targetSdk = 36
-        versionCode = 5
-        versionName = "0.5.0"
+        versionCode = 8
+        versionName = "0.8.0"
         buildConfigField("String", "IB_SOURCE_HEAD", "\"$ibSourceHead\"")
     }
 
@@ -58,6 +60,7 @@ android {
 }
 
 dependencies {
+    implementation("com.google.android.gms:play-services-auth:21.5.0")
     testImplementation("junit:junit:4.13.2")
 }
 
@@ -84,10 +87,11 @@ tasks.register("verifyWebViewBoundary") {
         check(implementation.contains("DurableTaskStore")) {
             "Long-view tasks must use browser-owned durable records."
         }
-        check(!implementation.contains("android:supportsPictureInPicture=\"true\"")) {
+        val longView = file("src/main/java/org/isomorphisms/ib/webview/LongViewActivity.java").readText()
+        check(!longView.contains("enterPictureInPictureMode(")) {
             "Picture-in-Picture must not be required for long-view correctness."
         }
-        check(!implementation.contains("android:foregroundServiceType=\"dataSync\"")) {
+        check(!longView.contains("IncrementalLoadService")) {
             "A foreground-service survival experiment must not define long-view correctness."
         }
         check(implementation.contains("setSaveEnabled(false)")) {
@@ -103,7 +107,27 @@ tasks.register("verifyWebViewBoundary") {
             "The acceptance app must not back up fixture state."
         }
 
+        check(implementation.contains("requestOfflineAccess")) {
+            "Drive authorization must request the one-time server code."
+        }
+        val consent = file("src/main/java/org/isomorphisms/ib/webview/DriveAuthorizationActivity.java").readText()
+        check(consent.contains("requestOfflineAccess") && !longView.contains("requestOfflineAccess")) {
+            "Consent belongs to the independent platform adapter."
+        }
+        val incremental = file("src/main/java/org/isomorphisms/ib/webview/IncrementalLargePageActivity.java").readText()
+        check(!incremental.contains("getServerAuthCode") && !incremental.contains("requestOfflineAccess")) {
+            "The browser experiment must only delegate private handoffs."
+        }
+        check(!implementation.contains("android.intent.category.BROWSABLE")) {
+            "Drive authorization must not be a browser link."
+        }
+
         val apks = fileTree("build/outputs/apk/debug") { include("*.apk") }.files
         check(apks.size == 1) { "Expected exactly one debug APK, found ${apks.size}." }
+        ZipFile(apks.single()).use { apk ->
+            check(apk.entries().asSequence().none { it.name.startsWith("lib/") }) {
+                "This authorization APK must remain native-ABI neutral."
+            }
+        }
     }
 }

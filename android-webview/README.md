@@ -1,5 +1,9 @@
 # IB WebView protected transactions
 
+The independent Google consent adapter is described in
+[`../docs/drive-authorization-c67.md`](../docs/drive-authorization-c67.md).
+It does not require a visible WebView or PiP loading service.
+
 The application launcher is now **IB Long View**, the first live browser path
 whose protected task survives both renderer replacement and IB host-process
 restart.  It uses browser-owned task, tab, and navigation identities under the
