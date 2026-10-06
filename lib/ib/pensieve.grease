@@ -462,6 +462,11 @@ ib_reindex_exact_text() {
   else
     : > "$part"
   fi
+  # Source policy is per import. Private projections require explicit selection
+  # and are excluded from the ordinary corpus search index.
+  if test -d "$pensieve/sources/ordinary"; then
+    find "$pensieve/sources/ordinary" -type f -path '*/text/*.txt' -print >> "$part"
+  fi
   mv "$part" "$index"
   printf '%s\n' "$index"
 }

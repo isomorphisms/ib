@@ -13,6 +13,8 @@ usage:
   ib search TEXT
   ib reindex
   ib paths
+  ib retain-source SOURCE_BYTES SOURCE_TSV
+  ib project-raw-urls SOURCE_ID
 EOF
   exit 2
 }
@@ -22,6 +24,12 @@ command=$1
 shift
 
 case "$command" in
+  retain-source)
+    exec "${GREASE:?GREASE must name the verified runtime}" "$repository_root/bin/retain-source.grease" "$@"
+    ;;
+  project-raw-urls)
+    exec "${GREASE:?GREASE must name the verified runtime}" "$repository_root/bin/project-raw-urls.grease" "$@"
+    ;;
   fetch)
     test "$#" -gt 0 || usage
     for input in "$@"; do

@@ -25,3 +25,9 @@ The reading contracts remain in `reading-feedback.md`, `reading-assistance.md`,
 and `reader-support-system.md`. This line does not retire the canonical Strand
 model or Longview/Binder architecture. README.md retains current main verbatim;
 the 0.2 overview lives here to keep independent design lines explicit.
+
+The bounded retained-source extension is documented in
+`retained-source-intake.md`: exact external bytes/provenance go into Cauldron,
+then a supported decoder creates replaceable Pensieve views. The first adapter
+uses the existing raw-URL history family; private sources stay out of ordinary
+search. ChatGPT conversation decoding remains missing.

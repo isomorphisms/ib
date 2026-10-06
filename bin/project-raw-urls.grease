@@ -1,0 +1,48 @@
+#!/usr/bin/env grease
+set -eu
+umask 077
+root=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)
+. "$root/lib/ib/pensieve.grease"
+fail() { printf 'project-raw-urls: %s\n' "$*" >&2; exit 2; }
+test "$#" = 1 || fail 'usage: project-raw-urls SOURCE_ID'
+id=$1
+case $id in *[!0-9a-f]*|'') fail 'invalid source ID' ;; esac
+test "${#id}" = 64 || fail 'invalid source ID length'
+home=$(ib_home)
+source=$home/cauldron/sources/$id
+for path in "$home/cauldron" "$home/cauldron/sources" "$source" "$source/raw" "$source/provenance.tsv"; do
+  test ! -L "$path" || fail 'symlink in source path'
+done
+manifest=$source/provenance.tsv
+test -f "$manifest" && test -f "$source/raw" || fail 'retained source unavailable'
+field() { awk -F '\t' -v key="$1" '$1==key {print $2}' "$manifest"; }
+test "$(field source_kind)" = raw_urls || fail 'unsupported source decoder; raw bytes remain retained'
+test "$(sha256sum "$source/raw" | awk '{print $1}')" = "$(field sha256)" || fail 'retained source hash mismatch'
+privacy=$(field privacy)
+case $privacy in ordinary|private) ;; *) fail 'invalid source privacy policy' ;; esac
+parent=$home/pensieve/sources/$privacy
+for path in "$home/pensieve" "$home/pensieve/sources" "$parent" "$parent/$id"; do
+  test ! -L "$path" || fail 'symlink in projection path'
+done
+mkdir -p "$parent"
+lock=$parent/$id.lock
+mkdir "$lock" || fail 'projection already in progress'
+cleanup() { rm -rf "$lock"; }
+trap cleanup EXIT HUP INT TERM
+mkdir -p "$lock/staged/text"
+# Same trim/comment rule as IB.History.ingest_raw_lines. Preserve occurrences,
+# including repeated URLs; missing times/titles stay unknown.
+awk '{value=$0; sub(/^[ \t\r]+/, "", value); sub(/[ \t\r]+$/, "", value);
+      if (value!="" && value !~ /^#/) print value}' "$source/raw" > "$lock/staged/text/urls.txt"
+awk 'BEGIN {print "order\tsource_line\ttimestamp"; order=0}
+     {value=$0; sub(/^[ \t\r]+/, "", value); sub(/[ \t\r]+$/, "", value);
+      if (value!="" && value !~ /^#/) {print order "\t" NR "\tunknown"; order++}}' \
+    "$source/raw" > "$lock/staged/coordinates.tsv"
+printf 'source_id\t%s\nsource_sha256\t%s\ndecoder\traw-urls-v1\n' "$id" "$(field sha256)" > "$lock/staged/source.tsv"
+if test -e "$parent/$id"; then
+  # Derived projection only. Retained bytes and human decisions are elsewhere.
+  rm -rf "$parent/$id"
+fi
+mv "$lock/staged" "$parent/$id"
+ib_reindex_exact_text >/dev/null
+printf '%s\n' "$parent/$id"
