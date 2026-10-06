@@ -1,4 +1,35 @@
-# IB WebView protected-transaction acceptance harness
+# IB WebView protected transactions
+
+The application launcher is now **IB Long View**, the first live browser path
+whose protected task survives both renderer replacement and IB host-process
+restart.  It uses browser-owned task, tab, and navigation identities under the
+app-private `state/` tree.  The task and security model are documented in
+[`docs/long-view-protected-tasks.md`](../docs/long-view-protected-tasks.md).
+
+The original issue #59 loopback harness remains in `WebViewActivity` as test
+equipment.  It is no longer the launcher and does not own the product model.
+
+## Long-view behavior
+
+The launcher opens a switchable real URL.  The complete URL is used only by the
+live renderer; durable state retains only a neutral scheme/host/port origin and
+records whether path, query, or fragment material was removed.  On renderer death the
+activity attaches a replacement WebView to the same task.  **Kill IB host**
+provides the separate whole-process acceptance leg; after relaunch IB discovers
+the same task, advances the host generation, and performs safe reconstruction.
+
+WebView's app profile owns cookies.  The task file does not copy them, and a
+reloaded page remains `authenticated=not-proven` until **Session works** is
+pressed.  **Needs repeat** records an explicit incomplete remote-site state.
+
+The path does not require Picture-in-Picture or a foreground service.  Important
+renderer priority remains a survival optimization, not the correctness model.
+
+**Copy receipt** produces a phone-visible receipt without query strings, field
+values, cookies, authorization codes, or heap-canary values.  Inspect the copied
+text for unexpected secrets before sharing it.
+
+## Issue #59 fixture
 
 This is a deliberately separate Android fixture for issue #59. It is not the
 prepaint viewer and it does not change the prepaint boundary.
@@ -42,6 +73,15 @@ If `getWebViewRenderProcess()` returns null, the receipt says isolated renderer
 recovery is unavailable on that provider/device. The fixture does not substitute
 `chrome://crash` or pretend host-process death is renderer-process death.
 
+## Update identity
+
+The package name and version code are part of the acceptance boundary. CI signs
+the installable debug artifact with the repository's stable public test signer
+and verifies repeated `adb install -r` replacement without uninstalling. A
+local build without the configured stable signer is deliberately left unsigned
+rather than receiving a machine-local Gradle debug identity. The test signer is
+not a production or store signing identity.
+
 ## Evidence boundary
 
 This first slice can provide four separate observations:
@@ -58,89 +98,3 @@ silently conflated with durable host-process recovery.
 `android:usesCleartextTraffic="true"` is present only because the deterministic
 fixture server is HTTP on `127.0.0.1`. The harness does not browse arbitrary
 cleartext sites.
-
-## Incremental large-page experiment
-
-The branch `incremental-large-page-render` also registers
-`IncrementalLargePageActivity` in a separate `:incremental` process. This is a
-diagnostic adapter for `docs/incremental-large-page-render.md`; it does not
-replace the protected-transaction fixture above.
-
-The APK exposes a second launcher entry named **IB Large Page**. Tap that entry
-to start the exact Google Cloud Studio target with `authuser=5`. This avoids
-relying on `/system/bin/am`, which some Android/Unisoc builds reject when it is
-invoked from an application UID such as Termux.
-
-### Google Drive authorization handoff
-
-The same APK can receive the private
-`ib://google-drive-authorize?...` handoff emitted by
-`cloud-storage-api`'s `google-drive-auth authorize-android` command. This URI
-is an Android VIEW intent, not a Google OAuth page and not a second browser
-path. The intent filter deliberately omits `BROWSABLE`.
-
-IB accepts only `https://www.googleapis.com/auth/drive.readonly`, requires an
-explicit **Authorize Drive** tap, and asks Google Identity Services for a
-server authorization code with offline access. If Google needs account
-selection or consent, Google Play services supplies the authorization UI.
-The Google OAuth endpoint is never loaded into this WebView.
-
-After success, IB sends the one-time server authorization code directly to the
-provided random `127.0.0.1` port with the matching state. It does not write
-the code to the journal, clipboard, WebView history, intent extras, or durable
-app storage. `cloud-storage-api` owns the token exchange and mode-0600 durable
-credential.
-
-Physical authorization requires an Android OAuth client for package
-`org.isomorphisms.ib.webview` registered with the SHA-1 of the stable private
-certificate used to sign the installed APK, plus the Web OAuth client used by
-the local token exchanger. CI compilation with a transient debug signer does
-not establish that physical OAuth identity and is not acceptance evidence for
-the live flow.
-The adapter records coarse load progress, first committed visible content,
-`onPageFinished`, compact Performance API timing/count samples, and renderer
-death to an app-private disk journal. **Keep loading** enters
-Picture-in-Picture so the WebView stays visibly attached while another app is
-foreground. On Android 12+ leaving the activity also auto-enters
-Picture-in-Picture. A foreground data-sync service in the same `:incremental`
-process keeps the host process active and shows an ongoing notification while
-that page remains open. The WebView also requests important renderer priority.
-
-Opening **IB Large Page** again brings the existing incremental Activity to the
-front. It records `launcher-reentry existing-page-preserved` and samples the
-existing document; it does not create a second WebView or call `loadUrl` again.
-The notification follows the same re-entry path. Its **Stop** action removes the
-extra process protection without claiming that Android or WebView preserved the
-page.
-
-The first MIRO A1 run disproved hidden-mode survival: the renderer was killed
-without crashing at priority 2 after the activity had been away for about 18
-minutes. Priority 2 is already WebView's highest public renderer priority.
-Picture-in-Picture is therefore the next narrow experiment, not another hidden
-process flag. Android may disable Picture-in-Picture on low-RAM devices; the
-adapter reports that explicitly rather than claiming hidden survival.
-
-For forms it records only whether an input/change event made the page dirty; it
-does not read the value. Renderer death never automatically reloads this real
-page. **Reload** is an explicit user action because replaying or discarding an
-in-progress form is not a renderer-recovery implementation detail.
-
-The replacement unattended-load acceptance run is at least 25 minutes in
-another app with the pinned Picture-in-Picture window present. Expanding that
-window, then returning through the **IB Large Page** icon and the foreground
-notification must retain the same run and JavaScript heap, show no second
-navigation start or renderer-gone event, and show whether the five-second
-resource/control samples advanced. On Android 13+ the activity requests
-notification permission so the notification re-entry path can actually be
-exercised.
-
-After the re-entry legs, tap **Copy receipt**. It copies the current app-private
-journal to the clipboard so the physical-phone evidence can be pasted directly
-into the review conversation. ADB, Wireless debugging, `run-as`, and filesystem
-extraction are not part of this acceptance path. The copied journal still
-contains only the already-bounded diagnostic fields: timing/count samples,
-coarse lifecycle events, the heap canary, and host PID; it does not add form
-values, credentials, query strings, or resource URLs.
-
-Build, installation, notification presence, copying the journal, or merely
-entering Picture-in-Picture do not substitute for the 25-minute physical run.

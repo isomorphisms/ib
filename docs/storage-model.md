@@ -49,7 +49,10 @@ state/
     ...
 ```
 
-This is a conceptual separation, not a frozen on-disk grammar. In particular, the category, task, proposal, and assertion paths are not implemented on `main` yet.
+This is a conceptual separation, not a frozen on-disk grammar. The first narrow
+task implementation now writes protected long-view `task.txt`, `tab.txt`, and
+`history.log` records. General task roots/frontiers, categories, proposals, and
+assertions are not thereby claimed as implemented.
 
 ## Stable event identity
 
@@ -80,6 +83,8 @@ Fields that can be derived should generally stay out of the canonical manifest. 
 A task persists the user's intention and unfinished frontier even when every associated renderer and response cache has disappeared. Roots and edges refer to stable tab, event, and resource identities. Several parent edges may point to one reusable resource without losing their individual context, order, or retention claims.
 
 Fetched bodies, extracted views, rankings, and summaries are not the task itself. See `docs/personal-workbench.md` and `docs/prefetch-and-reading.md`.
+
+For fragment-level reading graphs, multiply indexed link tables, materialized strands, and the ordinary-file Android path, see `docs/fragment-link-table.md`. The durable graph may remain simple while rebuildable source-, destination-, type-, and strand-oriented indexes duplicate relationships deliberately to make hot traversals sequential or RAM-addressable.
 
 ## Snapshots and representations
 

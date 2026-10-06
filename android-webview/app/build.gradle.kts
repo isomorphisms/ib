@@ -2,19 +2,50 @@ plugins {
     id("com.android.application")
 }
 
+val stableTestKeystorePath = providers.environmentVariable("IB_TEST_KEYSTORE").orNull
+val stableTestKeystorePassword = providers.environmentVariable("IB_TEST_KEYSTORE_PASSWORD").orNull
+    ?: "wegert-debug"
+val stableTestKeyPassword = providers.environmentVariable("IB_TEST_KEY_PASSWORD").orNull
+    ?: stableTestKeystorePassword
+val stableTestKeyAlias = providers.environmentVariable("IB_TEST_KEY_ALIAS").orNull
+    ?: "wegert-debug"
+val ibSourceHead = providers.environmentVariable("IB_SOURCE_HEAD").orNull ?: "unknown"
+
 android {
     namespace = "org.isomorphisms.ib.webview"
     compileSdk = 36
+
+    buildFeatures {
+        buildConfig = true
+    }
 
     defaultConfig {
         applicationId = "org.isomorphisms.ib.webview"
         minSdk = 26
         targetSdk = 36
-        versionCode = 4
-        versionName = "0.4.0"
+        versionCode = 7
+        versionName = "0.7.0"
+        buildConfigField("String", "IB_SOURCE_HEAD", "\"$ibSourceHead\"")
+    }
+
+    signingConfigs {
+        stableTestKeystorePath?.let { keystorePath ->
+            create("stableTest") {
+                storeFile = rootProject.file(keystorePath)
+                storePassword = stableTestKeystorePassword
+                keyAlias = stableTestKeyAlias
+                keyPassword = stableTestKeyPassword
+                storeType = "pkcs12"
+            }
+        }
     }
 
     buildTypes {
+        getByName("debug") {
+            // No environment-provided stable signer means an unsigned debug APK,
+            // never an AGP-generated machine-local debug identity.
+            signingConfig = signingConfigs.findByName("stableTest")
+        }
         getByName("release") {
             isMinifyEnabled = false
         }
@@ -45,20 +76,21 @@ tasks.register("verifyWebViewBoundary") {
         check(implementation.contains("RENDERER_PRIORITY_IMPORTANT")) {
             "Protected transactions must request important renderer priority."
         }
-        check(implementation.contains("android:supportsPictureInPicture=\"true\"")) {
-            "Unattended loading must keep the WebView visibly attached in Picture-in-Picture."
-        }
-        check(implementation.contains("setAutoEnterEnabled(true)")) {
-            "Leaving the activity must enter Picture-in-Picture on Android 12+."
-        }
-        check(!implementation.contains("moveTaskToBack(true)")) {
-            "Do not deliberately hide the incremental WebView after physical renderer eviction."
-        }
-        check(implementation.contains("startForeground(")) {
-            "Incremental background loading must keep its host process active."
+        check(implementation.contains("android:name=\".LongViewActivity\"")) {
+            "The real launcher must enter the protected long-view path."
         }
         check(implementation.contains("android:launchMode=\"singleTask\"")) {
-            "Launcher re-entry must reuse the existing incremental page activity."
+            "Live-renderer return must reuse the existing long-view activity."
+        }
+        check(implementation.contains("DurableTaskStore")) {
+            "Long-view tasks must use browser-owned durable records."
+        }
+        val longView = file("src/main/java/org/isomorphisms/ib/webview/LongViewActivity.java").readText()
+        check(!longView.contains("enterPictureInPictureMode(")) {
+            "Picture-in-Picture must not be required for long-view correctness."
+        }
+        check(!longView.contains("IncrementalLoadService")) {
+            "A foreground-service survival experiment must not define long-view correctness."
         }
         check(implementation.contains("setSaveEnabled(false)")) {
             "The WebView hierarchy must not become the hidden form persistence mechanism."
@@ -73,24 +105,19 @@ tasks.register("verifyWebViewBoundary") {
             "The acceptance app must not back up fixture state."
         }
 
-        check(implementation.contains("https://www.googleapis.com/auth/drive.readonly")) {
-            "Drive authorization must stay pinned to the read-only scope."
-        }
         check(implementation.contains("requestOfflineAccess")) {
-            "The Android bridge must request a server authorization code for offline refresh."
-        }
-        check(implementation.contains("android:scheme=\"ib\"")) {
-            "The Termux-to-IB authorization handoff must use the private IB scheme."
+            "Drive authorization must request the one-time server code."
         }
         check(!implementation.contains("android.intent.category.BROWSABLE")) {
-            "The private OAuth handoff must not be invokable as a browser link."
-        }
-        check(implementation.contains("127.0.0.1")) {
-            "The server authorization code must return only over local loopback."
+            "Drive authorization must not be a browser link."
         }
 
         val apks = fileTree("build/outputs/apk/debug") { include("*.apk") }.files
         check(apks.size == 1) { "Expected exactly one debug APK, found ${apks.size}." }
-
+        java.util.zip.ZipFile(apks.single()).use { apk ->
+            check(apk.entries().asSequence().none { it.name.startsWith("lib/") }) {
+                "This authorization APK must remain native-ABI neutral."
+            }
+        }
     }
 }

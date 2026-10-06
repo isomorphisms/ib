@@ -6,6 +6,11 @@ Apply the shared evidence and acceptance guardrails in
 Before changing browser objects, ownership, interfaces, or implementation
 boundaries, read [`README.md`](README.md) and [`docs/architecture.md`](docs/architecture.md).
 
+Idriç-facing vocabulary is owned by `isomorphisms/Idric/STYLE.md`. In
+maintained `.idric` public declarations, use `Number` rather than inherited
+`Nat`; use `List` or a domain collection rather than `Vect`. Run
+`tests/idric-public-vocabulary.sh` after changing public Idriç surfaces.
+
 ## Do not invent a parallel browser model
 
 Inspect the current owner of a concept before introducing another resource,
@@ -37,6 +42,16 @@ Follow the current language boundary in the README: Idriç owns browser semantic
 and invariants, Grease owns orchestration and OS-visible work, and native Android
 is a narrow platform adapter. Python/Ithon may be disposable comparison tools;
 they are not IB runtime acceptance.
+
+## Preserve Android update identity
+
+Every installable Android harness in this repository must keep its package name,
+persistent test signer, and nondecreasing version code across builds. This
+includes prepaint, WebView acceptance, and later device fixtures. Do not let
+Gradle fall back to a runner-local debug key, and do not uninstall an existing
+copy to hide a signer or downgrade mismatch. Replacement installation without
+uninstall is required Android acceptance for each harness. Keep the public/test
+signing identity separate from any production or store signing identity.
 
 ## Test the layer being claimed
 

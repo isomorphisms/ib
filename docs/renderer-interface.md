@@ -121,3 +121,9 @@ This lets a Chromium renderer use Chromium-specific acceleration while the same 
 Renderer crashes are worker failures. The core keeps the tab, task, and history record and may retry, choose another renderer, fall back to extraction, or leave the tab sleeping.
 
 A renderer crash must not imply loss of the browsing session or investigation.
+
+The Android long-view adapter now exercises this boundary directly.  It records
+renderer identity separately from task, tab, and navigation identity; replaces
+the renderer after `onRenderProcessGone`; and reports the recreated page as
+unconfirmed until authenticated continuation is independently observed.  Host
+restart uses the same task record but cannot compare the former JavaScript heap.

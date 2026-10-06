@@ -10,6 +10,12 @@ The browser core owns resource, tab, event, and task identity; sleeping and waki
 
 Low-memory behavior has a harder exception: an active authenticated transaction may be protected from ordinary sleeping or eviction. Opening another tab or app to retrieve information must not silently destroy the login/session or in-progress form state. See `docs/architecture.md` and #59.
 
+The first integrated protected long-view path now gives that work a durable
+task/tab/navigation identity across renderer and host-process loss.  It restores
+only a neutral URL through the existing WebView profile and reports session,
+heap, form, and reconstruction outcomes separately.  See
+`docs/long-view-protected-tasks.md`.
+
 ## Design notes
 
 - `docs/architecture.md` — ownership and replaceable-service boundaries
@@ -18,6 +24,7 @@ Low-memory behavior has a harder exception: an active authenticated transaction 
 - `docs/tab-categorization.md` — overlapping personal categories and adaptive refinement
 - `docs/inference-and-learning.md` — local-model proposals, validation, ensembles, and correction events
 - `docs/storage-model.md` — identity levels and canonical, proposed, and derived state
+- `docs/long-view-protected-tasks.md` — durable authenticated task reconstruction
 - `docs/developer-workbench.md` — fixture and memory-pressure harness
 
 ## Implementation languages
@@ -35,4 +42,10 @@ information prepaint. It uses native Android views rather than `WebView`, applie
 a fixed dark presentation to extracted text, preserves fetched image colors, and
 replaces partial projections with later complete revisions.
 
-The current Idriç core covers ordered history values, rebuildable indexes, storage classification and read policy, and the renderer-independent inspector model. Scientific-media work adds HTML-first arXiv harvesting, ordered image downloads, caption and alternate-text naming, PDF fallback, and a low-priority second naming pass. The task, category, and generic inference records documented above remain design boundaries rather than claims of completed implementation.
+The current Idriç core covers ordered history values, rebuildable indexes,
+storage classification and read policy, the renderer-independent inspector
+model, and the first protected long-view task transitions. Scientific-media
+work adds HTML-first arXiv harvesting, ordered image downloads, caption and
+alternate-text naming, PDF fallback, and a low-priority second naming pass.
+General task/frontier, category, and generic inference records documented above
+remain design boundaries rather than claims of completed implementation.

@@ -20,7 +20,7 @@ choice history_kind one_of
   search
 
 public export
-data HistoryEntry = Entry String (Maybe Integer) (Maybe String) history_source history_kind (Maybe String) Nat
+data HistoryEntry = Entry String (Maybe Integer) (Maybe String) history_source history_kind (Maybe String) Number
 
 public export
 entry_url : HistoryEntry → String
@@ -47,11 +47,11 @@ entry_query : HistoryEntry → Maybe String
 entry_query (Entry _ _ _ _ _ value _) = value
 
 public export
-entry_order : HistoryEntry → Nat
+entry_order : HistoryEntry → Number
 entry_order (Entry _ _ _ _ _ _ value) = value
 
 public export
-set_entry_order : Nat → HistoryEntry → HistoryEntry
+set_entry_order : Number → HistoryEntry → HistoryEntry
 set_entry_order order (Entry url time title source kind query _) =
   Entry url time title source kind query order
 
@@ -121,5 +121,5 @@ newest_first [] = []
 newest_first (entry :: rest) = insert_newest entry (newest_first rest)
 
 public export
-chronology : List HistoryEntry → List Nat
+chronology : List HistoryEntry → List Number
 chronology entries = map entry_order (newest_first entries)

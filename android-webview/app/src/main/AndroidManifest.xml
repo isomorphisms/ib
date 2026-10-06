@@ -7,10 +7,25 @@
 
     <application
         android:allowBackup="false"
-        android:label="IB WebView Acceptance"
+        android:label="IB"
         android:supportsRtl="true"
         android:theme="@android:style/Theme.Material.Light.NoActionBar"
         android:usesCleartextTraffic="true">
+        <!-- Existing authorization experiment. LongView remains the launcher;
+             this component is reached only through an explicit IB handoff. -->
+        <activity android:name=".IncrementalLargePageActivity"
+            android:configChanges="screenSize|smallestScreenSize|screenLayout|orientation"
+            android:exported="true" android:launchMode="singleTask"
+            android:process=":incremental" android:supportsPictureInPicture="true">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:host="google-drive-authorize" android:scheme="ib" />
+            </intent-filter>
+        </activity>
+        <service android:name=".IncrementalLoadService" android:exported="false"
+            android:foregroundServiceType="dataSync" android:process=":incremental"
+            android:stopWithTask="true" />
 
         <activity
             android:name=".PressureActivity"
@@ -18,42 +33,14 @@
             android:process=":pressure" />
 
         <activity
-            android:name=".IncrementalLargePageActivity"
-            android:configChanges="screenSize|smallestScreenSize|screenLayout|orientation"
-            android:exported="true"
-            android:label="IB Incremental Page"
-            android:launchMode="singleTask"
-            android:process=":incremental"
-            android:supportsPictureInPicture="true">
-            <intent-filter>
-                <action android:name="android.intent.action.VIEW" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <data
-                    android:host="google-drive-authorize"
-                    android:scheme="ib" />
-            </intent-filter>
-        </activity>
-
-        <service
-            android:name=".IncrementalLoadService"
-            android:exported="false"
-            android:foregroundServiceType="dataSync"
-            android:process=":incremental"
-            android:stopWithTask="true" />
-
-        <activity
-            android:name=".IncrementalLargePageLauncherActivity"
-            android:exported="true"
-            android:label="IB Large Page">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
-        </activity>
-
-        <activity
             android:name=".WebViewActivity"
-            android:exported="true">
+            android:exported="true" />
+
+        <activity
+            android:name=".LongViewActivity"
+            android:exported="true"
+            android:label="IB Long View"
+            android:launchMode="singleTask">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />

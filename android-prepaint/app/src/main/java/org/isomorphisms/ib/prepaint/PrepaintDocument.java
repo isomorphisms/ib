@@ -11,16 +11,14 @@ import java.util.List;
 final class PrepaintDocument {
     static final String FORMAT = "ib-prepaint";
     static final String VERSION = "1";
-    static final String ARTIFACT_SOURCE = "artifact";
-    static final String TEXT_SOURCE = "text";
     private static final long MAX_CHARACTERS = 4L * 1024L * 1024L;
     private static final int MAX_REVISIONS = 32;
     private static final int MAX_BLOCKS_PER_REVISION = 4096;
 
     final List<Revision> revisions;
-    final String sourceKind;
+    final SourceKind sourceKind;
 
-    private PrepaintDocument(List<Revision> revisions, String sourceKind) {
+    private PrepaintDocument(List<Revision> revisions, SourceKind sourceKind) {
         this.revisions = Collections.unmodifiableList(new ArrayList<>(revisions));
         this.sourceKind = sourceKind;
     }
@@ -50,7 +48,7 @@ final class PrepaintDocument {
                 finishParagraph(paragraph, blocks);
             } else if (UrlRecognition.isAbsoluteHttpUrl(trimmed)) {
                 finishParagraph(paragraph, blocks);
-                blocks.add(Block.of(Block.LINK, trimmed, trimmed));
+                blocks.add(new LinkBlock(trimmed, trimmed));
             } else {
                 if (paragraph.length() != 0) {
                     paragraph.append('\n');
@@ -63,7 +61,7 @@ final class PrepaintDocument {
         String visibleTitle = title == null || title.trim().isEmpty()
                 ? "Plain text" : title.trim();
         Revision revision = new Revision(0, true, "", "", visibleTitle, blocks);
-        return new PrepaintDocument(Collections.singletonList(revision), TEXT_SOURCE);
+        return new PrepaintDocument(Collections.singletonList(revision), SourceKind.PLAIN_TEXT);
     }
 
     static PrepaintDocument parse(Reader source) throws IOException {
@@ -134,34 +132,33 @@ final class PrepaintDocument {
                     break;
                 case "heading":
                     require(fields.size() == 3, lineNumber, "heading needs level and text");
-                    int level = parseHeadingLevel(fields.get(1), lineNumber);
-                    current.blocks.add(Block.heading(level, fields.get(2)));
+                    HeadingLevel level = parseHeadingLevel(fields.get(1), lineNumber);
+                    current.blocks.add(new HeadingBlock(level, fields.get(2)));
                     break;
                 case "text":
                     require(fields.size() == 2, lineNumber, "text needs a value");
-                    current.blocks.add(Block.of(Block.TEXT, fields.get(1)));
+                    current.blocks.add(new TextBlock(fields.get(1)));
                     break;
                 case "link":
                     require(fields.size() == 3, lineNumber, "link needs label and target");
-                    current.blocks.add(Block.of(Block.LINK, fields.get(1), fields.get(2)));
+                    current.blocks.add(new LinkBlock(fields.get(1), fields.get(2)));
                     break;
                 case "row":
                     require(fields.size() >= 2, lineNumber, "row needs at least one cell");
-                    current.blocks.add(Block.of(Block.ROW,
-                            fields.subList(1, fields.size()).toArray(new String[0])));
+                    current.blocks.add(new RowBlock(fields.subList(1, fields.size())));
                     break;
                 case "form":
                     require(fields.size() == 3, lineNumber, "form needs label and action");
-                    current.blocks.add(Block.of(Block.FORM, fields.get(1), fields.get(2)));
+                    current.blocks.add(new FormBlock(fields.get(1), fields.get(2)));
                     break;
                 case "image":
                     require(fields.size() == 4 || fields.size() == 5, lineNumber,
                             "image needs source, alternate text, caption, and optional link");
-                    current.blocks.add(fields.size() == 4
-                            ? Block.of(Block.IMAGE,
-                                    fields.get(1), fields.get(2), fields.get(3), "")
-                            : Block.of(Block.IMAGE,
-                                    fields.get(1), fields.get(2), fields.get(3), fields.get(4)));
+                    current.blocks.add(new ImageBlock(
+                            fields.get(1),
+                            fields.get(2),
+                            fields.get(3),
+                            fields.size() == 4 ? "" : fields.get(4)));
                     break;
                 default:
                     throw parseError(lineNumber, "unknown record " + record);
@@ -171,14 +168,14 @@ final class PrepaintDocument {
         require(sawHeader, lineNumber, "missing header");
         require(current == null, lineNumber, "unterminated revision");
         require(!revisions.isEmpty(), lineNumber, "no revisions");
-        return new PrepaintDocument(revisions, ARTIFACT_SOURCE);
+        return new PrepaintDocument(revisions, SourceKind.ARTIFACT);
     }
 
     private static void finishParagraph(StringBuilder paragraph, List<Block> blocks) {
         if (paragraph.length() == 0) {
             return;
         }
-        blocks.add(Block.of(Block.TEXT, paragraph.toString()));
+        blocks.add(new TextBlock(paragraph.toString()));
         paragraph.setLength(0);
     }
 
@@ -222,12 +219,11 @@ final class PrepaintDocument {
         }
     }
 
-    private static int parseHeadingLevel(String value, int lineNumber) throws IOException {
+    private static HeadingLevel parseHeadingLevel(String value, int lineNumber)
+            throws IOException {
         try {
             int level = Integer.parseInt(value);
-            require(level >= 1 && level <= 6, lineNumber,
-                    "heading level must be between 1 and 6");
-            return level;
+            return HeadingLevel.fromWireNumber(level, lineNumber);
         } catch (NumberFormatException error) {
             throw parseError(lineNumber, "invalid heading level");
         }
@@ -273,6 +269,36 @@ final class PrepaintDocument {
         return new IOException("prepaint line " + lineNumber + ": " + message);
     }
 
+    enum SourceKind {
+        ARTIFACT,
+        PLAIN_TEXT
+    }
+
+    enum HeadingLevel {
+        ONE(1),
+        TWO(2),
+        THREE(3),
+        FOUR(4),
+        FIVE(5),
+        SIX(6);
+
+        final int wireNumber;
+
+        HeadingLevel(int wireNumber) {
+            this.wireNumber = wireNumber;
+        }
+
+        private static HeadingLevel fromWireNumber(int number, int lineNumber)
+                throws IOException {
+            for (HeadingLevel level : values()) {
+                if (level.wireNumber == number) {
+                    return level;
+                }
+            }
+            throw parseError(lineNumber, "heading level must be between 1 and 6");
+        }
+    }
+
     static final class Revision {
         final long sequence;
         final boolean complete;
@@ -281,8 +307,8 @@ final class PrepaintDocument {
         final String title;
         final List<Block> blocks;
 
-        Revision(long sequence, boolean complete, String requestedUrl,
-                 String resolvedUrl, String title, List<Block> blocks) {
+        private Revision(long sequence, boolean complete, String requestedUrl,
+                         String resolvedUrl, String title, List<Block> blocks) {
             this.sequence = sequence;
             this.complete = complete;
             this.requestedUrl = requestedUrl;
@@ -292,32 +318,72 @@ final class PrepaintDocument {
         }
     }
 
-    static final class Block {
-        static final String HEADING = "heading";
-        static final String TEXT = "text";
-        static final String LINK = "link";
-        static final String ROW = "row";
-        static final String FORM = "form";
-        static final String IMAGE = "image";
+    abstract static class Block {
+        private Block() {
+        }
+    }
 
-        final String kind;
-        final int level;
-        final List<String> values;
+    static final class HeadingBlock extends Block {
+        final HeadingLevel level;
+        final String text;
 
-        private Block(String kind, int level, String... values) {
-            this.kind = kind;
+        private HeadingBlock(HeadingLevel level, String text) {
             this.level = level;
-            List<String> copy = new ArrayList<>();
-            Collections.addAll(copy, values);
-            this.values = Collections.unmodifiableList(copy);
+            this.text = text;
         }
+    }
 
-        static Block heading(int level, String text) {
-            return new Block(HEADING, level, text);
+    static final class TextBlock extends Block {
+        final String text;
+
+        private TextBlock(String text) {
+            this.text = text;
         }
+    }
 
-        static Block of(String kind, String... values) {
-            return new Block(kind, 0, values);
+    static final class LinkBlock extends Block {
+        final String label;
+        final String target;
+
+        private LinkBlock(String label, String target) {
+            this.label = label;
+            this.target = target;
+        }
+    }
+
+    static final class RowBlock extends Block {
+        final List<String> cells;
+
+        private RowBlock(List<String> cells) {
+            if (cells.isEmpty()) {
+                throw new IllegalArgumentException("row must contain at least one cell");
+            }
+            this.cells = Collections.unmodifiableList(new ArrayList<>(cells));
+        }
+    }
+
+    static final class FormBlock extends Block {
+        final String label;
+        final String action;
+
+        private FormBlock(String label, String action) {
+            this.label = label;
+            this.action = action;
+        }
+    }
+
+    static final class ImageBlock extends Block {
+        final String source;
+        final String alternateText;
+        final String caption;
+        final String linkTarget;
+
+        private ImageBlock(String source, String alternateText, String caption,
+                           String linkTarget) {
+            this.source = source;
+            this.alternateText = alternateText;
+            this.caption = caption;
+            this.linkTarget = linkTarget;
         }
     }
 

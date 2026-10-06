@@ -1,0 +1,16 @@
+holmes-offsets=0,24
+holmes-hits=0:0:f0001,24:2:f0003
+holmes-fragments=f0001,f0003
+cross-boundary-hits=7:0:f0001
+first-window=f0001,f0002
+second-window=f0002,f0003,f0004
+stale-window=INVALID
+unicode-hits=3:0:u0001
+duplicate-hits=0:0:d0001,5:0:d0001
+duplicate-fragments=d0001
+overlap-search=INVALID
+repeated-fragment-search=INVALID
+invalid-range-search=INVALID
+unmapped-hit-search=INVALID
+missing-strand-search=INVALID
+repeated-strand-search=INVALID
