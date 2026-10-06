@@ -15,8 +15,13 @@ for path in "$home/cauldron" "$home/cauldron/sources" "$source" "$source/raw" "$
 done
 manifest=$source/provenance.tsv
 test -f "$manifest" && test -f "$source/raw" || fail 'retained source unavailable'
+test "$(wc -c < "$manifest")" -le 65536 || fail 'retained provenance exceeds intake bound'
+awk -F '\t' 'NF!=2 || $2=="" || /\r/ {exit 1} seen[$1]++ {exit 1}' "$manifest" || fail 'invalid retained provenance'
 field() { awk -F '\t' -v key="$1" '$1==key {print $2}' "$manifest"; }
+expected_id=$({ cat "$manifest"; printf '\n%s\n' "$(field sha256)"; } | sha256sum | awk '{print $1}')
+test "$expected_id" = "$id" || fail 'retained provenance identity mismatch'
 test "$(field source_kind)" = raw_urls || fail 'unsupported source decoder; raw bytes remain retained'
+test "$(wc -c < "$source/raw" | tr -d '[:space:]')" = "$(field byte_count)" || fail 'retained source length mismatch'
 test "$(sha256sum "$source/raw" | awk '{print $1}')" = "$(field sha256)" || fail 'retained source hash mismatch'
 privacy=$(field privacy)
 case $privacy in ordinary|private) ;; *) fail 'invalid source privacy policy' ;; esac

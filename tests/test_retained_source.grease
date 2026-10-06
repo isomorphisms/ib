@@ -27,6 +27,12 @@ sed 's/privacy	ordinary/privacy	private/' "$manifest" > "$work/private.tsv"
 private_id=$("$runner" "$root/bin/ib" retain-source "$source" "$work/private.tsv")
 "$runner" "$root/bin/ib" project-raw-urls "$private_id" >/dev/null
 if grep -F "$private_id" "$IB_HOME/pensieve/indexes/exact-text.files"; then exit 1; fi
+private_manifest=$IB_HOME/cauldron/sources/$private_id/provenance.tsv
+cp "$private_manifest" "$work/original-private.tsv"
+sed 's/privacy\tprivate/privacy\tordinary/' "$work/original-private.tsv" > "$private_manifest"
+if "$runner" "$root/bin/ib" project-raw-urls "$private_id" >/dev/null 2> "$work/error"; then exit 1; fi
+grep -F 'provenance identity mismatch' "$work/error" >/dev/null
+cp "$work/original-private.tsv" "$private_manifest"
 sed 's/source_generation	1/source_generation	2/' "$manifest" > "$work/generation.tsv"
 new_id=$("$runner" "$root/bin/ib" retain-source "$source" "$work/generation.tsv")
 test "$new_id" != "$id"
