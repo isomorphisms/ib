@@ -43,7 +43,8 @@ must be recorded as unavailable, never guessed from a filename. Detect source
 metadata drift before publishing an extraction. A provider checksum identifies
 the archive; the local SHA-256 identifies the selected member.
 
-The smallest honest conversation decoder is still missing. Its contract is:
+The [conversation adapter](retained-source-ingestion.md) now implements this
+contract for bounded retained source shards using `ib-source distill SOURCE_ID`:
 
 - preserve conversation and message IDs when supplied; otherwise use stable
   source coordinates and mark the external identity absent;
