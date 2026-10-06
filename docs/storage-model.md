@@ -49,7 +49,10 @@ state/
     ...
 ```
 
-This is a conceptual separation, not a frozen on-disk grammar. In particular, the category, task, proposal, and assertion paths are not implemented on `main` yet.
+This is a conceptual separation, not a frozen on-disk grammar. The first narrow
+task implementation now writes protected long-view `task.txt`, `tab.txt`, and
+`history.log` records. General task roots/frontiers, categories, proposals, and
+assertions are not thereby claimed as implemented.
 
 ## Stable event identity
 

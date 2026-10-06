@@ -50,9 +50,18 @@ The adapter should identify the model and task explicitly so local models can be
 
 ## Classification baseline
 
-Category membership is multilabel. A useful first baseline is one scored binary classifier per category rather than a single exclusive multiclass classifier.
+Category membership is multilabel. A useful first baseline is one independent inclusion scorer per category rather than a single exclusive multiclass classifier. It is binary relevance only in the sense of asking one category question at a time; material outside category `c` is not automatically a negative example for `c`.
 
-A linear baseline can use one separator per category over persistent Float32 embeddings and cheap structured features. Train from explicit or trusted positive and negative evidence; where absence is merely unlabeled, use a positive-unlabeled treatment rather than declaring every other object negative. Useful features include:
+For category `c`, an explicit linear baseline is an affine score and a separately recorded policy threshold:
+
+```text
+s_c(x) = w_c dot phi(x) + b_c
+propose c when s_c(x) >= tau_c
+```
+
+`b_c` is normally learned, so the decision surface is affine and is not forced through the origin. `tau_c` need not be zero: it should reflect the cost of hiding relevant material. There is no argmax across categories. An authoritative human membership remains included and an authoritative category-scoped exclusion remains excluded regardless of a later model score; passing the threshold is still a proposal, not silent acceptance.
+
+Train from explicit or trusted positive and negative evidence; where absence is merely unlabeled, use a positive-unlabeled treatment rather than declaring every other object negative. Useful features include:
 
 - URL, host, title, MIME type, and source;
 - extracted text or image description;
@@ -61,13 +70,32 @@ A linear baseline can use one separator per category over persistent Float32 emb
 - prior accepted memberships and explicit corrections;
 - neighborhood or vector similarity.
 
-The literal classifier remains replaceable. A margin is a score, not an ontology. Slack, support examples, and disagreement among plausible separators should remain inspectable where they help explain uncertainty.
+In a soft-margin SVM, each labeled example has a scalar slack variable measuring violation of the desired margin. The collection of those scalars may be called a slack vector. Support vectors are instead the training examples with nonzero dual weight that determine the separator; some lie on the margin and some violate it. The signed geometric distance to the fitted zero surface is `s_c(x) / norm(w_c)`; distance to the model-policy threshold surface is `(s_c(x) - tau_c) / norm(w_c)`. Raw score, normalized distance, slack, support-vector status, held-out error, and ensemble disagreement are separate diagnostics; none is automatically a calibrated probability or an inclusion band.
+
+One-class SVM is an origin-related construction that separates examples from the feature-space origin with an offset. It is a possible positive-only probe, not the ordinary soft-margin binary SVM and not the default once explicit negative corrections exist.
+
+IB may fit another affine separator inside a coherent region or against residual errors from an earlier separator. That yields a collection of binary decisions—possibly an oblique tree, a boosted ensemble, or overlapping category scorers—not a compulsory single hierarchy. A parent and a narrower category may both remain true.
+
+Bagging may fit planes over row, feature, or provisional-unlabeled resamples and retain every plane before voting or averaging; this is a useful positive-unlabeled baseline. Boosting may fit later learners against earlier errors. A sum of unthresholded linear scores collapses algebraically to one linear score, while thresholded-plane voting or tree structure can represent a more elaborate boundary. Vote fraction still is not automatically a probability.
 
 Zero, one, or many categories may pass their per-category decisions. Retrieval should generally prefer an extra plausible membership to hiding material because another category won.
 
-## Corrections are training events
+## Human organization is supervision
 
-A drag, drop, rename, membership addition, or membership removal is an explicit human correction. Record the correction as an event and update derived models conservatively; do not overwrite the model proposal that prompted it.
+Machine learning should learn from intentional human organization, not merely from corrections made after a bad proposal.
+
+- creating or naming a category supplies category semantics;
+- adding membership supplies an authoritative category-scoped positive;
+- removing membership supplies an authoritative negative for that category only;
+- accepting a split or merge supplies a structural constraint;
+- grouping resources into a task or reading bundle supplies relationship and ranking evidence;
+- explicitly meaningful pinning or ordering may supply attention evidence.
+
+Each signal retains its original event, target kind, scope, and authority instead of being flattened into a universal label. Incidental filesystem order, passive visibility, `_active` removal, and unaccepted model output are not negative classification evidence.
+
+## Corrections and assertions are training events
+
+A drag, drop, rename, membership addition, membership removal, or accepted structural change is a typed human assertion. Record the event and update derived models conservatively; do not overwrite the model proposal that prompted it.
 
 Dropping an object into category `B` is an authoritative positive assertion for `B` and changes that view immediately. It is an add, not a move: existing membership in `A` remains because categories overlap. Explicitly removing `B` is negative evidence only for `B`. Removing `B` from `_active` is attention control and produces no classification or training event. Never train on a model's own unaccepted labels.
 

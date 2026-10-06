@@ -1,75 +1,78 @@
-# ib 0.2
+# ib
 
-> browsers don't have bookmarks.
+An experimental personal browser and task-workbench substrate built around durable browsing state rather than renderer-owned tabs.
 
-The 0.2 line starts again from the persistent information underneath a browser rather than from a renderer, Android application, or large typed browser core.
+IB's immediate target is one person's real browsing corpus and workflows, not general-purpose web compatibility. It optimizes the task behind navigation: learning a documentation set, recovering a fact, finding and sharing an image, comparing delivered prices, or resuming an investigation after the live browser processes are gone.
 
-The first implementation is deliberately shell-first and arXiv-only.
+The substrate supports multiple frontends over the same browser-owned state. A conventional page surface, a small phone frontend, a text-and-action workbench, and developer inspectors may coexist. Renderers, acquisition adapters, extractors, and models remain replaceable; none owns tabs, history, tasks, or accepted organization.
 
-## Cauldron and Pensieve
+The browser core owns resource, tab, event, and task identity; sleeping and waking; snapshots; organization; indexes; inference acceptance; and renderer selection. Only roughly 3–10 renderer working sets should normally be resident even when the known corpus reaches 10,000 resources.
 
-A fetched thing first enters the **Cauldron**.  The Cauldron is intake: original HTML, PDF bytes, fetched figures, source URLs, and acquisition time.  It may be messy, but it should retain enough source material to reinterpret later.
+Low-memory behavior has a harder exception: an active authenticated transaction may be protected from ordinary sleeping or eviction. Opening another tab or app to retrieve information must not silently destroy the login/session or in-progress form state. See `docs/architecture.md` and #59.
 
-The **Pensieve** is the next layer.  Material distilled from the Cauldron becomes locally searchable text and small metadata/relationship files there.  Indexes are derived from the Pensieve and must be rebuildable.
+The first integrated protected long-view path now gives that work a durable
+task/tab/navigation identity across renderer and host-process loss.  It restores
+only a neutral URL through the existing WebView profile and reports session,
+heap, form, and reconstruction outcomes separately.  See
+`docs/long-view-protected-tasks.md`.
 
-```text
-arXiv
-  |
-  v
-ICU + shell
-  |
-  v
-Cauldron
-  |  original HTML / PDF / figures / provenance
-  v
-distill
-  |
-  v
-Pensieve
-  |  searchable text / title / links / figure manifest
-  v
-indexes and later model hooks
-```
+## Design notes
 
-A tab or renderer is a temporary view onto this persistent state.  Neither is part of the 0.2 acceptance boundary.
+- `docs/architecture.md` — ownership and replaceable-service boundaries
+- `docs/personal-workbench.md` — personal scope, task frontend, user stories, and latency targets
+- `docs/prefetch-and-reading.md` — durable investigation frontiers, disposable fetches, and `~/reading`
+- `docs/tab-categorization.md` — overlapping personal categories and adaptive refinement
+- `docs/inference-and-learning.md` — local-model proposals, validation, ensembles, and correction events
+- `docs/storage-model.md` — identity levels and canonical, proposed, and derived state
+- `docs/long-view-protected-tasks.md` — durable authenticated task reconstruction
+- `docs/developer-workbench.md` — fixture and memory-pressure harness
 
-Live authenticated transaction state is not disposable merely because the renderer is temporary. Ordinary sleeping or eviction must not silently destroy an active login/session or in-progress form while another tab or app is used to retrieve information; see `docs/architecture.md` and #59.
+## Implementation languages
 
-Three future reader-support contracts are recorded separately:
+IB is implemented in **Idriç**. Browser-owned state, policy, and invariants belong in `.idric` source under `src/`.
 
-- [`docs/reading-feedback.md`](docs/reading-feedback.md): opening is not reading, passive interaction is evidence rather than proof of comprehension, and completed items may deliberately remain in a rereading/reminder rotation.
-- [`docs/reading-assistance.md`](docs/reading-assistance.md): the Pensieve should support interrupted and question-driven reading, fiction recall without spoilers, corpus triage for papers/repositories, and replaceable source-backed model-generated guides/fragments/strands rather than optimizing for finishing long reads.
-- [`docs/reader-support-system.md`](docs/reader-support-system.md): physical bookshelf photographs may enter as source evidence; recognized books and inferred interests remain derived; long-book prefetch can prepare spoiler-aware character/appearance/relationship support; and the division of work among Pensieve, deterministic indexes, and language-model hooks remains deliberately open.
+**Grease** is the shell and operating-system language for orchestration. HTTP fetching, temporary directories, file movement, invoking compilers or parsers, cache maintenance, and low-priority model batch passes belong in `.grease` programs rather than being reimplemented as Idriç application logic.
 
-## Commands
+Python and Ithon are not IB implementation layers. A disposable comparison may exist outside the runtime, but the browser core, storage and index policy, inspector model, and phone-facing application logic must not depend on them.
 
-```sh
-bin/ib fetch https://arxiv.org/abs/2203.11355
-bin/ib distill 2203.11355
-bin/ib add https://arxiv.org/abs/1901.09021 https://arxiv.org/abs/2305.00241
-bin/ib search 'Bergman kernel'
-bin/ib reindex
-bin/ib paths
-```
+Android or other native code is a narrow platform boundary for facilities Idriç and Grease cannot yet reach directly: NativeActivity, EGL, renderers, kernel-enforced filesystem operations, clipboard and share handoff, and similar FFI edges. Those adapters do not own browser state.
 
-`add` is just `fetch` followed by `distill`, then an exact-text index rebuild.
+`android-prepaint/` is a deliberately small phone-visible harness for the Idriç
+information prepaint. It uses native Android views rather than `WebView`, applies
+a fixed dark presentation to extracted text, preserves fetched image colors, and
+replaces partial projections with later complete revisions.
 
-By default persistent data lives under `${XDG_DATA_HOME:-$HOME/.local/share}/ib`.  Set `IB_HOME` to put the whole experiment somewhere else.  Set `IB_ICU` to the ICU executable when it is not on `PATH` as `icu`.
+The current Idriç core covers ordered history values, rebuildable indexes,
+storage classification and read policy, the renderer-independent inspector
+model, and the first protected long-view task transitions. Scientific-media
+work adds HTML-first arXiv harvesting, ordered image downloads, caption and
+alternate-text naming, PDF fallback, and a low-priority second naming pass.
+General task/frontier, category, and generic inference records documented above
+remain design boundaries rather than claims of completed implementation.
 
-The first arXiv corpus is in `tests/fixtures/arxiv-0.2.urls`.
+## Shell-first Cauldron and Pensieve
 
-## Host tools
+The independent 0.2 arXiv path starts with persistent information. Cauldron
+retains original HTML/PDF/figures, source URLs and acquisition time; distillation
+produces locally searchable text, title/link records and figure manifests in
+Pensieve. Indexes remain rebuildable. A tab or renderer is outside this slice.
 
-The acquisition path requires ICU.  HTML extraction prefers `xmlstarlet` and has a deliberately crude shell fallback.  PDF-to-text extraction uses `pdftotext` when available.  Missing `pdftotext` does not prevent the HTML-backed Pensieve entry from being created.
+`bin/ib` provides `fetch`, `distill`, `add`, `search`, `reindex`, and `paths`.
+`add` acquires, distills, then rebuilds the exact-text file-list index. Search
+uses retained local text without reacquisition. Persistent data defaults to
+`${XDG_DATA_HOME:-$HOME/.local/share}/ib`; `IB_HOME` selects a disposable or
+alternate root and `IB_ICU` names the ICU acquisition executable.
+Modern and one-component legacy arXiv IDs are validated before acquisition or
+replacement. Resolved item parents must stay within the intended storage root,
+including when a valid legacy ID crosses a symlink.
 
-This is not a claim of general Web compatibility.  The only site-specific adapter in 0.2 is arXiv.
+Executable `hooks/after-distill.d/` hooks receive Pensieve and Cauldron item
+paths. The body-hyperplane experiment is a derived consumer: partitions remain
+independent of labels, non-fit rows cannot train planes or enter provisional
+unlabeled samples, and external text declares its representation contract.
+The frozen proposal policy is unchanged. Its inherited Python tools remain
+experimental migration debt, not IB runtime or Idriç acceptance.
 
-## Derived indexes and hooks
-
-`bin/ib reindex` currently builds the simplest possible exact-text index: a sorted file list over Pensieve text representations.  `bin/ib search` searches those local files; it does not return to the Web.
-
-After an item is distilled, executable files under `$IB_HOME/hooks/after-distill.d/` are called with the Pensieve item path and its Cauldron source path.  This is intentionally a small process boundary for later vector spaces, hyperplanes, other indexing methods, model-context adapters, and language-model-generated reading guides.  Derived systems may append replaceable, provenance-linked artifacts; they do not own or silently rewrite the Pensieve, source evidence, human annotations, or reading observations.
-
-## Earlier work
-
-The older Idriç browser core, Android prepaint, scientific-media, and workbench material remain on this branch as reference while 0.2 is established.  The active 0.2 path does not depend on them.  They can be converged or removed after this smaller shell architecture proves itself.
+The reading contracts remain in `docs/reading-feedback.md`,
+`docs/reading-assistance.md`, and `docs/reader-support-system.md`. This line
+does not retire the canonical Strand model or Longview/Binder architecture.
