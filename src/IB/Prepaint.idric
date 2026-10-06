@@ -1,0 +1,51 @@
+module IB.Prepaint
+
+import IB.Strand
+
+%default total
+
+-- Revision numbers are generated here rather than exposed as an unrestricted
+-- machine count.  Zero is the first valid revision and next_revision is the
+-- only public way to advance it.
+export
+data RevisionSequence = Revision Integer
+
+export
+first_revision : RevisionSequence
+first_revision = Revision 0
+
+export
+next_revision : RevisionSequence → RevisionSequence
+next_revision (Revision value) = Revision (value + 1)
+
+export
+revision_sequence_value : RevisionSequence → Integer
+revision_sequence_value (Revision value) = value
+
+public export
+data RevisionState
+  = PartialRevision
+  | CompleteRevision
+
+public export
+record PrepaintRevision where
+  constructor Prepaint
+  sequence : RevisionSequence
+  state : RevisionState
+  source : SourceRepresentation
+  requested : RequestedAddress
+  resolved : ResolvedAddress
+  title : Maybe String
+  blocks : List InformationBlock
+
+export
+prepaint_from_strand : RevisionSequence → RevisionState → Strand → PrepaintRevision
+prepaint_from_strand sequence state strand =
+  Prepaint
+    sequence
+    state
+    strand.source
+    strand.requested
+    strand.resolved
+    strand.title
+    strand.blocks

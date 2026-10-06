@@ -83,6 +83,24 @@ jobs:
           receipt: /tmp/ib-valid-ingestion.receipt.tsv
           role: consumer
 
+      - name: Exercise canonical information model
+        working-directory: src
+        run: |
+          /tmp/idric/bin/idris2 CanonicalInformationSmoke.idric -o ib-canonical-information > /tmp/idric-canonical-information-compile.txt 2>&1
+          cat /tmp/idric-canonical-information-compile.txt
+          test -x ./build/exec/ib-canonical-information
+          ! grep -q '^Error:' /tmp/idric-canonical-information-compile.txt
+          ./build/exec/ib-canonical-information > /tmp/ib-canonical-information.txt
+          cat /tmp/ib-canonical-information.txt
+          grep -Fx 'canonical-information=constructed' /tmp/ib-canonical-information.txt
+          grep -Fx 'canonical-blocks=6' /tmp/ib-canonical-information.txt
+          grep -Fx 'canonical-row-cells=2' /tmp/ib-canonical-information.txt
+          grep -Fx 'empty-image-refused=True' /tmp/ib-canonical-information.txt
+          grep -Fx 'seventh-heading-refused=True' /tmp/ib-canonical-information.txt
+          grep -Fx 'revision-zero=0' /tmp/ib-canonical-information.txt
+          grep -Fx 'nonincreasing-revision-refused=True' /tmp/ib-canonical-information.txt
+          grep -Fx 'version1=serialized' /tmp/ib-canonical-information.txt
+
       - name: Exercise browser-owned Idriç core
         run: sh bin/ci_browser_foundation.grease exercise-core
 
