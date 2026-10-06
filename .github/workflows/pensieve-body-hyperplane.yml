@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - '0.2/pensieve-body-hyperplanes'
+      - '0.2/takeout-*'
   pull_request:
     branches:
       - '0.2/pensieve-arxiv'
@@ -45,6 +46,9 @@ jobs:
             onnxruntime==1.19.2 \
             transformers==4.45.2 \
             huggingface-hub==0.25.2
+
+      - name: Verify unlabeled partition isolation
+        run: python experiments/pensieve-hyperplanes/test_body_probe_partitions.py
 
       - name: Stage public paper bodies in a disposable Pensieve-shaped fixture
         run: |

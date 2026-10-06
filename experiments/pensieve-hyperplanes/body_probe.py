@@ -25,7 +25,16 @@ ROLES = {
     "held_out_positive",
     "held_out_negative",
 }
-FORMAT = "ib-pensieve-body-hyperplane-probe-v2"
+PARTITIONS = {"fit", "development", "held_out"}
+ROLE_PARTITION = {
+    "fit_positive": "fit",
+    "fit_negative": "fit",
+    "development_positive": "development",
+    "development_negative": "development",
+    "held_out_positive": "held_out",
+    "held_out_negative": "held_out",
+}
+FORMAT = "ib-pensieve-body-hyperplane-probe-v3"
 POLICY_FORMAT = "ib-pensieve-hyperplane-proposal-policy-v2"
 
 
@@ -96,6 +105,73 @@ def load_labels(path: Path, known_ids: set[str]) -> list[Label]:
     return labels
 
 
+def load_partitions(path: Path, ids: list[str]) -> dict[str, str]:
+    known_ids = set(ids)
+    partitions: dict[str, str] = {}
+    with path.open("r", encoding="utf-8", newline="") as stream:
+        reader = csv.DictReader(stream, delimiter="\t")
+        if reader.fieldnames != ["id", "partition"]:
+            raise ValueError("partitions must have id and partition columns")
+        for line_number, row in enumerate(reader, start=2):
+            row_id = row["id"]
+            partition = row["partition"]
+            if row_id not in known_ids:
+                raise ValueError(
+                    f"partitions line {line_number}: unknown id {row_id!r}"
+                )
+            if row_id in partitions:
+                raise ValueError(
+                    f"partitions line {line_number}: duplicate id {row_id!r}"
+                )
+            if partition not in PARTITIONS:
+                raise ValueError(
+                    f"partitions line {line_number}: invalid partition {partition!r}"
+                )
+            partitions[row_id] = partition
+
+    missing = known_ids - set(partitions)
+    if missing:
+        sample = ", ".join(sorted(missing)[:5])
+        raise ValueError(f"partitions missing {len(missing)} input ids: {sample}")
+    return partitions
+
+
+def validate_input_manifest(
+    manifest: dict, input_sha256: str, input_contract: str
+) -> dict | None:
+    if manifest.get("output_sha256") != input_sha256:
+        raise ValueError("input manifest does not match the text input artifact")
+
+    if input_contract == "pensieve-body-only":
+        if manifest.get("title_or_url_used") is not False:
+            raise ValueError(
+                "pensieve-body-only input requires title_or_url_used=false"
+            )
+        return None
+
+    if input_contract == "declared-text":
+        contract = manifest.get("representation_contract")
+        if not isinstance(contract, dict) or not contract:
+            raise ValueError(
+                "declared-text input requires a nonempty representation_contract"
+            )
+        kind = contract.get("kind")
+        fields = contract.get("model_text_fields")
+        if not isinstance(kind, str) or not kind:
+            raise ValueError("representation_contract.kind must be nonempty text")
+        if (
+            not isinstance(fields, list)
+            or not fields
+            or any(not isinstance(value, str) or not value for value in fields)
+        ):
+            raise ValueError(
+                "representation_contract.model_text_fields must be a nonempty text list"
+            )
+        return contract
+
+    raise ValueError(f"unsupported input contract {input_contract!r}")
+
+
 def load_policy(path: Path) -> dict:
     policy = json.loads(path.read_text(encoding="utf-8"))
     if policy.get("format") != POLICY_FORMAT:
@@ -140,6 +216,7 @@ def fit_concept(
     ids: list[str],
     vectors: np.ndarray,
     labels: list[Label],
+    partitions: dict[str, str] | None,
     policy: dict,
     bags: int,
     unlabeled_per_positive: float,
@@ -174,6 +251,18 @@ def fit_concept(
     if len(positives) < 2:
         raise ValueError(f"concept {concept!r} needs at least two fit positives")
 
+    if partitions is not None:
+        for label in labels:
+            if label.concept != concept:
+                continue
+            expected = ROLE_PARTITION[label.role]
+            actual = partitions[label.row_id]
+            if actual != expected:
+                raise ValueError(
+                    f"concept {concept!r} label {label.row_id!r} role "
+                    f"{label.role!r} requires partition {expected!r}, got {actual!r}"
+                )
+
     fit_ids = set(positives.tolist()) | set(negatives.tolist())
     excluded_ids = {
         index[label.row_id]
@@ -190,7 +279,17 @@ def fit_concept(
     if fit_ids & excluded_ids:
         raise ValueError(f"concept {concept!r} has fit/evaluation overlap")
 
-    fixed = fit_ids | excluded_ids
+    partition_excluded_ids = (
+        {
+            index[row_id]
+            for row_id, partition in partitions.items()
+            if partition != "fit"
+        }
+        if partitions is not None
+        else set()
+    )
+    partition_excluded_unlabeled = partition_excluded_ids - excluded_ids
+    fixed = fit_ids | excluded_ids | partition_excluded_ids
     unlabeled = np.asarray(
         [offset for offset in range(len(ids)) if offset not in fixed], dtype=np.int64
     )
@@ -303,6 +402,7 @@ def fit_concept(
         "held_out_positive_count": int(len(held_positive)),
         "held_out_negative_count": int(len(held_negative)),
         "fit_eligible_unlabeled_count": int(len(unlabeled)),
+        "partition_excluded_unlabeled_count": int(len(partition_excluded_unlabeled)),
         "requested_plane_count": bags,
         "retained_unique_plane_count": len(planes),
         "provisional_unlabeled_per_plane": sample_count,
@@ -351,8 +451,24 @@ def main() -> int:
     parser.add_argument("--vectors", required=True)
     parser.add_argument("--input-texts", required=True)
     parser.add_argument("--input-manifest", required=True)
+    parser.add_argument(
+        "--input-contract",
+        choices=("pensieve-body-only", "declared-text"),
+        default="pensieve-body-only",
+        help=(
+            "pensieve-body-only keeps the existing no-title/no-URL assertion; "
+            "declared-text requires an explicit representation_contract"
+        ),
+    )
     parser.add_argument("--embedding-provenance", required=True)
     parser.add_argument("--labels", required=True)
+    parser.add_argument(
+        "--partitions",
+        help=(
+            "optional complete id-to-partition TSV; development and held_out rows "
+            "are excluded from fitting even when they have no semantic label"
+        ),
+    )
     parser.add_argument("--proposal-policy", required=True)
     parser.add_argument("--output", required=True)
     parser.add_argument("--concept", action="append", default=[])
@@ -379,11 +495,13 @@ def main() -> int:
     manifest_path = Path(args.input_manifest)
     embedding_path = Path(args.embedding_provenance)
     labels_path = Path(args.labels)
+    partition_path = Path(args.partitions) if args.partitions else None
     policy_path = Path(args.proposal_policy)
 
     ids, vectors = load_vectors(vector_path)
     validate_inputs(input_path, ids)
     labels = load_labels(labels_path, set(ids))
+    partitions = load_partitions(partition_path, ids) if partition_path else None
     policy = load_policy(policy_path)
     available = sorted(
         {label.concept for label in labels if label.role == "fit_positive"}
@@ -395,14 +513,9 @@ def main() -> int:
     input_manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     embedding_provenance = json.loads(embedding_path.read_text(encoding="utf-8"))
     input_sha256 = sha256(input_path)
-    if input_manifest.get("title_or_url_used") is not False:
-        raise ValueError(
-            "body probe requires a manifest asserting title_or_url_used=false"
-        )
-    if input_manifest.get("output_sha256") != input_sha256:
-        raise ValueError(
-            "body-input manifest does not match the body-text input artifact"
-        )
+    representation_contract = validate_input_manifest(
+        input_manifest, input_sha256, args.input_contract
+    )
     if embedding_provenance.get("input_text_sha256") != input_sha256:
         raise ValueError(
             "embedding provenance does not match the body-text input artifact"
@@ -423,7 +536,9 @@ def main() -> int:
             "manifest_path": str(manifest_path),
             "manifest_sha256": sha256(manifest_path),
             "format": input_manifest.get("format"),
-            "title_or_url_used": False,
+            "input_contract": args.input_contract,
+            "title_or_url_used": input_manifest.get("title_or_url_used"),
+            "representation_contract": representation_contract,
         },
         "embedding": embedding_provenance,
         "labels": {
@@ -431,6 +546,20 @@ def main() -> int:
             "sha256": sha256(labels_path),
             "rows": [label.__dict__ for label in labels],
         },
+        "partitions": (
+            {
+                "path": str(partition_path),
+                "sha256": sha256(partition_path),
+                "counts": {
+                    partition: sum(
+                        1 for value in partitions.values() if value == partition
+                    )
+                    for partition in sorted(PARTITIONS)
+                },
+            }
+            if partition_path is not None and partitions is not None
+            else None
+        ),
         "proposal_policy": {
             "path": str(policy_path),
             "sha256": sha256(policy_path),
@@ -455,6 +584,7 @@ def main() -> int:
                 ids,
                 vectors,
                 labels,
+                partitions,
                 policy,
                 args.bags,
                 args.unlabeled_per_positive,
