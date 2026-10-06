@@ -25,8 +25,8 @@ android {
         applicationId = "org.isomorphisms.ib.webview"
         minSdk = 26
         targetSdk = 36
-        versionCode = 7
-        versionName = "0.7.0"
+        versionCode = 8
+        versionName = "0.8.0"
         buildConfigField("String", "IB_SOURCE_HEAD", "\"$ibSourceHead\"")
     }
 
@@ -109,6 +109,14 @@ tasks.register("verifyWebViewBoundary") {
 
         check(implementation.contains("requestOfflineAccess")) {
             "Drive authorization must request the one-time server code."
+        }
+        val consent = file("src/main/java/org/isomorphisms/ib/webview/DriveAuthorizationActivity.java").readText()
+        check(consent.contains("requestOfflineAccess") && !longView.contains("requestOfflineAccess")) {
+            "Consent belongs to the independent platform adapter."
+        }
+        val incremental = file("src/main/java/org/isomorphisms/ib/webview/IncrementalLargePageActivity.java").readText()
+        check(!incremental.contains("getServerAuthCode") && !incremental.contains("requestOfflineAccess")) {
+            "The browser experiment must only delegate private handoffs."
         }
         check(!implementation.contains("android.intent.category.BROWSABLE")) {
             "Drive authorization must not be a browser link."

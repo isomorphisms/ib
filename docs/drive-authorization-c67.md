@@ -1,46 +1,50 @@
-# Drive authorization receiver: current-line reconciliation
+# Drive authorization on the MIRO C67
 
-The existing Java/Google Identity Services receiver is independent of native
-ABIs. At e8164d978e35e2b4188c3a0fbd403e181b29e74d the exact hosted APK artifact
-10707349978 contains no `lib/` native payload. Source minSdk is 26, target and
-compile SDK are 36. Cat Food's retained C67 profile observes API 34: the minimum
-is satisfied; compile/target SDK are not minimum runtime requirements. Google
-Play Services availability, consent, callback and durable credential exchange
-still need physical C67 evidence. No arm64 port is required.
+The adapter is reconciled with current IB main independently of the PiP loading
+experiment, whose existing components and tests are preserved. LongViewActivity
+remains the launcher. The experiment delegates private handoffs to
+DriveAuthorizationActivity, which
+owns only explicit Google consent and one local code handoff; it has no WebView,
+journal, clipboard, corpus store or model path. Unknown/duplicate URI fields and
+overlapping requests are refused. Granted scopes must include each requested
+scope. The default is `drive.readonly`; the only additional allowed set is
+`drive.readonly + drive.file` for application-owned archives/copies.
 
-Reconciliation preserves current main's LongView launcher, semantic/core tests,
-durable task path, exact-head build and canonical package/signing lane. The
-separate existing incremental activity still owns the experimental receiver;
-its PiP/foreground-service tests apply to that component only. It does not become
-the main browser architecture. Loopback remains a provisional lowering under
-cloud-storage-api #12, not a new broker or proof of Binder/PFD accessibility.
+Package identity remains `org.isomorphisms.ib.webview`. Minimum SDK 26 fits the
+[retained C67 API 34 profile](https://github.com/isomorphisms/catfood/blob/main/android/devices/miro-c67.md).
+Target/compile SDK 36 does not require runtime API 36. The Java/Play services
+package has no native ABI payload; an arm64 port is unnecessary. Play services,
+account state and actual authorization remain physical runtime gates.
 
-Package remains `org.isomorphisms.ib.webview`, versionCode 7 (current independent
-Longview/latency candidates already use 6). The current build
-uses main's stable test certificate (SHA-256
-DE9B1D47C5A65E6D46A204B79DD9EE566B9D3C9832BA81EBC4213D3392E92FF9).
-The old branch's runner-local debug key is not update identity. A new build
-cannot replace an installed APK signed by that old key. No uninstall or signer
-migration is authorized. Do not introduce a second package to bypass it.
+Historical exact-head artifact e8164d978e35e2b4188c3a0fbd403e181b29e74d is
+[artifact 10707349978](https://github.com/isomorphisms/ib/actions/runs/35755114882/artifacts/10707349978).
+It predates private stable signing and is not a qualified update. New hosted
+builds retain main's stable public test signer and replacement-install fixture.
+Those are inspectable compilation/package and emulator fixture evidence, not
+private signing, C67 installation or OAuth acceptance. Without a supplied
+keystore the build emits an unsigned candidate rather than creating another
+debug identity. The inherited Java/Gradle adapter remains
+existing platform debt, not an ICK/NDK/direct-DEX rewrite.
 
-Live Google authorization must select this same package and a stable signing
-certificate approved for OAuth. The canonical public test key is inspection/
-test evidence, not an assumed private OAuth identity. Register the actual
-approved certificate's SHA-1 with the Android OAuth client for this package;
-configure a matching Web application client ID for requestOfflineAccess and
-cloud-storage-api's private client credential. Enable Drive API, configure the
-consent screen/user grant and exact drive.readonly scope. Do not store client
-secrets, refresh tokens or auth codes in IB history, logs, clipboard or Git.
+## One live signer and registration
 
-This receiver accepts drive.readonly only. SDF archive writes additionally
-need drive.file; the desktop/private credential route can request it. Android
-write-scope consent is still missing rather than silently broadening this
-allowlist. Consumer death before the one-time code is delivered requires a new
-consent attempt; the code is never made ordinary durable state.
+Do not register the shared public test key or a runner-local debug key for live
+Google authorization. Supply one stable private IB certificate, preserve it for
+replacement installs, and inspect the installed package before replacement.
+Do not create a C67-specific package/signer or uninstall to hide a mismatch.
 
-Required physical evidence: exact APK/source/signer/package/version, C67
-firmware and Play Services, explicit consent result, same pending local request,
-successful private credential commit and a subsequent authenticated Drive
-operation after restart. CI build/replacement installation on an emulator is
-not C67 authorization. This branch remains draft until its current-head checks
-and required physical gates are met.
+In the same user-owned Google project, enable Drive API, configure consent and
+the intended test user, register an Android client with this package/private
+signer SHA-1, and create the matching Web OAuth client for offline server-code
+exchange. Import the Web client through cloud-storage-api `init-android` into
+mode-0600 credential state. Read-only is default; explicitly request
+`--stream-upload`/`--copy-tree` for the narrow write scope.
+
+Official references:
+<https://developer.android.com/identity/authorization>
+<https://developers.google.com/android/reference/com/google/android/gms/auth/api/identity/AuthorizationRequest.Builder>
+<https://developers.google.com/workspace/guides/create-credentials>
+
+Private signer material, client registration, C67 installation/replacement,
+physical consent/code return, durable refresh state and an authorized Drive
+request remain external gates. CI cannot accept these on the user's behalf.

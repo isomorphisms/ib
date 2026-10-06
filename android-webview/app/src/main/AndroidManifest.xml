@@ -11,12 +11,14 @@
         android:supportsRtl="true"
         android:theme="@android:style/Theme.Material.Light.NoActionBar"
         android:usesCleartextTraffic="true">
-        <!-- Existing authorization experiment. LongView remains the launcher;
-             this component is reached only through an explicit IB handoff. -->
+        <!-- Preserved browser experiment; consent has an independent adapter. -->
         <activity android:name=".IncrementalLargePageActivity"
             android:configChanges="screenSize|smallestScreenSize|screenLayout|orientation"
             android:exported="true" android:launchMode="singleTask"
             android:process=":incremental" android:supportsPictureInPicture="true">
+        </activity>
+        <activity android:name=".DriveAuthorizationActivity" android:exported="true"
+            android:launchMode="singleTask">
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
