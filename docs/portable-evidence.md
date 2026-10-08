@@ -83,7 +83,8 @@ decoders when requested, rather than exported as canonical truth.
 whose original `model` policy is `allow`. Missing model policy defaults to deny.
 The result contains `ib-assistant-source-context-v1`, ordered source references,
 byte spans from zero to original byte count, exact hashes and available raw files
-under `data/`. An unavailable reference remains unavailable. Source data is never
+under `data/`, plus the admitted sources' exact original provenance under
+`sources/<source-id>/provenance.tsv`. An unavailable reference remains unavailable. Source data is never
 evaluated or interpreted as a shell command, tool request or instruction.
 
 The context is local preparation, not transmission or permission to an assistant

@@ -64,6 +64,8 @@ var private_context = $(evidence $root $runner $home context $private_bundle "$t
 test ! -s "$private_context/references.tsv"
 var context = $(evidence $root $runner $home context $bundle "$temporary/context")
 cmp "$temporary/raw" "$context/data/$first"
+cmp "$home/cauldron/sources/$first/provenance.tsv" "$context/sources/$first/provenance.tsv"
+cmp "$home/cauldron/sources/$second/provenance.tsv" "$context/sources/$second/provenance.tsv"
 test ! -e NEVER_EXECUTE
 grep -F b'whole-source-bytes\t0\t' "$context/references.tsv" > /dev/null
 write -- 'PASS private selection, assistant denial and source-as-data context'
