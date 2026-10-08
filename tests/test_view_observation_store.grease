@@ -1,0 +1,60 @@
+#!/usr/bin/env grease
+set -eu
+
+# The producer is an explicit OS-boundary fixture. Idriç's real semantic cases
+# execute in the compiler normalizer; this fixture cannot qualify its backend.
+test "$#" -eq 2 || exit 71
+repository_root=$1
+store_library=$2
+. "$store_library"
+. "$repository_root/lib/view_observation_store.grease"
+work=$(mktemp -d)
+trap --add EXIT { rm -rf "$work" }
+mkdir "$work/card"
+ib_store_init "$work/card" fixture-media
+printf '東京🙂ababa' >"$work/source"
+source_digest=$(sha256sum "$work/source")
+source_digest=${source_digest%% *}
+printf 'graph-input\n' >"$work/graph"
+printf 'committed-journal\n' >"$work/journal"
+printf 'new-observation\n' >"$work/row"
+cat >"$work/producer" <<'FIXTURE'
+#!/usr/bin/env grease
+cat "$7" "$8"
+FIXTURE
+chmod 700 "$work/producer"
+ib_observation_publish "$work/card" fixture-media journal-1 "$work/producer" \
+  text-1 retained:text-1 "$source_digest" utf8-text-v1 \
+  "$work/source" "$work/graph" "$work/journal" "$work/row"
+ib_store_read_bounded "$work/card" fixture-media journal-1 1048576 >"$work/reopened"
+cat "$work/journal" "$work/row" >"$work/expected"
+cmp "$work/expected" "$work/reopened"
+
+cat >"$work/failing-producer" <<'FIXTURE'
+#!/usr/bin/env grease
+cat "$7"
+printf 'partial-row'
+exit 7
+FIXTURE
+chmod 700 "$work/failing-producer"
+if ib_observation_publish "$work/card" fixture-media journal-2 "$work/failing-producer" \
+  text-1 retained:text-1 "$source_digest" utf8-text-v1 \
+  "$work/source" "$work/graph" "$work/journal" "$work/row"; then
+  exit 1
+else
+  test "$?" -eq 7
+fi
+test ! -e "$work/card/objects/journal-2"
+ib_store_read_bounded "$work/card" fixture-media journal-1 1048576 >"$work/after-interruption"
+cmp "$work/expected" "$work/after-interruption"
+
+printf 'changed source' >"$work/source"
+if ib_observation_publish "$work/card" fixture-media stale-journal "$work/producer" \
+  text-1 retained:text-1 "$source_digest" utf8-text-v1 \
+  "$work/source" "$work/graph" "$work/journal" "$work/row"; then
+  exit 1
+else
+  test "$?" -eq 73
+fi
+test ! -e "$work/card/objects/stale-journal"
+printf '%s\n' 'view-observation-os-boundary=PASS'

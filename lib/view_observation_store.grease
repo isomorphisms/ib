@@ -1,0 +1,60 @@
+# Grease generation publisher. Source durable_object_store.grease first.
+# Each accepted append creates an immutable journal generation. The old complete
+# generation remains independently readable; no in-place canonical rewrite.
+ib_observation_publish() {
+  forkwait {
+    test "$#" -eq 12 || return 71
+    observation_root=$1
+    observation_backend=$2
+    observation_object=$3
+    observation_producer=$4
+    observation_source_id=$5
+    observation_representation=$6
+    observation_digest=$7
+    observation_decoder=$8
+    observation_source=$9
+    observation_graph=${10}
+    observation_journal=${11}
+    observation_proposed=${12}
+    test -x "$observation_producer" || return 71
+    case "$observation_digest" in ''|*[!0123456789abcdef]*) return 71 ;; esac
+    test "${#observation_digest}" -eq 64 || return 71
+    ib_store_require_backend "$observation_root" "$observation_backend" || return $?
+    observation_work=$(mktemp -d) || return 72
+    trap --add EXIT {
+      rm -f "$observation_work/source" "$observation_work/graph" "$observation_work/journal" \
+        "$observation_work/row" "$observation_work/output" "$observation_work/diagnostics"
+      rmdir "$observation_work"
+    }
+    umask 077
+    for observation_pair in source graph journal row; do
+      case "$observation_pair" in
+        source) observation_input=$observation_source; observation_limit=4194304 ;;
+        graph) observation_input=$observation_graph; observation_limit=1048576 ;;
+        journal) observation_input=$observation_journal; observation_limit=1048576 ;;
+        row) observation_input=$observation_proposed; observation_limit=4096 ;;
+      esac
+      test -f "$observation_input" && test ! -L "$observation_input" || return 71
+      # The inherited Grease numeric expression is explicit at this byte edge.
+      observation_capture=$[int(observation_limit) + 1]
+      head -c "$observation_capture" "$observation_input" >"$observation_work/$observation_pair" || return 72
+      test "$(wc -c <"$observation_work/$observation_pair")" -le "$observation_limit" || return 69
+      cmp -s "$observation_input" "$observation_work/$observation_pair" || return 73
+    done
+    iconv -f UTF-8 -t UTF-8 "$observation_work/source" >/dev/null || return 71
+    observation_observed=$(sha256sum "$observation_work/source") || return 72
+    observation_observed=${observation_observed%% *}
+    test "$observation_observed" = "$observation_digest" || return 73
+    try { forkwait { ulimit -f 2048 && timeout 10 "$observation_producer" \
+      "$observation_source_id" "$observation_representation" "$observation_digest" "$observation_decoder" \
+      "$observation_work/source" "$observation_work/graph" "$observation_work/journal" "$observation_work/row" \
+      >"$observation_work/output" 2>"$observation_work/diagnostics" } }
+    if (_error.code !== 0) {
+      observation_status=$[_error.code]
+      head -c 4096 "$observation_work/diagnostics" >&2
+      return "$observation_status"
+    }
+    ib_store_publish_bounded "$observation_root" "$observation_backend" "$observation_object" \
+      "$observation_work/output" 1048576
+  }
+}
