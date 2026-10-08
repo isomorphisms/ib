@@ -1,0 +1,43 @@
+module ViewObservationCommand
+
+import Data.Text
+import IB.FragmentStore
+import IB.ViewObservations
+import IB.Occurrence
+import IB.Strand
+import System
+import System.File
+
+covering
+append_row : Text → Text → Text → Text → Text → Text → Text → Text → IO ()
+append_row source_identity representation_identity digest decoder
+           source_path graph_path journal_path proposed_path = do
+  source_input ← readFile source_path
+  graph_input ← readFile graph_path
+  journal_input ← readFile journal_path
+  proposed_input ← readFile proposed_path
+  case (nonempty_text representation_identity, source_input, graph_input,
+        journal_input, proposed_input) of
+    (Just reference, Right text, Right graph_wire, Right journal_wire, Right row) ⇒
+      case revisioned_source (Source reference OtherSource CompleteSource)
+             (SourceText source_identity text) digest decoder of
+        Nothing ⇒ exitFailure
+        Just source ⇒ case decode_graph source graph_wire of
+          Nothing ⇒ exitFailure
+          Just graph ⇒ case lines row of
+            [one_row] ⇒ case append_observation_row graph journal_wire one_row of
+              Nothing ⇒ exitFailure
+              Just updated ⇒ putStr updated
+            _ ⇒ exitFailure
+    _ ⇒ exitFailure
+
+covering
+main : IO ()
+main = do
+  arguments ← getArgs
+  case arguments of
+    _ :: source_identity :: representation_identity :: digest :: decoder ::
+      source_path :: graph_path :: journal_path :: proposed_path :: [] ⇒
+        append_row source_identity representation_identity digest decoder
+          source_path graph_path journal_path proposed_path
+    _ ⇒ exitFailure

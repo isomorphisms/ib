@@ -1,0 +1,245 @@
+module IB.ViewObservations
+
+import Data.Text
+import Data.List1
+import IB.FragmentStore
+import IB.Occurrence
+
+public export
+choice observation_kind one_of
+  visible_interval
+  entered_view
+  left_view
+  source_selection
+  source_activation
+
+public export
+record ViewObservation where
+  constructor ObservedView
+  identity : Text
+  adapter : Text
+  clock_session : Text
+  source_revision : List Text
+  fragment : Text
+  source_start : SourceCoordinate
+  source_end : SourceCoordinate
+  started_ms : Integer
+  ended_ms : Integer
+  kind : observation_kind
+  foreground : Bool
+  occluded : Bool
+
+scalar : Text → Bool
+scalar value = not (value ≟ "") && all allowed (unpack value)
+  where
+    allowed : Char → Bool
+    allowed '\t' = False
+    allowed '\n' = False
+    allowed '\r' = False
+    allowed '\0' = False
+    allowed _ = True
+
+range_within : ViewObservation → SourceFragment → Bool
+range_within observation fragment =
+  observation.fragment ≟ fragment_id fragment &&
+  fragment_source_start fragment <= observation.source_start &&
+  observation.source_start < observation.source_end &&
+  observation.source_end <= fragment_source_end fragment
+
+export
+observation_valid : FragmentGraph → ViewObservation → Bool
+observation_valid graph observation =
+  scalar observation.identity && scalar observation.adapter &&
+  scalar observation.clock_session &&
+  observation.source_revision ≟ source_binding (graph_source graph) &&
+  observation.started_ms >= 0 && observation.ended_ms >= observation.started_ms &&
+  any (range_within observation) (graph_fragments graph)
+
+kind_text : observation_kind → Text
+kind_text visible_interval = "visible"
+kind_text entered_view = "entered"
+kind_text left_view = "left"
+kind_text source_selection = "selection"
+kind_text source_activation = "activation"
+
+boolean_text : Bool → Text
+boolean_text True = "1"
+boolean_text False = "0"
+
+fields : List Text → Text
+fields [] = ""
+fields [value] = value
+fields (value :: rest) = value ++ "\t" ++ fields rest
+
+export
+observation_row : ViewObservation → Text
+observation_row observation = fields
+  [ "observation", observation.identity, observation.adapter, observation.clock_session
+  , observation.fragment, show observation.source_start, show observation.source_end
+  , show observation.started_ms, show observation.ended_ms, kind_text observation.kind
+  , boolean_text observation.foreground, boolean_text observation.occluded
+  ]
+
+same_identity : ViewObservation → ViewObservation → Bool
+same_identity left right = left.identity ≟ right.identity && left.adapter ≟ right.adapter
+
+overlapping_sample : ViewObservation → ViewObservation → Bool
+overlapping_sample left right = case (left.kind, right.kind) of
+  (visible_interval, visible_interval) ⇒
+    left.adapter ≟ right.adapter && left.clock_session ≟ right.clock_session &&
+    left.fragment ≟ right.fragment && left.started_ms < right.ended_ms &&
+    right.started_ms < left.ended_ms
+  _ ⇒ False
+
+export
+accept_observation :
+  FragmentGraph → List ViewObservation → ViewObservation → Maybe (List ViewObservation)
+accept_observation graph observations proposed =
+  if not (observation_valid graph proposed) then Nothing else
+  case filter (same_identity proposed) observations of
+    [] ⇒ if any (overlapping_sample proposed) observations
+            then Nothing else Just (observations ++ [proposed])
+    [previous] ⇒ if observation_row previous ≟ observation_row proposed &&
+                    previous.source_revision ≟ proposed.source_revision
+                   then Just observations else Nothing
+    _ ⇒ Nothing
+
+export
+journal_header : FragmentGraph → Text
+journal_header graph =
+  "ib-observations\t1\n" ++ fields ("source" :: source_binding (graph_source graph)) ++ "\n"
+
+export
+serialize_journal : FragmentGraph → List ViewObservation → Maybe Text
+serialize_journal graph observations = go [] observations
+  where
+    go : List ViewObservation → List ViewObservation → Maybe Text
+    go accepted [] = Just (journal_header graph ++ unlines (map observation_row accepted))
+    go accepted (next :: rest) = do
+      updated ← accept_observation graph accepted next
+      go updated rest
+
+digit : Char → Maybe Integer
+digit character = case character of
+  '0' ⇒ Just 0
+  '1' ⇒ Just 1
+  '2' ⇒ Just 2
+  '3' ⇒ Just 3
+  '4' ⇒ Just 4
+  '5' ⇒ Just 5
+  '6' ⇒ Just 6
+  '7' ⇒ Just 7
+  '8' ⇒ Just 8
+  '9' ⇒ Just 9
+  _ ⇒ Nothing
+
+decimal_from : Integer → List Char → Maybe Integer
+decimal_from value [] = Just value
+decimal_from value (character :: rest) = do
+  next ← digit character
+  decimal_from (value * 10 + next) rest
+
+decimal : Text → Maybe Integer
+decimal "0" = Just 0
+decimal value = case unpack value of
+  [] ⇒ Nothing
+  '0' :: _ ⇒ Nothing
+  characters ⇒ if length characters > 18 then Nothing else decimal_from 0 characters
+
+kind_value : Text → Maybe observation_kind
+kind_value "visible" = Just visible_interval
+kind_value "entered" = Just entered_view
+kind_value "left" = Just left_view
+kind_value "selection" = Just source_selection
+kind_value "activation" = Just source_activation
+kind_value _ = Nothing
+
+boolean_value : Text → Maybe Bool
+boolean_value "1" = Just True
+boolean_value "0" = Just False
+boolean_value _ = Nothing
+
+parse_observation : List Text → Text → Maybe ViewObservation
+parse_observation binding row =
+  case forget (split (≟ '\t') row) of
+    ["observation", identity, adapter, clock, fragment, lower, upper,
+     started, ended, kind, foreground, occluded] ⇒ do
+      lower_value ← decimal lower
+      upper_value ← decimal upper
+      started_value ← decimal started
+      ended_value ← decimal ended
+      kind ← kind_value kind
+      foreground ← boolean_value foreground
+      occluded ← boolean_value occluded
+      pure (ObservedView identity adapter clock binding fragment
+             (cast lower_value) (cast upper_value) started_value ended_value
+             kind foreground occluded)
+    _ ⇒ Nothing
+
+-- A newline commits a journal row. A final non-newline tail remains explicitly
+-- incomplete and cannot be accepted just because its fields happen to parse.
+complete_lines : List Char → List Char → List Text → (List Text, Text)
+complete_lines [] pending complete = (reverse complete, pack (reverse pending))
+complete_lines ('\n' :: rest) pending complete =
+  complete_lines rest [] (pack (reverse pending) :: complete)
+complete_lines (character :: rest) pending complete =
+  complete_lines rest (character :: pending) complete
+
+public export
+record JournalReplay where
+  constructor ReplayedJournal
+  observations : List ViewObservation
+  refused_rows : List Number
+  incomplete_tail : Bool
+
+replay_rows :
+  FragmentGraph → Number → List ViewObservation → List Number →
+  List Text → Bool → JournalReplay
+replay_rows graph position accepted refused [] tail =
+  ReplayedJournal accepted (reverse refused) tail
+replay_rows graph position accepted refused (row :: rest) tail =
+  case parse_observation (source_binding (graph_source graph)) row of
+    Nothing ⇒ replay_rows graph (S position) accepted (position :: refused) rest tail
+    Just observation ⇒ case accept_observation graph accepted observation of
+      Nothing ⇒ replay_rows graph (S position) accepted (position :: refused) rest tail
+      Just updated ⇒ replay_rows graph (S position) updated refused rest tail
+
+export
+replay_journal : FragmentGraph → Text → Maybe JournalReplay
+replay_journal graph wire =
+  let metadata_characters = the Integer (cast (length (unpack wire))) in
+  if metadata_characters > 1048576 then Nothing else
+  let (committed, tail) = complete_lines (unpack wire) [] [] in
+  case committed of
+    "ib-observations\t1" :: binding :: rows ⇒
+      if forget (split (≟ '\t') binding) ≟ ("source" :: source_binding (graph_source graph))
+        then Just (replay_rows graph 0 [] [] rows (not (tail ≟ "")))
+        else Nothing
+    _ ⇒ Nothing
+
+-- Version one derives observed visible duration, not reading or comprehension.
+-- The accepted facts remain the canonical data; this total can be rebuilt.
+export
+visible_duration_v1 : Text → List ViewObservation → Integer
+visible_duration_v1 fragment [] = 0
+visible_duration_v1 fragment (observation :: rest) =
+  let later = visible_duration_v1 fragment rest in
+  case observation.kind of
+    visible_interval ⇒
+      if observation.fragment ≟ fragment && observation.foreground && not observation.occluded
+        then observation.ended_ms - observation.started_ms + later else later
+    _ ⇒ later
+
+-- The publication producer accepts one explicit adapter row. Corrupt or torn
+-- prior data is surfaced through replay_journal, never silently rewritten by
+-- appending. Recovery can select the preceding immutable complete generation.
+export
+append_observation_row : FragmentGraph → Text → Text → Maybe Text
+append_observation_row graph prior proposed = do
+  replayed ← replay_journal graph prior
+  if replayed.incomplete_tail || not (null replayed.refused_rows)
+    then Nothing
+    else do
+      observation ← parse_observation (source_binding (graph_source graph)) proposed
+      accepted ← accept_observation graph replayed.observations observation
+      serialize_journal graph accepted

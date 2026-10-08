@@ -1,0 +1,117 @@
+module ViewObservationAcceptance
+
+import Data.Text
+import IB.ViewObservations
+import IB.FragmentStore
+import IB.Occurrence
+import IB.Strand
+import System
+
+graph_for : Text → Maybe FragmentGraph
+graph_for digest = do
+  reference ← nonempty_text "retained:text-1"
+  source ← revisioned_source (Source reference PlainTextSource CompleteSource)
+    (SourceText "text-1" "東京🙂ababa") digest "utf8-text-v1"
+  validate_graph source [Fragment "span-1" "text-1" 0 8]
+    (MaterializedStrand "first-cut" ["span-1"]) []
+
+sample : FragmentGraph → Text → Integer → Integer → Bool → Bool → ViewObservation
+sample graph identity start finish foreground occluded =
+  ObservedView identity "material-adapter" "boot-1-view-1"
+    (source_binding (graph_source graph)) "span-1" 0 8
+    start finish visible_interval foreground occluded
+
+refused : Maybe a → Bool
+refused Nothing = True
+refused (Just _) = False
+
+fixture_observations : FragmentGraph → List ViewObservation
+fixture_observations graph =
+  [ sample graph "slow" 0 7000 True False
+  , sample graph "fast-pass" 7000 7100 True False
+  , sample graph "occlusion" 7100 9100 True True
+  , sample graph "background" 9100 15100 False False
+  , sample graph "return" 15100 18100 True False
+  ]
+
+cases : FragmentGraph → List (Text, Bool)
+cases graph =
+  let observations = fixture_observations graph in
+  let first = sample graph "slow" 0 7000 True False in
+  [ ("foreground-duration", visible_duration_v1 "span-1" observations ≟ 10100)
+  , ("other-fragment-duration", visible_duration_v1 "other" observations ≟ 0)
+  , ("distinct-facts", map observation_row observations ≟
+       [ "observation\tslow\tmaterial-adapter\tboot-1-view-1\tspan-1\t0\t8\t0\t7000\tvisible\t1\t0"
+       , "observation\tfast-pass\tmaterial-adapter\tboot-1-view-1\tspan-1\t0\t8\t7000\t7100\tvisible\t1\t0"
+       , "observation\tocclusion\tmaterial-adapter\tboot-1-view-1\tspan-1\t0\t8\t7100\t9100\tvisible\t1\t1"
+       , "observation\tbackground\tmaterial-adapter\tboot-1-view-1\tspan-1\t0\t8\t9100\t15100\tvisible\t0\t0"
+       , "observation\treturn\tmaterial-adapter\tboot-1-view-1\tspan-1\t0\t8\t15100\t18100\tvisible\t1\t0"
+       ])
+  , ("duplicate-callback-idempotent", case accept_observation graph observations first of
+       Just replayed ⇒ length replayed ≟ 5
+       Nothing ⇒ False)
+  , ("conflicting-id-refused", refused (accept_observation graph observations
+       (sample graph "slow" 0 1 True False)))
+  , ("overlap-new-id-refused", refused (accept_observation graph observations
+       (sample graph "new-id" 500 1000 True False)))
+  , ("backward-clock-refused", refused (accept_observation graph []
+       (sample graph "backwards" 100 10 True False)))
+  , ("changed-source-refused", case graph_for "changed-digest" of
+       Just changed ⇒ refused (accept_observation changed [] first)
+       Nothing ⇒ False)
+  , ("alternate-view-source-range", observation_valid graph
+       (ObservedView "small-cut" "text-adapter" "boot-1-text-view"
+         (source_binding (graph_source graph)) "span-1" 1 4
+         0 100 visible_interval True False))
+  , ("whole-journal-roundtrip", case serialize_journal graph observations of
+       Just wire ⇒ case replay_journal graph wire of
+         Just replayed ⇒ map observation_row replayed.observations ≟ map observation_row observations &&
+           replayed.refused_rows ≟ [] && not replayed.incomplete_tail
+         Nothing ⇒ False
+       Nothing ⇒ False)
+  , ("duplicate-journal-idempotent", case serialize_journal graph observations of
+       Just wire ⇒ case replay_journal graph (wire ++ observation_row first ++ "\n") of
+         Just replayed ⇒ length replayed.observations ≟ 5 && replayed.refused_rows ≟ []
+         Nothing ⇒ False
+       Nothing ⇒ False)
+  , ("torn-final-append-preserves-prior", case serialize_journal graph observations of
+       Just wire ⇒ case replay_journal graph (wire ++ "observation\ttorn") of
+         Just replayed ⇒ length replayed.observations ≟ 5 && replayed.incomplete_tail &&
+           visible_duration_v1 "span-1" replayed.observations ≟ 10100
+         Nothing ⇒ False
+       Nothing ⇒ False)
+  , ("invalid-row-preserves-prior", case serialize_journal graph observations of
+       Just wire ⇒ case replay_journal graph (wire ++ "bad-complete-row\n") of
+         Just replayed ⇒ length replayed.observations ≟ 5 && replayed.refused_rows ≟ [5]
+         Nothing ⇒ False
+       Nothing ⇒ False)
+  , ("changed-revision-journal-refused", case (serialize_journal graph observations, graph_for "changed-digest") of
+       (Just wire, Just changed) ⇒ refused (replay_journal changed wire)
+       _ ⇒ False)
+  , ("derived-duration-rebuild", case serialize_journal graph observations of
+       Just wire ⇒ case replay_journal graph wire of
+         Just replayed ⇒ visible_duration_v1 "span-1" replayed.observations ≟
+           visible_duration_v1 "span-1" observations
+         Nothing ⇒ False
+       Nothing ⇒ False)
+  , ("append-replay-duplicate", case serialize_journal graph observations of
+       Just wire ⇒ append_observation_row graph wire (observation_row first) ≟ Just wire
+       Nothing ⇒ False)
+  , ("append-torn-prior-refused", case serialize_journal graph observations of
+       Just wire ⇒ refused (append_observation_row graph (wire ++ "torn") (observation_row first))
+       Nothing ⇒ False)
+  ]
+
+acceptance_results : List (Text, Bool)
+acceptance_results = case graph_for "original-digest" of
+  Just graph ⇒ cases graph
+  Nothing ⇒ [("fixture-construction", False)]
+
+report : List (Text, Bool) → IO ()
+report [] = pure ()
+report ((name, passed) :: rest) = do
+  putStrLn (name ++ "=" ++ show passed)
+  if passed then report rest else exitFailure
+
+main : IO ()
+main = report acceptance_results
