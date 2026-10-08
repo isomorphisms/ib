@@ -43,6 +43,13 @@ Shizuku provider today
 
 `bin/ib_android_shizuku.grease` exposes those operations for development.
 
+Authority inspection preserves a failed UID query's exact nonzero status and
+emits no authority on failure. A successful query must contain decimal digits
+only: `0` means `root`, `2000` means `shell`, and other numeric values retain
+the `uid:VALUE` classification. Empty or malformed output is rejected with
+status 2 rather than being classified as authority. The Binder-facing caller
+preserves the same result.
+
 This is deliberately a small mechanism surface. Browser tasks, tab identity,
 restart policy, durable results, and renderer policy remain owned by the Idriç
 core.
@@ -75,6 +82,12 @@ normal kernel-scheduled work; Shizuku supplies authority, not CPU scheduling.
 test local adapter behavior: argument forwarding, exit-status preservation,
 identity classification, process/signal dispatch, and rejection of an unsafe
 PID string.
+
+The authority cases exercise both the Shizuku adapter and real Binder delegation
+with root, shell, and ordinary UID controls; provider exits 37, 124, and a
+permission denial; missing/nonexecutable providers; and malformed UID output.
+`tests/test_android_binder_host.grease` also checks status forwarding at the
+isolated provider boundary.
 
 That test is **not** Shizuku acceptance. Physical MIRO A1 acceptance still must
 show the exact branch revision running against real Shizuku/rish and record the

@@ -7,6 +7,7 @@ case $0 in
 esac
 repository_root=$(CDPATH= cd -- "$script_directory/.." && pwd)
 . "$repository_root/lib/android_shizuku_host.grease"
+. "$repository_root/lib/android_binder_host.grease"
 
 work_directory=$(mktemp -d)
 cleanup() {
@@ -37,7 +38,11 @@ case "$command_text" in
     exit 37
     ;;
   'id -u')
-    printf '2000\n'
+    printf '%s\n' "${FAKE_RISH_UID-2000}"
+    if test -n "${FAKE_RISH_UID_ERROR:-}"; then
+      printf '%s\n' "$FAKE_RISH_UID_ERROR" >&2
+    fi
+    exit "${FAKE_RISH_UID_STATUS:-0}"
     ;;
   *'printf "identity'*'id -Z 2>/dev/null'*'printf "unavailable'*)
     printf 'identity\tuid=2000(shell) gid=2000(shell) groups=2000(shell)\n'
@@ -91,7 +96,72 @@ fi
 test "$status" -eq 37
 grep -F 'remote failure' "$work_directory/failure.err" >/dev/null
 
-test "$(ib_shizuku_authority)" = 'shell'
+# Test both the provider adapter and the real Binder-facing caller. Capture the
+# producer status separately: a text comparison must not mask failed discovery.
+assert_authority_result() {
+  authority_expected_status=$1
+  authority_expected_output=$2
+  for authority_function in ib_shizuku_authority ib_binder_authority; do
+    if "$authority_function" >"$work_directory/authority.out" 2>"$work_directory/authority.err"; then
+      authority_status=0
+    else
+      authority_status=$?
+    fi
+    if test "$authority_status" -ne "$authority_expected_status"; then
+      printf '%s returned status %s; expected %s\n' "$authority_function" "$authority_status" "$authority_expected_status" >&2
+      exit 1
+    fi
+    if test -n "$authority_expected_output"; then
+      printf '%s\n' "$authority_expected_output" >"$work_directory/authority.expected"
+    else
+      : >"$work_directory/authority.expected"
+    fi
+    if ! cmp "$work_directory/authority.expected" "$work_directory/authority.out"; then
+      printf '%s produced unexpected authority output\n' "$authority_function" >&2
+      exit 1
+    fi
+    if test -n "${authority_expected_error:-}"; then
+      grep -F "$authority_expected_error" "$work_directory/authority.err" >/dev/null
+    else
+      test ! -s "$work_directory/authority.err"
+    fi
+  done
+}
+
+export FAKE_RISH_UID=2000 FAKE_RISH_UID_STATUS=0
+authority_expected_error=
+assert_authority_result 0 shell
+export FAKE_RISH_UID=0
+assert_authority_result 0 root
+export FAKE_RISH_UID=10123
+assert_authority_result 0 uid:10123
+
+# Plausible privilege text from a failed provider must never claim authority.
+export FAKE_RISH_UID=0 FAKE_RISH_UID_STATUS=37
+assert_authority_result 37 ''
+export FAKE_RISH_UID=2000 FAKE_RISH_UID_STATUS=124
+assert_authority_result 124 ''
+export FAKE_RISH_UID_STATUS=13 FAKE_RISH_UID_ERROR='permission denied by provider'
+authority_expected_error=$FAKE_RISH_UID_ERROR
+assert_authority_result 13 ''
+unset FAKE_RISH_UID_ERROR
+
+export FAKE_RISH_UID_STATUS=0
+authority_expected_error='invalid effective UID from Shizuku provider'
+for malformed_uid in '' shell ' 2000' '2000 ' 2000x -1 "$(printf '2000\n0')"; do
+  export FAKE_RISH_UID="$malformed_uid"
+  assert_authority_result 2 ''
+done
+
+export IB_RISH_COMMAND="$work_directory/missing-rish"
+authority_expected_error='rish is not executable:'
+assert_authority_result 1 ''
+: >"$work_directory/denied-rish"
+chmod 600 "$work_directory/denied-rish"
+export IB_RISH_COMMAND="$work_directory/denied-rish"
+assert_authority_result 1 ''
+export IB_RISH_COMMAND="$fake_rish"
+unset FAKE_RISH_UID FAKE_RISH_UID_STATUS
 
 identity=$(ib_shizuku_identity)
 printf '%s\n' "$identity" | grep -F 'identity' >/dev/null

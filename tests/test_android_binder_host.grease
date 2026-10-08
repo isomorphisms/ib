@@ -9,7 +9,12 @@ repository_root=$(CDPATH= cd -- "$script_directory/.." && pwd)
 
 # Stub the current provider at its narrow edge. This proves that generic callers
 # bind to ib_binder_* while the full attempt tuple crosses unchanged.
-ib_shizuku_authority() { printf '%s\n' 'shell'; }
+ib_shizuku_authority() {
+  if test "${provider_authority_status:-0}" -ne 0; then
+    return "$provider_authority_status"
+  fi
+  printf '%s\n' "${provider_authority:-shell}"
+}
 ib_shizuku_identity() { printf '%s\n' 'identity-via-provider'; }
 ib_shizuku_process_snapshot() { printf '%s\n' 'processes-via-provider'; }
 ib_shizuku_validate_pid() { test "$1" = 123; }
@@ -62,6 +67,20 @@ ib_shizuku_capabilities_open_app_report() { printf '%s\n' app-report-via-provide
 
 test "$(ib_binder_provider)" = shizuku
 test "$(ib_binder_authority)" = shell
+provider_authority=root
+authority=$(ib_binder_authority)
+test "$authority" = root
+for provider_authority_status in 37 124 13 1 2; do
+  if authority=$(ib_binder_authority); then
+    printf 'Binder authority masked provider failure %s\n' "$provider_authority_status" >&2
+    exit 1
+  else
+    authority_status=$?
+  fi
+  test "$authority_status" -eq "$provider_authority_status"
+  test -z "$authority"
+done
+unset provider_authority provider_authority_status
 test "$(ib_binder_identity)" = identity-via-provider
 test "$(ib_binder_process_snapshot)" = processes-via-provider
 ib_binder_validate_pid 123

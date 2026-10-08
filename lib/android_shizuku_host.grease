@@ -72,8 +72,12 @@ ib_shizuku_effective_uid() {
 }
 
 ib_shizuku_authority() {
-  uid=$(ib_shizuku_effective_uid) || return 1
+  uid=$(ib_shizuku_effective_uid) || return $?
   case "$uid" in
+    ''|*[!0-9]*)
+      ib_shizuku_fail 'invalid effective UID from Shizuku provider'
+      return 2
+      ;;
     0)
       printf 'root\n'
       ;;
