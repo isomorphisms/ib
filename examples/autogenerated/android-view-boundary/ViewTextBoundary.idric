@@ -1,0 +1,9 @@
+module ViewTextBoundary
+
+import Data.Text
+
+-- A qualification control for the already supported Text export ABI.
+-- This does not create an Android View or callback.
+%export "dex:display_text"
+display_text : Text → Text
+display_text text = text

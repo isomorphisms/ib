@@ -1,0 +1,7 @@
+sha256sum: WARNING: 1 computed checksum did NOT match
+      printf '%s  %s\n' "$expected" "$artifact" | sha256sum -c - > /dev/null
+                                                  ^~~~~~~~~
+/workspace/scratch/8cdd18d75ffb/view-qualification/qualification/android-view/inspect-artifacts.grease:25: errexit PID 5: Command failed with status 1
+      printf '%s  %s\n' "$expected" "$artifact" | sha256sum -c - > /dev/null
+                                                  ^~~~~~~~~
+/workspace/scratch/8cdd18d75ffb/view-qualification/qualification/android-view/inspect-artifacts.grease:25: errexit PID 5: Pipeline failed with status 1

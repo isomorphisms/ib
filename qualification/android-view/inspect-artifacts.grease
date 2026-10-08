@@ -1,0 +1,73 @@
+#!/usr/bin/env grease
+# Inspect published dependencies. This does not compile or qualify an IB view.
+set -eu -o pipefail
+
+if (len(ARGV) !== 1) {
+  echo 'usage: grease inspect-artifacts.grease ABSOLUTE_ARTIFACT_DIRECTORY' >&2
+  exit 2
+}
+var directory = ARGV[0]
+if (not directory.startsWith('/')) {
+  echo 'FAIL: artifact directory must be absolute' >&2
+  exit 2
+}
+var root = $(realpath -- "$(dirname -- "$0")")
+mkdir -p "$directory"
+var output = "$directory/inspection.tsv"
+var pending_output = $(mktemp "$directory/inspection.XXXXXX")
+trap --add EXIT { rm -f "$pending_output" }
+printf 'artifact\tsha256\tarchive_bytes\tclasses_jar_bytes\tclass_count\tnative_libraries\tresource_entries\n' > "$pending_output"
+
+while read -r name expected url {
+  var artifact = "$directory/$name"
+  if test -e "$artifact" {
+    # Cached bytes must match too; do not replace a corrupt input silently.
+    printf '%s  %s\n' "$expected" "$artifact" | sha256sum -c - > /dev/null
+  } else {
+    var partial = $(mktemp "$directory/download.XXXXXX")
+    try { curl -fsSL --connect-timeout 10 --max-time 120 --max-filesize 33554432 "$url" -o "$partial" }
+    var download_status = _error.code
+    if (download_status !== 0) {
+      rm -f "$partial"
+      echo "FAIL: dependency unavailable: $name" >&2
+      exit "$download_status"
+    }
+    try { printf '%s  %s\n' "$expected" "$partial" | sha256sum -c - > /dev/null }
+    var digest_status = _error.code
+    if (digest_status !== 0) {
+      rm -f "$partial"
+      echo "FAIL: dependency digest differs: $name" >&2
+      exit "$digest_status"
+    }
+    mv "$partial" "$artifact"
+  }
+  var bytes = $(wc -c < "$artifact" | tr -d '[:space:]')
+  var classes_bytes = 'n/a'
+  var classes = 'n/a'
+  var native_libraries = 'n/a'
+  var resources = 'n/a'
+  if (name.endsWith('.aar') or name.endsWith('.jar')) {
+    unzip -t "$artifact" > /dev/null
+    unzip -Z1 "$artifact" > "$artifact.entries"
+    setvar native_libraries = $(awk '/[.]so$/ { count++ } END { print count+0 }' "$artifact.entries")
+    setvar resources = $(awk '/^res\// { count++ } END { print count+0 }' "$artifact.entries")
+    if (name.endsWith('.aar')) {
+      unzip -p "$artifact" classes.jar > "$artifact.classes.jar"
+      setvar classes_bytes = $(wc -c < "$artifact.classes.jar" | tr -d '[:space:]')
+      unzip -Z1 "$artifact.classes.jar" > "$artifact.classes.entries"
+      setvar classes = $(awk '/[.]class$/ { count++ } END { print count+0 }' "$artifact.classes.entries")
+      unzip -p "$artifact" AndroidManifest.xml > "$artifact.manifest.xml"
+      # Some older AARs legitimately predate this metadata member.
+      if grep -Fx 'META-INF/com/android/build/gradle/aar-metadata.properties' "$artifact.entries" > /dev/null {
+        unzip -p "$artifact" META-INF/com/android/build/gradle/aar-metadata.properties > "$artifact.metadata.properties"
+      }
+    } else {
+      setvar classes_bytes = "$bytes"
+      setvar classes = $(awk '/[.]class$/ { count++ } END { print count+0 }' "$artifact.entries")
+    }
+  }
+  printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$name" "$expected" "$bytes" "$classes_bytes" "$classes" "$native_libraries" "$resources" >> "$pending_output"
+} < "$root/artifacts.tsv"
+
+mv "$pending_output" "$output"
+cat "$output"
