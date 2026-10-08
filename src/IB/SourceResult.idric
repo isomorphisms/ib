@@ -1,0 +1,185 @@
+module IB.SourceResult
+
+import Data.Text
+import IB.LongViewTask
+import IB.WorkerLifecycle
+import IB.StorageAdmission
+
+-- Bind existing worker/admission state to readback facts from the existing
+-- Cauldron intake and Pensieve raw-URL decoder. These are boundary receipts,
+-- not another resource, event, source representation, or corpus store.
+-- The byte-owning adapters must measure hashes/counts and authenticate their
+-- receipts. This pure reducer neither acquires bytes nor proves filesystem IO.
+
+public export
+record AcquisitionContext where
+  constructor SourceAcquisition
+  event_identity : DurableIdentity
+  requested : NeutralAddress
+  resolved : NeutralAddress
+  acquisition_revision : DurableIdentity
+
+public export
+record RetainedSourceReadback where
+  constructor ReadRetainedSource
+  context : AcquisitionContext
+  source_identity : Text
+  source_sha256 : Text
+  byte_count : Integer
+  source_kind : Text
+  acquired_at : Text
+  complete : Bool
+
+public export
+record PublishedSourceReadback where
+  constructor ReadPublishedSource
+  result_identity : DurableIdentity
+  location : PublicationLocation
+  payload_sha256 : Text
+  payload_bytes : Integer
+  complete : Bool
+  producer_exit : Integer
+
+export
+data SourceResult = SourceBound WorkerTask AcquisitionContext RetainedSourceReadback
+
+same_identity : DurableIdentity → DurableIdentity → Bool
+same_identity left right = identity_text left ≟ identity_text right
+
+same_context : AcquisitionContext → AcquisitionContext → Bool
+same_context left right =
+  same_identity left.event_identity right.event_identity &&
+  neutral_address_text left.requested ≟ neutral_address_text right.requested &&
+  neutral_address_text left.resolved ≟ neutral_address_text right.resolved &&
+  same_identity left.acquisition_revision right.acquisition_revision
+
+is_hex_digit : Char → Bool
+is_hex_digit character =
+  (character >= '0' && character <= '9') ||
+  (character >= 'a' && character <= 'f')
+
+sha256_identity : Text → Bool
+sha256_identity value = length (unpack value) ≟ 64 && all is_hex_digit (unpack value)
+
+receipt_scalar : Text → Bool
+receipt_scalar value = case durable_identity value of
+  Nothing ⇒ False
+  Just _ ⇒ True
+
+same_location : PublicationRequest → PublicationLocation → Bool
+same_location request location =
+  request.backend_identity ≟ location.backend_identity &&
+  request.media_identity ≟ location.media_identity &&
+  request.observation_identity ≟ location.observation_identity
+
+export
+bind_source_result :
+  AcquisitionContext → WorkerTask → ProcessAttachment → AdmittedPublication →
+  RetainedSourceReadback → PublishedSourceReadback → Maybe SourceResult
+bind_source_result expected worker attempt admission retained published =
+  let request = admission.publication_request in
+  if not (same_context expected retained.context) ||
+     not (sha256_identity retained.source_identity) ||
+     not (sha256_identity retained.source_sha256) ||
+     not (receipt_scalar retained.acquired_at) ||
+     not (retained.source_kind ≟ "raw_urls") ||
+     not retained.complete || not published.complete ||
+     not (published.producer_exit ≟ 0) ||
+     retained.byte_count <= 0 ||
+     -- This is the current canonical intake's selected-shard ceiling, not a
+     -- new acquisition allowance or post-decoder WorkBounds enforcement.
+     retained.byte_count > 16777216 ||
+     retained.byte_count > request.byte_limit ||
+     not (identity_text worker.result_identity ≟ request.result_identity) ||
+     not (same_identity worker.result_identity published.result_identity) ||
+     not (same_location request published.location) ||
+     not (retained.source_sha256 ≟ published.payload_sha256) ||
+     not (retained.byte_count ≟ published.payload_bytes)
+    then Nothing
+    else case commit_worker_result attempt worker of
+      Nothing ⇒ Nothing
+      Just committed ⇒ Just (SourceBound committed expected retained)
+
+export
+source_result_worker : SourceResult → WorkerTask
+source_result_worker (SourceBound worker _ _) = worker
+
+export
+source_result_context : SourceResult → AcquisitionContext
+source_result_context (SourceBound _ context _) = context
+
+export
+source_result_identity : SourceResult → Text
+source_result_identity (SourceBound _ _ retained) = retained.source_identity
+
+export
+source_result_sha256 : SourceResult → Text
+source_result_sha256 (SourceBound _ _ retained) = retained.source_sha256
+
+export
+source_result_acquired_at : SourceResult → Text
+source_result_acquired_at (SourceBound _ _ retained) = retained.acquired_at
+
+public export
+record RawUrlProjectionReadback where
+  constructor ReadRawUrlProjection
+  source_identity : Text
+  source_sha256 : Text
+  decoder_revision : Text
+  projection_sha256 : Text
+  projection_bytes : Integer
+  complete : Bool
+  producer_exit : Integer
+
+public export
+choice projection_refusal one_of
+  projection_source_mismatch
+  projection_decoder_unsupported
+  projection_producer_failed
+  projection_not_complete
+  projection_invalid_content
+
+export
+data SourceProjection = ProjectionBound SourceResult RawUrlProjectionReadback
+
+export
+bind_raw_url_projection :
+  SourceResult → RawUrlProjectionReadback → Either projection_refusal SourceProjection
+bind_raw_url_projection source projection =
+  if not (source_result_identity source ≟ projection.source_identity) ||
+     not (source_result_sha256 source ≟ projection.source_sha256)
+    then Left projection_source_mismatch
+    else if not (projection.decoder_revision ≟ "raw-urls-v1")
+      then Left projection_decoder_unsupported
+      else if not (projection.producer_exit ≟ 0)
+        then Left projection_producer_failed
+        else if not projection.complete
+          then Left projection_not_complete
+          else if projection.projection_bytes <= 0 ||
+                  not (sha256_identity projection.projection_sha256)
+            then Left projection_invalid_content
+            else Right (ProjectionBound source projection)
+
+export
+projection_source_identity : SourceProjection → Text
+projection_source_identity (ProjectionBound source _) = source_result_identity source
+
+export
+projection_sha256 : SourceProjection → Text
+projection_sha256 (ProjectionBound _ projection) = projection.projection_sha256
+
+public export
+record ProjectionRecovery where
+  constructor RecoveredProjection
+  last_complete : Maybe SourceProjection
+  replacement_refusal : Maybe projection_refusal
+
+-- A failed replacement preserves the prior checked derivative and its prior
+-- source identity. It does not relabel old content as the newly acquired body.
+export
+recover_raw_url_projection :
+  SourceResult → RawUrlProjectionReadback → Maybe SourceProjection → ProjectionRecovery
+recover_raw_url_projection source replacement previous =
+  case bind_raw_url_projection source replacement of
+    Left refusal ⇒ RecoveredProjection previous (Just refusal)
+    Right projection ⇒ RecoveredProjection (Just projection) Nothing
