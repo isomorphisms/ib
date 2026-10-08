@@ -23,7 +23,10 @@ against current source references before producing the replacement bytes.
 Identical replay is idempotent; changed records with the same identity refuse.
 A rollback appends another action rather than deleting previous records.
 
-The bounded v1 journal allows at most 4,096 decisions and 1 MiB of decoded text.
+The bounded v1 journal allows at most 4,096 decisions and 1 MiB of ASCII record
+text in either direction. Accepted identity/action/marker fields are ASCII, so
+character count and UTF-8 byte count agree; non-ASCII journal input refuses.
+The future Grease reader must additionally bound raw bytes before text decode.
 Those limits bound this first record adapter, not the total retained corpus.
 Rotation/compaction is not implemented. A terminal marker binds record count
 and final decision identity, not authenticity or platform durability. Historical
@@ -38,6 +41,11 @@ compiler image SHA-256 is
 The compiler REPL evaluates core assertions to True, the deliberately broken
 dismissal to False, and the repaired dismissal to True. Codecs/refusal/replay
 checks also evaluate True on the actual core.
+
+The encoder's output limit matches the decoder's accepted-input limit. A
+targeted mutant setting the output budget to zero makes round-trip acceptance
+False; the restored budget preserves the good control. This does not establish
+whole-file streaming or a 4,096-record corpus-scale performance claim.
 
 First blocker: IB has no qualified ICK/NDK stage producing this semantic
 validator executable. A bounded Grease durable journal adapter therefore

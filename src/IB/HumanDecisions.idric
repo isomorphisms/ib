@@ -395,8 +395,9 @@ encode_journal : List Decision → Maybe Text
 encode_journal journal =
   if length journal <= 4096 && valid_journal_from [] journal then do
     rows ← encode_rows journal
-    pure ("ib-human-decisions-v1\n" ++ rows ++ "commit\t" ++
-      show (length journal) ++ "\t" ++ last_identity journal ++ "\n")
+    let encoded = "ib-human-decisions-v1\n" ++ rows ++ "commit\t" ++
+          show (length journal) ++ "\t" ++ last_identity journal ++ "\n"
+    if length (unpack encoded) <= 1048576 then Just encoded else Nothing
     else Nothing
 
 -- A commit marker establishes framing and full-record count, not authenticity
@@ -421,7 +422,12 @@ decode_rows journal (row :: rest) = do
 public export
 decode_journal : Text → Maybe (List Decision)
 decode_journal text =
-  if length (unpack text) <= 1048576 && isSuffixOf "\n" text then
+  -- All accepted fields/markers are ASCII. For accepted record text this
+  -- character count equals UTF-8 byte count; reject non-ASCII before claiming
+  -- the same 1 MiB bound as the encoder. The future Grease input adapter must
+  -- enforce its raw byte budget before decoding text.
+  if all (\character ⇒ ord character < 128) (unpack text) &&
+     length (unpack text) <= 1048576 && isSuffixOf "\n" text then
     case lines text of
       "ib-human-decisions-v1" :: rows ⇒
         if length rows <= 4097 then decode_rows [] rows else Nothing
