@@ -1,0 +1,7 @@
+diff --git a/android-webview/app/src/main/java/org/isomorphisms/ib/webview/DurableTaskStore.java b/android-webview/app/src/main/java/org/isomorphisms/ib/webview/DurableTaskStore.java
+--- a/android-webview/app/src/main/java/org/isomorphisms/ib/webview/DurableTaskStore.java
++++ b/android-webview/app/src/main/java/org/isomorphisms/ib/webview/DurableTaskStore.java
+@@ -180,2 +180,2 @@
+-        if (value == null || value.equals(".") || value.equals("..")
++        if (value == null
+             || !PATH_IDENTITY.matcher(value).matches()) {

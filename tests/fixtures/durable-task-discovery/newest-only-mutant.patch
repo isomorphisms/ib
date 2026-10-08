@@ -1,0 +1,9 @@
+diff --git a/android-webview/app/src/main/java/org/isomorphisms/ib/webview/DurableTaskStore.java b/android-webview/app/src/main/java/org/isomorphisms/ib/webview/DurableTaskStore.java
+--- a/android-webview/app/src/main/java/org/isomorphisms/ib/webview/DurableTaskStore.java
++++ b/android-webview/app/src/main/java/org/isomorphisms/ib/webview/DurableTaskStore.java
+@@ -159,3 +159,4 @@
+         }
+-        return new Discovery(records, failures, latest);
++        return new Discovery(latest == null ? Collections.emptyList()
++            : Collections.singletonList(latest), Collections.emptyList(), latest);
+     }

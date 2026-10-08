@@ -78,8 +78,10 @@ public final class LongViewActivity extends Activity {
             : supplied_url.trim();
 
         boolean new_task = false;
+        DurableTaskStore.Discovery discovery;
         try {
-            DurableTaskRecord discovered = store.discover_latest();
+            discovery = store.discover();
+            DurableTaskRecord discovered = discovery.latest;
             if (discovered == null) {
                 DurableNavigation navigation = DurableNavigation.from_user_url(requested_url);
                 task = DurableTaskRecord.start(
@@ -111,6 +113,12 @@ public final class LongViewActivity extends Activity {
         receipt_file = create_receipt_file();
         build_ui();
         record("run", device_and_artifact_receipt());
+        record("durable-discovery", "valid-records=" + discovery.records.size()
+            + " refused-records=" + discovery.failures.size());
+        for (DurableTaskStore.DiscoveryFailure failure : discovery.failures) {
+            record("durable-discovery-refusal", "task-id=" + failure.task_id
+                + " reason=" + failure.reason);
+        }
         record("task", task_receipt("discovered"));
         record(
             "session-profile",

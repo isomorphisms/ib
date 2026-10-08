@@ -6,7 +6,11 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.attribute.FileTime;
 import java.util.Arrays;
 
 import org.junit.Rule;
@@ -183,6 +187,185 @@ public final class DurableTaskRecordTest {
             )
         );
         assertFalse(Files.exists(temporary.getRoot().toPath().resolve("escape")));
+    }
+
+    @Test
+    public void dot_identities_refuse_before_any_state_creation() throws Exception {
+        Path root = temporary.getRoot().toPath();
+        DurableTaskStore store = new DurableTaskStore(root);
+        Path outside = root.resolve("unchanged.txt");
+        Files.write(outside, "before".getBytes(StandardCharsets.UTF_8));
+        for (String identity : Arrays.asList(".", "..")) {
+            assertThrows(IllegalArgumentException.class, () -> store.save(
+                named_fixture(identity, "tab-1"),
+                DurableTaskStore.TabProtection.PROTECTED_AUTHENTICATED_TRANSACTION
+            ));
+            assertThrows(IllegalArgumentException.class, () -> store.save(
+                named_fixture("task-1", identity),
+                DurableTaskStore.TabProtection.PROTECTED_AUTHENTICATED_TRANSACTION
+            ));
+            assertThrows(IllegalArgumentException.class, () -> store.read_task_record(identity));
+            assertThrows(IllegalArgumentException.class, () -> store.append_navigation(
+                named_fixture("task-1", identity)
+            ));
+        }
+        assertFalse(Files.exists(root.resolve("state")));
+        assertEquals("before", new String(Files.readAllBytes(outside), StandardCharsets.UTF_8));
+    }
+
+    @Test
+    public void corrupt_newest_keeps_all_older_valid_records_and_failure() throws Exception {
+        Path root = temporary.getRoot().toPath();
+        DurableTaskStore store = new DurableTaskStore(root);
+        DurableTaskRecord first = named_fixture("task-a", "tab-a");
+        DurableTaskRecord second = named_fixture("task-b", "tab-b");
+        store.save(second, DurableTaskStore.TabProtection.PROTECTED_AUTHENTICATED_TRANSACTION);
+        store.save(first, DurableTaskStore.TabProtection.PROTECTED_AUTHENTICATED_TRANSACTION);
+        Path first_path = root.resolve("state/tasks/task-a/task.txt");
+        Path second_path = root.resolve("state/tasks/task-b/task.txt");
+        Files.setLastModifiedTime(first_path, FileTime.fromMillis(1));
+        Files.setLastModifiedTime(second_path, FileTime.fromMillis(2));
+        Path corrupt = root.resolve("state/tasks/task-c/task.txt");
+        Files.createDirectories(corrupt.getParent());
+        Files.write(corrupt, "schema\tbroken\n".getBytes(StandardCharsets.UTF_8));
+        Files.setLastModifiedTime(corrupt, FileTime.fromMillis(3));
+
+        DurableTaskStore.Discovery discovered = store.discover();
+        assertEquals(2, discovered.records.size());
+        assertEquals("task-a", discovered.records.get(0).task_id);
+        assertEquals("task-b", discovered.records.get(1).task_id);
+        assertEquals(first.serialize(), discovered.records.get(0).serialize());
+        assertEquals(second.serialize(), discovered.records.get(1).serialize());
+        assertEquals("task-b", discovered.latest.task_id);
+        assertEquals(1, discovered.failures.size());
+        assertEquals("task-c", discovered.failures.get(0).task_id);
+        assertEquals("task-b", store.discover_latest().task_id);
+        assertEquals(first.serialize(), store.read_task_record("task-a"));
+        assertEquals(second.serialize(), store.read_task_record("task-b"));
+        assertEquals("task-a", store.discover().records.get(0).task_id);
+    }
+
+    @Test
+    public void equal_timestamps_have_stable_selection_and_discovery_order() throws Exception {
+        Path root = temporary.getRoot().toPath();
+        DurableTaskStore store = new DurableTaskStore(root);
+        for (String identity : Arrays.asList("task-z", "task-a")) {
+            store.save(named_fixture(identity, "tab-" + identity),
+                DurableTaskStore.TabProtection.PROTECTED_AUTHENTICATED_TRANSACTION);
+            Files.setLastModifiedTime(root.resolve("state/tasks/" + identity + "/task.txt"),
+                FileTime.fromMillis(7));
+        }
+        assertEquals("task-a", store.discover().latest.task_id);
+        assertEquals("task-z", store.discover().records.get(1).task_id);
+    }
+
+    @Test
+    public void linked_state_parent_refuses_writes_and_discovery() throws Exception {
+        Path outside = temporary.newFolder("outside").toPath();
+        Path selected = temporary.newFolder("selected").toPath();
+        Path sentinel = outside.resolve("sentinel.txt");
+        Files.write(sentinel, "unchanged".getBytes(StandardCharsets.UTF_8));
+        Files.createSymbolicLink(selected.resolve("state"), outside);
+        DurableTaskStore store = new DurableTaskStore(selected);
+        assertThrows(IOException.class, () -> store.save(fixture(),
+            DurableTaskStore.TabProtection.PROTECTED_AUTHENTICATED_TRANSACTION));
+        assertThrows(IOException.class, store::discover);
+        assertFalse(Files.exists(outside.resolve("tasks")));
+        assertFalse(Files.exists(outside.resolve("tabs")));
+        assertEquals("unchanged", new String(Files.readAllBytes(sentinel), StandardCharsets.UTF_8));
+    }
+
+    @Test
+    public void linked_task_directory_and_record_are_individual_failures() throws Exception {
+        Path root = temporary.getRoot().toPath();
+        DurableTaskStore store = new DurableTaskStore(root);
+        store.save(fixture(), DurableTaskStore.TabProtection.PROTECTED_AUTHENTICATED_TRANSACTION);
+        Path outside = temporary.newFolder("linked-outside").toPath();
+        Path outside_record = outside.resolve("task.txt");
+        Files.write(outside_record, named_fixture("task-linked", "tab-linked").serialize()
+            .getBytes(StandardCharsets.UTF_8));
+        Files.createSymbolicLink(root.resolve("state/tasks/task-linked"), outside);
+        Path file_linked = root.resolve("state/tasks/task-file-link");
+        Files.createDirectory(file_linked);
+        Files.createSymbolicLink(file_linked.resolve("task.txt"), outside_record);
+
+        DurableTaskStore.Discovery discovery = store.discover();
+        assertEquals(1, discovery.records.size());
+        assertEquals(2, discovery.failures.size());
+        assertThrows(IOException.class, () -> store.read_task_record("task-linked"));
+        assertThrows(IOException.class, () -> store.read_task_record("task-file-link"));
+        assertThrows(IOException.class, () -> store.save(
+            named_fixture("task-linked", "tab-linked"),
+            DurableTaskStore.TabProtection.PROTECTED_AUTHENTICATED_TRANSACTION));
+        assertEquals(named_fixture("task-linked", "tab-linked").serialize(),
+            new String(Files.readAllBytes(outside_record), StandardCharsets.UTF_8));
+    }
+
+    @Test
+    public void linked_history_refuses_append_without_changing_link_target() throws Exception {
+        Path root = temporary.getRoot().toPath();
+        DurableTaskStore store = new DurableTaskStore(root);
+        store.save(fixture(), DurableTaskStore.TabProtection.PROTECTED_AUTHENTICATED_TRANSACTION);
+        Path outside = root.resolve("history-outside.txt");
+        Files.write(outside, "unchanged".getBytes(StandardCharsets.UTF_8));
+        Files.createSymbolicLink(root.resolve("state/tabs/tab-1/history.log"), outside);
+        assertThrows(IOException.class, () -> store.append_navigation(fixture()));
+        assertEquals("unchanged", new String(Files.readAllBytes(outside), StandardCharsets.UTF_8));
+    }
+
+    @Test
+    public void oversized_truncated_and_mismatched_records_do_not_hide_valid_record() throws Exception {
+        Path root = temporary.getRoot().toPath();
+        DurableTaskStore store = new DurableTaskStore(root);
+        store.save(fixture(), DurableTaskStore.TabProtection.PROTECTED_AUTHENTICATED_TRANSACTION);
+        for (String identity : Arrays.asList(
+            "task-oversized", "task-truncated", "task-wrong-id", "task-invalid-utf8"
+        )) {
+            Files.createDirectory(root.resolve("state/tasks/" + identity));
+        }
+        Files.write(root.resolve("state/tasks/task-oversized/task.txt"),
+            new byte[DurableTaskStore.MAX_RECORD_BYTES + 1]);
+        Files.write(root.resolve("state/tasks/task-truncated/task.txt"),
+            fixture().serialize().trim().getBytes(StandardCharsets.UTF_8));
+        Files.write(root.resolve("state/tasks/task-wrong-id/task.txt"),
+            fixture().serialize().getBytes(StandardCharsets.UTF_8));
+        Files.write(root.resolve("state/tasks/task-invalid-utf8/task.txt"),
+            new byte[] {(byte) 0xc3, (byte) 0x28, (byte) '\n'});
+        DurableTaskStore.Discovery discovery = store.discover();
+        assertEquals(1, discovery.records.size());
+        assertEquals(4, discovery.failures.size());
+        assertEquals("task-1", discovery.latest.task_id);
+        assertThrows(IOException.class, () -> store.read_task_record("task-oversized"));
+        assertThrows(IOException.class, () -> store.read_task_record("task-truncated"));
+    }
+
+    @Test
+    public void incomplete_temporary_replacement_does_not_replace_committed_record() throws Exception {
+        Path root = temporary.getRoot().toPath();
+        DurableTaskStore store = new DurableTaskStore(root);
+        store.save(fixture(), DurableTaskStore.TabProtection.PROTECTED_AUTHENTICATED_TRANSACTION);
+        Files.write(root.resolve("state/tasks/task-1/task.txt.interrupted.tmp"),
+            "schema\tunfinished".getBytes(StandardCharsets.UTF_8));
+        assertEquals(fixture().serialize(), store.read_task_record("task-1"));
+        assertEquals(1, store.discover().records.size());
+        assertTrue(store.discover().failures.isEmpty());
+    }
+
+    @Test
+    public void excessive_entry_count_refuses_instead_of_returning_a_complete_subset() throws Exception {
+        Path root = temporary.getRoot().toPath();
+        DurableTaskStore store = new DurableTaskStore(root);
+        store.save(fixture(), DurableTaskStore.TabProtection.PROTECTED_AUTHENTICATED_TRANSACTION);
+        for (int index = 0; index < DurableTaskStore.MAX_TASK_ENTRIES; index++) {
+            Files.createDirectory(root.resolve("state/tasks/empty-" + index));
+        }
+        assertThrows(IOException.class, store::discover);
+        assertEquals(fixture().serialize(), store.read_task_record("task-1"));
+    }
+
+    private static DurableTaskRecord named_fixture(String task_id, String tab_id) {
+        return DurableTaskRecord.start(task_id, tab_id, "navigation-1",
+            DurableNavigation.from_user_url("https://example.test/path"), "host-1", 101, 1);
     }
 
     @Test
