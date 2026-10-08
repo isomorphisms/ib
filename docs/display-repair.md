@@ -28,6 +28,15 @@ Activating the button copies that exact payload through the platform clipboard b
 
 The Idriç core stub is `IB.DisplayRepair.CopyButton`.
 
+The source-bound policy slice now wraps that primitive through
+`IB.CopyPolicy.prepare_copy` and `clipboard_handoff`. It consumes the accepted
+S06 source/fragment graph, resolves an exact code-point range, rechecks browser
+policy and target/source identity at activation, and returns a validated
+handoff. A raw `copy_button` is a descriptor, not authorization to write.
+Native controls and the actual clipboard adapter remain separate unqualified
+gates. See [source-bound exact Copy](source-bound-exact-copy.md) for executed
+normalization evidence and those limits.
+
 ## Detection is separate
 
 The copy-button primitive must not depend on an expensive detector.

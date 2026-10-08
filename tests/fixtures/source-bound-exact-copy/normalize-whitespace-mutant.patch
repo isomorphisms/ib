@@ -1,0 +1,10 @@
+diff --git a/src/IB/CopyPolicy.idric b/src/IB/CopyPolicy.idric
+--- a/src/IB/CopyPolicy.idric
++++ b/src/IB/CopyPolicy.idric
+@@ -137,5 +137,5 @@
+       payload ← exact_source_payload candidate graph
+       Right (SourceBoundCopy site candidate
+-        (copy_button candidate.target_identity payload candidate.kind))
++        (copy_button candidate.target_identity (trim payload) candidate.kind))
+
+ -- A ready handoff is not evidence that the platform clipboard was written.

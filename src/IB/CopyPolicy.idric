@@ -1,0 +1,158 @@
+module IB.CopyPolicy
+
+import Data.Text
+import IB.DisplayRepair
+import IB.FragmentStore
+import IB.Occurrence
+
+public export
+choice copy_detection one_of
+  explicit_target
+  code_semantics
+  preformatted_semantics
+  unclassified_semantics
+
+public export
+choice copy_refusal one_of
+  globally_disabled
+  site_disabled
+  invalid_context
+  unsupported_detection
+  invalid_target_identity
+  stale_source_revision
+  stale_target
+  unknown_fragment
+  invalid_source_range
+  changed_payload
+  clipboard_unavailable
+
+public export
+record CopyPolicy where
+  constructor DisableCopy
+  disabled_everywhere : Bool
+  disabled_sites : List Text
+
+public export
+record CopyCandidate where
+  constructor CandidateCopy
+  target_identity : Text
+  source_revision : List Text
+  fragment_identity : Text
+  source_start : SourceCoordinate
+  source_end : SourceCoordinate
+  kind : copy_target_kind
+  detection : copy_detection
+
+export
+record PreparedCopy where
+  constructor SourceBoundCopy
+  site_identity : Text
+  candidate : CopyCandidate
+  repair : DisplayRepair
+
+identity_valid : Text → Bool
+identity_valid value = not (value ≟ "") && all valid_character (unpack value)
+  where
+    valid_character : Char → Bool
+    valid_character '\t' = False
+    valid_character '\n' = False
+    valid_character '\r' = False
+    valid_character '\0' = False
+    valid_character _ = True
+
+cheap_candidate : CopyCandidate → Bool
+cheap_candidate candidate = case candidate.detection of
+  explicit_target ⇒ True
+  code_semantics ⇒ case candidate.kind of
+    code_block ⇒ True
+    _ ⇒ False
+  preformatted_semantics ⇒ case candidate.kind of
+    preformatted_text ⇒ True
+    _ ⇒ False
+  unclassified_semantics ⇒ False
+
+-- Discovery selects neutral descriptors only. It never copies or rewrites text.
+export
+cheap_candidates : List CopyCandidate → List CopyCandidate
+cheap_candidates = filter cheap_candidate
+
+policy_refusal : CopyPolicy → Text → Maybe copy_refusal
+policy_refusal policy site =
+  if policy.disabled_everywhere then Just globally_disabled
+  else if not (identity_valid site) then Just invalid_context
+  else if elem site policy.disabled_sites then Just site_disabled
+  else Nothing
+
+find_fragment : Text → List SourceFragment → Maybe SourceFragment
+find_fragment wanted [] = Nothing
+find_fragment wanted (fragment :: rest) =
+  if fragment_id fragment ≟ wanted then Just fragment else find_fragment wanted rest
+
+-- Count is a semantic code-point extent; this deliberately does not use bytes
+-- or Android's UTF-16 positions. S06 owns conversion at those boundaries.
+subtract_extent : Number → Number → Number
+subtract_extent value Z = value
+subtract_extent Z (S _) = Z
+subtract_extent (S value) (S amount) = subtract_extent value amount
+
+take_source : Number → List Char → List Char
+take_source Z _ = []
+take_source (S _) [] = []
+take_source (S count) (character :: rest) = character :: take_source count rest
+
+drop_source : Number → List Char → List Char
+drop_source Z characters = characters
+drop_source (S _) [] = []
+drop_source (S count) (_ :: rest) = drop_source count rest
+
+exact_source_payload : CopyCandidate → FragmentGraph → Either copy_refusal Text
+exact_source_payload candidate graph =
+  if not (identity_valid candidate.target_identity) ||
+     not (identity_valid candidate.fragment_identity)
+    then Left invalid_target_identity
+  else if not (candidate.source_revision ≟ source_binding (graph_source graph))
+    then Left stale_source_revision
+  else case find_fragment candidate.fragment_identity (graph_fragments graph) of
+    Nothing ⇒ Left unknown_fragment
+    Just fragment ⇒
+      if candidate.source_start < fragment_source_start fragment ||
+         candidate.source_end > fragment_source_end fragment ||
+         candidate.source_end < candidate.source_start
+        then Left invalid_source_range
+        else Right $ pack $ take_source
+          (subtract_extent candidate.source_end candidate.source_start)
+          (drop_source candidate.source_start
+            (unpack (source_text (revision_text (graph_source graph)))))
+
+-- Site and current graph come from the browser owner, never from the page's
+-- candidate. Cheap detection and exact range resolution precede clipboard I/O.
+export
+prepare_copy :
+  CopyPolicy → Text → FragmentGraph → CopyCandidate → Either copy_refusal PreparedCopy
+prepare_copy policy site graph candidate = case policy_refusal policy site of
+  Just refusal ⇒ Left refusal
+  Nothing ⇒
+    if not (cheap_candidate candidate) then Left unsupported_detection else do
+      payload ← exact_source_payload candidate graph
+      Right (SourceBoundCopy site candidate
+        (copy_button candidate.target_identity payload candidate.kind))
+
+-- A ready handoff is not evidence that the platform clipboard was written.
+-- Revalidation also covers a policy change while a control remained painted.
+export
+clipboard_handoff :
+  CopyPolicy → Text → FragmentGraph → Text → Bool → PreparedCopy →
+  Either copy_refusal DisplayRepair
+clipboard_handoff policy site graph active_target available prepared =
+  if not (active_target ≟ prepared.candidate.target_identity) then Left stale_target
+  else if not (site ≟ prepared.site_identity) then Left invalid_context
+  else do
+    current ← prepare_copy policy site graph prepared.candidate
+    if not (copy_payload current.repair ≟ copy_payload prepared.repair)
+      then Left changed_payload
+      else if not available then Left clipboard_unavailable
+      else Right current.repair
+
+export
+prepared_payload : PreparedCopy → Text
+prepared_payload prepared = copy_payload prepared.repair

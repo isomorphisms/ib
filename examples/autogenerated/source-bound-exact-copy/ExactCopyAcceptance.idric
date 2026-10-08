@@ -1,0 +1,185 @@
+module ExactCopyAcceptance
+
+import Data.Text
+import IB.CopyPolicy
+import IB.DisplayRepair
+import IB.FragmentStore
+import IB.Occurrence
+import IB.Strand
+
+-- This corpus uses explicit synthetic provenance labels. Digest verification
+-- belongs to S06's byte-owning adapter, not to the pure Copy normalizer.
+fixture_graph : Text → Text → Text → Text → Maybe FragmentGraph
+fixture_graph identity digest decoder payload = do
+  representation ← nonempty_text "retained/representation-1"
+  source ← revisioned_source (Source representation PlainTextSource CompleteSource)
+    (SourceText identity payload) digest decoder
+  validate_graph source
+    [Fragment "body" identity 0 (length (unpack payload))]
+    (MaterializedStrand "reading" ["body"]) []
+
+allow_copy : CopyPolicy
+allow_copy = DisableCopy False []
+
+site : Text
+site = "example.test"
+
+exact_payload : Text
+exact_payload = "\t λ⇒🙂é\r\n  line 2  \n"
+
+base_graph : Maybe FragmentGraph
+base_graph = fixture_graph "source-1" "digest-1" "decoder-1" exact_payload
+
+candidate_for : FragmentGraph → SourceCoordinate → SourceCoordinate → CopyCandidate
+candidate_for graph start finish = CandidateCopy "copy-body"
+  (source_binding (graph_source graph)) "body" start finish code_block code_semantics
+
+whole_candidate : FragmentGraph → CopyCandidate
+whole_candidate graph = candidate_for graph 0 (length (unpack exact_payload))
+
+payload_is : Text → Either copy_refusal DisplayRepair → Bool
+payload_is wanted (Right repair) = copy_payload repair ≟ wanted
+payload_is _ (Left _) = False
+
+refusal_name : copy_refusal → Text
+refusal_name globally_disabled = "globally-disabled"
+refusal_name site_disabled = "site-disabled"
+refusal_name invalid_context = "invalid-context"
+refusal_name unsupported_detection = "unsupported-detection"
+refusal_name invalid_target_identity = "invalid-target-identity"
+refusal_name stale_source_revision = "stale-source-revision"
+refusal_name stale_target = "stale-target"
+refusal_name unknown_fragment = "unknown-fragment"
+refusal_name invalid_source_range = "invalid-source-range"
+refusal_name changed_payload = "changed-payload"
+refusal_name clipboard_unavailable = "clipboard-unavailable"
+
+refused : Text → Either copy_refusal value → Bool
+refused wanted (Left reason) = refusal_name reason ≟ wanted
+refused _ (Right _) = False
+
+with_graph : (FragmentGraph → Bool) → Bool
+with_graph check = case base_graph of
+  Nothing ⇒ False
+  Just graph ⇒ check graph
+
+with_prepared : (FragmentGraph → PreparedCopy → Bool) → Bool
+with_prepared check = with_graph $ \graph ⇒
+  case prepare_copy allow_copy site graph (whole_candidate graph) of
+    Left _ ⇒ False
+    Right prepared ⇒ check graph prepared
+
+export
+copy_case_results : List (Text, Bool)
+copy_case_results =
+  [ ("whole-code-exact-tabs-crlf-unicode", with_prepared $ \graph, prepared ⇒
+      payload_is exact_payload
+        (clipboard_handoff allow_copy site graph "copy-body" True prepared))
+  , ("empty-valid-selection", with_graph $ \graph ⇒
+      case prepare_copy allow_copy site graph (candidate_for graph 0 0) of
+        Left _ ⇒ False
+        Right prepared ⇒ payload_is ""
+          (clipboard_handoff allow_copy site graph "copy-body" True prepared))
+  , ("unicode-codepoint-subrange", case fixture_graph "unicode" "digest-u" "decoder-1" "a🙂λb" of
+      Nothing ⇒ False
+      Just graph ⇒ case prepare_copy allow_copy site graph (candidate_for graph 1 3) of
+        Left _ ⇒ False
+        Right prepared ⇒ payload_is "🙂λ"
+          (clipboard_handoff allow_copy site graph "copy-body" True prepared))
+  , ("global-disable-before-preparation", with_graph $ \graph ⇒
+      refused "globally-disabled"
+        (prepare_copy (DisableCopy True []) site graph (whole_candidate graph)))
+  , ("site-disable-before-preparation", with_graph $ \graph ⇒
+      refused "site-disabled"
+        (prepare_copy (DisableCopy False [site]) site graph (whole_candidate graph)))
+  , ("other-site-disable-allows-exact-copy", with_prepared $ \graph, prepared ⇒
+      payload_is exact_payload
+        (clipboard_handoff (DisableCopy False ["other.test"])
+          site graph "copy-body" True prepared))
+  , ("global-disable-after-paint", with_prepared $ \graph, prepared ⇒
+      refused "globally-disabled"
+        (clipboard_handoff (DisableCopy True []) site graph "copy-body" True prepared))
+  , ("site-disable-after-paint", with_prepared $ \graph, prepared ⇒
+      refused "site-disabled"
+        (clipboard_handoff (DisableCopy False [site]) site graph "copy-body" True prepared))
+  , ("missing-clipboard-capability", with_prepared $ \graph, prepared ⇒
+      refused "clipboard-unavailable"
+        (clipboard_handoff allow_copy site graph "copy-body" False prepared))
+  , ("recycled-control-target-refused", with_prepared $ \graph, prepared ⇒
+      refused "stale-target"
+        (clipboard_handoff allow_copy site graph "copy-other" True prepared))
+  , ("different-site-context-refused", with_prepared $ \graph, prepared ⇒
+      refused "invalid-context"
+        (clipboard_handoff allow_copy "other.test" graph "copy-body" True prepared))
+  , ("new-digest-refuses-old-control", with_prepared $ \graph, prepared ⇒
+      case fixture_graph "source-1" "digest-2" "decoder-1" exact_payload of
+        Nothing ⇒ False
+        Just changed ⇒ refused "stale-source-revision"
+          (clipboard_handoff allow_copy site changed "copy-body" True prepared))
+  , ("equal-bytes-other-source-refused", with_prepared $ \graph, prepared ⇒
+      case fixture_graph "source-2" "digest-1" "decoder-1" exact_payload of
+        Nothing ⇒ False
+        Just changed ⇒ refused "stale-source-revision"
+          (clipboard_handoff allow_copy site changed "copy-body" True prepared))
+  , ("new-decoder-refuses-old-control", with_prepared $ \graph, prepared ⇒
+      case fixture_graph "source-1" "digest-1" "decoder-2" exact_payload of
+        Nothing ⇒ False
+        Just changed ⇒ refused "stale-source-revision"
+          (clipboard_handoff allow_copy site changed "copy-body" True prepared))
+  , ("forged-unchanged-binding-with-changed-text-refused", with_prepared $ \graph, prepared ⇒
+      case fixture_graph "source-1" "digest-1" "decoder-1"
+        "x\t λ⇒🙂é\r\n  line 2  \n" of
+        Nothing ⇒ False
+        Just changed ⇒ refused "changed-payload"
+          (clipboard_handoff allow_copy site changed "copy-body" True prepared))
+  , ("missing-fragment-refused", with_graph $ \graph ⇒
+      refused "unknown-fragment" (prepare_copy allow_copy site graph
+        (CandidateCopy "copy-missing" (source_binding (graph_source graph))
+          "absent" 0 1 code_block code_semantics)))
+  , ("missing-provenance-binding-refused", with_graph $ \graph ⇒
+      refused "stale-source-revision" (prepare_copy allow_copy site graph
+        (CandidateCopy "copy-unbound" [] "body" 0 1 code_block code_semantics)))
+  , ("byte-unit-candidate-refused", with_graph $ \graph ⇒
+      refused "stale-source-revision" (prepare_copy allow_copy site graph
+        (CandidateCopy "copy-byte-unit"
+          ["source-1", "retained/representation-1", "digest-1", "decoder-1", "utf8-byte"]
+          "body" 0 1 code_block code_semantics)))
+  , ("out-of-range-selection-refused", with_graph $ \graph ⇒
+      refused "invalid-source-range" (prepare_copy allow_copy site graph
+        (candidate_for graph 0 (S (length (unpack exact_payload))))))
+  , ("reversed-range-refused", with_graph $ \graph ⇒
+      refused "invalid-source-range"
+        (prepare_copy allow_copy site graph (candidate_for graph 2 1)))
+  , ("empty-target-identity-refused", with_graph $ \graph ⇒
+      refused "invalid-target-identity" (prepare_copy allow_copy site graph
+        (CandidateCopy "" (source_binding (graph_source graph))
+          "body" 0 1 code_block code_semantics)))
+  , ("unclassified-target-needs-no-write", with_graph $ \graph ⇒
+      refused "unsupported-detection" (prepare_copy allow_copy site graph
+        (CandidateCopy "copy-unclassified" (source_binding (graph_source graph))
+          "body" 0 1 text_region unclassified_semantics)))
+  , ("cheap-explicit-code-preformatted-selection", with_graph $ \graph ⇒
+      let binding = source_binding (graph_source graph) in
+      length (cheap_candidates
+        [ CandidateCopy "explicit" binding "body" 0 1 text_region explicit_target
+        , CandidateCopy "code" binding "body" 0 1 code_block code_semantics
+        , CandidateCopy "pre" binding "body" 0 1 preformatted_text preformatted_semantics
+        , CandidateCopy "unsupported" binding "body" 0 1 text_region unclassified_semantics
+        , CandidateCopy "kind-mismatch" binding "body" 0 1 text_region code_semantics
+        ]) ≟ 3)
+  , ("retained-graph-rebuild-copies-exact-source", with_prepared $ \graph, prepared ⇒
+      case decode_graph (graph_source graph) (serialize_graph graph) of
+        Nothing ⇒ False
+        Just reopened ⇒ payload_is exact_payload
+          (clipboard_handoff allow_copy site reopened "copy-body" True prepared))
+  , ("literal-overlap-positions-and-copy", case fixture_graph "overlap" "digest-o" "decoder-1" "🙂aaaλ" of
+      Nothing ⇒ False
+      Just graph ⇒ case graph_occurrences "aa" graph of
+        Nothing ⇒ False
+        Just occurrences ⇒
+          map occurrence_source_start occurrences ≟ [1, 2] &&
+          case prepare_copy allow_copy site graph (candidate_for graph 2 4) of
+            Left _ ⇒ False
+            Right prepared ⇒ payload_is "aa"
+              (clipboard_handoff allow_copy site graph "copy-body" True prepared))
+  ]
