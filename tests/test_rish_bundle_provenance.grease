@@ -1,0 +1,112 @@
+#!/usr/bin/env grease
+# Actual Grease runtime; inherited libraries need explicit +O ysh:all mode.
+set -eu
+root=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)
+. "$root/lib/android_shizuku_host.grease"
+. "${IB_CAPABILITY_LIBRARY:-$root/lib/android_device_capabilities.grease}"
+fixture=$(mktemp -d)
+trap 'rm -rf "$fixture"' EXIT HUP INT TERM
+state=$fixture/state
+saved=$state/snapshots/snap-a
+active=$fixture/active
+mkdir -p "$saved" "$active" "$fixture/device"
+printf 'snap-a\n' > "$state/current"
+# Opaque executable fixture: observation must never execute this launcher.
+printf '#!/bin/sh\nprintf invoked > "%s"\nexit 99\n' "$fixture/invoked" > "$active/rish"
+printf 'dex-bytes\n' > "$active/rish_shizuku.dex"
+chmod 0500 "$active/rish"
+chmod 0400 "$active/rish_shizuku.dex"
+cp "$active/rish" "$saved/rish"
+cp "$active/rish_shizuku.dex" "$saved/rish_shizuku.dex"
+launcher_hash=$(ib_capabilities_sha256 "$saved/rish")
+dex_hash=$(ib_capabilities_sha256 "$saved/rish_shizuku.dex")
+printf 'schema\tcatfood-shizuku-state-v1\nscope\trish-bundle\nrish_sha256\t%s\ndex_sha256\t%s\n' "$launcher_hash" "$dex_hash" > "$saved/receipt.tsv"
+export IB_RISH_COMMAND=$active/rish
+export CATFOOD_DEVICE_STATE=$fixture/device
+export CATFOOD_DEVICE_ID_FILE=$fixture/device/device-id
+printf 'phone-a\n' > "$CATFOOD_DEVICE_ID_FILE"
+printf '# catfood-device-inventory-v1\nmeta\tdevice_id\tphone-a\tlocal-state\nmeta\tobserved_at\t2026-10-08T17:00:00Z\tclock\nmeta\tmodel\tMIRO A1\tgetprop\n' > "$fixture/device/inventory.tsv"
+
+assert_state() {
+  printf '%s\n' "$report" | awk -F '\t' -v name="$1" -v status="$2" '$1 == "field" && $2 == name && $3 == status {found++} END {exit found != 1}'
+}
+assert_absent() {
+  if printf '%s\n' "$report" | awk -F '\t' -v name="$1" '$1 == "field" && $2 == name {found++} END {exit found == 0}'; then
+    printf 'unexpected observation: %s\n' "$1" >&2
+    exit 1
+  fi
+}
+observe() { report=$(ib_capabilities_shizuku_bundle "$state"); }
+
+before=$(find "$state" "$active" "$fixture/device" -type f -exec sha256sum {} + | sort)
+observe
+assert_state catfood_receipt_present measured
+assert_state catfood_saved_pair_verified measured
+assert_state catfood_active_pair_matches measured
+assert_state catfood_dex_mode_valid measured
+assert_absent live_authority_observed
+report=$(ib_capabilities_catfood_identity)
+assert_state catfood_device_id reported
+assert_state catfood_device_manifest reported
+after=$(find "$state" "$active" "$fixture/device" -type f -exec sha256sum {} + | sort)
+test "$before" = "$after"
+test ! -e "$fixture/invoked"
+
+chmod 0600 "$saved/rish_shizuku.dex"
+printf 'corrupt\n' > "$saved/rish_shizuku.dex"
+observe
+assert_state catfood_saved_pair_verified invalid
+assert_absent catfood_active_pair_matches
+cp "$active/rish_shizuku.dex" "$saved/rish_shizuku.dex"
+chmod 0400 "$saved/rish_shizuku.dex"
+chmod 0600 "$active/rish_shizuku.dex"
+printf 'different active bytes\n' > "$active/rish_shizuku.dex"
+observe
+assert_state catfood_saved_pair_verified measured
+assert_state catfood_active_pair_matches stale
+cp "$saved/rish_shizuku.dex" "$active/rish_shizuku.dex"
+chmod 0600 "$active/rish_shizuku.dex"
+observe
+assert_state catfood_dex_mode_valid invalid
+assert_state catfood_active_pair_matches measured
+chmod 0400 "$active/rish_shizuku.dex"
+mv "$active/rish_shizuku.dex" "$active/held.dex"
+observe
+assert_state catfood_active_pair_matches invalid
+mv "$active/held.dex" "$active/rish_shizuku.dex"
+
+cp "$saved/receipt.tsv" "$fixture/valid-receipt"
+printf 'dex_sha256\t%s\n' "$dex_hash" >> "$saved/receipt.tsv"
+observe
+assert_state catfood_receipt_present invalid
+assert_absent catfood_saved_pair_verified
+cp "$fixture/valid-receipt" "$saved/receipt.tsv"
+printf 'missing-receipt\n' > "$state/current"
+observe
+assert_state catfood_shizuku_snapshot stale
+printf 'snap-a\n' > "$state/current"
+
+# Controlled external save races the observation at its first hash read.
+real_sha=$(command -v sha256sum)
+sha256sum() {
+  printf 'snap-b\n' > "$state/current"
+  "$real_sha" "$@"
+}
+observe
+assert_state catfood_shizuku_snapshot stale
+assert_absent catfood_saved_pair_verified
+assert_absent catfood_active_pair_matches
+unset -f sha256sum
+printf 'snap-a\n' > "$state/current"
+observe
+assert_state catfood_active_pair_matches measured
+
+# Equal model names do not make local installation identities interchangeable.
+printf 'phone-b\n' > "$CATFOOD_DEVICE_ID_FILE"
+report=$(ib_capabilities_catfood_identity)
+assert_state catfood_device_manifest stale
+printf 'phone-a\n' > "$CATFOOD_DEVICE_ID_FILE"
+report=$(ib_capabilities_catfood_identity)
+assert_state catfood_device_manifest reported
+test ! -e "$fixture/invoked"
+printf 'rish-bundle-provenance: 10 positive/refusal/recovery groups PASS\n'

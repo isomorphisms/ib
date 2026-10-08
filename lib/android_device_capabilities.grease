@@ -1,4 +1,5 @@
-# Grease/POSIX-shell source. Read-only Android capability observation for IB.
+# Grease source; inherited function spelling uses the runtime's legacy mode.
+# Read-only Android capability observation for IB.
 # Browser policy consumes these observations; this adapter does not choose storage.
 
 ib_capabilities_emit() {
@@ -27,18 +28,156 @@ ib_capabilities_catfood_state() {
     ib_capabilities_emit field device_label unknown catfood 'no device label supplied by current Cat Food contract'
   fi
 
-  # Cat Food #65 is still the place for a general per-device/local-checkout
-  # manifest. Do not fabricate one from a directory name.
-  ib_capabilities_emit field catfood_device_manifest unknown catfood 'general per-device manifest not available to this adapter'
+  ib_capabilities_catfood_identity
+
+  # Buffer observations until the pointer is rechecked. A concurrent external
+  # save must not leave verified rows describing a different current snapshot.
+  ib_capabilities_shizuku_bundle "$state_dir"
+}
+
+ib_capabilities_catfood_identity() (
+  device_state=${CATFOOD_DEVICE_STATE:-${XDG_STATE_HOME:-"$HOME/.local/state"}/catfood/device}
+  inventory=$device_state/inventory.tsv
+  identity_file=${CATFOOD_DEVICE_ID_FILE:-$device_state/device-id}
+  identity=${CATFOOD_DEVICE_ID:-}
+  if test -z "$identity" && test -r "$identity_file"; then
+    identity=$(cat "$identity_file") || identity=
+  fi
+  case "$identity" in
+    ''|-|*[!A-Za-z0-9_.-]*)
+      ib_capabilities_emit field catfood_device_id unknown catfood 'no valid existing per-installation identity'
+      return 0 ;;
+  esac
+  ib_capabilities_emit field catfood_device_id reported catfood-local-state "$identity"
+  if ! test -f "$inventory"; then
+    ib_capabilities_emit field catfood_device_manifest unknown catfood 'no existing inventory.tsv'
+    return 0
+  fi
+  if ! test "$(head -n 1 "$inventory")" = '# catfood-device-inventory-v1'; then
+    ib_capabilities_emit field catfood_device_manifest invalid catfood 'unsupported inventory schema'
+    return 0
+  fi
+  recorded=$(ib_capabilities_inventory_value "$inventory" device_id) || recorded=
+  if test "$recorded" != "$identity"; then
+    ib_capabilities_emit field catfood_device_manifest stale catfood 'inventory does not match existing installation identity'
+    return 0
+  fi
+  observed=$(ib_capabilities_inventory_value "$inventory" observed_at) || observed=
+  if test -z "$observed"; then
+    ib_capabilities_emit field catfood_device_manifest invalid catfood 'missing or duplicate observed_at'
+    return 0
+  fi
+  ib_capabilities_emit field catfood_device_manifest reported catfood "$inventory"
+  ib_capabilities_emit field catfood_device_observed_at reported catfood "$observed"
+)
+
+ib_capabilities_inventory_value() {
+  awk -F '\t' -v name="$2" '$1 == "meta" && $2 == name {value=$3; count++; if (NF != 4) bad=1} END {if (count != 1 || bad) exit 1; print value}' "$1"
+}
+
+ib_capabilities_receipt_value() {
+  awk -F '\t' -v name="$2" '$1 == name {value=$2; count++; if (NF != 2) bad=1} END {if (count != 1 || bad) exit 1; print value}' "$1"
+}
+
+ib_capabilities_sha256() (
+  if command -v sha256sum >/dev/null 2>&1; then
+    digest=$(sha256sum "$1") || return $?
+  elif test -x "${CATFOOD_TOYBOX:-/system/bin/toybox}"; then
+    digest=$("${CATFOOD_TOYBOX:-/system/bin/toybox}" sha256sum "$1") || return $?
+  else
+    return 127
+  fi
+  printf '%s\n' "${digest%% *}"
+)
+
+ib_capabilities_hash_valid() {
+  test "${#1}" -eq 64 || return 1
+  case "$1" in *[!0-9a-f]*) return 1 ;; esac
+}
+
+ib_capabilities_bundle_details() (
+  snapshot=$1
+  receipt=$snapshot/receipt.tsv
+  receipt_bytes=$(wc -c < "$receipt") || return $?
+  if test "$receipt_bytes" -gt 8192; then
+    ib_capabilities_emit field catfood_receipt_present invalid catfood oversized
+    return 0
+  fi
+  schema=$(ib_capabilities_receipt_value "$receipt" schema) || schema=
+  scope=$(ib_capabilities_receipt_value "$receipt" scope) || scope=
+  expected_rish=$(ib_capabilities_receipt_value "$receipt" rish_sha256) || expected_rish=
+  expected_dex=$(ib_capabilities_receipt_value "$receipt" dex_sha256) || expected_dex=
+  if test "$schema" != catfood-shizuku-state-v1 || test "$scope" != rish-bundle ||
+     ! ib_capabilities_hash_valid "$expected_rish" || ! ib_capabilities_hash_valid "$expected_dex"; then
+    ib_capabilities_emit field catfood_receipt_present invalid catfood 'schema/scope/hash missing, malformed or duplicated'
+    return 0
+  fi
+  ib_capabilities_emit field catfood_receipt_present measured local-files "$receipt"
+  tab=$(printf '\t')
+  while IFS="$tab" read -r key value rest; do
+    case "$key" in
+      manager_package|source_dir|rish_sha256|dex_sha256|schema|scope)
+        ib_capabilities_emit field "catfood_$key" reported catfood "$value" ;;
+    esac
+  done < "$receipt"
+  if ! test -f "$snapshot/rish" || ! test -f "$snapshot/rish_shizuku.dex" ||
+     test -L "$snapshot/rish" || test -L "$snapshot/rish_shizuku.dex"; then
+    ib_capabilities_emit field catfood_saved_pair_verified invalid local-files 'missing or linked saved pair'
+    return 0
+  fi
+  saved_rish=$(ib_capabilities_sha256 "$snapshot/rish") || saved_rish=
+  saved_dex=$(ib_capabilities_sha256 "$snapshot/rish_shizuku.dex") || saved_dex=
+  if test "$saved_rish" != "$expected_rish" || test "$saved_dex" != "$expected_dex"; then
+    ib_capabilities_emit field catfood_saved_pair_verified invalid local-files checksum-mismatch
+    return 0
+  fi
+  ib_capabilities_emit field catfood_saved_pair_verified measured local-files 'saved bytes match receipt'
+  active=$(ib_shizuku_rish_command 2>/dev/null) || active=
+  case "$active" in
+    /*) ;;
+    */*) parent=$(CDPATH='' cd -- "${active%/*}" && pwd -P) || parent=
+         active=$parent/${active##*/} ;;
+    *) ib_capabilities_emit field catfood_active_pair_matches unknown local-files 'no resolved executable file'; return 0 ;;
+  esac
+  ib_capabilities_emit field catfood_active_rish reported command-resolution "$active"
+  dex=${active%/*}/rish_shizuku.dex
+  if ! test -f "$active" || ! test -f "$dex" || test -L "$dex"; then
+    ib_capabilities_emit field catfood_active_pair_matches invalid local-files 'missing active pair or linked DEX'
+    return 0
+  fi
+  active_rish=$(ib_capabilities_sha256 "$active") || active_rish=
+  active_dex=$(ib_capabilities_sha256 "$dex") || active_dex=
+  mode=$(stat -c '%a' "$dex" 2>/dev/null) || mode=
+  permissions=$(printf '%s\n' "$mode" | sed 's/.*\(...\)$/\1/')
+  case "$permissions" in
+    ''|*[!0-7]*) ib_capabilities_emit field catfood_dex_mode_valid unknown local-files 'mode unavailable' ;;
+    *[2367]*) ib_capabilities_emit field catfood_dex_mode_valid invalid local-files "writable DEX mode=$mode" ;;
+    *) ib_capabilities_emit field catfood_dex_mode_valid measured local-files "nonwritable DEX mode=$mode" ;;
+  esac
+  if test "$active_rish" = "$expected_rish" && test "$active_dex" = "$expected_dex"; then
+    ib_capabilities_emit field catfood_active_pair_matches measured local-files 'resolved launcher and sibling DEX match saved bytes'
+  else
+    ib_capabilities_emit field catfood_active_pair_matches stale local-files 'active bytes differ from saved pair'
+  fi
+)
+
+ib_capabilities_shizuku_bundle() (
+  state_dir=$1
 
   if ! test -f "$state_dir/current"; then
     ib_capabilities_emit field catfood_shizuku_snapshot unknown catfood 'no preserved Shizuku snapshot recorded'
     return 0
   fi
 
-  snapshot_id=$(cat "$state_dir/current" 2>/dev/null || true)
+  pointer_bytes=$(wc -c < "$state_dir/current") || return $?
+  if test "$pointer_bytes" -gt 128; then
+    ib_capabilities_emit field catfood_shizuku_snapshot invalid catfood 'oversized current pointer'
+    return 0
+  fi
+
+  snapshot_id=$(cat "$state_dir/current" 2>/dev/null) || snapshot_id=
   case "$snapshot_id" in
-    ''|*/*|*..*)
+    ''|*..*|*[!A-Za-z0-9._-]*)
       ib_capabilities_emit field catfood_shizuku_snapshot invalid catfood "$snapshot_id"
       return 0
       ;;
@@ -46,22 +185,20 @@ ib_capabilities_catfood_state() {
 
   snapshot=$state_dir/snapshots/$snapshot_id
   receipt=$snapshot/receipt.tsv
-  if ! test -f "$receipt"; then
+  if ! test -f "$receipt" || test -L "$receipt" || test -L "$snapshot"; then
     ib_capabilities_emit field catfood_shizuku_snapshot stale catfood "$snapshot_id receipt-missing"
     return 0
   fi
 
+  observations=$(ib_capabilities_bundle_details "$snapshot") || return $?
+  after=$(cat "$state_dir/current" 2>/dev/null) || after=
+  if test "$after" != "$snapshot_id"; then
+    ib_capabilities_emit field catfood_shizuku_snapshot stale catfood 'current pointer changed during observation'
+    return 0
+  fi
   ib_capabilities_emit field catfood_shizuku_snapshot reported catfood "$snapshot_id"
-  tab=$(printf '\t')
-  while IFS="$tab" read -r key value rest; do
-    test -z "${rest:-}" || value="$value $rest"
-    case "$key" in
-      manager_package|source_dir|rish_sha256|dex_sha256|schema|scope)
-        ib_capabilities_emit field "catfood_$key" reported catfood "$value"
-        ;;
-    esac
-  done < "$receipt"
-}
+  printf '%s\n' "$observations"
+)
 
 ib_android_capabilities_open_app_report() {
   ib_binder_capabilities_open_app_report
@@ -84,8 +221,14 @@ ib_android_capabilities_report() {
 
   if remote_output=$(ib_binder_capabilities_remote_snapshot 2>&1); then
     printf '%s\n' "$remote_output"
+    authority_uid=$(printf '%s\n' "$remote_output" | awk -F '\t' '$1 == "field" && $2 == "remote_uid" && $3 == "measured" {value=$5; count++} END {if (count != 1) exit 1; print value}') || authority_uid=
+    case "$authority_uid" in
+      ''|*[!0-9]*) ib_capabilities_emit field live_authority_observed unknown binder 'no unique valid measured UID in live provider report' ;;
+      *) ib_capabilities_emit field live_authority_observed measured binder "$authority_uid" ;;
+    esac
   else
     status=$?
+    ib_capabilities_emit field live_authority_observed failed binder "exit=$status"
     ib_capabilities_emit field binder_snapshot failed local "exit=$status $remote_output"
     return "$status"
   fi
