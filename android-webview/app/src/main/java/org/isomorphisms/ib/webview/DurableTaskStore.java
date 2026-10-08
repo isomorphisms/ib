@@ -8,9 +8,11 @@ import java.nio.charset.CharacterCodingException;
 import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.AtomicMoveNotSupportedException;
+import java.nio.file.DirectoryIteratorException;
 import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
+import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
@@ -120,6 +122,8 @@ final class DurableTaskStore {
                 }
                 entries.add(entry);
             }
+        } catch (DirectoryIteratorException exception) {
+            throw new IOException("durable task directory enumeration failed", exception);
         }
         entries.sort(Comparator.comparing(path -> path.getFileName().toString()));
         List<DurableTaskRecord> records = new ArrayList<>();
@@ -195,12 +199,16 @@ final class DurableTaskStore {
         Path current = directory.getRoot();
         for (Path component : directory) {
             current = current.resolve(component);
-            if (!Files.exists(current, LinkOption.NOFOLLOW_LINKS)) {
+            BasicFileAttributes attributes;
+            try {
+                attributes = Files.readAttributes(
+                    current, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS
+                );
+            } catch (NoSuchFileException exception) {
+                // Absence is the only condition that permits an empty discovery.
+                // Access denial and other observation failures stay explicit.
                 return false;
             }
-            BasicFileAttributes attributes = Files.readAttributes(
-                current, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS
-            );
             if (!attributes.isDirectory() || attributes.isSymbolicLink()) {
                 throw new IOException("durable directory is not a non-linked directory");
             }

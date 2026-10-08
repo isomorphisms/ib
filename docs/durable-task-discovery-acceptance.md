@@ -16,6 +16,10 @@ replacement. Both task and tab identities and output bounds are checked before
 creation. Task/tab publication remains two separate operations; this does not
 introduce or claim a multi-file transaction.
 
+Only an observed missing path yields an empty discovery. Permission denial,
+attribute-read failure and directory-iteration failure remain errors rather
+than being treated as an absent corpus.
+
 `discover()` supplies every valid protected task, ordered by its task identity,
 and a separate refusal for each invalid entry. Encoded task records are limited
 to 64 KiB and an enumeration to 1,024 entries. Exceeding the entry limit refuses
