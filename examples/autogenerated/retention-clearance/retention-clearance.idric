@@ -1,0 +1,7 @@
+module RetentionClearanceAttempt
+
+import public IB.Storage
+import public IB.Prefetch
+
+-- The canonical owner is IB.Storage; RetentionCases exercises its actual
+-- policy and the existing Prefetch adapter without generating another store.

@@ -1,0 +1,75 @@
+module RetentionCases
+
+import IB.Storage
+import IB.Prefetch
+import System
+
+good_evidence : RebuildEvidence
+good_evidence = OfflineRebuildEvidence ["source-revision-one"] ["source-revision-one"]
+  "human-decisions-one" "human-decisions-one" "projection-generator-one"
+  "projection-output-one" "projection-output-one" True True True
+
+is_preserved : clearance_result → Bool
+is_preserved preserve_information = True
+is_preserved clear_qualified_projection = False
+
+canonical_is_preserved : Bool
+canonical_is_preserved = is_preserved (clearance_decision canonical_information explicit_clearance_requested good_evidence)
+
+acquisition_is_preserved : Bool
+acquisition_is_preserved = is_preserved (clearance_decision acquired_information explicit_clearance_requested good_evidence)
+
+decisions_are_preserved : Bool
+decisions_are_preserved = is_preserved (clearance_decision accepted_decisions explicit_clearance_requested good_evidence)
+
+last_complete_is_preserved : Bool
+last_complete_is_preserved = is_preserved (clearance_decision last_complete_result explicit_clearance_requested good_evidence)
+
+unknown_is_preserved : Bool
+unknown_is_preserved = is_preserved (clearance_decision unknown_retention explicit_clearance_requested good_evidence)
+
+explicit_derived_is_clearable : Bool
+explicit_derived_is_clearable = not (is_preserved (clearance_decision derived_information explicit_clearance_requested good_evidence))
+
+automatic_clearance_is_refused : Bool
+automatic_clearance_is_refused = is_preserved (clearance_decision derived_information no_clearance_requested good_evidence)
+
+missing_input_is_refused : Bool
+missing_input_is_refused = is_preserved (clearance_decision derived_information explicit_clearance_requested
+  (OfflineRebuildEvidence ["source-revision-one"] [] "human-decisions-one" "human-decisions-one"
+    "projection-generator-one" "projection-output-one" "projection-output-one" True True True))
+
+lost_decision_is_refused : Bool
+lost_decision_is_refused = is_preserved (clearance_decision derived_information explicit_clearance_requested
+  (OfflineRebuildEvidence ["source-revision-one"] ["source-revision-one"] "human-decisions-one" ""
+    "projection-generator-one" "projection-output-one" "projection-output-one" True True True))
+
+unavailable_media_is_preserved : Bool
+unavailable_media_is_preserved = is_preserved (clearance_decision derived_information explicit_clearance_requested
+  (OfflineRebuildEvidence ["source-revision-one"] ["source-revision-one"] "human-decisions-one" "human-decisions-one"
+    "projection-generator-one" "projection-output-one" "projection-output-one" True True False))
+
+network_rebuild_is_refused : Bool
+network_rebuild_is_refused = is_preserved (clearance_decision derived_information explicit_clearance_requested
+  (OfflineRebuildEvidence ["source-revision-one"] ["source-revision-one"] "human-decisions-one" "human-decisions-one"
+    "projection-generator-one" "projection-output-one" "projection-output-one" True False True))
+
+wrong_output_is_refused : Bool
+wrong_output_is_refused = is_preserved (clearance_decision derived_information explicit_clearance_requested
+  (OfflineRebuildEvidence ["source-revision-one"] ["source-revision-one"] "human-decisions-one" "human-decisions-one"
+    "projection-generator-one" "projection-output-one" "wrong-output" True True True))
+
+prefetch_placement_cannot_authorize_clearance : Bool
+prefetch_placement_cannot_authorize_clearance = is_preserved (clearance_decision
+  (prefetch_storage_retention (Target "https://source.example/paper" transient_cache))
+  explicit_clearance_requested good_evidence)
+
+all_expected : Bool
+all_expected = and [canonical_is_preserved, acquisition_is_preserved, decisions_are_preserved,
+  last_complete_is_preserved, unknown_is_preserved, explicit_derived_is_clearable,
+  automatic_clearance_is_refused, missing_input_is_refused, lost_decision_is_refused,
+  unavailable_media_is_preserved, network_rebuild_is_refused, wrong_output_is_refused,
+  prefetch_placement_cannot_authorize_clearance]
+
+main : IO ()
+main = if all_expected then putStrLn "retention-cases=PASS" else exitFailure
