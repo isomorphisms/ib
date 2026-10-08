@@ -1,0 +1,234 @@
+module IB.FragmentStore
+
+import Data.Text
+import Data.List1
+import IB.Occurrence
+import IB.Strand
+
+-- A representation is the canonical successor's source object. Its decoded
+-- revision is separately verified by the byte-owning adapter before admission.
+export
+record RevisionedSource where
+  constructor BoundSource
+  representation : SourceRepresentation
+  authoritative : AuthoritativeText
+  decoded_digest : Text
+  decoder_revision : Text
+
+scalar : Text → Bool
+scalar value = not (value ≟ "") && all allowed (unpack value)
+  where
+    allowed : Char → Bool
+    allowed '\t' = False
+    allowed '\n' = False
+    allowed '\r' = False
+    allowed '\0' = False
+    allowed _ = True
+
+export
+revisioned_source :
+  SourceRepresentation → AuthoritativeText → Text → Text → Maybe RevisionedSource
+revisioned_source representation authoritative digest decoder =
+  if scalar (source_id authoritative) &&
+     scalar (nonempty_text_value representation.reference) &&
+     scalar digest && scalar decoder
+    then Just (BoundSource representation authoritative digest decoder)
+    else Nothing
+
+export
+source_binding : RevisionedSource → List Text
+source_binding source =
+  [ source_id source.authoritative
+  , nonempty_text_value source.representation.reference
+  , source.decoded_digest
+  , source.decoder_revision
+  , "unicode-codepoint"
+  ]
+
+public export
+record FragmentLink where
+  constructor LinkedFragments
+  from_fragment : Text
+  to_fragment : Text
+
+export
+record FragmentGraph where
+  constructor CheckedGraph
+  source : RevisionedSource
+  fragments : List SourceFragment
+  traversal : IB.Occurrence.Strand
+  links : List FragmentLink
+
+known_fragment : List SourceFragment → Text → Bool
+known_fragment fragments wanted =
+  any (\fragment ⇒ fragment_id fragment ≟ wanted) fragments
+
+link_valid : List SourceFragment → FragmentLink → Bool
+link_valid fragments link =
+  known_fragment fragments link.from_fragment &&
+  known_fragment fragments link.to_fragment
+
+unique_links : List FragmentLink → Bool
+unique_links [] = True
+unique_links (link :: rest) =
+  not (any same rest) && unique_links rest
+  where
+    same : FragmentLink → Bool
+    same other = link.from_fragment ≟ other.from_fragment &&
+                 link.to_fragment ≟ other.to_fragment
+
+fragment_names_valid : List SourceFragment → Bool
+fragment_names_valid = all (\fragment ⇒ scalar (fragment_id fragment))
+
+export
+validate_graph :
+  RevisionedSource → List SourceFragment → IB.Occurrence.Strand →
+  List FragmentLink → Maybe FragmentGraph
+validate_graph source fragments traversal links =
+  if scalar (strand_id traversal) && fragment_names_valid fragments &&
+     all (known_fragment fragments) (strand_fragment_ids traversal) &&
+     all (link_valid fragments) links && unique_links links
+    then case search_occurrences "" source.authoritative fragments traversal of
+      Just _ ⇒ Just (CheckedGraph source fragments traversal links)
+      Nothing ⇒ Nothing
+    else Nothing
+
+export
+graph_fragments : FragmentGraph → List SourceFragment
+graph_fragments graph = graph.fragments
+
+export
+graph_traversal : FragmentGraph → IB.Occurrence.Strand
+graph_traversal graph = graph.traversal
+
+export
+graph_occurrences : Text → FragmentGraph → Maybe (List Occurrence)
+graph_occurrences wanted graph =
+  search_occurrences wanted graph.source.authoritative graph.fragments graph.traversal
+
+export
+incoming_links : Text → FragmentGraph → List Text
+incoming_links wanted graph =
+  map (\link ⇒ link.from_fragment)
+      (filter (\link ⇒ link.to_fragment ≟ wanted) graph.links)
+
+export
+outgoing_links : Text → FragmentGraph → List Text
+outgoing_links wanted graph =
+  map (\link ⇒ link.to_fragment)
+      (filter (\link ⇒ link.from_fragment ≟ wanted) graph.links)
+
+-- Unicode scalar values use one through four UTF-8 bytes. No Java UTF-16 or
+-- byte coordinate is silently substituted for the occurrence code-point unit.
+utf8_width : Char → Number
+utf8_width character =
+  let value = ord character in
+  if value < 128 then 1
+  else if value < 2048 then 2
+  else if value < 65536 then 3
+  else 4
+
+byte_boundary : Number → List Char → Maybe Number
+byte_boundary Z _ = Just 0
+byte_boundary (S remaining) [] = Nothing
+byte_boundary (S remaining) (character :: rest) =
+  map (utf8_width character +) (byte_boundary remaining rest)
+
+export
+utf8_byte_offset : SourceCoordinate → RevisionedSource → Maybe Number
+utf8_byte_offset coordinate source =
+  byte_boundary coordinate (unpack (source_text source.authoritative))
+
+fields : List Text → Text
+fields [] = ""
+fields [value] = value
+fields (value :: rest) = value ++ "\t" ++ fields rest
+
+fragment_row : SourceFragment → Text
+fragment_row fragment = fields
+  [ "fragment", fragment_id fragment
+  , show (fragment_source_start fragment), show (fragment_source_end fragment)
+  ]
+
+link_row : FragmentLink → Text
+link_row link = fields ["link", link.from_fragment, link.to_fragment]
+
+export
+serialize_graph : FragmentGraph → Text
+serialize_graph graph = unlines
+  ([ "ib-fragments\t1"
+   , fields ("source" :: source_binding graph.source)
+   , fields ["traversal", strand_id graph.traversal]
+   ] ++ map fragment_row graph.fragments ++
+   map (\identity ⇒ fields ["visit", identity]) (strand_fragment_ids graph.traversal) ++
+   map link_row graph.links ++ ["commit"])
+
+digit : Char → Maybe Number
+digit '0' = Just 0
+digit '1' = Just 1
+digit '2' = Just 2
+digit '3' = Just 3
+digit '4' = Just 4
+digit '5' = Just 5
+digit '6' = Just 6
+digit '7' = Just 7
+digit '8' = Just 8
+digit '9' = Just 9
+digit _ = Nothing
+
+decimal_from : Number → List Char → Maybe Number
+decimal_from value [] = Just value
+decimal_from value (character :: rest) = do
+  next ← digit character
+  decimal_from (value * 10 + next) rest
+
+-- Reject noncanonical signs, padding, leading zeros and adversarial giant
+-- decimal strings before constructing an unbounded semantic Number.
+decimal : Text → Maybe Number
+decimal "0" = Just 0
+decimal value = case unpack value of
+  [] ⇒ Nothing
+  '0' :: _ ⇒ Nothing
+  characters ⇒ if length characters > 9 then Nothing else decimal_from 0 characters
+
+record PendingRows where
+  constructor Rows
+  fragments : List SourceFragment
+  visits : List Text
+  links : List FragmentLink
+
+read_rows : Text → List Text → Maybe PendingRows
+read_rows source ["commit"] = Just (Rows [] [] [])
+read_rows source [] = Nothing
+read_rows source (row :: rest) = do
+  remaining ← read_rows source rest
+  case forget (split (≟ '\t') row) of
+    ["fragment", identity, start, finish] ⇒ do
+      lower ← decimal start
+      upper ← decimal finish
+      pure (Rows (Fragment identity source lower upper :: remaining.fragments)
+                 remaining.visits remaining.links)
+    ["visit", identity] ⇒
+      Just (Rows remaining.fragments (identity :: remaining.visits) remaining.links)
+    ["link", from, to] ⇒
+      Just (Rows remaining.fragments remaining.visits
+                 (LinkedFragments from to :: remaining.links))
+    _ ⇒ Nothing
+
+export
+decode_graph : RevisionedSource → Text → Maybe FragmentGraph
+decode_graph source wire =
+  -- One MiB decoded metadata limit; original source bytes remain elsewhere.
+  let metadata_characters = the Integer (cast (length (unpack wire))) in
+  if metadata_characters > 1048576 then Nothing else
+  case lines wire of
+    "ib-fragments\t1" :: binding :: traversal :: rows ⇒
+      if not (forget (split (≟ '\t') binding) ≟ ("source" :: source_binding source))
+        then Nothing
+        else case forget (split (≟ '\t') traversal) of
+          ["traversal", identity] ⇒ do
+            decoded ← read_rows (source_id source.authoritative) rows
+            validate_graph source decoded.fragments
+              (MaterializedStrand identity decoded.visits) decoded.links
+          _ ⇒ Nothing
+    _ ⇒ Nothing
