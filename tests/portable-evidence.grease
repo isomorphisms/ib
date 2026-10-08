@@ -1,0 +1,145 @@
+#!/usr/bin/env grease
+# Synthetic directory/identity boundary acceptance, native Grease mode.
+umask 077
+var tests_directory = $(dirname -- $0)
+var root = $(realpath -- "$tests_directory/..")
+var runner = ENV.GREASE
+var temporary = $(mktemp -d)
+trap --add EXIT { rm -rf -- $temporary }
+var home = "$temporary/source"
+mkdir -- $home
+
+proc retain(root, runner, home, raw, descriptor) {
+  env IB_HOME=$home $runner +O ysh:all "$root/bin/retain-source.grease" $raw $descriptor
+}
+
+proc evidence(root, runner, home, operation, first, second='') {
+  if (second === '') {
+    env IB_HOME=$home GREASE=$runner $runner "$root/bin/ib-evidence.grease" $operation $first
+  } else {
+    env IB_HOME=$home GREASE=$runner $runner "$root/bin/ib-evidence.grease" $operation $first $second
+  }
+}
+
+proc refuse(root, runner, home, operation, first, second, diagnostic, error) {
+  try { evidence $root $runner $home $operation $first $second > /dev/null 2> $error }
+  if (not _error.code) { write -- 'FAIL expected refusal' >&2; exit 1 }
+  grep -F -- $diagnostic $error > /dev/null
+}
+
+printf '# synthetic only\nhttps://example.invalid/a\nhttps://example.invalid/a\n# $(touch NEVER_EXECUTE)\n' > "$temporary/raw"
+var hash = $(sha256sum "$temporary/raw" | cut -d ' ' -f 1)
+var count = $(wc -c < "$temporary/raw" | tr -d '[:space:]')
+printf 'source_kind\traw_urls\nsource_identity\tfixture-origin-A\nsource_generation\t1\nacquired_at\t2026-10-08T00:00:00Z\nprivacy\tordinary\nmodel\tallow\nexposure\tlocal-only\nsha256\t%s\nbyte_count\t%s\n' $hash $count > "$temporary/A.tsv"
+sed 's/fixture-origin-A/fixture-origin-B/' "$temporary/A.tsv" > "$temporary/B.tsv"
+sed 's/privacy\tordinary/privacy\tprivate/;s/model\tallow/model\tdeny/' "$temporary/A.tsv" > "$temporary/private.tsv"
+var first = $(retain $root $runner $home "$temporary/raw" "$temporary/A.tsv")
+var second = $(retain $root $runner $home "$temporary/raw" "$temporary/B.tsv")
+var private = $(retain $root $runner $home "$temporary/raw" "$temporary/private.tsv")
+if (first === second) { exit 1 }
+if (first !== '6417fb2d83faf7c85c74114bf1a6f08ddeab64b393e9dab0926f07126996a711' or second !== '6ddf7ca08227cfb84dc46684e22b0186a06764d7301fb1012615022b43256211') {
+  write -- 'FAIL fixed source-identity goldens changed' >&2
+  exit 1
+}
+write -- "golden-source-A=$first"
+write -- "golden-source-B=$second"
+printf '%s\traw\tordinary\n%s\traw\tordinary\n' $first $second > "$temporary/selection.tsv"
+var bundle = $(evidence $root $runner $home export "$temporary/selection.tsv" "$temporary/bundle")
+test ! -e "$bundle/sources/$private"
+var imported_home = "$temporary/imported"
+var imported = $(evidence $root $runner $imported_home import $bundle)
+var repeated = $(evidence $root $runner $imported_home import $bundle)
+if (imported !== repeated) { exit 1 }
+cmp "$home/cauldron/sources/$first/provenance.tsv" "$imported_home/cauldron/sources/$first/provenance.tsv"
+cmp "$home/cauldron/sources/$second/provenance.tsv" "$imported_home/cauldron/sources/$second/provenance.tsv"
+cmp "$temporary/raw" "$imported_home/cauldron/sources/$first/raw"
+cmp "$temporary/raw" "$imported_home/cauldron/sources/$second/raw"
+write -- 'PASS equal-byte origins, exact provenance and idempotent import'
+
+printf '%s\traw\tordinary\n' $private > "$temporary/private-selection.tsv"
+refuse $root $runner $home export "$temporary/private-selection.tsv" "$temporary/private-refused" 'explicit selection' "$temporary/error"
+printf '%s\traw\tprivate-selected\n' $private > "$temporary/private-selection.tsv"
+var private_bundle = $(evidence $root $runner $home export "$temporary/private-selection.tsv" "$temporary/private-bundle")
+var private_context = $(evidence $root $runner $home context $private_bundle "$temporary/private-context")
+test ! -s "$private_context/references.tsv"
+var context = $(evidence $root $runner $home context $bundle "$temporary/context")
+cmp "$temporary/raw" "$context/data/$first"
+cmp "$home/cauldron/sources/$first/provenance.tsv" "$context/sources/$first/provenance.tsv"
+cmp "$home/cauldron/sources/$second/provenance.tsv" "$context/sources/$second/provenance.tsv"
+test ! -e NEVER_EXECUTE
+grep -F b'whole-source-bytes\t0\t' "$context/references.tsv" > /dev/null
+write -- 'PASS private selection, assistant denial and source-as-data context'
+
+sed 's/source_kind\traw_urls/source_kind\tsecret/' "$temporary/A.tsv" > "$temporary/secret.tsv"
+var secret = $(retain $root $runner $home "$temporary/raw" "$temporary/secret.tsv")
+printf '%s\traw\tprivate-selected\n' $secret > "$temporary/secret-selection.tsv"
+refuse $root $runner $home export "$temporary/secret-selection.tsv" "$temporary/secret-refused" 'secret/profile/unsupported' "$temporary/error"
+write -- 'PASS explicit selection cannot export a classified secret source'
+
+# A reference-only export carries no bytes and never creates an empty source.
+printf '%s\treference\tordinary\n' $first > "$temporary/reference.tsv"
+var omitted = $(evidence $root $runner $home export "$temporary/reference.tsv" "$temporary/omitted")
+var omitted_receipt = $(evidence $root $runner "$temporary/omitted-home" import $omitted)
+test ! -e "$temporary/omitted-home/cauldron/sources/$first"
+grep -F b'\tunavailable\t' "$temporary/omitted-home/cauldron/imports/$omitted_receipt/sources.tsv" > /dev/null
+cmp "$home/cauldron/sources/$first/provenance.tsv" "$temporary/omitted-home/cauldron/imports/$omitted_receipt/references/$first/provenance.tsv"
+evidence $root $runner "$temporary/omitted-home" import $omitted > /dev/null
+# Requested optional bytes genuinely absent remains the same unavailable state.
+mv "$home/cauldron/sources/$first/raw" "$temporary/saved-raw"
+printf '%s\traw\tordinary\n' $first > "$temporary/missing.tsv"
+var missing = $(evidence $root $runner $home export "$temporary/missing.tsv" "$temporary/missing")
+evidence $root $runner "$temporary/missing-home" import $missing > /dev/null
+test ! -e "$temporary/missing-home/cauldron/sources/$first"
+mv "$temporary/saved-raw" "$home/cauldron/sources/$first/raw"
+write -- 'PASS omitted and missing references never become empty success'
+
+# Refusals run against an existing usable target and preserve its exact bytes.
+cp -R -- $bundle "$temporary/tampered"
+printf 'changed' >> "$temporary/tampered/sources/$second/raw"
+refuse $root $runner $imported_home import "$temporary/tampered" '' 'source bytes or length mismatch' "$temporary/error"
+refuse $root $runner "$temporary/tampered-new-home" import "$temporary/tampered" '' 'source bytes or length mismatch' "$temporary/error"
+test ! -e "$temporary/tampered-new-home/cauldron/sources"
+cmp "$temporary/raw" "$imported_home/cauldron/sources/$first/raw"
+cmp "$temporary/raw" "$imported_home/cauldron/sources/$second/raw"
+cp -R -- $bundle "$temporary/bad-manifest"
+printf 'extra\n' >> "$temporary/bad-manifest/sources.tsv"
+refuse $root $runner "$temporary/refused-home" import "$temporary/bad-manifest" '' 'portable source rows' "$temporary/error"
+test ! -e "$temporary/refused-home/cauldron/sources"
+cp -R -- $bundle "$temporary/unknown"
+printf 'ib-portable-source-v99\n' > "$temporary/unknown/schema"
+refuse $root $runner $imported_home import "$temporary/unknown" '' 'unsupported bundle schema' "$temporary/error"
+cp -R -- $bundle "$temporary/extra"
+mkdir -- "$temporary/extra/cookies"
+refuse $root $runner $imported_home import "$temporary/extra" '' 'unexpected bundle entry' "$temporary/error"
+cp -R -- $bundle "$temporary/symlink"
+rm -- "$temporary/symlink/sources/$second/raw"
+ln -s "$temporary/raw" "$temporary/symlink/sources/$second/raw"
+refuse $root $runner $imported_home import "$temporary/symlink" '' 'symlink' "$temporary/error"
+printf '../../elsewhere\traw\tordinary\n' > "$temporary/traversal.tsv"
+refuse $root $runner $home export "$temporary/traversal.tsv" "$temporary/traversal" 'selection needs' "$temporary/error"
+mkdir -- "$temporary/outside"
+ln -s "$temporary/outside" "$temporary/linked-parent"
+refuse $root $runner $home export "$temporary/selection.tsv" "$temporary/linked-parent/bundle" 'symlink' "$temporary/error"
+test ! -e "$temporary/outside/bundle"
+cp -R -- $bundle "$temporary/oversized"
+truncate -s 16777217 "$temporary/oversized/sources/$second/raw"
+refuse $root $runner $imported_home import "$temporary/oversized" '' 'file exceeds bundle bound' "$temporary/error"
+write -- 'PASS tamper/schema/profile/traversal/symlink/oversize refusal without source mutation'
+
+# Real partial publication: block source two's canonical intake lock. Source
+# one may commit; no receipt may say the complete bundle imported. Retry after
+# removing the fixture lock resumes by idempotent intake, no redownload.
+var interrupted_home = "$temporary/interrupted"
+mkdir -p -- "$interrupted_home/cauldron/sources/$second.lock"
+refuse $root $runner $interrupted_home import $bundle '' 'publication is already in progress' "$temporary/error"
+test -f "$interrupted_home/cauldron/sources/$first/raw"
+test ! -e "$interrupted_home/cauldron/imports/$imported/complete"
+cmp "$temporary/raw" "$interrupted_home/cauldron/sources/$first/raw"
+rmdir -- "$interrupted_home/cauldron/sources/$second.lock"
+evidence $root $runner $interrupted_home import $bundle > /dev/null
+cmp "$temporary/raw" "$interrupted_home/cauldron/sources/$second/raw"
+test -f "$interrupted_home/cauldron/imports/$imported/complete"
+write -- 'PASS interrupted import preserves committed source and resumes safely'
+
+rm -rf -- $temporary
+write -- 'PASS native Grease portable evidence adapter; Idriç and physical qualification separate'

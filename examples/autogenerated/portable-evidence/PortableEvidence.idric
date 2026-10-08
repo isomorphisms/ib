@@ -1,0 +1,29 @@
+module PortableEvidence
+
+import Data.Text
+
+-- Semantic policy; compiler evaluation is separate from target qualification.
+public export
+data SourcePrivacy = OrdinarySource | PrivateSource | SecretSource | RendererProfile
+public export
+data ExportSelection = SelectedOrdinary | SelectedPrivate
+public export
+data AssistantPolicy = AssistantAllowed | AssistantDenied
+public export
+data Representation = RawSourceBytes | UnavailableSourceReference
+
+export
+admit_selection : ExportSelection → SourcePrivacy → Bool
+admit_selection SelectedOrdinary OrdinarySource = True
+admit_selection SelectedPrivate OrdinarySource = True
+admit_selection SelectedPrivate PrivateSource = True
+admit_selection _ _ = False
+
+export
+assistant_may_receive : AssistantPolicy → Bool
+assistant_may_receive AssistantAllowed = True
+assistant_may_receive AssistantDenied = False
+
+export
+source_coordinate_unit : Text
+source_coordinate_unit = "whole-source-bytes"
