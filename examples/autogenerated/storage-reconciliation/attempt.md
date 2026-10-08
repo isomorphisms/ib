@@ -31,4 +31,18 @@ Required implementation path: maintained Idriç compiler source
 normalization, with no consumer code generation. A qualified ICK/NDK execution
 path remains separate; no Chez/RefC/Java fallback is selected.
 
-Attempt/result: filled after actual compiler invocation. Fallback: none.
+Attempt/result: the real maintained compiler checked the core and fixture and
+normalized all fourteen semantic results to `True`. The installation-mismatch
+mutant normalized to `False`; the maintained Grease acceptance exited 1. The
+first fixture arity error was rejected, reduced and preserved in
+`ArityFailure.idric`. A later reserved-word local binding was corrected before
+the accepted core. No source or runtime fallback was selected.
+
+The accepted source tree and runtime hashes are recorded in
+`docs/storage-observation-reconciliation-receipt.md`. Normalization exercises
+compiler semantics, not a qualified consumer executable. First remaining
+production blocker: the existing app observer lacks current installation,
+media-generation/pool and bounded-writer evidence. Smallest next producer slice:
+bind those observations to the selected root, retain the exact source/UID/time
+and refuse stale/replaced roots; the current-shape refusal controls must continue
+to fail admission while the new actual producer's positive case passes.
