@@ -1,0 +1,73 @@
+#!/usr/bin/env grease
+# Native Grease transport/acceptance phases. WorkerLifecycle still owns policy.
+umask 077
+var script_directory = $(dirname "$0")
+var repository_root = $(realpath "$script_directory/..")
+var grease = ENV.IB_GREASE_COMMAND
+var source_head = $(git -C "$repository_root" rev-parse HEAD)
+proc refuse (message) { printf '%s\n' "$message" >&2; exit 76 }
+proc worker (operation, ...args) {
+  "$grease" +O ysh:all "$repository_root/bin/ib_android_longview_worker.grease" "$operation" @args
+}
+proc digest (path) { sha256sum "$path" | cut -d ' ' -f 1 }
+if (len(ARGV) < 2) { refuse 'expected start|observe|resume|signal RECEIPT and start arguments' }
+var phase = ARGV[0]
+var path = ARGV[1]
+var parent = $(dirname "$path")
+if test -L "$path" || test -L "$parent" { refuse 'symlink receipt path refused' }
+var work = $(mktemp -d)
+trap --add EXIT { rm -rf "$work" }
+if (phase === 'start') {
+  if (len(ARGV) !== 9) { refuse 'start expects receipt WORK RESULT LAUNCH HOST_GEN ATTEMPT ATTEMPT_NO immediate|delayed' }
+  if test -e "$path" { refuse 'receipt already exists; no new attempt started' }
+  var start_args = ARGV[2:]
+  for argument in (start_args) {
+    if (len(argument) > 128) { refuse 'start argument exceeds handoff transport budget; no attempt started' }
+  }
+  try { worker start @start_args > "$work/provider" }
+  if (_error.code) { exit $[_error.code] }
+  if ! awk -F '\t' 'NF!=10 || $1!="worker" || NR!=1 {bad=1} END{exit bad || NR!=1}' "$work/provider" { refuse 'malformed worker start receipt' }
+  var fields = split($(cat "$work/provider"), b'\t')
+  if (fields[1] !== start_args[2] or fields[7] !== start_args[3] or fields[8] !== start_args[4] or fields[9] !== start_args[5]) {
+    refuse 'worker receipt disagrees with requested attempt'
+  }
+  var attachment = fields[1:]
+  worker validate $[start_args[0]] $[start_args[1]] @attachment
+  printf 'schema\tib-worker-handoff-v1\nsource_head\t%s\nattempt\t%s\t%s' "$source_head" $[start_args[0]] $[start_args[1]] > "$work/body"
+  for field in (fields[1:]) { printf '\t%s' "$field" >> "$work/body" }
+  printf '\n' >> "$work/body"
+  var hash = $(digest "$work/body")
+  cat "$work/body" > "$work/receipt"
+  printf 'complete\t%s\n' "$hash" >> "$work/receipt"
+  var receipt_bytes = int($(wc -c < "$work/receipt"))
+  if (receipt_bytes > 2048) { refuse 'provider handoff exceeds transport byte limit; no receipt published' }
+  # Stage in the selected directory, then link without replacing an old receipt.
+  var temporary = $(mktemp "$parent/.ib-worker-handoff.XXXXXXXX")
+  trap --add EXIT { rm -f "$temporary" }
+  cp "$work/receipt" "$temporary"
+  sync
+  ln "$temporary" "$path"
+  rm -f "$temporary"
+  sync
+  printf 'handoff\t%s\n' "$path"
+  exit 0
+}
+if (len(ARGV) !== 2) { refuse 'later phases accept only a receipt path' }
+if ! test -f "$path" { refuse 'receipt unavailable' }
+# Bounded snapshot precedes parsing. This guards ordinary truncation/tampering;
+# concurrent same-UID hierarchy replacement needs a qualified descriptor edge.
+head -c 2049 "$path" > "$work/receipt"
+var count = int($(wc -c < "$work/receipt"))
+if (count > 2048) { refuse 'receipt exceeds byte limit' }
+if ! awk -F '\t' 'NR==1 && ($1!="schema" || $2!="ib-worker-handoff-v1" || NF!=2) {bad=1} NR==2 && ($1!="source_head" || NF!=2) {bad=1} NR==3 && ($1!="attempt" || NF!=12) {bad=1} NR==4 && ($1!="complete" || NF!=2) {bad=1} END{exit bad || NR!=4}' "$work/receipt" { refuse 'receipt schema or field count refused' }
+head -n 3 "$work/receipt" > "$work/body"
+var rows = split($(cat "$work/receipt"), b'\n')
+var hash = $(digest "$work/body")
+var expected_source = $(printf 'source_head\t%s' "$source_head")
+var expected_complete = $(printf 'complete\t%s' "$hash")
+if (rows[1] !== expected_source or rows[3] !== expected_complete) { refuse 'receipt source or integrity mismatch' }
+var tuple = split(rows[2], b'\t')[1:]
+if (phase === 'observe') { worker observe @tuple; exit 0 }
+if (phase === 'resume') { worker read @tuple; exit 0 }
+if (phase === 'signal') { worker signal @tuple; exit 0 }
+refuse 'unknown acceptance phase'

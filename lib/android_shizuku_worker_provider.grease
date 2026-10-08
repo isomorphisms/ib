@@ -197,7 +197,8 @@ pid=\$!
 stat=/proc/\$pid/stat
 comm=/proc/\$pid/comm
 test -r \"\$stat\" && test -r \"\$comm\" || {
-  kill \"\$pid\" 2>/dev/null || :
+  # Do not turn a failed identity read into numeric-PID cancellation. The gated
+  # child has its own bounded gate wait and cannot publish without an attempt.
   printf 'failed:identity\\n' >\"\$status\"
   exit 44
 }
@@ -396,35 +397,6 @@ ib_shizuku_worker_signal_owned() {
       return 2
       ;;
   esac
-  prefix=$(ib_shizuku_worker_attempt_command_prefix "${1}" "${2}" "${3}" "${4}" "${5}" "${6}" "${7}" "${8}" "${9}" "${10}" "${11}") || return 2
-  live_guard=$(ib_shizuku_worker_live_guard_suffix) || return 2
-  command_text="# IB_LONGVIEW_WORKER_SIGNAL_V2
-set -eu
-$prefix
-$live_guard
-lock=\"\$root/work/\$work.launch-lock\"
-signal_waits=0
-until mkdir \"\$lock\" 2>/dev/null; do
-  signal_waits=\$((signal_waits + 1))
-  test \"\$signal_waits\" -le 100 || exit 74
-  sleep 0.01
-done
-trap 'rmdir \"\$lock\" 2>/dev/null || :' EXIT INT TERM
-test \"\$(cat \"\$attempt_file\")\" = \"\$expected_attempt\" || exit 72
-status=\"\$root/work/\$work.status\"
-test -f \"\$status\" || exit 68
-test \"\$(cat \"\$status\")\" = running || exit 72
-stat=/proc/\$pid/stat
-comm=/proc/\$pid/comm
-test -r \"\$stat\" && test -r \"\$comm\" || exit 44
-tail=\$(sed 's/^[0-9][0-9]* (.*) //' \"\$stat\") || exit 44
-observed_start=\$(printf '%s\\n' \"\$tail\" | awk '{print \$20}')
-observed_name=\$(tr -d '\\r\\n' <\"\$comm\")
-test \"\$observed_start\" = \"\$expected_start\" || exit 45
-test \"\$observed_name\" = \"\$expected_name\" || exit 46
-kill -$signal \"\$pid\"
-printf 'killed\\n' >\"\$status\"
-rmdir \"\$lock\"
-trap - EXIT INT TERM"
-  ib_shizuku_run_bounded 5 "$command_text"
+  printf '%s\n' 'identity-bound Android signaling is unavailable; no signal or attempt mutation' >&2
+  return 78
 }

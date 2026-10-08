@@ -113,7 +113,7 @@ expect_status 72 ib_longview_worker_observe \
   race-work race-result "$race_launch_one" "$race_boot" "$race_uid" \
   "$race_pid_one" "$race_start_one" "$race_name_one" "$race_host_one" \
   "$race_attempt_one" "$race_number_one"
-expect_status 72 ib_longview_worker_signal_owned \
+expect_status 78 ib_longview_worker_signal_owned \
   race-work race-result "$race_launch_one" "$race_boot" "$race_uid" \
   "$race_pid_one" "$race_start_one" "$race_name_one" "$race_host_one" \
   "$race_attempt_one" "$race_number_one" TERM
@@ -138,7 +138,7 @@ grep -Fx "$(printf 'attempt_id\trace-attempt-two')" "$work/race-result" >/dev/nu
 grep -Fx "$(printf 'attempt_number\t2')" "$work/race-result" >/dev/null
 test "$(cat "$remote_root/work/race-work.status")" = committed
 
-# Exercise the real owned-signal program on a live delayed worker.
+# A real delayed worker must not be mutated through the unqualified signal edge.
 signal_receipt=$(ib_longview_worker_start \
   signal-work signal-result signal-launch 3 signal-attempt 1 delayed)
 signal_parsed=$(parse_receipt "$signal_receipt")
@@ -149,14 +149,14 @@ set -- signal-work signal-result "$signal_launch" "$signal_boot" "$signal_uid" \
   "$signal_pid" "$signal_start" "$signal_name" "$signal_host" \
   "$signal_attempt" "$signal_number"
 test "$(ib_longview_worker_observe "$@")" = running
-ib_longview_worker_signal_owned "$@" TERM
-test "$(ib_longview_worker_status "$@")" = killed
+expect_status 78 ib_longview_worker_signal_owned "$@" TERM
+test "$(ib_longview_worker_status "$@")" = running
 for poll in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
   observed=$(ib_longview_worker_observe "$@" 2>/dev/null || :)
-  test "$observed" = gone-uncommitted && break
+  test "$observed" = committed && break
   sleep 0.05
 done
-test "$observed" = gone-uncommitted
-test ! -e "$remote_root/objects/signal-result"
+test "$observed" = committed
+test -e "$remote_root/objects/signal-result"
 
 printf '%s\n' 'android Shizuku worker actual-program E3 tests: ok'

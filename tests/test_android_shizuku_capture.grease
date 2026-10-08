@@ -1,0 +1,90 @@
+#!/usr/bin/env grease
+# Native test body; inherited provider is sourced with explicit compatibility.
+set -eu -o pipefail
+var script_directory = $(dirname "$0")
+var repository_root = $(realpath "$script_directory/..")
+var grease = ENV.IB_GREASE_COMMAND
+var work = $(mktemp -d)
+proc cleanup { rm -rf "$work" }
+trap --add EXIT { cleanup }
+var rish = "$work/rish"
+setglobal ENV.IB_RISH_COMMAND = rish
+setglobal ENV.FAKE_CHILD_RECORD = "$work/child"
+setglobal ENV.FAKE_SURVIVAL_RECORD = "$work/survived"
+cat > "$rish" <<'FAKE'
+#!/usr/bin/env grease
+set -eu -o pipefail
+if (len(ARGV) < 2 or len(ARGV) > 2) { exit 91 }
+if ! test "$[ARGV[0]]" = -c { exit 91 }
+var operation = ARGV[1]
+if test "$operation" = success { printf '2000\n'; exit 0 }
+if test "$operation" = denial { printf '2000\n'; printf 'permission denied\n' >&2; exit 37 }
+if test "$operation" = stdout-overflow { head -c 256 /dev/zero; exit 0 }
+if test "$operation" = stderr-overflow { head -c 256 /dev/zero >&2; exit 0 }
+if test "$operation" = partial-hang { printf '2000\n' }
+if test "$operation" = hang || test "$operation" = partial-hang {
+  printf '%s\n' "$$" > "$[ENV.FAKE_CHILD_RECORD]"
+  sleep 3
+  printf 'survived\n' >> "$[ENV.FAKE_SURVIVAL_RECORD]"
+  exit 0
+}
+if test "$operation" = orphan {
+  fork { sleep 3; printf 'survived\n' >> "$[ENV.FAKE_SURVIVAL_RECORD]" }
+  printf '%s\n' "$!" > "$[ENV.FAKE_CHILD_RECORD]"
+  exit 0
+}
+exit 92
+FAKE
+chmod 700 "$rish"
+var direct = "$work/direct"
+mkdir "$direct"
+"$grease" "$repository_root/lib/android_shizuku_capture.grease" "$direct" 128 128 "$rish" stdout-overflow
+test "$(wc -c < "$direct/stdout")" = 129
+var direct_error = "$work/direct-error"
+mkdir "$direct_error"
+"$grease" "$repository_root/lib/android_shizuku_capture.grease" "$direct_error" 128 128 "$rish" stderr-overflow
+test "$(wc -c < "$direct_error/stderr")" = 129
+proc capture (operation) {
+  # Existing module is tested through its declared Grease compatibility edge.
+  "$grease" +O ysh:all -c 'repository_root=$1; . "$repository_root/lib/android_shizuku_host.grease"; ib_shizuku_capture 1 128 128 "$2"' ib-capture "$repository_root" "$operation"
+}
+proc expect (expected, operation) {
+  try { capture "$operation" > "$work/out" 2> "$work/err" }
+  var actual = _error.code
+  if ! test "$actual" = "$expected" {
+    cat "$work/err" >&2
+    printf '%s expected %s got %s\n' "$operation" "$expected" "$actual" >&2
+    exit 1
+  }
+  if test "$expected" = 0 { test "$(cat "$work/out")" = 2000 } else { test ! -s "$work/out" }
+  printf '%s\t%s\n' "$operation" "$actual"
+}
+expect 0 success
+expect 37 denial
+grep -Fx 'permission denied' "$work/err"
+expect 65 stdout-overflow
+expect 65 stderr-overflow
+for operation in hang partial-hang orphan {
+  expect 124 "$operation"
+  var child = $(cat "$[ENV.FAKE_CHILD_RECORD]")
+  # Killed children may be unreaped zombies in this container; neither is live.
+  if test -r "/proc/$child/stat" {
+    var state = $(awk '{print $3}' "/proc/$child/stat")
+    test "$state" = Z
+  }
+}
+sleep 3
+test ! -e "$work/survived"
+expect 0 success
+var saved_path = ENV.PATH
+# Preserve only the launcher's known dirname boundary, deliberately no timeout.
+ln -s "$(command -v dirname)" "$work/dirname"
+setglobal ENV.PATH = work
+try { capture success > "$work/out" 2> "$work/err" }
+var missing_status = _error.code
+setglobal ENV.PATH = saved_path
+test "$missing_status" = 69
+test ! -s "$work/out"
+grep -F 'timeout is not available' "$work/err"
+expect 0 success
+printf 'bounded provider capture acceptance: PASS\n'

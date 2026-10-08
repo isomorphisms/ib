@@ -1,0 +1,96 @@
+#!/usr/bin/env grease
+umask 077
+var directory = $(dirname "$0")
+var repository = $(realpath "$directory/..")
+var grease = ENV.IB_GREASE_COMMAND
+var work = $(mktemp -d)
+trap --add EXIT { rm -rf "$work" }
+var rish = "$work/rish"
+setglobal ENV.IB_RISH_COMMAND = rish
+setglobal ENV.PHASE_STATE = "$work/state"
+setglobal ENV.PHASE_LOG = "$work/log"
+printf 'running\n' > "$work/state"
+cat > "$rish" <<'RISH'
+#!/usr/bin/env grease
+var command_text = ARGV[1]
+var state = $(cat "$[ENV.PHASE_STATE]")
+printf 'contact\n' >> "$[ENV.PHASE_LOG]"
+var command_file = "$[ENV.PHASE_LOG].command"
+printf '%s\n' "$command_text" > "$command_file"
+if (state === 'unavailable') { printf 'provider denied\n' >&2; exit 37 }
+if (state === 'changed-boot') { exit 75 }
+if (state === 'malformed-uid') {
+  printf 'worker\tlaunch-phase\tfixture-boot\tbad-uid\t123\t999\tibworker\t1\tattempt-phase\t1\n'
+  exit 0
+}
+if (state === 'oversized-boot') {
+  printf 'worker\tlaunch-phase\t'
+  printf '%3000s' x | tr ' ' x
+  printf '\t2000\t123\t999\tibworker\t1\tattempt-phase\t1\n'
+  exit 0
+}
+if grep -q IB_LONGVIEW_WORKER_START_V2 "$command_file" {
+  printf 'worker\tlaunch-phase\tfixture-boot\t2000\t123\t999\tibworker\t1\tattempt-phase\t1\n'
+  exit 0
+}
+if grep -q IB_LONGVIEW_WORKER_OBSERVE_V2 "$command_file" {
+  printf '%s\n' "$state"
+  exit 0
+}
+if grep -q IB_LONGVIEW_WORKER_READ_V2 "$command_file" {
+  if (state !== 'committed') { exit 68 }
+  printf 'schema\tib-longview-worker-result-v2\nvalue\tdeterministic-ok\n'
+  exit 0
+}
+exit 92
+RISH
+chmod 700 "$rish"
+proc phase (...args) {
+  "$grease" "$repository/bin/accept_android_longview_worker_phases.grease" @args
+}
+proc expect (expected, ...args) {
+  try { phase @args > "$work/out" 2> "$work/err" }
+  var actual = _error.code
+  if (actual !== int(expected)) { cat "$work/err" >&2; printf 'expected %s got %s\n' "$expected" "$actual" >&2; exit 1 }
+  if (actual) { test ! -s "$work/out" }
+}
+var receipt = "$work/handoff"
+expect 0 start "$receipt" work-phase result-phase launch-phase 1 attempt-phase 1 delayed
+expect 0 observe "$receipt"
+test "$(cat "$work/out")" = running
+env -u IB_GREASE_COMMAND "$grease" +O ysh:all "$repository/bin/accept_android_longview_worker.grease" observe "$receipt" > "$work/fallback"
+test "$(cat "$work/fallback")" = running
+expect 68 resume "$receipt"
+printf 'unavailable\n' > "$work/state"
+expect 37 observe "$receipt"
+grep -Fx 'provider denied' "$work/err"
+printf 'running\n' > "$work/state"
+expect 0 observe "$receipt"
+printf 'changed-boot\n' > "$work/state"
+expect 75 observe "$receipt"
+printf 'committed\n' > "$work/state"
+expect 0 resume "$receipt"
+grep -Fx b'value\tdeterministic-ok' "$work/out"
+var before = $(wc -l < "$work/log")
+var long_atom = $(printf '%2000s' x | tr ' ' x)
+expect 76 start "$work/oversized-input" "$long_atom" result-phase launch-phase 1 attempt-phase 1 delayed
+test ! -e "$work/oversized-input"
+cp "$receipt" "$work/original"
+head -n 3 "$work/original" > "$receipt"
+expect 76 observe "$receipt"
+cp "$work/original" "$receipt"
+sed 's/launch-phase/tampered-phase/' "$work/original" > "$receipt"
+expect 76 signal "$receipt"
+cp "$work/original" "$receipt"
+expect 78 signal "$receipt"
+expect 76 start "$receipt" work-phase result-phase launch-phase 1 attempt-phase 1 delayed
+var after = $(wc -l < "$work/log")
+test "$before" = "$after"
+expect 0 resume "$receipt"
+printf 'malformed-uid\n' > "$work/state"
+expect 2 start "$work/bad-receipt" work-phase result-phase launch-phase 1 attempt-phase 1 delayed
+test ! -e "$work/bad-receipt"
+printf 'oversized-boot\n' > "$work/state"
+expect 76 start "$work/oversized-receipt" work-phase result-phase launch-phase 1 attempt-phase 1 delayed
+test ! -e "$work/oversized-receipt"
+printf 'worker handoff transport mocks: PASS; actual kernel/device phases NOT_RUN\n'

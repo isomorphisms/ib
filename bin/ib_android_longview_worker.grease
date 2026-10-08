@@ -12,7 +12,7 @@ repository_root=$(CDPATH= cd -- "$script_directory/.." && pwd)
 . "$repository_root/lib/android_longview_worker.grease"
 
 usage() {
-  printf 'usage: %s start WORK RESULT LAUNCH HOST_GEN ATTEMPT ATTEMPT_NO immediate|delayed | status|read|observe WORK RESULT LAUNCH BOOT UID PID START NAME HOST_GEN ATTEMPT ATTEMPT_NO | signal WORK RESULT LAUNCH BOOT UID PID START NAME HOST_GEN ATTEMPT ATTEMPT_NO [SIGNAL]\n' "$0" >&2
+  printf 'usage: %s start WORK RESULT LAUNCH HOST_GEN ATTEMPT ATTEMPT_NO immediate|delayed | validate|status|read|observe WORK RESULT LAUNCH BOOT UID PID START NAME HOST_GEN ATTEMPT ATTEMPT_NO | signal WORK RESULT LAUNCH BOOT UID PID START NAME HOST_GEN ATTEMPT ATTEMPT_NO [SIGNAL]\n' "$0" >&2
 }
 
 command=${1:-}
@@ -23,6 +23,10 @@ test -n "$command" || {
 shift
 
 case "$command" in
+  validate)
+    test "$#" -eq 11 || { usage; exit 2; }
+    ib_longview_worker_validate_attempt "$@"
+    ;;
   start)
     test "$#" -eq 7 || { usage; exit 2; }
     ib_longview_worker_start "$@"

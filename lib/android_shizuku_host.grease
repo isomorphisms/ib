@@ -47,28 +47,80 @@ ib_shizuku_run_bounded() {
     return 2
   fi
 
-  seconds=$1
-  command_text=$2
-  case "$seconds" in
-    ''|*[!0-9]*|0)
-      ib_shizuku_fail "invalid timeout seconds: $seconds"
-      return 2
-      ;;
-  esac
+  ib_shizuku_capture "$1" 65536 8192 "$2"
+}
 
-  timeout_command=$(command -v timeout) || {
-    ib_shizuku_fail 'timeout is not available; refusing an unbounded Shizuku operation'
-    return 1
+# Capture a trusted operation before exposing any bytes. Limits include both
+# streams and elapsed time. Raw ib_shizuku_run remains an explicit debug edge.
+ib_shizuku_capture() {
+  if test "$#" -ne 4; then
+    ib_shizuku_fail 'ib_shizuku_capture expects SECONDS STDOUT_BYTES STDERR_BYTES COMMAND'
+    return 2
+  fi
+  capture_seconds=$1
+  capture_stdout_limit=$2
+  capture_stderr_limit=$3
+  capture_command_text=$4
+  for capture_number in "$capture_seconds" "$capture_stdout_limit" "$capture_stderr_limit"; do
+    case "$capture_number" in
+      ''|*[!0-9]*|0|0*)
+        ib_shizuku_fail 'capture limits must be positive canonical decimal integers'
+        return 2
+        ;;
+    esac
+    test "${#capture_number}" -le 7 || return 2
+  done
+  test "$capture_seconds" -le 60 && test "$capture_stdout_limit" -le 1048576 && test "$capture_stderr_limit" -le 65536 || return 2
+  capture_timeout=$(command -v timeout) || {
+    ib_shizuku_fail 'timeout is not available; refusing unbounded provider capture'
+    return 69
   }
-  rish_command=$(ib_shizuku_rish_command) || return 1
-
-  # The caller is bounded even if an Android service stalls. Preserve timeout's
-  # status (normally 124) rather than translating it into success.
-  "$timeout_command" "$seconds" "$rish_command" -c "$command_text"
+  capture_grease=${IB_GREASE_COMMAND:-}
+  if test -z "$capture_grease"; then
+    capture_grease=$(command -v grease) || {
+      ib_shizuku_fail 'Grease is not available for bounded provider capture'
+      return 69
+    }
+  fi
+  capture_helper=${IB_SHIZUKU_CAPTURE_HELPER:-${repository_root:-.}/lib/android_shizuku_capture.grease}
+  test -x "$capture_grease" && test -f "$capture_helper" || {
+    ib_shizuku_fail 'bounded provider capture helper is not available'
+    return 69
+  }
+  capture_rish=$(ib_shizuku_rish_command) || return $?
+  capture_directory=$(mktemp -d) || return 69
+  chmod 700 "$capture_directory" || { rm -rf "$capture_directory"; return 69; }
+  if "$capture_timeout" --kill-after=1 "$capture_seconds" "$capture_grease" "$capture_helper" \
+    "$capture_directory" "$capture_stdout_limit" "$capture_stderr_limit" "$capture_rish" "$capture_command_text" \
+    >"$capture_directory/helper.out" 2>"$capture_directory/helper.err"; then
+    capture_status=0
+  else
+    capture_status=$?
+  fi
+  if test "$capture_status" -ne 0; then
+    head -c 8192 "$capture_directory/helper.err" >&2
+    printf 'provider capture failed (%s); remote lifetime unknown\n' "$capture_status" >&2
+    rm -rf "$capture_directory"
+    return "$capture_status"
+  fi
+  capture_stdout_bytes=$(wc -c <"$capture_directory/stdout") || { rm -rf "$capture_directory"; return 69; }
+  capture_stderr_bytes=$(wc -c <"$capture_directory/stderr") || { rm -rf "$capture_directory"; return 69; }
+  if test "$capture_stdout_bytes" -gt "$capture_stdout_limit" || test "$capture_stderr_bytes" -gt "$capture_stderr_limit"; then
+    ib_shizuku_fail 'provider capture exceeded an output budget; remote lifetime unknown'
+    rm -rf "$capture_directory"
+    return 65
+  fi
+  capture_status=$(cat "$capture_directory/status") || { rm -rf "$capture_directory"; return 69; }
+  cat "$capture_directory/stderr" >&2
+  if test "$capture_status" -eq 0; then
+    cat "$capture_directory/stdout"
+  fi
+  rm -rf "$capture_directory"
+  return "$capture_status"
 }
 
 ib_shizuku_effective_uid() {
-  ib_shizuku_run 'id -u'
+  ib_shizuku_capture 5 256 8192 'id -u'
 }
 
 ib_shizuku_authority() {
@@ -91,14 +143,14 @@ ib_shizuku_authority() {
 }
 
 ib_shizuku_identity() {
-  ib_shizuku_run 'printf "identity\\t"; id; printf "selinux\\t"; id -Z 2>/dev/null || printf "unavailable\\n"'
+  ib_shizuku_capture 5 8192 8192 'printf "identity\\t"; id; printf "selinux\\t"; id -Z 2>/dev/null || printf "unavailable\\n"'
 }
 
 ib_shizuku_process_snapshot() {
   # Keep this first process view deliberately close to Android's own shell
   # surface. Typed process records can be added after physical-device evidence
   # establishes the stable fields on the target.
-  ib_shizuku_run 'ps -A'
+  ib_shizuku_capture 5 262144 8192 'ps -A'
 }
 
 ib_shizuku_validate_pid() {
@@ -148,14 +200,12 @@ ib_shizuku_process_identity() {
   pid=$1
   ib_shizuku_validate_pid "$pid" || return 2
 
-  ib_shizuku_run "pid=$pid; stat=/proc/\$pid/stat; comm=/proc/\$pid/comm; test -r \"\$stat\" && test -r \"\$comm\" || exit 44; tail=\$(sed 's/^[0-9][0-9]* (.*) //' \"\$stat\") || exit 44; start=\$(printf '%s\\n' \"\$tail\" | awk '{print \$20}'); name=\$(tr -d '\\r\\n' <\"\$comm\"); test -n \"\$start\" && test -n \"\$name\" || exit 44; printf '%s\\t%s\\t%s\\n' \"\$pid\" \"\$start\" \"\$name\""
+  ib_shizuku_capture 5 512 8192 "pid=$pid; stat=/proc/\$pid/stat; comm=/proc/\$pid/comm; test -r \"\$stat\" && test -r \"\$comm\" || exit 44; tail=\$(sed 's/^[0-9][0-9]* (.*) //' \"\$stat\") || exit 44; start=\$(printf '%s\\n' \"\$tail\" | awk '{print \$20}'); name=\$(tr -d '\\r\\n' <\"\$comm\"); test -n \"\$start\" && test -n \"\$name\" || exit 44; printf '%s\\t%s\\t%s\\n' \"\$pid\" \"\$start\" \"\$name\""
 }
 
-# A stale PID alone is never authority to signal a process. The caller must
-# supply the process start identity and comm value captured when that owned
-# process was launched/observed. The remote check and kill happen in one shell
-# invocation so PID reuse between a separate check and signal cannot silently
-# target an unrelated process.
+# A start/name check followed by numeric kill is not identity-bound: exit and
+# PID reuse may intervene inside the same remote shell. No qualified Android
+# identity-bound signal primitive is currently available at this boundary.
 ib_shizuku_signal_owned() {
   if test "$#" -lt 3 || test "$#" -gt 4; then
     ib_shizuku_fail 'ib_shizuku_signal_owned expects PID START_TICKS PROCESS_NAME and optional SIGNAL'
@@ -178,7 +228,8 @@ ib_shizuku_signal_owned() {
       ;;
   esac
 
-  ib_shizuku_run "pid=$pid; expected_start=$expected_start; expected_name=$expected_name; stat=/proc/\$pid/stat; comm=/proc/\$pid/comm; test -r \"\$stat\" && test -r \"\$comm\" || exit 44; tail=\$(sed 's/^[0-9][0-9]* (.*) //' \"\$stat\") || exit 44; observed_start=\$(printf '%s\\n' \"\$tail\" | awk '{print \$20}'); observed_name=\$(tr -d '\\r\\n' <\"\$comm\"); test \"\$observed_start\" = \"\$expected_start\" || exit 45; test \"\$observed_name\" = \"\$expected_name\" || exit 46; kill -$signal \"\$pid\""
+  ib_shizuku_fail 'identity-bound Android signaling is unavailable; no signal sent'
+  return 78
 }
 
 # Deliberately reject the old PID-only operation. Supervisor and test code must
@@ -211,7 +262,7 @@ ib_shizuku_package_pids() {
 
   package_name=$1
   ib_shizuku_validate_package_name "$package_name" || return 2
-  ib_shizuku_run "pidof $package_name"
+  ib_shizuku_capture 5 4096 8192 "pidof $package_name"
 }
 
 ib_shizuku_force_stop_package() {
@@ -232,5 +283,5 @@ ib_shizuku_force_stop_package() {
   # am is ActivityManager's shell-facing control tool. This operation exists
   # for explicit physical acceptance fault injection, not arbitrary package
   # control from browser/model/page data.
-  ib_shizuku_run "am force-stop $package_name"
+  ib_shizuku_capture 5 1024 8192 "am force-stop $package_name"
 }

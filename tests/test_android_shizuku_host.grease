@@ -174,7 +174,16 @@ printf '%s\n' "$processes" | grep -F '2000 sh' >/dev/null
 process_identity=$(ib_shizuku_process_identity 123)
 test "$process_identity" = "$(printf '123\t999\tibworker')"
 
-ib_shizuku_signal_owned 123 999 ibworker TERM
+before=$(wc -l < "$fake_log")
+if ib_shizuku_signal_owned 123 999 ibworker TERM >"$work_directory/signal.out" 2>"$work_directory/signal.err"; then
+  exit 1
+else
+  status=$?
+fi
+test "$status" -eq 78
+test ! -s "$work_directory/signal.out"
+after=$(wc -l < "$fake_log")
+test "$before" -eq "$after"
 
 if ib_shizuku_signal_owned 123 998 ibworker TERM     >"$work_directory/stale.out" 2>"$work_directory/stale.err"; then
   printf 'stale process start identity was accepted\n' >&2
@@ -182,7 +191,7 @@ if ib_shizuku_signal_owned 123 998 ibworker TERM     >"$work_directory/stale.out
 else
   status=$?
 fi
-test "$status" -eq 45
+test "$status" -eq 78
 
 before=$(wc -l < "$fake_log")
 if ib_shizuku_signal 123 TERM >/dev/null 2>&1; then

@@ -6,13 +6,20 @@ case $0 in
   *) script_directory=. ;;
 esac
 repository_root=$(CDPATH= cd -- "$script_directory/.." && pwd)
+case "${1:-}" in
+  start|observe|resume|signal)
+    grease_command=${IB_GREASE_COMMAND:-}
+    test -n "$grease_command" || grease_command=$(command -v grease) || exit 69
+    exec env IB_GREASE_COMMAND="$grease_command" "$grease_command" "$repository_root/bin/accept_android_longview_worker_phases.grease" "$@"
+    ;;
+esac
 . "$repository_root/lib/android_shizuku_host.grease"
 . "$repository_root/lib/android_shizuku_worker_provider.grease"
 . "$repository_root/lib/android_binder_host.grease"
 . "$repository_root/lib/android_longview_worker.grease"
 
 usage() {
-  printf 'usage: %s immediate|kill\n' "$0" >&2
+  printf 'usage: %s immediate|kill | start RECEIPT WORK RESULT LAUNCH HOST_GEN ATTEMPT ATTEMPT_NO immediate|delayed | observe|resume|signal RECEIPT\n' "$0" >&2
 }
 
 mode=${1:-}

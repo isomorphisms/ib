@@ -232,17 +232,17 @@ set -- work-delayed result-delayed launch-d1 boot-a 2000 123 999 sh 8 attempt-d1
 test "$(ib_longview_worker_status "$@")" = running
 expect_status 71 ib_longview_worker_start work-delayed result-delayed launch-d2 8 attempt-d2 2 delayed
 
-# Every stale component is rejected on the mutating signal path. The current
-# attempt stays running after all refusals.
-expect_status 72 ib_longview_worker_signal_owned work-delayed result-delayed wrong-launch boot-a 2000 123 999 sh 8 attempt-d1 1 TERM
-expect_status 72 ib_longview_worker_signal_owned work-delayed result-delayed launch-d1 boot-b 2000 123 999 sh 8 attempt-d1 1 TERM
-expect_status 72 ib_longview_worker_signal_owned work-delayed result-delayed launch-d1 boot-a 2001 123 999 sh 8 attempt-d1 1 TERM
-expect_status 72 ib_longview_worker_signal_owned work-delayed result-delayed launch-d1 boot-a 2000 124 999 sh 8 attempt-d1 1 TERM
-expect_status 72 ib_longview_worker_signal_owned work-delayed result-delayed launch-d1 boot-a 2000 123 1000 sh 8 attempt-d1 1 TERM
-expect_status 72 ib_longview_worker_signal_owned work-delayed result-delayed launch-d1 boot-a 2000 123 999 other 8 attempt-d1 1 TERM
-expect_status 72 ib_longview_worker_signal_owned work-delayed result-delayed launch-d1 boot-a 2000 123 999 sh 9 attempt-d1 1 TERM
-expect_status 72 ib_longview_worker_signal_owned work-delayed result-delayed launch-d1 boot-a 2000 123 999 sh 8 attempt-d2 1 TERM
-expect_status 72 ib_longview_worker_signal_owned work-delayed result-delayed launch-d1 boot-a 2000 123 999 sh 8 attempt-d1 2 TERM
+# Signaling refuses before provider contact until an identity-bound primitive is
+# qualified. Every stale tuple and the exact tuple remain non-mutating.
+expect_status 78 ib_longview_worker_signal_owned work-delayed result-delayed wrong-launch boot-a 2000 123 999 sh 8 attempt-d1 1 TERM
+expect_status 78 ib_longview_worker_signal_owned work-delayed result-delayed launch-d1 boot-b 2000 123 999 sh 8 attempt-d1 1 TERM
+expect_status 78 ib_longview_worker_signal_owned work-delayed result-delayed launch-d1 boot-a 2001 123 999 sh 8 attempt-d1 1 TERM
+expect_status 78 ib_longview_worker_signal_owned work-delayed result-delayed launch-d1 boot-a 2000 124 999 sh 8 attempt-d1 1 TERM
+expect_status 78 ib_longview_worker_signal_owned work-delayed result-delayed launch-d1 boot-a 2000 123 1000 sh 8 attempt-d1 1 TERM
+expect_status 78 ib_longview_worker_signal_owned work-delayed result-delayed launch-d1 boot-a 2000 123 999 other 8 attempt-d1 1 TERM
+expect_status 78 ib_longview_worker_signal_owned work-delayed result-delayed launch-d1 boot-a 2000 123 999 sh 9 attempt-d1 1 TERM
+expect_status 78 ib_longview_worker_signal_owned work-delayed result-delayed launch-d1 boot-a 2000 123 999 sh 8 attempt-d2 1 TERM
+expect_status 78 ib_longview_worker_signal_owned work-delayed result-delayed launch-d1 boot-a 2000 123 999 sh 8 attempt-d1 2 TERM
 test "$(ib_longview_worker_status "$@")" = running
 
 # Revoked/unavailable authority is neither success nor a fabricated terminal
@@ -255,10 +255,11 @@ IB_RISH_COMMAND=$saved_rish
 export IB_RISH_COMMAND
 test "$(ib_longview_worker_status "$@")" = running
 
-# Exact owned signaling succeeds; no partial Binder process identity is used.
-ib_longview_worker_signal_owned "$@" TERM
-test "$(ib_longview_worker_status "$@")" = killed
-test "$(ib_longview_worker_observe "$@")" = gone-uncommitted
+# Exact tuple still refuses without an identity-bound signal primitive.
+expect_status 78 ib_longview_worker_signal_owned "$@" TERM
+test "$(ib_longview_worker_status "$@")" = running
+# Explicit fixture fault, not evidence of an actual delivered signal.
+printf 'killed\n' >"$FAKE_WORKER_STATE/status-work-delayed"
 
 # A retry must advance the attempt number while the killed attempt is still
 # eligible for restart.

@@ -1,0 +1,23 @@
+#!/usr/bin/env grease
+# Native Grease process group body; trusted provider arguments only.
+set -eu -o pipefail
+if (len(ARGV) < 5 or len(ARGV) > 5) { exit 2 }
+var directory = ARGV[0]
+var stdout_limit = int(ARGV[1])
+var stderr_limit = int(ARGV[2])
+var rish = ARGV[3]
+var command_text = ARGV[4]
+mkfifo "$directory/stdout.pipe" "$directory/stderr.pipe"
+fork { head -c $[stdout_limit + 1] < "$directory/stdout.pipe" > "$directory/stdout" }
+var stdout_reader = $!
+fork { head -c $[stderr_limit + 1] < "$directory/stderr.pipe" > "$directory/stderr" }
+var stderr_reader = $!
+var producer_status = 0
+if "$rish" -c "$command_text" > "$directory/stdout.pipe" 2> "$directory/stderr.pipe" {
+  setvar producer_status = 0
+} else {
+  setvar producer_status = int($?)
+}
+wait "$stdout_reader"
+wait "$stderr_reader"
+printf '%s\n' "$producer_status" > "$directory/status"

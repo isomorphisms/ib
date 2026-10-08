@@ -128,10 +128,10 @@ fi
 emit field capacity_pool_relationship unknown shizuku-shell "df filesystems and Android volumes are observations, not proof of physical backing equivalence"
 IB_CAPABILITIES_REMOTE
 )
-  ib_shizuku_run "$remote_script"
+  ib_shizuku_capture 5 262144 8192 "$remote_script"
 }
 
 ib_shizuku_capabilities_open_app_report() {
-  ib_shizuku_run 'am start -W -n org.isomorphisms.ib.webview/.DeviceCapabilitiesActivity'
+  ib_shizuku_capture 5 8192 8192 'am start -W -n org.isomorphisms.ib.webview/.DeviceCapabilitiesActivity'
 }
 
