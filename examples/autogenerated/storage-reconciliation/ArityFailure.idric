@@ -1,0 +1,8 @@
+module ArityFailure
+
+import Data.Text
+
+-- Reduced preserved failure from the first fixture attempt: six Text domains
+-- need six arrows and a result. The original declaration was one arrow short.
+app_report : Text → Text → Text → Text → Text → Text
+app_report root pool installation authority writer available = root

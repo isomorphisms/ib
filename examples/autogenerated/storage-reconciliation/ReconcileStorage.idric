@@ -1,0 +1,166 @@
+module ReconcileStorage
+
+import Data.Text
+import IB.StorageAdmission
+import IB.StorageCapabilities
+
+expected : Text → Text → Integer → StorageExpectation
+expected root pool floor =
+  ExpectedStorage "phone-a" "source-a" "10123" root "ordinary" "card-a"
+    "generation-a" "observation-a" pool 1000 20 floor 0
+
+app_report : Text → Text → Text → Text → Text → Text → Text
+app_report root pool installation authority writer available =
+  "schema\tib-app-storage-capabilities-v1\t\t\t\n" ++
+  "field\tinstallation_identity\treported\tandroid-app\t" ++ installation ++ "\n" ++
+  "field\tsource_head\treported\tandroid-app\tsource-a\n" ++
+  "field\tapp_uid\tmeasured\tandroid-app\t10123\n" ++
+  "field\tobserved_seconds\tmeasured\tandroid-app\t995\n" ++
+  "app_storage_root\t" ++ root ++ "\treported\tandroid-app\tpath=/selected-root state=mounted removable=true emulated=false can-write=true backend-identity=ordinary volume-uuid=card-a volume-generation=generation-a observation-identity=observation-a capacity-pool-identity=" ++ pool ++ "\n" ++
+  "app_storage_capacity\t" ++ root ++ "\tmeasured\t" ++ authority ++
+    "\ttotal-bytes=16000000000 available-bytes=" ++ available ++ "\n" ++
+  "app_storage_writer\t" ++ root ++ "\t" ++ writer ++ "\t" ++ authority ++
+    "\tbounded-write-pass\n"
+
+report_rows : Text → List CapabilityRow
+report_rows report = case capability_rows report of
+  Nothing ⇒ []
+  Just rows ⇒ rows
+
+row : Text → Text → Text → Text → Text → CapabilityRow
+row = ObservedCapability
+
+is_admitted : SpaceLedger → Integer → Bool
+is_admitted ledger peak = case admission_for ledger peak of
+  admitted ⇒ True
+  _ ⇒ False
+
+good_rows : List CapabilityRow
+good_rows = report_rows (app_report "sd" "sd-pool" "phone-a" "android-app" "measured" "8000000000")
+
+changed : Text → Text → List CapabilityRow → List CapabilityRow
+changed name value rows =
+  map (\entry ⇒ if entry.name == name
+                  then row entry.kind entry.name entry.status entry.authority value
+                  else entry) rows
+
+target : StorageExpectation
+target = expected "sd" "sd-pool" 1000000000
+
+request : PublicationRequest
+request = RequestedPublication "result-a" 5000000000 "ordinary" "card-a" "observation-a" "reservation-a"
+
+location : PublicationLocation
+location = ObservedPublicationLocation "ordinary" "card-a" "observation-a"
+
+is_just : Maybe a → Bool
+is_just Nothing = False
+is_just (Just _) = True
+
+positive_wide : Bool
+positive_wide = is_admitted (ledger_from_report target good_rows) 5000000000
+
+different_installation_refuses : Bool
+different_installation_refuses = not (is_admitted
+  (ledger_from_report target (changed "installation_identity" "phone-b" good_rows)) 1)
+
+shell_authority_refuses : Bool
+shell_authority_refuses = not (is_admitted
+  (ledger_from_report target
+    (report_rows (app_report "sd" "sd-pool" "phone-a" "shizuku-shell" "measured" "8000000000"))) 1)
+
+reported_writer_refuses : Bool
+reported_writer_refuses = not (is_admitted
+  (ledger_from_report target
+    (report_rows (app_report "sd" "sd-pool" "phone-a" "android-app" "reported" "8000000000"))) 1)
+
+stale_refuses : Bool
+stale_refuses = not (is_admitted
+  (ledger_from_report target (changed "observed_seconds" "970" good_rows)) 1)
+
+changed_generation_refuses : Bool
+changed_generation_refuses = not (is_admitted
+  (ledger_from_report
+    ({volume_generation := "generation-b"} target) good_rows) 1)
+
+unknown_alias_refuses : Bool
+unknown_alias_refuses = not (is_admitted
+  (ledger_from_report target
+    (report_rows (app_report "sd" "" "phone-a" "android-app" "measured" "8000000000"))) 1)
+
+duplicate_capacity_refuses : Bool
+duplicate_capacity_refuses = not (is_admitted
+  (ledger_from_report target
+    (row "app_storage_capacity" "sd" "measured" "android-app"
+      "total-bytes=16000000000 available-bytes=8000000000" :: good_rows)) 1)
+
+internal_floor_refuses : Bool
+internal_floor_refuses = not (is_just (publication_from_reports
+  (expected "internal" "internal-pool" 1000)
+  (report_rows (app_report "internal" "internal-pool" "phone-a" "android-app" "measured" "999"))
+  target good_rows 0 request location))
+
+positive_publication : Bool
+positive_publication = case publication_from_reports
+  (expected "internal" "internal-pool" 1000)
+  (report_rows (app_report "internal" "internal-pool" "phone-a" "android-app" "measured" "2000"))
+  target good_rows 100 request location of
+    Nothing ⇒ False
+    Just accepted ⇒
+      accepted.internal_reservation.unreflected_commitments_bytes == 100 &&
+      accepted.publication.reserved_ledger.unreflected_commitments_bytes == 5000000000
+
+alias_not_double_budgeted : Bool
+alias_not_double_budgeted = not (is_just (publication_from_reports
+  (expected "internal" "sd-pool" 1000000000)
+  (report_rows (app_report "internal" "sd-pool" "phone-a" "android-app" "measured" "8000000000"))
+  target good_rows 2500000000 request location))
+
+actual_framework_report_refuses : Bool
+actual_framework_report_refuses =
+  let actual = "schema\tib-app-storage-capabilities-v1\t\t\t\n" ++
+               "field\tapp_uid\tmeasured\tandroid-app\t10123\n" ++
+               "field\tsource_head\treported\tandroid-app\tsource-a\n" ++
+               "app_storage_root\tsd\treported\tandroid-app\tpath=/storage/1234/Android/data/ib/files state=mounted can-write=true\n" ++
+               "app_storage_capacity\tsd\tmeasured\tandroid-app\ttotal-bytes=16000000000 available-bytes=8000000000\n" ++
+               "field\twriter_evidence\treported\tandroid-app\tframework-root-plus-canWrite; no test write performed\n" in
+  not (is_admitted (ledger_from_report target (report_rows actual)) 1)
+
+actual_shell_report_refuses : Bool
+actual_shell_report_refuses =
+  let actual = "schema\tib-android-capabilities-v1\n" ++
+               "field\tcatfood_device_id\treported\tcatfood-local-state\tphone-a\n" ++
+               "field\tsource_head\treported\tlocal-checkout\tsource-a\n" ++
+               "field\tproduct_model\treported\tshizuku-shell\tMIRO A1\n" ++
+               "field\tbulk_candidate_mount\tmeasured\tshizuku-shell\t/storage/1234\n" ++
+               "field\tbulk_candidate_available_kib\tmeasured\tshizuku-shell\t67107864\n" ++
+               "field\tib_app_writer_access\tunknown\tandroid-app\trequires app-side probe\n" ++
+               "field\tcapacity_pool_relationship\tunknown\tshizuku-shell\tunknown\n" in
+  not (is_admitted (ledger_from_report target (report_rows actual)) 1)
+
+simulated_writer_refuses : Bool
+simulated_writer_refuses = not (is_admitted
+  (ledger_from_report target
+    (report_rows (app_report "sd" "sd-pool" "phone-a" "android-app" "simulated" "8000000000"))) 1)
+
+public export
+case_results : List (Text, Bool)
+case_results =
+  [("positive-wide", positive_wide),
+   ("different-installation", different_installation_refuses),
+   ("shell-only", shell_authority_refuses),
+   ("reported-writer", reported_writer_refuses),
+   ("stale", stale_refuses),
+   ("changed-generation", changed_generation_refuses),
+   ("unknown-alias", unknown_alias_refuses),
+   ("duplicate-capacity", duplicate_capacity_refuses),
+   ("internal-floor", internal_floor_refuses),
+   ("positive-publication", positive_publication),
+   ("alias-budget", alias_not_double_budgeted),
+   ("actual-framework-report", actual_framework_report_refuses),
+   ("actual-shell-report", actual_shell_report_refuses),
+   ("simulated-writer", simulated_writer_refuses)]
+
+public export
+all_cases_pass : Bool
+all_cases_pass = all snd case_results
