@@ -45,6 +45,10 @@ source_binding source =
   , "unicode-codepoint"
   ]
 
+export
+revision_text : RevisionedSource → AuthoritativeText
+revision_text source = source.authoritative
+
 public export
 record FragmentLink where
   constructor LinkedFragments
@@ -96,6 +100,10 @@ validate_graph source fragments traversal links =
 export
 graph_fragments : FragmentGraph → List SourceFragment
 graph_fragments graph = graph.fragments
+
+export
+graph_source : FragmentGraph → RevisionedSource
+graph_source graph = graph.source
 
 export
 graph_traversal : FragmentGraph → IB.Occurrence.Strand
