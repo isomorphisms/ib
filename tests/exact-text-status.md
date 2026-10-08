@@ -36,3 +36,8 @@ The regression currently requires an available qualified Grease runtime. The
 workflow still runs the real pinned compiler/oracle; it does not provision
 Grease or run this process-injection harness automatically. Fixture changes are
 included in the workflow path filter so they still trigger semantic acceptance.
+
+The automatic-provisioning prerequisite has now been checked against actual
+maintained Grease/Cat Food sources, published assets and live IB checks. See
+[the provisioning receipt](exact-text-status-provisioning.md). An expiring
+Actions artifact or a stock Oils executable is not a silent fallback.
