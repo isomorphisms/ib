@@ -1,0 +1,130 @@
+#!/usr/bin/env grease
+# Grease orchestration, not a replacement interpreter or a native helper.
+# The executable/argv are supplied by a trusted operation adapter. The two
+# readers can write at most their budget plus one detection byte to disk.
+
+var capture_directory = ''
+var capture_children = []
+
+proc cleanup {
+  # Each helper has its own finite deadline. Wait rather than signal a numeric
+  # PID after a reap/race; timeout owns termination of its local process group.
+  for child in (capture_children) {
+    try { wait $child }
+  }
+  if (capture_directory !== '') {
+    rm -rf -- $capture_directory
+  }
+}
+
+proc capture (seconds_text, stdout_text, stderr_text, ...command_argv) {
+  # Validate before creating files or executing the provider. Bounded decimal
+  # strings also keep numeric conversion and diagnostic messages bounded.
+  for value in ([seconds_text, stdout_text, stderr_text]) {
+    if (len(value) > 7 or value !~ / ^ d+ $ /) {
+      echo 'invalid provider capture budget' >&2
+      return 2
+    }
+  }
+  var seconds = int(seconds_text)
+  var stdout_limit = int(stdout_text)
+  var stderr_limit = int(stderr_text)
+  if (seconds < 1 or seconds > 300 or stdout_limit > 1048576 or stderr_limit > 1048576) {
+    echo 'provider capture budget exceeds supported bounds' >&2
+    return 2
+  }
+  for required in timeout head mkfifo mktemp wc cat rm {
+    if ! command -v $required >/dev/null {
+      echo "required provider capture primitive missing: $required" >&2
+      return 127
+    }
+  }
+  if (len(command_argv) === 0) {
+    echo 'capture requires an executable and explicit arguments' >&2
+    return 2
+  }
+  if ! test -x $[command_argv[0]] {
+    echo 'capture executable is not executable' >&2
+    return 1
+  }
+  var runtime = get(ENV, 'IB_GREASE_COMMAND', '')
+  if (runtime === '') {
+    echo 'IB_GREASE_COMMAND must identify the qualified capture runtime' >&2
+    return 127
+  }
+  if (runtime !~ / ^ '/' /) {
+    echo 'IB_GREASE_COMMAND must be an absolute executable path' >&2
+    return 127
+  }
+  if ! test -x $runtime {
+    echo 'IB_GREASE_COMMAND is not executable' >&2
+    return 127
+  }
+
+  umask 077
+  var temporary_root = get(ENV, 'TMPDIR', '/tmp')
+  setglobal capture_directory = $(mktemp -d "$temporary_root/ib-provider.XXXXXXXX")
+  trap --add EXIT { cleanup }
+  trap --add INT { exit 130 }
+  trap --add TERM { exit 143 }
+  trap --add HUP { exit 129 }
+  mkfifo "$capture_directory/stdout.pipe" "$capture_directory/stderr.pipe"
+  # timeout starts before head opens the FIFO, so even an absent writer cannot
+  # strand a reader. The extra two seconds allow provider termination/reaping.
+  fork {
+    exec timeout --kill-after=1 $[seconds + 2] head -c $[stdout_limit + 1] \
+      "$capture_directory/stdout.pipe" >"$capture_directory/stdout"
+  }
+  var stdout_child = $!
+  call capture_children->append(stdout_child)
+  fork {
+    exec timeout --kill-after=1 $[seconds + 2] head -c $[stderr_limit + 1] \
+      "$capture_directory/stderr.pipe" >"$capture_directory/stderr"
+  }
+  var stderr_child = $!
+  call capture_children->append(stderr_child)
+  fork {
+    # The deadline starts BEFORE the child opens either FIFO. A reader that
+    # fails before opening cannot strand the producer in an unbounded open.
+    exec timeout --kill-after=1 $seconds $runtime \
+      "$_this_dir/bounded_process_capture.grease" --run-producer \
+      "$capture_directory/stdout.pipe" "$capture_directory/stderr.pipe" @command_argv
+  }
+  var provider_child = $!
+  call capture_children->append(provider_child)
+
+  try { wait $provider_child }
+  var provider_status = _error.code
+  try { wait $stdout_child }
+  var stdout_status = _error.code
+  try { wait $stderr_child }
+  var stderr_status = _error.code
+  # Reaped PIDs must never be signalled by the exit cleanup.
+  setglobal capture_children = []
+  var stdout_bytes = int($(wc -c <"$capture_directory/stdout"))
+  var stderr_bytes = int($(wc -c <"$capture_directory/stderr"))
+
+  if (stdout_bytes > stdout_limit or stderr_bytes > stderr_limit) {
+    echo "provider output budget exceeded: stdout=$stdout_bytes/$stdout_limit stderr=$stderr_bytes/$stderr_limit; remote-lifetime=unknown" >&2
+    return 65
+  }
+  if (stdout_status !== 0 or stderr_status !== 0) {
+    echo "provider capture incomplete: stdout-status=$stdout_status stderr-status=$stderr_status; remote-lifetime=unknown" >&2
+    return 74
+  }
+  cat "$capture_directory/stderr" >&2
+  if (provider_status !== 0) {
+    # A bounded failure never exposes plausible stdout as a successful result.
+    # 124/137 may also be a provider's own exit: do not invent a causal label
+    # or alter its exact bounded stderr. Remote lifetime remains unknown.
+    return $provider_status
+  }
+  cat "$capture_directory/stdout"
+}
+
+if (len(ARGV) >= 4 and ARGV[0] === '--run-producer') {
+  var producer_argv = ARGV[3:]
+  exec @producer_argv >$[ARGV[1]] 2>$[ARGV[2]]
+}
+try { capture @ARGV }
+exit $[_error.code]

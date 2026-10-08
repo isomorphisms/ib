@@ -5,6 +5,10 @@
 # ib_shizuku_run accepts trusted IB/Grease command text. It is not a quoting or
 # authorization boundary for arbitrary user-supplied strings.
 
+# Grease supplies the directory of the currently sourced library. A legacy
+# stock-shell caller has no qualified source context and fails closed below.
+ib_shizuku_capture_program="${_this_dir:-}/bounded_process_capture.grease"
+
 ib_shizuku_fail() {
   printf '%s\n' "$*" >&2
   return 1
@@ -33,12 +37,7 @@ ib_shizuku_run() {
     return 2
   fi
 
-  command_text=$1
-  rish_command=$(ib_shizuku_rish_command) || return 1
-
-  # rish passes -c directly to the remote Android shell. Its exit status is the
-  # remote shell/command status and must remain visible to IB.
-  "$rish_command" -c "$command_text"
+  ib_shizuku_run_bounded "${IB_SHIZUKU_TIMEOUT_SECONDS:-5}" "$1"
 }
 
 ib_shizuku_run_bounded() {
@@ -56,15 +55,25 @@ ib_shizuku_run_bounded() {
       ;;
   esac
 
-  timeout_command=$(command -v timeout) || {
-    ib_shizuku_fail 'timeout is not available; refusing an unbounded Shizuku operation'
-    return 1
-  }
   rish_command=$(ib_shizuku_rish_command) || return 1
-
-  # The caller is bounded even if an Android service stalls. Preserve timeout's
-  # status (normally 124) rather than translating it into success.
-  "$timeout_command" "$seconds" "$rish_command" -c "$command_text"
+  grease_command=${IB_GREASE_COMMAND:-}
+  if test -z "$grease_command"; then
+    grease_command=$(command -v grease) || {
+      ib_shizuku_fail 'Grease is unavailable; refusing a substitute capture runtime'
+      return 127
+    }
+  fi
+  if ! test -x "$grease_command" || ! test -f "$ib_shizuku_capture_program"; then
+    ib_shizuku_fail 'qualified Grease capture entrypoint/source context is unavailable'
+    return 127
+  fi
+  # This compatibility wrapper is the only inherited shell part of capture.
+  # The actual implementation runs in Grease default mode, with bounded FIFO
+  # readers rather than unbounded files followed by a size check.
+  IB_GREASE_COMMAND="$grease_command" "$grease_command" "$ib_shizuku_capture_program" "$seconds" \
+    "${IB_SHIZUKU_STDOUT_LIMIT_BYTES:-65536}" \
+    "${IB_SHIZUKU_STDERR_LIMIT_BYTES:-16384}" \
+    "$rish_command" -c "$command_text"
 }
 
 ib_shizuku_effective_uid() {
