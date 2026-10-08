@@ -1,0 +1,192 @@
+module HumanDecisionCases
+
+import IB.HumanDecisions
+import System
+
+-- Concrete fixture names in equality propositions are values, not implicit
+-- universally quantified variables.
+%unbound_implicits off
+
+first_target : Target
+first_target = TargetReference resource_target "resource-one"
+
+other_target : Target
+other_target = TargetReference resource_target "resource-two"
+
+source : SourceReference
+source = RetainedSource "retained-source-one" "revision-one" first_target
+
+revised_source : SourceReference
+revised_source = RetainedSource "retained-source-one" "revision-two" first_target
+
+other_source : SourceReference
+other_source = RetainedSource "retained-source-two" "revision-one" other_target
+
+category_a : Decision
+category_a = HumanDecision "decision-a" source include_category (Just "A") Nothing
+
+category_b : Decision
+category_b = HumanDecision "decision-b" source include_category (Just "B") Nothing
+
+remove_b : Decision
+remove_b = HumanDecision "decision-remove-b" source exclude_category (Just "B") (Just "decision-b")
+
+dismissal : Decision
+dismissal = HumanDecision "decision-dismiss" source dismiss_item Nothing Nothing
+
+rollback : Decision
+rollback = HumanDecision "decision-keep" source keep_item Nothing (Just "decision-dismiss")
+
+attention : Decision
+attention = HumanDecision "decision-attention" source deactivate_category (Just "A") Nothing
+
+is_refused : {value : Type} → Maybe value → Bool
+is_refused Nothing = True
+is_refused (Just _) = False
+
+journal : List Decision
+journal = [category_a, category_b, remove_b, attention, dismissal]
+
+activities : List RetainedActivity
+activities = [
+  ActivityReference "seen-one" source observed_exposure,
+  ActivityReference "return-two" other_source explicit_return,
+  ActivityReference "saved-one" source explicit_save,
+  ActivityReference "saved-two" other_source explicit_save,
+  ActivityReference "duplicate-one" source explicit_save
+  ]
+
+-- These are execution assertions over the maintained core, not filesystem
+-- durability or Android acceptance. Typechecking is not execution.
+overlap_is_preserved : Bool
+overlap_is_preserved = (memberships_for first_target [category_a, category_b]) ≟ (["A", "B"])
+
+removing_b_preserves_a : Bool
+removing_b_preserves_a = (memberships_for first_target journal) ≟ (["A"])
+
+attention_is_not_a_label : Bool
+attention_is_not_a_label = (memberships_for first_target [category_a, attention]) ≟ (["A"])
+
+other_target_is_unchanged : Bool
+other_target_is_unchanged = (memberships_for other_target journal) ≟ ([])
+
+same_evidence_is_suppressed : Bool
+same_evidence_is_suppressed = (suppressed_item source journal) ≟ (True)
+
+new_evidence_is_distinct : Bool
+new_evidence_is_distinct = (suppressed_item revised_source journal) ≟ (False)
+
+explicit_rollback_is_appended : Bool
+explicit_rollback_is_appended = (suppressed_item source (journal ++ [rollback])) ≟ (False)
+
+unchanged_dismissal_cannot_reappear : Bool
+unchanged_dismissal_cannot_reappear = (length (useful_candidates [source, other_source] journal activities)) ≟ (1)
+
+duplicate_activity_is_not_another_candidate : Bool
+duplicate_activity_is_not_another_candidate = (length (useful_candidates [source, other_source] [] activities)) ≟ (2)
+
+candidate_reasons : List Candidate → List Text
+candidate_reasons [] = []
+candidate_reasons (candidate :: rest) = candidate_reason candidate :: candidate_reasons rest
+
+save_precedes_return_and_exposure : Bool
+save_precedes_return_and_exposure = (candidate_reasons (useful_candidates [source, other_source] [] activities)) ≟ (["explicit-save", "explicit-save"])
+
+category_shape_is_checked : Bool
+category_shape_is_checked = (is_refused (append_decision [source] (HumanDecision "bad-category" source dismiss_item (Just "A") Nothing) journal)) ≟ (True)
+
+stale_evidence_is_refused : Bool
+stale_evidence_is_refused = (is_refused (append_decision [revised_source] category_a [])) ≟ (True)
+
+unknown_rollback_is_refused : Bool
+unknown_rollback_is_refused = (is_refused (append_decision [source] (HumanDecision "unknown-rollback" source keep_item Nothing (Just "missing-decision")) journal)) ≟ (True)
+
+collision_is_refused : Bool
+collision_is_refused = (is_refused (append_decision [source] (HumanDecision "decision-a" source exclude_category (Just "A") Nothing) journal)) ≟ (True)
+
+identical_replay_is_not_refused : Bool
+identical_replay_is_not_refused = (is_refused (append_decision [source] category_a journal)) ≟ (False)
+
+valid_proposal : Proposal
+valid_proposal = CategoryProposal "proposal-one" source "A" "model-one" "model-revision" "policy-one"
+
+valid_proposal_is_accepted : Bool
+valid_proposal_is_accepted = (is_refused (validate_proposal [source] valid_proposal)) ≟ (False)
+
+missing_model_is_not_a_negative_label : Bool
+missing_model_is_not_a_negative_label = (is_refused (validate_proposal [source] (CategoryProposal "proposal-one" source "A" "" "model-revision" "policy-one"))) ≟ (True)
+
+proposal_command_is_refused : Bool
+proposal_command_is_refused = (is_refused (validate_proposal [source] (CategoryProposal "proposal-command" source "$(rm)" "model-one" "model-revision" "policy-one"))) ≟ (True)
+
+proposal_stale_source_is_refused : Bool
+proposal_stale_source_is_refused = (is_refused (validate_proposal [revised_source] valid_proposal)) ≟ (True)
+
+-- Proposals never participate in these projections, even after validation.
+-- A new proposal cannot alter this obligation or the explicit human journal.
+validated_proposal_does_not_erase_dismissal : Bool
+validated_proposal_does_not_erase_dismissal = (suppressed_item source journal) ≟ (True)
+
+round_trip : Bool
+round_trip = case encode_journal journal of
+  Nothing ⇒ False
+  Just encoded ⇒ case decode_journal encoded of
+    Nothing ⇒ False
+    Just decoded ⇒ encode_journal decoded ≟ Just encoded
+
+torn_journal_is_refused : Bool
+torn_journal_is_refused = is_refused (decode_journal "ib-human-decisions-v1\ndecision\tdecision-a\tresource\tresource-one\tretained-source-one\trevision-one\tinclude-category\tA\t\n")
+
+wrong_commit_count_is_refused : Bool
+wrong_commit_count_is_refused = is_refused (decode_journal "ib-human-decisions-v1\ncommit\t1\tnone\n")
+
+missing_final_newline_is_refused : Bool
+missing_final_newline_is_refused = is_refused (decode_journal "ib-human-decisions-v1\ncommit\t0\tnone")
+
+secret_request_field_is_refused : Bool
+secret_request_field_is_refused = is_refused (decode_decision "decision\tdecision-secret\tresource\tresource-one\tretained-source-one\trevision-one\tkeep\t\t\trequest-credentials")
+
+unknown_command_is_refused : Bool
+unknown_command_is_refused = is_refused (decode_decision "decision\tdecision-command\tresource\tresource-one\tretained-source-one\trevision-one\texecute-command\t\t")
+
+duplicate_record_is_refused : Bool
+duplicate_record_is_refused = is_refused (encode_journal [category_a, category_a])
+
+recovery_keeps_prior_journal : Bool
+recovery_keeps_prior_journal = case encode_journal journal of
+  Nothing ⇒ False
+  Just encoded ⇒ not (is_refused (decode_journal encoded))
+
+proposal_round_trip : Bool
+proposal_round_trip = case encode_proposal [source] valid_proposal of
+  Nothing ⇒ False
+  Just encoded ⇒ case decode_proposal [source] encoded of
+    Nothing ⇒ False
+    Just decoded ⇒ encode_proposal [source] decoded ≟ Just encoded
+
+serialized_append_is_idempotent : Bool
+serialized_append_is_idempotent = case (encode_journal journal, encode_decision category_a) of
+  (Just committed, Just row) ⇒ append_serialized_decision [source] committed row ≟ Just committed
+  _ ⇒ False
+
+serialized_append_refuses_stale_evidence : Bool
+serialized_append_refuses_stale_evidence = case (encode_journal journal, encode_decision rollback) of
+  (Just committed, Just row) ⇒ is_refused (append_serialized_decision [revised_source] committed row)
+  _ ⇒ False
+
+proposal_extra_secret_field_is_refused : Bool
+proposal_extra_secret_field_is_refused = is_refused (decode_proposal [source] "proposal\tproposal-one\tresource\tresource-one\tretained-source-one\trevision-one\tA\tmodel-one\tmodel-revision\tpolicy-one\tcredentials")
+
+all_expected : Bool
+all_expected = and [overlap_is_preserved, removing_b_preserves_a, attention_is_not_a_label, other_target_is_unchanged, same_evidence_is_suppressed, new_evidence_is_distinct, explicit_rollback_is_appended, unchanged_dismissal_cannot_reappear, duplicate_activity_is_not_another_candidate, save_precedes_return_and_exposure, category_shape_is_checked, stale_evidence_is_refused, unknown_rollback_is_refused, collision_is_refused, identical_replay_is_not_refused, valid_proposal_is_accepted, missing_model_is_not_a_negative_label, proposal_command_is_refused, proposal_stale_source_is_refused, validated_proposal_does_not_erase_dismissal]
+
+all_cases : Bool
+all_cases = all_expected && round_trip && torn_journal_is_refused &&
+          wrong_commit_count_is_refused && missing_final_newline_is_refused &&
+          secret_request_field_is_refused && unknown_command_is_refused &&
+          duplicate_record_is_refused && recovery_keeps_prior_journal &&
+          proposal_round_trip && serialized_append_is_idempotent &&
+          serialized_append_refuses_stale_evidence && proposal_extra_secret_field_is_refused
+
+main : IO ()
+main = if all_cases then putStrLn "human-decision-cases=PASS" else exitFailure

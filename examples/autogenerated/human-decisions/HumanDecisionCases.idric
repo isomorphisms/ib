@@ -1,0 +1,123 @@
+module HumanDecisionCases
+
+import IB.HumanDecisions
+
+first_target : Target
+first_target = TargetReference resource_target "resource-one"
+
+other_target : Target
+other_target = TargetReference resource_target "resource-two"
+
+source : SourceReference
+source = RetainedSource "retained-source-one" "revision-one" first_target
+
+revised_source : SourceReference
+revised_source = RetainedSource "retained-source-one" "revision-two" first_target
+
+other_source : SourceReference
+other_source = RetainedSource "retained-source-two" "revision-one" other_target
+
+category_a : Decision
+category_a = HumanDecision "decision-a" source include_category (Just "A") Nothing
+
+category_b : Decision
+category_b = HumanDecision "decision-b" source include_category (Just "B") Nothing
+
+remove_b : Decision
+remove_b = HumanDecision "decision-remove-b" source exclude_category (Just "B") (Just "decision-b")
+
+dismissal : Decision
+dismissal = HumanDecision "decision-dismiss" source dismiss_item Nothing Nothing
+
+rollback : Decision
+rollback = HumanDecision "decision-keep" source keep_item Nothing (Just "decision-dismiss")
+
+attention : Decision
+attention = HumanDecision "decision-attention" source deactivate_category (Just "A") Nothing
+
+is_refused : Maybe value → Bool
+is_refused Nothing = True
+is_refused (Just _) = False
+
+journal : List Decision
+journal = [category_a, category_b, remove_b, attention, dismissal]
+
+activities : List RetainedActivity
+activities = [
+  ActivityReference "seen-one" source observed_exposure,
+  ActivityReference "return-two" other_source explicit_return,
+  ActivityReference "saved-one" source explicit_save,
+  ActivityReference "saved-two" other_source explicit_save,
+  ActivityReference "duplicate-one" source explicit_save
+  ]
+
+-- These equality obligations are normalized by the real Idriç typechecker.
+-- They are not executable/journal durability or Android acceptance.
+overlap_is_preserved : memberships_for first_target [category_a, category_b] = ["A", "B"]
+overlap_is_preserved = Refl
+
+removing_b_preserves_a : memberships_for first_target journal = ["A"]
+removing_b_preserves_a = Refl
+
+attention_is_not_a_label : memberships_for first_target [category_a, attention] = ["A"]
+attention_is_not_a_label = Refl
+
+other_target_is_unchanged : memberships_for other_target journal = []
+other_target_is_unchanged = Refl
+
+same_evidence_is_suppressed : suppressed_item source journal = True
+same_evidence_is_suppressed = Refl
+
+new_evidence_is_distinct : suppressed_item revised_source journal = False
+new_evidence_is_distinct = Refl
+
+explicit_rollback_is_appended : suppressed_item source (journal ++ [rollback]) = False
+explicit_rollback_is_appended = Refl
+
+unchanged_dismissal_cannot_reappear : length (useful_candidates [source, other_source] journal activities) = 1
+unchanged_dismissal_cannot_reappear = Refl
+
+duplicate_activity_is_not_another_candidate : length (useful_candidates [source, other_source] [] activities) = 2
+duplicate_activity_is_not_another_candidate = Refl
+
+candidate_reasons : List Candidate → List Text
+candidate_reasons [] = []
+candidate_reasons (candidate :: rest) = candidate_reason candidate :: candidate_reasons rest
+
+save_precedes_return_and_exposure : candidate_reasons (useful_candidates [source, other_source] [] activities) = ["explicit-save", "explicit-save"]
+save_precedes_return_and_exposure = Refl
+
+category_shape_is_checked : is_refused (append_decision [source] (HumanDecision "bad-category" source dismiss_item (Just "A") Nothing) journal) = True
+category_shape_is_checked = Refl
+
+stale_evidence_is_refused : is_refused (append_decision [revised_source] category_a []) = True
+stale_evidence_is_refused = Refl
+
+unknown_rollback_is_refused : is_refused (append_decision [source] (HumanDecision "unknown-rollback" source keep_item Nothing (Just "missing-decision")) journal) = True
+unknown_rollback_is_refused = Refl
+
+collision_is_refused : is_refused (append_decision [source] (HumanDecision "decision-a" source exclude_category (Just "A") Nothing) journal) = True
+collision_is_refused = Refl
+
+identical_replay_is_not_refused : is_refused (append_decision [source] category_a journal) = False
+identical_replay_is_not_refused = Refl
+
+valid_proposal : Proposal
+valid_proposal = CategoryProposal "proposal-one" source "A" "model-one" "model-revision" "policy-one"
+
+valid_proposal_is_accepted : is_refused (validate_proposal [source] valid_proposal) = False
+valid_proposal_is_accepted = Refl
+
+missing_model_is_not_a_negative_label : is_refused (validate_proposal [source] (CategoryProposal "proposal-one" source "A" "" "model-revision" "policy-one")) = True
+missing_model_is_not_a_negative_label = Refl
+
+proposal_command_is_refused : is_refused (validate_proposal [source] (CategoryProposal "proposal-command" source "$(rm)" "model-one" "model-revision" "policy-one")) = True
+proposal_command_is_refused = Refl
+
+proposal_stale_source_is_refused : is_refused (validate_proposal [revised_source] valid_proposal) = True
+proposal_stale_source_is_refused = Refl
+
+-- Proposals never participate in these projections, even after validation.
+-- A new proposal cannot alter this obligation or the explicit human journal.
+validated_proposal_does_not_erase_dismissal : suppressed_item source journal = True
+validated_proposal_does_not_erase_dismissal = Refl

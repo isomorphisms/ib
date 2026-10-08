@@ -1,0 +1,457 @@
+module IB.HumanDecisions
+
+import Data.Text
+import Data.List1
+
+-- Durable decisions own organization. Proposals and view projections never
+-- manufacture a human action. Inputs refer to the existing retained-source
+-- store and stable browser events; this is not another corpus or event store.
+
+public export
+choice target_kind one_of
+  resource_target
+  tab_target
+  event_target
+  task_target
+  source_target
+
+public export
+record Target where
+  constructor TargetReference
+  kind : target_kind
+  identity : Text
+
+public export
+record SourceReference where
+  constructor RetainedSource
+  source_identity : Text
+  revision_identity : Text
+  target : Target
+
+public export
+record Proposal where
+  constructor CategoryProposal
+  proposal_identity : Text
+  evidence : SourceReference
+  category : Text
+  model_identity : Text
+  model_revision : Text
+  policy_revision : Text
+
+public export
+choice human_action one_of
+  include_category
+  exclude_category
+  activate_category
+  deactivate_category
+  keep_item
+  dismiss_item
+  finish_item
+  defer_item
+
+public export
+record Decision where
+  constructor HumanDecision
+  decision_identity : Text
+  evidence : SourceReference
+  action : human_action
+  category : Maybe Text
+  supersedes : Maybe Text
+
+public export
+choice activity_kind one_of
+  explicit_save
+  explicit_defer
+  explicit_return
+  observed_exposure
+
+public export
+record RetainedActivity where
+  constructor ActivityReference
+  activity_identity : Text
+  evidence : SourceReference
+  kind : activity_kind
+
+public export
+record Candidate where
+  constructor UsefulCandidate
+  evidence : SourceReference
+  reason : activity_kind
+  activity_identity : Text
+
+valid_character : Char → Bool
+valid_character character =
+  (character >= 'a' && character <= 'z') ||
+  (character >= 'A' && character <= 'Z') ||
+  (character >= '0' && character <= '9') ||
+  elem character ['-', '_', '.', ':']
+
+valid_identity : Text → Bool
+valid_identity value =
+  not (value ≟ "") && not (value ≟ ".") && not (value ≟ "..") &&
+  length (unpack value) <= 160 && all valid_character (unpack value)
+
+same_kind : target_kind → target_kind → Bool
+same_kind resource_target resource_target = True
+same_kind tab_target tab_target = True
+same_kind event_target event_target = True
+same_kind task_target task_target = True
+same_kind source_target source_target = True
+same_kind _ _ = False
+
+same_target : Target → Target → Bool
+same_target left right = same_kind left.kind right.kind &&
+  left.identity ≟ right.identity
+
+public export
+same_evidence : SourceReference → SourceReference → Bool
+same_evidence left right = same_target left.target right.target &&
+  left.source_identity ≟ right.source_identity &&
+  left.revision_identity ≟ right.revision_identity
+
+valid_evidence : SourceReference → Bool
+valid_evidence evidence = valid_identity evidence.source_identity &&
+  valid_identity evidence.revision_identity &&
+  valid_identity evidence.target.identity
+
+available_evidence : SourceReference → List SourceReference → Bool
+available_evidence wanted [] = False
+available_evidence wanted (available :: rest) =
+  same_evidence wanted available || available_evidence wanted rest
+
+public export
+validate_proposal : List SourceReference → Proposal → Maybe Proposal
+validate_proposal available proposal =
+  if valid_identity proposal.proposal_identity &&
+     valid_evidence proposal.evidence &&
+     available_evidence proposal.evidence available &&
+     valid_identity proposal.category &&
+     valid_identity proposal.model_identity &&
+     valid_identity proposal.model_revision &&
+     valid_identity proposal.policy_revision
+    then Just proposal
+    else Nothing
+
+same_action : human_action → human_action → Bool
+same_action include_category include_category = True
+same_action exclude_category exclude_category = True
+same_action activate_category activate_category = True
+same_action deactivate_category deactivate_category = True
+same_action keep_item keep_item = True
+same_action dismiss_item dismiss_item = True
+same_action finish_item finish_item = True
+same_action defer_item defer_item = True
+same_action _ _ = False
+
+category_action : human_action → Bool
+category_action include_category = True
+category_action exclude_category = True
+category_action activate_category = True
+category_action deactivate_category = True
+category_action _ = False
+
+valid_decision_category : Decision → Bool
+valid_decision_category decision = case decision.category of
+  Nothing ⇒ not (category_action decision.action)
+  Just category ⇒ category_action decision.action && valid_identity category
+
+same_decision : Decision → Decision → Bool
+same_decision left right = left.decision_identity ≟ right.decision_identity &&
+  same_evidence left.evidence right.evidence &&
+  same_action left.action right.action && left.category ≟ right.category &&
+  left.supersedes ≟ right.supersedes
+
+find_decision : Text → List Decision → Maybe Decision
+find_decision wanted [] = Nothing
+find_decision wanted (decision :: rest) =
+  if wanted ≟ decision.decision_identity then Just decision
+    else find_decision wanted rest
+
+valid_supersession : Decision → List Decision → Bool
+valid_supersession decision journal = case decision.supersedes of
+  Nothing ⇒ True
+  Just identity ⇒ case find_decision identity journal of
+    Nothing ⇒ False
+    Just previous ⇒ same_evidence decision.evidence previous.evidence &&
+      decision.category ≟ previous.category
+
+-- Only explicit human actions enter this function. Validation of a proposal
+-- gives no permission to call it; accepted proposals remain separate records.
+public export
+append_decision : List SourceReference → Decision → List Decision → Maybe (List Decision)
+append_decision available decision journal =
+  case find_decision decision.decision_identity journal of
+    Just previous ⇒ if same_decision decision previous then Just journal else Nothing
+    Nothing ⇒
+      if valid_identity decision.decision_identity &&
+         valid_evidence decision.evidence &&
+         available_evidence decision.evidence available &&
+         valid_decision_category decision && valid_supersession decision journal
+        then Just (journal ++ [decision])
+        else Nothing
+
+remove_category : Text → List Text → List Text
+remove_category category [] = []
+remove_category category (entry :: rest) =
+  if category ≟ entry then remove_category category rest
+    else entry :: remove_category category rest
+
+membership_step : Target → Decision → List Text → List Text
+membership_step target decision categories =
+  if same_target target decision.evidence.target then
+    case (decision.action, decision.category) of
+      (include_category, Just category) ⇒
+        if elem category categories then categories else categories ++ [category]
+      (exclude_category, Just category) ⇒ remove_category category categories
+      _ ⇒ categories
+    else categories
+
+membership_replay : Target → List Text → List Decision → List Text
+membership_replay target categories [] = categories
+membership_replay target categories (decision :: rest) =
+  membership_replay target (membership_step target decision categories) rest
+
+public export
+memberships_for : Target → List Decision → List Text
+memberships_for target journal = membership_replay target [] journal
+
+-- Attention is a distinct projection: activating/deactivating a category does
+-- not alter memberships or create positive/negative training evidence.
+attention_replay : List Text → List Decision → List Text
+attention_replay categories [] = categories
+attention_replay categories (decision :: rest) =
+  let next = case (decision.action, decision.category) of
+        (activate_category, Just category) ⇒
+          if elem category categories then categories else categories ++ [category]
+        (deactivate_category, Just category) ⇒ remove_category category categories
+        _ ⇒ categories
+  in attention_replay next rest
+
+public export
+active_categories : List Decision → List Text
+active_categories journal = attention_replay [] journal
+
+suppressed_replay : SourceReference → Bool → List Decision → Bool
+suppressed_replay evidence suppressed [] = suppressed
+suppressed_replay evidence suppressed (decision :: rest) =
+  let next = if same_evidence evidence decision.evidence then
+        case decision.action of
+          dismiss_item ⇒ True
+          finish_item ⇒ True
+          keep_item ⇒ False
+          defer_item ⇒ False
+          _ ⇒ suppressed
+        else suppressed
+  in suppressed_replay evidence next rest
+
+public export
+suppressed_item : SourceReference → List Decision → Bool
+suppressed_item evidence journal = suppressed_replay evidence False journal
+
+activity_priority : activity_kind → Number
+activity_priority explicit_save = 4
+activity_priority explicit_defer = 3
+activity_priority explicit_return = 2
+activity_priority observed_exposure = 1
+
+already_selected : SourceReference → List Candidate → Bool
+already_selected evidence [] = False
+already_selected evidence (candidate :: rest) =
+  same_evidence evidence candidate.evidence || already_selected evidence rest
+
+select_priority : Number → List SourceReference → List Decision → List RetainedActivity → List Candidate → List Candidate
+select_priority priority available decisions [] candidates = candidates
+select_priority priority available decisions (activity :: rest) candidates =
+  let selected =
+        if activity_priority activity.kind ≟ priority &&
+           valid_identity activity.activity_identity && valid_evidence activity.evidence &&
+           available_evidence activity.evidence available &&
+           not (suppressed_item activity.evidence decisions) &&
+           not (already_selected activity.evidence candidates)
+          then candidates ++ [UsefulCandidate activity.evidence activity.kind activity.activity_identity]
+          else candidates
+  in select_priority priority available decisions rest selected
+
+-- Ordering is stable within each priority group; equal bytes, URL strings,
+-- and event positions do not collapse distinct source/target identities.
+public export
+useful_candidates : List SourceReference → List Decision → List RetainedActivity → List Candidate
+useful_candidates available decisions activities =
+  let saved = select_priority 4 available decisions activities []
+      deferred = select_priority 3 available decisions activities saved
+      returned = select_priority 2 available decisions activities deferred
+  in select_priority 1 available decisions activities returned
+
+public export
+candidate_reason : Candidate → Text
+candidate_reason candidate = case candidate.reason of
+  explicit_save ⇒ "explicit-save"
+  explicit_defer ⇒ "explicit-defer"
+  explicit_return ⇒ "explicit-return"
+  observed_exposure ⇒ "observed-exposure"
+
+target_kind_text : target_kind → Text
+target_kind_text resource_target = "resource"
+target_kind_text tab_target = "tab"
+target_kind_text event_target = "event"
+target_kind_text task_target = "task"
+target_kind_text source_target = "source"
+
+decode_target_kind : Text → Maybe target_kind
+decode_target_kind "resource" = Just resource_target
+decode_target_kind "tab" = Just tab_target
+decode_target_kind "event" = Just event_target
+decode_target_kind "task" = Just task_target
+decode_target_kind "source" = Just source_target
+decode_target_kind _ = Nothing
+
+action_text : human_action → Text
+action_text include_category = "include-category"
+action_text exclude_category = "exclude-category"
+action_text activate_category = "activate-category"
+action_text deactivate_category = "deactivate-category"
+action_text keep_item = "keep"
+action_text dismiss_item = "dismiss"
+action_text finish_item = "done"
+action_text defer_item = "later"
+
+decode_action : Text → Maybe human_action
+decode_action "include-category" = Just include_category
+decode_action "exclude-category" = Just exclude_category
+decode_action "activate-category" = Just activate_category
+decode_action "deactivate-category" = Just deactivate_category
+decode_action "keep" = Just keep_item
+decode_action "dismiss" = Just dismiss_item
+decode_action "done" = Just finish_item
+decode_action "later" = Just defer_item
+decode_action _ = Nothing
+
+optional_text : Maybe Text → Text
+optional_text Nothing = ""
+optional_text (Just text) = text
+
+decode_optional : Text → Maybe (Maybe Text)
+decode_optional "" = Just Nothing
+decode_optional text = if valid_identity text then Just (Just text) else Nothing
+
+valid_decision_record : Decision → Bool
+valid_decision_record decision = valid_identity decision.decision_identity &&
+  valid_evidence decision.evidence && valid_decision_category decision &&
+  case decision.supersedes of
+    Nothing ⇒ True
+    Just identity ⇒ valid_identity identity
+
+-- Restricted fields need no quoting or eval. Unknown or extra fields refuse;
+-- a line cannot contain credentials, executable commands or hidden payload.
+public export
+encode_decision : Decision → Maybe Text
+encode_decision decision =
+  if valid_decision_record decision then Just (
+    "decision\t" ++ decision.decision_identity ++ "\t" ++
+    target_kind_text decision.evidence.target.kind ++ "\t" ++
+    decision.evidence.target.identity ++ "\t" ++
+    decision.evidence.source_identity ++ "\t" ++
+    decision.evidence.revision_identity ++ "\t" ++
+    action_text decision.action ++ "\t" ++ optional_text decision.category ++ "\t" ++
+    optional_text decision.supersedes)
+    else Nothing
+
+public export
+decode_decision : Text → Maybe Decision
+decode_decision row = case forget (split (≟ '\t') row) of
+  ["decision", identity, kind_text, target, source, revision, action_name, category, supersedes] ⇒ do
+    kind ← decode_target_kind kind_text
+    action ← decode_action action_name
+    category ← decode_optional category
+    supersedes ← decode_optional supersedes
+    let decision = HumanDecision identity
+          (RetainedSource source revision (TargetReference kind target)) action category supersedes
+    if valid_decision_record decision then Just decision else Nothing
+  _ ⇒ Nothing
+
+last_identity : List Decision → Text
+last_identity [] = "none"
+last_identity [decision] = decision.decision_identity
+last_identity (_ :: rest) = last_identity rest
+
+encode_rows : List Decision → Maybe Text
+encode_rows [] = Just ""
+encode_rows (decision :: rest) = do
+  row ← encode_decision decision
+  rows ← encode_rows rest
+  pure (row ++ "\n" ++ rows)
+
+valid_journal_from : List Decision → List Decision → Bool
+valid_journal_from previous [] = True
+valid_journal_from previous (decision :: rest) =
+  case find_decision decision.decision_identity previous of
+    Just _ ⇒ False
+    Nothing ⇒ case append_decision [decision.evidence] decision previous of
+      Nothing ⇒ False
+      Just next ⇒ valid_journal_from next rest
+
+public export
+encode_journal : List Decision → Maybe Text
+encode_journal journal =
+  if length journal <= 4096 && valid_journal_from [] journal then do
+    rows ← encode_rows journal
+    pure ("ib-human-decisions-v1\n" ++ rows ++ "commit\t" ++
+      show (length journal) ++ "\t" ++ last_identity journal ++ "\n")
+    else Nothing
+
+-- A commit marker establishes framing and full-record count, not authenticity
+-- or disk durability. Grease must additionally preserve bytes and producer
+-- status, and the storage owner must establish platform fsync guarantees.
+decode_rows : List Decision → List Text → Maybe (List Decision)
+decode_rows journal [marker] =
+  if marker ≟ ("commit\t" ++ show (length journal) ++ "\t" ++ last_identity journal)
+    then Just journal else Nothing
+decode_rows journal [] = Nothing
+decode_rows journal (row :: rest) = do
+  decision ← decode_decision row
+  case find_decision decision.decision_identity journal of
+    Just _ ⇒ Nothing
+    Nothing ⇒ do
+      -- Historical evidence is a reference, not an assertion that bytes are
+      -- still available. New appends use the real current-source availability
+      -- contract; replay checks record shape, identity and supersession only.
+      next ← append_decision [decision.evidence] decision journal
+      decode_rows next rest
+
+public export
+decode_journal : Text → Maybe (List Decision)
+decode_journal text =
+  if length (unpack text) <= 1048576 && isSuffixOf "\n" text then
+    case lines text of
+      "ib-human-decisions-v1" :: rows ⇒
+        if length rows <= 4097 then decode_rows [] rows else Nothing
+      _ ⇒ Nothing
+    else Nothing
+
+public export
+append_serialized_decision : List SourceReference → Text → Text → Maybe Text
+append_serialized_decision current_sources committed_journal decision_row = do
+  journal ← decode_journal committed_journal
+  decision ← decode_decision decision_row
+  next ← append_decision current_sources decision journal
+  encode_journal next
+
+public export
+encode_proposal : List SourceReference → Proposal → Maybe Text
+encode_proposal available proposal = do
+  checked ← validate_proposal available proposal
+  pure ("proposal\t" ++ checked.proposal_identity ++ "\t" ++
+    target_kind_text checked.evidence.target.kind ++ "\t" ++
+    checked.evidence.target.identity ++ "\t" ++
+    checked.evidence.source_identity ++ "\t" ++
+    checked.evidence.revision_identity ++ "\t" ++ checked.category ++ "\t" ++
+    checked.model_identity ++ "\t" ++ checked.model_revision ++ "\t" ++ checked.policy_revision)
+
+public export
+decode_proposal : List SourceReference → Text → Maybe Proposal
+decode_proposal available row = case forget (split (≟ '\t') row) of
+  ["proposal", identity, kind_text, target, source, revision, category, model, model_revision, policy] ⇒ do
+    kind ← decode_target_kind kind_text
+    validate_proposal available (CategoryProposal identity
+      (RetainedSource source revision (TargetReference kind target)) category model model_revision policy)
+  _ ⇒ Nothing
