@@ -1,0 +1,93 @@
+module FragmentStoreAcceptance
+
+import Data.Text
+import IB.FragmentStore
+import IB.Occurrence
+import IB.Strand
+import System
+
+fixture_source : Text → Maybe RevisionedSource
+fixture_source digest = do
+  reference ← nonempty_text "retained:representation-1"
+  revisioned_source (Source reference PlainTextSource CompleteSource)
+    (SourceText "source-1" "東京🙂ababa") digest "utf8-text-v1"
+
+fixture_fragments : List SourceFragment
+fixture_fragments =
+  [Fragment "intro" "source-1" 0 3, Fragment "repeat" "source-1" 3 8]
+
+fixture_traversal : IB.Occurrence.Strand
+fixture_traversal = MaterializedStrand "reading-1" ["repeat", "intro"]
+
+fixture_graph : Maybe FragmentGraph
+fixture_graph = do
+  source ← fixture_source "sha256:decoded-original"
+  validate_graph source fixture_fragments fixture_traversal
+    [LinkedFragments "intro" "repeat"]
+
+refused : Maybe a → Bool
+refused Nothing = True
+refused (Just _) = False
+
+has_positions : List Occurrence → Bool
+has_positions [Hit 3 0 "repeat", Hit 5 0 "repeat"] = True
+has_positions _ = False
+
+cases : RevisionedSource → FragmentGraph → List (Text, Bool)
+cases source graph =
+  [ ("codepoint-byte-boundary", utf8_byte_offset 3 source ≟ Just 10)
+  , ("beyond-source-refused", refused (utf8_byte_offset 9 source))
+  , ("overlapping-literal-occurrences", case graph_occurrences "aba" graph of
+       Just occurrences ⇒ has_positions occurrences
+       Nothing ⇒ False)
+  , ("ordered-context", context_fragment_ids 0 1 (Hit 3 0 "repeat")
+       (graph_traversal graph) ≟ Just ["repeat", "intro"])
+  , ("roundtrip", case decode_graph source (serialize_graph graph) of
+       Just recovered ⇒ serialize_graph recovered ≟ serialize_graph graph &&
+         incoming_links "repeat" recovered ≟ ["intro"] &&
+         outgoing_links "intro" recovered ≟ ["repeat"]
+       Nothing ⇒ False)
+  , ("two-view-cuts-one-revision", case validate_graph source fixture_fragments
+       (MaterializedStrand "other-cut" ["intro", "repeat"])
+       [LinkedFragments "intro" "repeat"] of
+       Just other ⇒ incoming_links "repeat" other ≟ incoming_links "repeat" graph
+       Nothing ⇒ False)
+  , ("byte-units-refused", refused (decode_graph source
+       ("ib-fragments\t1\nsource\tsource-1\tretained:representation-1\t" ++
+        "sha256:decoded-original\tutf8-text-v1\tutf8-byte\n" ++
+        "traversal\treading-1\nfragment\tintro\t0\t3\n" ++
+        "visit\tintro\ncommit\n")))
+  , ("oversized-range-refused", refused (validate_graph source
+       [Fragment "intro" "source-1" 0 10]
+       (MaterializedStrand "reading-1" ["intro"]) []))
+  , ("dangling-visit-refused", refused (validate_graph source fixture_fragments
+       (MaterializedStrand "reading-1" ["intro", "repeat", "absent"]) []))
+  , ("dangling-link-refused", refused (validate_graph source fixture_fragments
+       fixture_traversal [LinkedFragments "intro" "absent"]))
+  , ("truncated-commit-refused", refused (decode_graph source
+       "ib-fragments\t1\nsource\tsource-1\tretained:representation-1\tsha256:decoded-original\tutf8-text-v1\tunicode-codepoint\ntraversal\treading-1\n"))
+  , ("changed-revision-refused", case fixture_source "sha256:decoded-changed" of
+       Just changed ⇒ refused (decode_graph changed (serialize_graph graph))
+       Nothing ⇒ False)
+  , ("index-rebuild-identical", case decode_graph source (serialize_graph graph) of
+       Just rebuilt ⇒ incoming_links "repeat" rebuilt ≟ incoming_links "repeat" graph &&
+         outgoing_links "intro" rebuilt ≟ outgoing_links "intro" graph
+       Nothing ⇒ False)
+  ]
+
+report : List (Text, Bool) → IO ()
+report [] = pure ()
+report ((name, passed) :: rest) = do
+  putStrLn (name ++ "=" ++ show passed)
+  if passed then report rest else exitFailure
+
+acceptance_results : List (Text, Bool)
+acceptance_results = case (fixture_source "sha256:decoded-original", fixture_graph) of
+  (Just source, Just graph) ⇒ cases source graph
+  _ ⇒ [("fixture-construction", False)]
+
+acceptance_passed : Bool
+acceptance_passed = all snd acceptance_results
+
+main : IO ()
+main = report acceptance_results

@@ -1,0 +1,58 @@
+# Grease byte boundary. Source the existing Longview durable_object_store.grease
+# first; this consumer does not implement a second publication mechanism.
+
+ib_fragment_publish() {
+  forkwait {
+  test "$#" -eq 10 || return 71
+  fragment_root=$1
+  fragment_backend=$2
+  fragment_object=$3
+  fragment_normalizer=$4
+  fragment_source_id=$5
+  fragment_representation=$6
+  fragment_digest=$7
+  fragment_decoder=$8
+  fragment_source=$9
+  fragment_graph=${10}
+  test -x "$fragment_normalizer" || return 71
+  test -f "$fragment_source" && test ! -L "$fragment_source" || return 71
+  test -f "$fragment_graph" && test ! -L "$fragment_graph" || return 71
+  case "$fragment_digest" in
+    ''|*[!0123456789abcdef]*) return 71 ;;
+  esac
+  test "${#fragment_digest}" -eq 64 || return 71
+  ib_store_require_backend "$fragment_root" "$fragment_backend" || return $?
+  fragment_work=$(mktemp -d) || return 72
+  trap --add EXIT {
+    rm -f "$fragment_work/source" "$fragment_work/graph" "$fragment_work/normalized" "$fragment_work/diagnostics"
+    rmdir "$fragment_work"
+  }
+  umask 077
+  # Snapshot bounded input before hash/check to avoid validating one generation
+  # and publishing another. Limits here are bytes, core ranges are code points.
+  head -c 4194305 "$fragment_source" >"$fragment_work/source" || return 72
+  test "$(wc -c <"$fragment_work/source")" -le 4194304 || return 69
+  cmp -s "$fragment_source" "$fragment_work/source" || return 73
+  iconv -f UTF-8 -t UTF-8 "$fragment_work/source" >/dev/null || return 71
+  fragment_observed=$(sha256sum "$fragment_work/source") || return 72
+  fragment_observed=${fragment_observed%% *}
+  test "$fragment_observed" = "$fragment_digest" || return 73
+  head -c 1048577 "$fragment_graph" >"$fragment_work/graph" || return 72
+  test "$(wc -c <"$fragment_work/graph")" -le 1048576 || return 69
+  cmp -s "$fragment_graph" "$fragment_work/graph" || return 73
+  # The inherited Grease ulimit primitive applies the host file-size limit to
+  # both output streams. Timeout and producer status are preserved. A failed
+  # producer's plausible bytes are never admitted to the immutable store.
+  try { forkwait { ulimit -f 2048 && timeout 10 "$fragment_normalizer" \
+      "$fragment_source_id" "$fragment_representation" "$fragment_digest" \
+      "$fragment_decoder" "$fragment_work/source" "$fragment_work/graph" \
+      >"$fragment_work/normalized" 2>"$fragment_work/diagnostics" } }
+  if (_error.code !== 0) {
+    fragment_status=$[_error.code]
+    head -c 4096 "$fragment_work/diagnostics" >&2
+    return "$fragment_status"
+  }
+  ib_store_publish_bounded "$fragment_root" "$fragment_backend" "$fragment_object" \
+    "$fragment_work/normalized" 1048576
+  }
+}

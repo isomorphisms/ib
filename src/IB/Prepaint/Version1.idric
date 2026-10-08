@@ -38,7 +38,7 @@ maybe_text (Just value) = value
 serialize_block : InformationBlock → String
 serialize_block (Heading level text) =
   join_fields ["heading", heading_level_text level, escape_field text]
-serialize_block (Text text) =
+serialize_block (TextBlock text) =
   join_fields ["text", escape_field text]
 serialize_block (Link text reference) =
   join_fields ["link", escape_field text, escape_field (link_reference_value reference)]
