@@ -1,0 +1,137 @@
+IB-R1 BACKEND RECOVERY — inspected 2026-10-08
+
+Evidence and disposition
+
+IB main is 10fa7bbe93ff9ffa1ba7b9f62e0dd8f6c10a86bc. Preserved Longview is 843c7bcf5336c685c4a96a4b4bc28b96fbc7a5dc, branch longview-renderer-loss-acceptance. Main is already its ancestor; git rev-list main...Longview reports 0/216. A separate restack job is unjustified at this snapshot. Refresh topology before future integration.
+
+isomorphisms/ib PR #114, “Consolidate Longview through the Binder boundary with retained acceptance work,” https://github.com/isomorphisms/ib/pull/114, is closed, unmerged, retained. isomorphisms/ib PR #115, “Reconstruct immutable-result publication acceptance on Longview,” https://github.com/isomorphisms/ib/pull/115, and isomorphisms/ib PR #117, “Bind Longview worker completion to exact execution attempts,” https://github.com/isomorphisms/ib/pull/117, were merged INTO THE LONGVIEW BRANCH, not main. Their implementation must be consumed, not reissued. Merge commits are 9813acaf102db32f8d8fb526f5161e57316f2d64 and 041734f9e6a520350599d900581b5ae72d1a36c6.
+
+Source reviewed: AGENTS.md, README.md, docs/architecture.md, shared ai-ci AGENTS/README/failure ledger/research, Longview Binder/provider/worker/capability/retirement documents, implementations and tests, workflow, preserved latency and OAuth documents/source. Issue bodies 93, 98, 100, 106, 120, 85 and Cat Food 93 were read directly. Issue106 already contains an October 1 mechanism inventory and recovered conversation lineage; repeating the whole audit as a new job is unjustified. Its contents are repository evidence about recovery, not a newly retrieved verbatim conversation. No complete original conversation export, physical device, live Shizuku service, or private OAuth enrollment was available in this subtask.
+
+Already implemented on Longview: Binder-facing generic caller surface; provider-specific lowering; explicit package fault target; refusal of PID-only, PID0/1 and hostile identifiers; exact attempt tuple and stale completion rejection; bounded worker invocation; immutable publication; distinct app-private provider/reader and live PFD fixtures; emulator lifetime acceptance. Remaining precise gaps follow. Historical CI from PR bodies was read but not rerun; it cannot be relabeled current execution or MIRO acceptance.
+
+Source-review limitation: the owned signal implementations read /proc identity and then invoke numeric kill. Performing both in one shell does not make identity validation and signaling atomic against process exit/PID reuse between those steps. Existing stale-tuple tests do not establish that stronger race-free property. IB-B09 tracks diagnosis and closure; no exploit or physical-device failure is claimed.
+
+The E4 source producer still emits a fixed deterministic fixture; LongViewActivity commits constant HEAVY_RESULT_BYTES. Storage job IB-S03 owns the complete source-derived acquisition/admission/provenance/reopenable-result change, including the narrow trusted worker opcode and hostile-source refusal. Do not create a competing backend acquisition job. IB-S02 owns downstream decoded-resource envelopes.
+
+Cat Food reconciliation: isomorphisms/catfood PR #115, “Reconcile current Android delivery and retire old generations,” https://github.com/isomorphisms/catfood/pull/115, is now MERGED at head 976c227f9081ad9d87f0535af3fb2ca3c0d93734. Its android/preserve-shizuku.sh and tests/shizuku-state.sh already verify hashes, refuse corrupt/incomplete snapshots, preserve discovery precedence and restore a nonwritable DEX. The restore uses two renames, not an atomic pair swap. Cat Food issue93 and IB capability documentation retain stale links to earlier generations. Neither preservation tests nor the merge proves UID2000 or physical Shizuku authority.
+
+QUEUE — FULL LITERAL ASSIGNMENTS
+
+SUN IB-B01 — Preserve authority failure status through Binder
+
+Owner: isomorphisms/ib issue93 (https://github.com/isomorphisms/ib/issues/93); isolated child of retained longview-renderer-loss-acceptance, inspected 843c7bcf5336c685c4a96a4b4bc28b96fbc7a5dc. Intent: issue93 requires exact denials and distinguishes shell/root/unavailable authority; issue98 forbids silent success. Reuse the retained Longview implementation and merged attempt/publication work.
+
+Concrete defect: lib/android_shizuku_host.grease::ib_shizuku_authority converts every ib_shizuku_effective_uid failure into status1. Existing tests prove raw ib_shizuku_run preserves status37 but never exercise that status through authority or ib_binder_authority. Fix this wrapper to preserve exact nonzero status and stderr, with no authority success row. Validate the successful UID response so malformed/multiline output cannot masquerade as observed authority; preserve valid root, shell and ordinary-app distinctions.
+
+Scope: that wrapper, tests/test_android_shizuku_host.grease, focused Binder-facing regression, and explanatory receipt. No provider replacement, new task types, device mutation, or E2/E3 rewrite. Check active workers before touching shared host tests.
+
+Acceptance: real Grease executes happy UID0/2000/ordinary controls; provider exits37/124 and permission-denial text emerge unchanged through Binder; malformed UID refuses; restored provider succeeds after failure. A mutant collapsing status37 to1 must fail. Report unavailable Grease explicitly; POSIX compatibility execution alone is not Grease acceptance.
+
+Start: READY_CI, no device prerequisite. Output: bounded patch/commit, exact runtime identity and execution receipt; physical authority remains NOT_RUN. This is the first independently useful backend execution slice.
+
+SUN IB-B02 — Bind IB capability provenance to the actual rish bundle
+
+Owner: isomorphisms/ib issue93 and Cat Food issue93 (https://github.com/isomorphisms/catfood/issues/93). IB base: longview-renderer-loss-acceptance@843c7bcf5336c685c4a96a4b4bc28b96fbc7a5dc. Reuse merged Cat Food c67-physical-profile@976c227f9081ad9d87f0535af3fb2ca3c0d93734, android/preserve-shizuku.sh. Intent: issue93's separation of files, persisted grants and actual authority; issue120's bootstrap/restoration requirement.
+
+Gap: lib/android_device_capabilities.grease merely repeats receipt hashes as reported; rish resolution and that recorded bundle are not compared. Implement a read-only consumer observation that distinguishes receipt-present, saved-pair-verified, active-pair-matches, DEX-mode-valid and live-authority-observed. Preserve unknown/invalid states. Resolve the actual explicit/PATH command; never silently switch it to the saved copy. Consult Cat Food's current per-device identity contract rather than hardcoding the obsolete manifest-unavailable claim.
+
+Scope: capability adapter/tests/documentation. Reuse Cat Food preservation; do not create another backup/restore implementation, automatically restore files, start Shizuku, or promise atomic pair replacement. Keep ordinary Binder IPC independent of privileged-provider availability.
+
+Acceptance: valid matching pair; corrupt saved DEX; stale receipt; different active pair; missing sibling; writable DEX; changed current pointer during observation; two devices sharing a model but not identity. Repeating observation changes no files. Recovery after explicit external restoration yields matching provenance without claiming shell/root authority.
+
+Start: READY_CI, independent of B01 except any shared report wiring. Output: bounded consumer patch and fixtures, exact Cat Food/IB pins, reconciled old-reference note. MIRO reboot/reacquisition remains a separate device result.
+
+SUN IB-B03 — Make worker lifetime acceptance restartable across callers
+
+Owner: isomorphisms/ib issue98 (https://github.com/isomorphisms/ib/issues/98), retained Longview@843c7bcf5336c685c4a96a4b4bc28b96fbc7a5dc. Intent: issue98 independently requires UI, initiating caller, worker, Shizuku and reboot outcomes. Consume merged attempt binding unchanged.
+
+Gap: bin/accept_android_longview_worker.grease accepts only immediate or kill, generates identity inside one invocation, and cannot resume after caller/service/reboot loss from a durable handoff. Extend acceptance orchestration with bounded start/observe/resume phases and a plain receipt carrying the exact work/result/launch/boot/UID/PID/start/name/host/attempt tuple. Keep policy in IB.WorkerLifecycle; the harness must not invent a restart policy.
+
+Scope: acceptance entrypoint, fixtures and lifecycle documentation. Reuse lib/android_longview_worker.grease and current provider. No new supervisor, background service, privilege escalation, process immortality claim, automatic nonreplayable retry, or phone reboot during hosted work.
+
+Acceptance: start and later read from distinct caller processes; delayed caller loss; exact owned kill; stale handoff refusal; provider unavailable then restored; committed result retained; simulated changed boot; receipt truncation/tampering refuses before signal or publication. Exercise actual fixed worker program where possible, not only a hand-written fake. A lost running process must remain distinguishable from an already committed result.
+
+Start: READY_CI after B01 if its status contract is consumed. Hosted implementation can proceed now; actual MIRO service-stop/reboot phases require explicit device access and scope. Output: runnable phase-separated Grease harness plus exact-source hosted receipt and an unfilled physical-case matrix, never fabricated device rows.
+
+SUN IB-B04 — Bound live PFD sessions and prove unauthorized access refusal
+
+Owner: isomorphisms/ib issues85/98, https://github.com/isomorphisms/ib/issues/85. Base: longview-renderer-loss-acceptance@843c7bcf5336c685c4a96a4b4bc28b96fbc7a5dc. Intent: issue98 requires bounded framing, caller authorization, stalled-peer handling and cheap waitable events.
+
+Gap: LiveChannelProvider.java creates a daemon thread for every open; read_exact and the final EOF wait have no session deadline or concurrency cap. Current android-webview workflow covers ping/pong and both death directions, but no no-grant/revoked-grant, partial-frame stall or session-exhaustion case. The reader is a separate Android shim; it does not transfer a descriptor into the Termux POSIX process.
+
+Implement bounded sessions and cancellation through the existing narrow Android PFD adapter, with admission/refusal and timeout diagnostics. Keep source-defined ping/pong semantics and URI authorization. Scope LiveChannelProvider, reader fixture, their boundary checks and exact-head Android acceptance. Do not replace Binder/PFD with TCP, select a product transport, or turn the provider into durable storage. Existing Java/Gradle is platform debt, not authorization for a new build fallback; obey the repository's qualified build gate.
+
+Acceptance: authorized exchange; ungranted and revoked callers denied; malformed/partial/oversized frames; idle peer; configured session limit; EOF in both death directions; reconnect after each release; resources return to baseline. Use waitable cancellation, not frequent rish polling.
+
+Start: READY_CI source/test slice once the actual Android build path is qualified; report its exact blocker otherwise. Output: bounded adapter patch and emulator evidence; physical MIRO channel acceptance remains separate.
+
+SUN IB-B05 — Execute the distinct MIRO live-channel and durable-reader gates
+
+Owner: isomorphisms/ib issues84/85/98 and retained Longview@843c7bcf5336c685c4a96a4b4bc28b96fbc7a5dc; https://github.com/isomorphisms/ib/issues/84. Intent: issues85/98 and docs/provider-retirement.md require actual cross-UID behavior and truthful caller boundaries. Reuse current provider/reader packages; the old provider experiment is already superseded.
+
+Implement any missing device receipt orchestration, then execute on the verified MIRO A1 with exact APK digest, source, stable package/signer/version and replacement-install evidence. Record separate app, reader and Termux identities. Demonstrate two independent complete read-only descriptors, host termination followed by a fresh authorized late read, and unchanged committed bytes. Separately perform live ping/pong, no-grant denial, caller-first/provider-first death, no-listener behavior and reconnect. Report accurately whether only the Android shim receives the PFD.
+
+Observe grant loss after package force-stop and separately after reboot only when those device operations are authorized; reacquisition must not recreate the result. Never move private bytes into shared storage to force success. Do not revive the failed Unix-socket experiment or reinterpret an emulator pass as physical evidence.
+
+Acceptance includes unauthorized reader refusal, attempted writes refused, absent provider distinguished from absent result, changed provider generation, and recovery without reacquisition. Preserve negative results.
+
+Start: BLOCKED_EXTERNAL in this environment: no MIRO A1 connection or qualified installed artifacts. Hosted harness preparation can begin; physical run depends on B04's qualified artifact and explicit device scope. Output: executed case receipts or a precise access/artifact blocker, with no blanket IPC-architecture acceptance.
+
+SUN IB-B06 — Bound provider observation time and output
+
+Owner: isomorphisms/ib issues93/98; https://github.com/isomorphisms/ib/issues/98. Base: retained Longview@843c7bcf5336c685c4a96a4b4bc28b96fbc7a5dc; apply after B01 to avoid competing edits. Intent: issue98 explicitly requires bounded stdout, stderr and execution time; issue93 requires precise denial reporting.
+
+Gap: ib_shizuku_run_bounded limits only elapsed time. Identity, process snapshots, process-identity queries, package queries and capability snapshots still call unbounded ib_shizuku_run; remote snapshot row limits do not bound a stalled rish startup or stderr flood. Existing worker result-size checks do not solve this outer provider boundary.
+
+Implement one bounded trusted-operation capture boundary with explicit time/stdout/stderr budgets and preserved exact status when within limits. Route the generic production observations through it while keeping any intentional raw debug executor clearly separate. Retain operation-specific atom validation, Binder-neutral callers and provider-specific lowering. No unrestricted page/model command API, new process supervisor or changed worker identities.
+
+Acceptance: successful identity/snapshot controls; hang before output; hang after partial output; stdout/stderr limit overflow; missing timeout primitive; exact status37 and denial diagnostics; all bounded failures avoid a fabricated success payload. Verify a subsequent valid operation recovers, local helper children are cleaned up and no result/attempt state changes. A local timeout does not prove the remote process stopped: report remote lifetime unknown until separately observed. Test the actual Grease runtime and explicitly account for any native helper's qualified toolchain.
+
+Start: READY_CI after B01; serialize edits in host adapter and its tests. Output: narrow patch, budget rationale, adversarial receipts and exact runtime/source identity. Physical Shizuku latency and Android cancellation behavior remain NOT_RUN until B03's device phase.
+
+SUN IB-B07 — Resume the preserved latency correction with current evidence
+
+Owner: isomorphisms/ib issue90 (https://github.com/isomorphisms/ib/issues/90) and PR #91, “Account for page-load latency without UI-thread receipt fsync,” https://github.com/isomorphisms/ib/pull/91. Continue perf/page-load-accounting@f3533211bc0eca556b3ad58a3ca64ecaaea1d618, inspected against main@10fa7bbe93ff9ffa1ba7b9f62e0dd8f6c10a86bc and retained Longview@843c7bcf5336c685c4a96a4b4bc28b96fbc7a5dc.
+
+Gap: Longview still fsyncs ordinary receipts on the UI thread; this independent preserved line owns the background writer, navigation trace and checkpoint timing. Its old low-memory emulator failed before page load. The repaired harness has not supplied the required fresh hosted or MIRO timing result. Do not rewrite the feature or count the infrastructure failure as browser performance.
+
+Reconcile only the retained latency delta, preserving real durable checkpoints and host-kill sync barrier. Scope LongViewActivity, android-webview workflow, existing latency documentation and focused tests. Coordinate integration after S03/display LongView edits; do not concurrently modify the same Activity. No reduced memory requirement, PiP revival or fabricated real-page pass.
+
+Acceptance: exact-head Android14/1GiB/45-attempt harness reaches actual navigation, commit/finish and timing assertions; producer failure remains nonzero; receipts exclude URL query/fragment secrets; queued writes flush before deliberate host death; recovery checkpoints remain durable. Record construction, checkpoint, DNS/TLS, first-byte, response and paint separately.
+
+Start: READY_CI preserved-line requalification, subject to explicit build qualification. MIRO timings are BLOCKED_EXTERNAL here. Output: source/run/artifact receipt on the existing owner and a separate physical timing gate; no replacement PR or merge claim.
+
+SUN IB-B08 — Finish the existing credential-safe Drive adapter only at its real gates
+
+Owner: isomorphisms/ib PR #79, “Receive local Drive authorization handoffs,” https://github.com/isomorphisms/ib/pull/79. Continue feature/android-drive-authorization@0b0a7bed15cb668a00ba11147618e3d353d58f1b, based on main@10fa7bbe93ff9ffa1ba7b9f62e0dd8f6c10a86bc. Intent: issue100's explicit provider adapter and docs/drive-authorization-c67.md. This is a C67-specific accepted follow-on, not evidence for MIRO A1.
+
+The parser/scope refusal, dedicated DriveAuthorizationActivity and local credential-writer handoff already exist; historical hosted build/lint/signer checks passed. Remaining gates are approved stable private signing identity, exact installed-package match, Google Android/Web client and consent registration, physical Play Services/account state, code return, durable refresh state and one authorized Drive request. Do not generate another generic OAuth implementation or relabel the public CI signer as live enrollment.
+
+Refresh the retained adapter and exact artifact evidence. Test only any newly exposed gap; preserve refusal of duplicate/unknown fields, overlapping requests, incomplete scopes and unapproved destinations. Readonly remains default. Failed or cancelled consent returns safely without ordinary task records, logs, clipboard or public fixtures acquiring codes/tokens. Recovery must allow a later explicit request without replaying a completed handoff.
+
+Start: BLOCKED_EXTERNAL for live completion. Hosted review can proceed independently; enrollment, private signer selection and physical authorization require those explicit inputs, not guesses. No account or cloud-console mutation during preparation.
+
+Output: bounded repair only if evidence finds one, otherwise an exact refreshed blocker receipt tied to the existing PR and Cat Food artifact admission owner. Preserve package/signer/update identity; do not uninstall to conceal mismatch or reopen as a duplicate.
+
+SUN IB-B09 — Close the gap between owned-process validation and signaling
+
+Owner: isomorphisms/ib issue98, https://github.com/isomorphisms/ib/issues/98. Base: longview-renderer-loss-acceptance@843c7bcf5336c685c4a96a4b4bc28b96fbc7a5dc. Intent: signal only the exact owned process; PID reuse must never target another process. Preserve merged E3 attempt semantics.
+
+Source finding: lib/android_shizuku_host.grease::ib_shizuku_signal_owned and lib/android_shizuku_worker_provider.grease::ib_shizuku_worker_signal_owned read process identity, then invoke numeric kill. Same-shell execution does not make those operations atomic. Existing stale-input tests do not exercise exit/reuse between validation and signaling. This is a source-evidenced gap, not demonstrated exploitation or device failure.
+
+First revalidate the claim and build a deterministic controlled-child race test with an explicit barrier after validation. Separate synthetic identity-reuse simulation from actual kernel execution. Diagnose available identity-bound signaling mechanisms against the real Android/Grease boundary before selecting one; do not assume pidfd support, permission, syscall exposure or compiler qualification. If no qualified mechanism meets the contract, fail closed and report that capability gap.
+
+Acceptance: exact owned child receives the intended signal; stale tuple, intervening exit/reuse and unrelated child receive none; authority loss and unavailable primitive refuse; later valid attempt recovers. No phone-wide signaling or task-policy relocation.
+
+Start: READY_CI diagnosis; serialize host/worker edits after B01/B06. Output: bounded repair or precise blocked receipt, controlled-race evidence and exact runtime/toolchain pins. Physical MIRO qualification remains separate.
+
+DEPENDENCIES AND EXECUTION NOTES
+
+B01 is the smallest first wave code change. B02 can run independently in capability files; coordinate with storage report owner before edits. B03 consumes B01's error contract and owns only phase-separated worker acceptance. B06 follows B01 in host adapter files. B04 owns live-channel source and workflow cases; B05 consumes its resulting artifact. B07 uses its retained latency worktree and must serialize LongView integration with S03/display work. B08 is independent and blocked only on its actual live inputs. B09 can begin source diagnosis independently, but its host/worker edits follow B01/B06 and coordinate with B03's acceptance harness.
+
+Avoid an extra Binder-neutrality rewrite: current src/IB/Binder.idric, lib/android_binder_host.grease and tests/test_android_binder_host.grease already implement/test the chosen boundary. Preserve that check in all jobs. Avoid repeating E2/E3, snapshot/restore, the full October1 workaround audit, or a synthetic restack against an already-contained main.
+
+Each SUN should finish with a decision/evidence receipt and a bounded Earth handoff only where implementation was not executed; mechanical Moon propagation is conditional on an exact accepted implementation. Required implementation work is not complete merely because that handoff exists. The explicit user request selects SUN ownership for this queue; routine propagation need not consume additional SUN allocation.
+
+All hosted classifications mean source work is startable, not that this audit observed a qualified local Grease/Android build runtime. Recheck actual entrypoints/pins before execution. Existing Java/Gradle and POSIX compatibility evidence remain named debt; neither overrides the user's Idriç/Grease and qualified ICK/NDK requirements. Keep all physical-device and live-OAuth acceptance NOT_RUN until actually exercised.

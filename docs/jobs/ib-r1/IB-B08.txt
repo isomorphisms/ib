@@ -1,0 +1,36 @@
+IB-R1 SUN execution contract — 2026-10-08
+Repository: https://github.com/isomorphisms/ib
+Master owner: https://github.com/isomorphisms/ib/issues/120
+
+Refresh live refs, branch/PR ownership, AGENTS.md, README.md, docs/architecture.md and shared isomorphisms/ai-ci instructions before editing. Use an isolated worktree; reuse an existing owner and do not duplicate preserved branches. A READY_CI start is not compiler, CI or device acceptance.
+
+Pinned source aliases:
+M = main@10fa7bbe93ff9ffa1ba7b9f62e0dd8f6c10a86bc.
+L = longview-renderer-loss-acceptance@843c7bcf5336c685c4a96a4b4bc28b96fbc7a5dc.
+P = 0.2/pensieve-arxiv@b4d93c47327f112433b90c0a77a00b3ddcba0af4.
+C = style/current-idric-ib@631052fbeccd183c4fd409428180b3eab824c481.
+V = material3-arxiv-viewer@78d17f8a4683a292db849647c8716a3ab2c1ceeb.
+N = material3-pinned-recents@b72b2ac9f56d3c7a66137dc0c265d1ae9756083d.
+F = 0.2/viewport-figures@778266431c57060080d35324180c71e577c995b6.
+H = ui/prepaint-collapsible-navigation@672fc7febf9a48de3270ac3d8cee6ed54d2a26d1; historical interaction specification ui/collapsible-left-navigation@1c818d85a4e10ac530af4c0e7461f6264f1efbcc.
+Shared guardrails: ai-ci@01608a2493fa409463f70e8fbfd8a123ef59ee85.
+
+Idriç owns semantics and invariants; Grease owns orchestration; Android is a narrow adapter. Qualified ICK/NDK stages only, with exact ICK gaps when NDK is selected. Existing Java/Gradle/POSIX scaffolding is named debt, not automatic qualification. No runtime substitution or builds on phones. Preserve package, stable signer and nondecreasing versionCode. Distinguish source, mocked host, compiler, emulator, artifact and physical evidence; never promote absent/skipped/stale evidence.
+
+The user selected Material 3 over expedient prepaint on September 11. Preserve acquisition, source decoding, semantic extraction and provenance, but do not expand obsolete prepaint rendering. Binder is the chosen boundary; Shizuku is a replaceable current provider. No presentation lifetime may become canonical worker/corpus ownership. E2 publication and E3 attempt binding are already on L. Kernel appendFAT, raw SD writes and a mount are not prerequisites.
+
+Outputs: implement the named slice and focused successful/failing/recovery acceptance, or give the first precise contradiction/blocker. Preserve producer status. Do not claim implementation complete from an issue, plan or handoff. Publish only the bounded review branch/output authorized by the active execution assignment; no merge, closure, deletion, release, real message, account enrollment or device mutation without its actual authority. Stop only the blocked dependency; independent work continues.
+
+Cross-job dependencies use the files beside this assignment. S03 owns source acquisition/publication/projection integration; D02 consumes it. S05 owns durable navigation; D03 projects it. S06 owns fragment/strand persistence; S07 owns observations; D06 supplies the platform observation adapter. S08 owns decisions and the first-useful retention reducer; D07 projects it. B02 and S01 share capability files and must serialize edits. B01/B06/B09 share host files. B07/S03/D02 must coordinate any LongViewActivity edits.
+
+SUN IB-B08 — Finish the existing credential-safe Drive adapter only at its real gates
+
+Owner: isomorphisms/ib PR #79, “Receive local Drive authorization handoffs,” https://github.com/isomorphisms/ib/pull/79. Continue feature/android-drive-authorization@0b0a7bed15cb668a00ba11147618e3d353d58f1b, based on main@10fa7bbe93ff9ffa1ba7b9f62e0dd8f6c10a86bc. Intent: issue100's explicit provider adapter and docs/drive-authorization-c67.md. This is a C67-specific accepted follow-on, not evidence for MIRO A1.
+
+The parser/scope refusal, dedicated DriveAuthorizationActivity and local credential-writer handoff already exist; historical hosted build/lint/signer checks passed. Remaining gates are approved stable private signing identity, exact installed-package match, Google Android/Web client and consent registration, physical Play Services/account state, code return, durable refresh state and one authorized Drive request. Do not generate another generic OAuth implementation or relabel the public CI signer as live enrollment.
+
+Refresh the retained adapter and exact artifact evidence. Test only any newly exposed gap; preserve refusal of duplicate/unknown fields, overlapping requests, incomplete scopes and unapproved destinations. Readonly remains default. Failed or cancelled consent returns safely without ordinary task records, logs, clipboard or public fixtures acquiring codes/tokens. Recovery must allow a later explicit request without replaying a completed handoff.
+
+Start: BLOCKED_EXTERNAL for live completion. Hosted review can proceed independently; enrollment, private signer selection and physical authorization require those explicit inputs, not guesses. No account or cloud-console mutation during preparation.
+
+Output: bounded repair only if evidence finds one, otherwise an exact refreshed blocker receipt tied to the existing PR and Cat Food artifact admission owner. Preserve package/signer/update identity; do not uninstall to conceal mismatch or reopen as a duplicate.

@@ -1,0 +1,99 @@
+DISPLAY RECOVERY — inspected 2026-10-08
+
+Evidence level: source/repository/API inspection only. No Android build, UI execution, physical install, or performance result was produced in this reconnaissance.
+
+Pinned source map
+- M: main 10fa7bbe93ff9ffa1ba7b9f62e0dd8f6c10a86bc; AGENTS.md, README.md, docs/architecture.md, docs/display-repair.md, docs/personal-workbench.md, src/IB/DisplayRepair.idric, src/IB/Occurrence.idric, android-prepaint/.
+- V: material3-arxiv-viewer 78d17f8a4683a292db849647c8716a3ab2c1ceeb; android-material3/README.md, android-material3/app/src/main/java/org/isomorphisms/ib/material3/MainActivity.kt, ViewExposure.java; docs/view-exposure.md; tests/ViewExposureTest.java; lib/ib/view_exposure.grease.
+- N: material3-pinned-recents b72b2ac9f56d3c7a66137dc0c265d1ae9756083d; same Material activity and README paths.
+- F: 0.2/viewport-figures 778266431c57060080d35324180c71e577c995b6; src/IB/Viewport.idric and docs/viewport.md.
+- C: style/current-idric-ib 631052fbeccd183c4fd409428180b3eab824c481; src/IB/Strand.idric, src/IB/Prepaint.idric, src/IB/Prepaint/Version1.idric, docs/canonical-information-successor.md. Current owner is isomorphisms/ib PR #48, “Rewrite canonical IB slice in current Idriç style,” https://github.com/isomorphisms/ib/pull/48 (open). Its predecessor, isomorphisms/ib PR #47, “Define canonical Idriç information and prepaint model,” https://github.com/isomorphisms/ib/pull/47, is closed and superseded, not merged.
+- H: ui/prepaint-collapsible-navigation 672fc7febf9a48de3270ac3d8cee6ed54d2a26d1; historical implementation and phone-behavior claim in isomorphisms/ib PR #51, “Add collapsible left navigation to prepaint APK,” https://github.com/isomorphisms/ib/pull/51. Interaction contract: ui/collapsible-left-navigation 1c818d85a4e10ac530af4c0e7461f6264f1efbcc, docs/task-frontend-navigation.md; isomorphisms/ib PR #50, “Specify faster collapsible task navigation,” https://github.com/isomorphisms/ib/pull/50.
+
+Candidate dispositions and important corrections
+- User correction recovered by parent from September 11, 02:11Z: prepaint was hurry scaffolding and Material 3 removes the need for it. Therefore D03 from the master candidate list must NOT become a prepaint-renderer expansion. Extraction, source identity, revision refusal and useful progressive information can survive in the selected view adapter. The stale main README/prepaint descriptions are not stronger authority.
+- Material V is a frozen-asset Compose experiment, not a live Pensieve consumer. It discovers five bundled article directories; only one has fixture body text. It uses Kotlin/Java, Gradle, Compose BOM 2026.08.00 and versionCode 1, with no explicit persistent signer in its build file. These are observed declarations, not validated package versions or accepted architecture. Current ai-ci forbids silently treating those build stages as the selected ICK/NDK path.
+- N's pinned/recent state lives in Compose remember; restarting loses it. Its fixed 320dp rail is unsuitable as an assumed small-screen solution. N and V are divergent siblings: taking N wholesale would remove V's fragment/exposure integration.
+- H and its specification merged historically, but M no longer contains PrepaintNavigation.java, PrepaintApplication.java or docs/task-frontend-navigation.md. The merge “Retain inclusion semantics; retire obsolete parallel prototypes” (4860de7264207f80e69bf57545fb0a33301cc84c) includes removal of the navigation design file; current absence cannot be called current acceptance. Preserve the intended interaction, not obsolete Activity/Termux plumbing.
+- F supplies text/figure vocabulary and ownership guidance only. It does not supply an implemented Material image renderer. PDF/source acquisition belongs elsewhere.
+- isomorphisms/ib PR #13, “Add browser-owned display repair and Copy primitive,” https://github.com/isomorphisms/ib/pull/13, is merged. M contains the primitive/accessor smoke; no generic platform Copy integration was found. PrepaintActivity's existing ClipboardManager use copies an ICU command, not the semantic text repair payload.
+- V contains substantial exposure experiment code and fixtures, but Java owns fragment identity, weighted accounting and storage. Its seven-second unit is a derived experiment, not human comprehension. Reuse relevant cases, migrate semantic ownership, and do not duplicate the S-family strand/observation ledger.
+- #55 is explicitly an investigation, not dependency-adoption authority. #118 explicitly permits a plain first UI and names optional Google Keep; it does not request a Keep replacement.
+- No independent PDF-overlay job: precise historical overlay intent was not independently recovered here. Prepared image display is supported by F; a general PDF renderer would be speculative.
+- No separate FastChat-copy job: #120 authorizes comparison, not adoption. Compare only during D01; implementation/process-layout decisions remain IB's.
+- No separate generic “UI quality” job: keyboard, focus, accessibility, restoration, memory and latency checks belong to each concrete feature.
+
+Common execution boundary for the eight assignments
+Read IB/shared ai-ci instructions and the listed exact refs; refresh live branch/PR ownership before editing. Preserve Idriç semantic ownership, Grease orchestration, and narrow platform adapters. Build only through qualified ICK or a declared NDK stage with an exact ICK gap. Existing Kotlin/Java/Gradle stubs do not authorize expanding those paths. Use one worktree/feature branch per independent change; do not modify retained branches in place. Bind tests/checks/artifacts to exact heads and propagate producer failure. Host/emulator evidence never becomes MIRO A1 evidence. Target MIRO A1 runtime only; independently named tablet/C67 obligations require their own device facts. Keep stable package/signer and nondecreasing version when producing an APK. No builds on the phone, implicit library adoption, model runtime substitution, source rewriting, telemetry export, publishing/merging, or real external message/note writes. Parent supplies shared S/B dependency IDs when assembling the queue.
+
+SUN IB-D01 — Qualify the selected Android view boundary
+Owner: https://github.com/isomorphisms/ib/issues/55; sources M, V, N and user Material-3 correction. Start READY_CI for the bounded investigation; build experiments require qualified execution paths.
+
+Inspect the actual AndroidX, Material/Material 3, Markwon, Window and termux-am-library candidates already available through the user's dependency inventory. Record exact artifacts/versions/licenses, transitive payload, compatible API/ABI, startup/residency evidence and which requirement each supplies. Distinguish Material styling from adopting Compose. Read the actual FastChat view/event/control boundaries only for reusable patterns. Produce a concrete choice or one precise capability blocker, including how Idriç/ICK reaches the chosen platform surface; do not resolve a blocked compiler by introducing Gradle.
+
+Change only the #55 qualification note/contract and a minimal build/adapter qualification fixture when supported. Reuse V's snapshot solely as a comparison input, with its fixture status explicit. Positive acceptance: one real typed text/action round trip through the proposed boundary. Negative: missing dependency, incompatible artifact or undeclared compiler cannot report qualification. Recovery: re-run from a clean build host with pinned inputs. Measure APK/startup/RAM only when actually built/executed; otherwise UNKNOWN.
+
+Non-goals: wholesale UI adoption, rewriting IB, package-list shopping, prepaint revival. Output: bounded qualification PR or exact blocked receipt. Physical MIRO measurement remains separately pending. D02–D04 and D06–D08 consume this decision, not guessed tooling.
+
+SUN IB-D02 — Feed the Material view from live retained projections
+Owner: https://github.com/isomorphisms/ib/issues/99 with #102; sources M, V and C. Start BLOCKED_EXTERNAL until D01 selects a qualified adapter and the S-family retained-result/projection boundary is available; semantic interface work may begin independently.
+
+Replace V's AssetManager-only article snapshot adapter with the existing owner’s live, bounded projection reader. The view receives semantic blocks plus source/revision identity and emits commands; it must not fetch URLs, parse PDF/HTML, choose canonical truth, or infer that the arXiv fixture is the permanent data model. Reuse C's accepted source/block obligations through its sole live successor; do not recreate the closed predecessor or force its historical prepaint transport into Material.
+
+Implement last-valid-view replacement for newer source-backed revisions and explicit unavailable/stale/partial states. Reopening after renderer/host loss must show actual retained content and provenance. Coordinate the S owner; this job owns adapter consumption only, not publication/recovery storage.
+
+Acceptance: two different non-arXiv corpora appear through the same adapter; valid newer revision replaces; malformed, out-of-order and wrong-source revisions cannot overwrite a good view; temporary read failure retains usable prior state; process restart reopens exact durable identity. Detect a constant-fixture renderer with changed-content inputs. Output a bounded adapter PR plus exact-head results. Native view recreation and MIRO restoration remain physical acceptance; no new prepaint engine.
+
+SUN IB-D03 — Recover useful pinned/recent and collapsible navigation
+Owner: https://github.com/isomorphisms/ib/issues/102; sources M, N, H and the historical #50 interaction contract. Start READY_CI for pure Idriç command/projection work after agreeing the existing task/tab owner; platform wiring depends on D01/D02 and the S-family durable-navigation slice.
+
+Implement a projection over existing durable task/tab/history identities with pin/unpin/select commands. Preserve deliberate duplicate tabs and original event order. Persist explicit pins and selection through the existing core store; derive recency from events. Keep rail visibility/local animation separate from canonical state. Port the intended < and > toggle, roughly 150ms normal motion, immediate reduced motion and latest-toggle-wins behavior into the selected adapter without resurrecting H's removed Activity/Termux hook.
+
+Acceptance: pin/select/revisit produces the expected view, no duplicate pinned/recent row, restart restores accepted selection/pins, identical URLs do not collapse tabs, corrupt or stale ids fail visibly without selecting another object. Repeated rapid toggles converge; collapse releases width; scrolling, selected source and search input remain intact. Exercise narrow and wide viewport fixtures, keyboard focus and accessible toggle labels.
+
+Non-goals: a new task model, rebuilding old prepaint navigation, adopting N wholesale or deleting exposure support. Output one bounded PR and deterministic receipts; exact MIRO interaction remains pending until exercised.
+
+SUN IB-D04 — Display prepared scientific figures without cropping
+Owner: https://github.com/isomorphisms/ib/issues/55, linked to #11; sources F and V. Start BLOCKED_EXTERNAL on D01/D02 adapter contract; pure viewport mapping fixtures can start now.
+
+Complete F's intended text/figure boundary in the selected Material view. Reuse the existing canonical information owner and Pensieve producer for source selection, prepared-image resolution, captions and provenance. Render already-local image references at preserved aspect ratio, with optional caption; figures must not be cropped or recolored. Keep title/list metadata outside the body block stream. Avoid a second figure identity system or treating arXiv ids as universal documents.
+
+Positive acceptance: mixed text/figure stream, captionless figure, tall/wide scientific figure and unchanged color samples. Negative: missing, denied, corrupt, oversized or wrong-type image reference gives bounded visible failure without fetching from the viewport or dropping neighboring text. Recovery: release decoded images outside the bounded resident window, recreate the view, and recover source selection/position from existing state. Include a changed-image fixture to reject constant placeholders, and measure decoded-memory behavior rather than only file size.
+
+Non-goals: PDF parsing, a general PDF renderer, extraction/indexing, pinch/drag frameworks, prepaint canvases or a mandatory Compose dependency. Output bounded rendering PR, exact image/source hashes and hosted test receipts. Actual MIRO visual/color/memory behavior and install identity require separate physical evidence.
+
+SUN IB-D05 — Wire trusted exact Copy through browser policy
+Owner: https://github.com/isomorphisms/ib/issues/102 and #120; sources M docs/display-repair.md and src/IB/DisplayRepair.idric; reuse the merged isomorphisms/ib PR #13, “Add browser-owned display repair and Copy primitive,” https://github.com/isomorphisms/ib/pull/13. Start READY_CI for policy/selection cases; platform integration depends on D01/D02.
+
+Connect existing CopyButton targets to the selected narrow clipboard adapter. Preserve exact semantic payload and stable target/source identity. Add cheap explicit/preformatted/code-target discovery separately from clipboard writes; implement global/per-site disable policy through the current owner. Paint browser controls outside page-controlled DOM/CSS/JavaScript. The old command-copy affordance is not this feature.
+
+Acceptance: copy multiline code, tabs, whitespace, Unicode and empty-valid payload exactly; disabled policy prevents the write; stale target/revision or invalid provenance cannot copy text from another source. Hostile page styles/events cannot suppress, restyle or intercept trusted controls. A missing clipboard capability reports failure without modifying source bytes. Recreate the renderer then copy from the reconstructed semantic target; compare fetched/retained hashes before and after. Include a deliberately whitespace-normalizing mutant.
+
+Non-goals: model-based detection, DOM rewriting, arbitrary repair features, whole-app clipboard harvesting. Output a bounded PR with semantic and adapter tests reported separately. Hosted policy proof is not physical clipboard proof; MIRO acceptance must inspect the actual copied payload.
+
+SUN IB-D06 — Connect source-linked view observations to the core ledger
+Owner: https://github.com/isomorphisms/ib/issues/101; sources V ViewExposure.java/docs/view-exposure.md/tests and M src/IB/Occurrence.idric. Start READY_CI for adapter observation fixtures; durable integration depends on the S-family fragment/observation contract, D01 and D02.
+
+Recover V's useful viewport sampling cases while moving fragment identity, observation acceptance and derived exposure semantics to their Idriç owner. The platform adapter supplies geometry, visibility and monotonic elapsed time only; the S job owns durable ordering, deduplication and crash-safe append. State source-coordinate units explicitly and preserve mapping across alternate view cuts. Seven-second units may remain a versioned derived query, never a claim of reading or comprehension.
+
+Acceptance: slow partial exposure, tiny scrolling, fast pass, return, occlusion/backgrounding and adapter disposal yield distinct deterministic events; Unicode/non-BMP text must not mix byte, code-point and platform string offsets. Two layouts identify the same source span. Revised text must not inherit old observations. Reconnect after process loss must not double-account replayed events, and a torn tail must not erase prior observations. Include mutants that count background time or duplicate reconnect intervals.
+
+Non-goals: a parallel Java-owned Pensieve store, new graph/index schemas, eye tracking, analytics export or resurrected prepaint stages. Output adapter PR and fixture provenance; physical MIRO lifecycle/occlusion evidence remains separate.
+
+SUN IB-D07 — Show retained user intent on the first useful Pensieve screen
+Owner: https://github.com/isomorphisms/ib/issues/118; sources M, V and live issue #118. Start BLOCKED_EXTERNAL on the S-family retention reducer/action contract and D01/D02; presentation fixtures can begin against that contract.
+
+Build the small Material/list projection of actual retained user-derived items. Show why an item appears, its source, and keep/dismiss/done/later/open-source/edit actions. Explicit saves/defer/return evidence should outrank mere exposure as supplied by the core policy. Reuse stable identity, provenance and rejection decisions; do not build another notes database or fill an empty corpus with recommendations. The view must not require manual retyping of retained source content.
+
+Acceptance: a browser/mail/note fixture yields useful source-linked items immediately; no corporate recommendations appear by default; empty input gives an honest actionable empty state; dismissing unchanged evidence remains dismissed after refresh and restart. Keep/done/later commands survive view loss and cannot mutate a different revision/item through stale row reuse. A denied source is marked unavailable without leaking private content. Test explicit error feedback when persistence fails rather than visually pretending an action succeeded.
+
+Non-goals: retention-policy redesign, classifiers, account import, replacement Google Keep, or real Keep writes. Preserve Keep as an optional separately permissioned action hook; the integration owner handles it. Output a bounded view PR plus exact-head interaction fixtures; MIRO first-open usability remains pending.
+
+SUN IB-D08 — Make discovered images directly actionable and measure the task
+Owner: https://github.com/isomorphisms/ib/issues/30 and #102; sources M docs/personal-workbench.md and F. Start READY_CI for core action eligibility/trace fixtures; native image actions depend on D01/D02/D04 and the existing retained-object owner.
+
+Expose Copy, Save, Share and Open source for an already-discovered, source-backed image without first navigating its webpage. Reuse prepared image identity/provenance and browser-owned action commands; keep handoff/persistence in the appropriate platform/store adapters. Record action count, first-actionable-result latency, foreground network waits and task-completion/handoff latency separately. Use the repository's concrete image-task story; success is a usable handoff, not full page load.
+
+Acceptance: a retained local image offers actions while offline with zero mandatory source-page navigation; unavailable bytes cannot be reported shared; denied/revoked grants and chooser cancellation leave retained state intact; restart preserves a saved decision and allows a fresh action. Use a controlled recipient/chooser fixture—never send to a real person. Include a mutant that inserts mandatory source navigation and a false-success adapter to verify rejection. Keep Open source available.
+
+Non-goals: image search backend, recipient automation, inferred consent, renderer redesign or sharing credentials/private corpus by default. Output bounded action PR and trace receipts, naming host/emulator versus physical results. MIRO latency and platform recipient handoff remain unproven until actually exercised.

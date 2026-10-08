@@ -1,0 +1,293 @@
+IB-R1 SUN execution contract — 2026-10-08
+Repository: https://github.com/isomorphisms/ib
+Master owner: https://github.com/isomorphisms/ib/issues/120
+
+Refresh live refs, branch/PR ownership, AGENTS.md, README.md, docs/architecture.md and shared isomorphisms/ai-ci instructions before editing. Use an isolated worktree; reuse an existing owner and do not duplicate preserved branches. A READY_CI start is not compiler, CI or device acceptance.
+
+Pinned source aliases:
+M = main@10fa7bbe93ff9ffa1ba7b9f62e0dd8f6c10a86bc.
+L = longview-renderer-loss-acceptance@843c7bcf5336c685c4a96a4b4bc28b96fbc7a5dc.
+P = 0.2/pensieve-arxiv@b4d93c47327f112433b90c0a77a00b3ddcba0af4.
+C = style/current-idric-ib@631052fbeccd183c4fd409428180b3eab824c481.
+V = material3-arxiv-viewer@78d17f8a4683a292db849647c8716a3ab2c1ceeb.
+N = material3-pinned-recents@b72b2ac9f56d3c7a66137dc0c265d1ae9756083d.
+F = 0.2/viewport-figures@778266431c57060080d35324180c71e577c995b6.
+H = ui/prepaint-collapsible-navigation@672fc7febf9a48de3270ac3d8cee6ed54d2a26d1; historical interaction specification ui/collapsible-left-navigation@1c818d85a4e10ac530af4c0e7461f6264f1efbcc.
+Shared guardrails: ai-ci@01608a2493fa409463f70e8fbfd8a123ef59ee85.
+
+Idriç owns semantics and invariants; Grease owns orchestration; Android is a narrow adapter. Qualified ICK/NDK stages only, with exact ICK gaps when NDK is selected. Existing Java/Gradle/POSIX scaffolding is named debt, not automatic qualification. No runtime substitution or builds on phones. Preserve package, stable signer and nondecreasing versionCode. Distinguish source, mocked host, compiler, emulator, artifact and physical evidence; never promote absent/skipped/stale evidence.
+
+The user selected Material 3 over expedient prepaint on September 11. Preserve acquisition, source decoding, semantic extraction and provenance, but do not expand obsolete prepaint rendering. Binder is the chosen boundary; Shizuku is a replaceable current provider. No presentation lifetime may become canonical worker/corpus ownership. E2 publication and E3 attempt binding are already on L. Kernel appendFAT, raw SD writes and a mount are not prerequisites.
+
+Outputs: implement the named slice and focused successful/failing/recovery acceptance, or give the first precise contradiction/blocker. Preserve producer status. Do not claim implementation complete from an issue, plan or handoff. Publish only the bounded review branch/output authorized by the active execution assignment; no merge, closure, deletion, release, real message, account enrollment or device mutation without its actual authority. Stop only the blocked dependency; independent work continues.
+
+Cross-job dependencies use the files beside this assignment. S03 owns source acquisition/publication/projection integration; D02 consumes it. S05 owns durable navigation; D03 projects it. S06 owns fragment/strand persistence; S07 owns observations; D06 supplies the platform observation adapter. S08 owns decisions and the first-useful retention reducer; D07 projects it. B02 and S01 share capability files and must serialize edits. B01/B06/B09 share host files. B07/S03/D02 must coordinate any LongViewActivity edits.
+
+SUN IB-Q01 — Enforce exact-text producer failures
+
+Owner: isomorphisms/ib issue #119.
+Baseline: main at 10fa7bbe93ff9ffa1ba7b9f62e0dd8f6c10a86bc.
+
+Inspect .github/workflows/exact-text.yml and any overlapping work.
+Repair the compile and oracle steps so a producer failure cannot be hidden
+by tee or by correct-looking output. Preserve all twelve semantic checks.
+
+Exercise the actual maintained steps with:
+1. a successful producer;
+2. a producer with incorrect output;
+3. a producer emitting all expected lines, then exiting 7;
+4. a failing compiler that leaves a plausible executable and log.
+
+Only the successful control may pass. Restoring the original masking
+behavior must break the regression. Follow the repository’s Idriç,
+Grease, build-policy, and exact-head evidence rules.
+
+Use an isolated branch. Deliver the patch, focused execution evidence,
+and a draft PR if publication is available. Do not merge or close issues.
+Hosted checks establish no Android or physical-device acceptance.
+
+SUN IB-D01 — Qualify the selected Android view boundary
+Owner: https://github.com/isomorphisms/ib/issues/55; sources M, V, N and user Material-3 correction. Start READY_CI for the bounded investigation; build experiments require qualified execution paths.
+
+Inspect the actual AndroidX, Material/Material 3, Markwon, Window and termux-am-library candidates already available through the user's dependency inventory. Record exact artifacts/versions/licenses, transitive payload, compatible API/ABI, startup/residency evidence and which requirement each supplies. Distinguish Material styling from adopting Compose. Read the actual FastChat view/event/control boundaries only for reusable patterns. Produce a concrete choice or one precise capability blocker, including how Idriç/ICK reaches the chosen platform surface; do not resolve a blocked compiler by introducing Gradle.
+
+Change only the #55 qualification note/contract and a minimal build/adapter qualification fixture when supported. Reuse V's snapshot solely as a comparison input, with its fixture status explicit. Positive acceptance: one real typed text/action round trip through the proposed boundary. Negative: missing dependency, incompatible artifact or undeclared compiler cannot report qualification. Recovery: re-run from a clean build host with pinned inputs. Measure APK/startup/RAM only when actually built/executed; otherwise UNKNOWN.
+
+Non-goals: wholesale UI adoption, rewriting IB, package-list shopping, prepaint revival. Output: bounded qualification PR or exact blocked receipt. Physical MIRO measurement remains separately pending. D02–D04 and D06–D08 consume this decision, not guessed tooling.
+
+SUN IB-D02 — Feed the Material view from live retained projections
+Owner: https://github.com/isomorphisms/ib/issues/99 with #102; sources M, V and C. Start BLOCKED_EXTERNAL until D01 selects a qualified adapter and the S-family retained-result/projection boundary is available; semantic interface work may begin independently.
+
+Replace V's AssetManager-only article snapshot adapter with the existing owner’s live, bounded projection reader. The view receives semantic blocks plus source/revision identity and emits commands; it must not fetch URLs, parse PDF/HTML, choose canonical truth, or infer that the arXiv fixture is the permanent data model. Reuse C's accepted source/block obligations through its sole live successor; do not recreate the closed predecessor or force its historical prepaint transport into Material.
+
+Implement last-valid-view replacement for newer source-backed revisions and explicit unavailable/stale/partial states. Reopening after renderer/host loss must show actual retained content and provenance. Coordinate the S owner; this job owns adapter consumption only, not publication/recovery storage.
+
+Acceptance: two different non-arXiv corpora appear through the same adapter; valid newer revision replaces; malformed, out-of-order and wrong-source revisions cannot overwrite a good view; temporary read failure retains usable prior state; process restart reopens exact durable identity. Detect a constant-fixture renderer with changed-content inputs. Output a bounded adapter PR plus exact-head results. Native view recreation and MIRO restoration remain physical acceptance; no new prepaint engine.
+
+SUN IB-D03 — Recover useful pinned/recent and collapsible navigation
+Owner: https://github.com/isomorphisms/ib/issues/102; sources M, N, H and the historical #50 interaction contract. Start READY_CI for pure Idriç command/projection work after agreeing the existing task/tab owner; platform wiring depends on D01/D02 and the S-family durable-navigation slice.
+
+Implement a projection over existing durable task/tab/history identities with pin/unpin/select commands. Preserve deliberate duplicate tabs and original event order. Persist explicit pins and selection through the existing core store; derive recency from events. Keep rail visibility/local animation separate from canonical state. Port the intended < and > toggle, roughly 150ms normal motion, immediate reduced motion and latest-toggle-wins behavior into the selected adapter without resurrecting H's removed Activity/Termux hook.
+
+Acceptance: pin/select/revisit produces the expected view, no duplicate pinned/recent row, restart restores accepted selection/pins, identical URLs do not collapse tabs, corrupt or stale ids fail visibly without selecting another object. Repeated rapid toggles converge; collapse releases width; scrolling, selected source and search input remain intact. Exercise narrow and wide viewport fixtures, keyboard focus and accessible toggle labels.
+
+Non-goals: a new task model, rebuilding old prepaint navigation, adopting N wholesale or deleting exposure support. Output one bounded PR and deterministic receipts; exact MIRO interaction remains pending until exercised.
+
+SUN IB-D04 — Display prepared scientific figures without cropping
+Owner: https://github.com/isomorphisms/ib/issues/55, linked to #11; sources F and V. Start BLOCKED_EXTERNAL on D01/D02 adapter contract; pure viewport mapping fixtures can start now.
+
+Complete F's intended text/figure boundary in the selected Material view. Reuse the existing canonical information owner and Pensieve producer for source selection, prepared-image resolution, captions and provenance. Render already-local image references at preserved aspect ratio, with optional caption; figures must not be cropped or recolored. Keep title/list metadata outside the body block stream. Avoid a second figure identity system or treating arXiv ids as universal documents.
+
+Positive acceptance: mixed text/figure stream, captionless figure, tall/wide scientific figure and unchanged color samples. Negative: missing, denied, corrupt, oversized or wrong-type image reference gives bounded visible failure without fetching from the viewport or dropping neighboring text. Recovery: release decoded images outside the bounded resident window, recreate the view, and recover source selection/position from existing state. Include a changed-image fixture to reject constant placeholders, and measure decoded-memory behavior rather than only file size.
+
+Non-goals: PDF parsing, a general PDF renderer, extraction/indexing, pinch/drag frameworks, prepaint canvases or a mandatory Compose dependency. Output bounded rendering PR, exact image/source hashes and hosted test receipts. Actual MIRO visual/color/memory behavior and install identity require separate physical evidence.
+
+SUN IB-D05 — Wire trusted exact Copy through browser policy
+Owner: https://github.com/isomorphisms/ib/issues/102 and #120; sources M docs/display-repair.md and src/IB/DisplayRepair.idric; reuse the merged isomorphisms/ib PR #13, “Add browser-owned display repair and Copy primitive,” https://github.com/isomorphisms/ib/pull/13. Start READY_CI for policy/selection cases; platform integration depends on D01/D02.
+
+Connect existing CopyButton targets to the selected narrow clipboard adapter. Preserve exact semantic payload and stable target/source identity. Add cheap explicit/preformatted/code-target discovery separately from clipboard writes; implement global/per-site disable policy through the current owner. Paint browser controls outside page-controlled DOM/CSS/JavaScript. The old command-copy affordance is not this feature.
+
+Acceptance: copy multiline code, tabs, whitespace, Unicode and empty-valid payload exactly; disabled policy prevents the write; stale target/revision or invalid provenance cannot copy text from another source. Hostile page styles/events cannot suppress, restyle or intercept trusted controls. A missing clipboard capability reports failure without modifying source bytes. Recreate the renderer then copy from the reconstructed semantic target; compare fetched/retained hashes before and after. Include a deliberately whitespace-normalizing mutant.
+
+Non-goals: model-based detection, DOM rewriting, arbitrary repair features, whole-app clipboard harvesting. Output a bounded PR with semantic and adapter tests reported separately. Hosted policy proof is not physical clipboard proof; MIRO acceptance must inspect the actual copied payload.
+
+SUN IB-D06 — Connect source-linked view observations to the core ledger
+Owner: https://github.com/isomorphisms/ib/issues/101; sources V ViewExposure.java/docs/view-exposure.md/tests and M src/IB/Occurrence.idric. Start READY_CI for adapter observation fixtures; durable integration depends on the S-family fragment/observation contract, D01 and D02.
+
+Recover V's useful viewport sampling cases while moving fragment identity, observation acceptance and derived exposure semantics to their Idriç owner. The platform adapter supplies geometry, visibility and monotonic elapsed time only; the S job owns durable ordering, deduplication and crash-safe append. State source-coordinate units explicitly and preserve mapping across alternate view cuts. Seven-second units may remain a versioned derived query, never a claim of reading or comprehension.
+
+Acceptance: slow partial exposure, tiny scrolling, fast pass, return, occlusion/backgrounding and adapter disposal yield distinct deterministic events; Unicode/non-BMP text must not mix byte, code-point and platform string offsets. Two layouts identify the same source span. Revised text must not inherit old observations. Reconnect after process loss must not double-account replayed events, and a torn tail must not erase prior observations. Include mutants that count background time or duplicate reconnect intervals.
+
+Non-goals: a parallel Java-owned Pensieve store, new graph/index schemas, eye tracking, analytics export or resurrected prepaint stages. Output adapter PR and fixture provenance; physical MIRO lifecycle/occlusion evidence remains separate.
+
+SUN IB-D07 — Show retained user intent on the first useful Pensieve screen
+Owner: https://github.com/isomorphisms/ib/issues/118; sources M, V and live issue #118. Start BLOCKED_EXTERNAL on the S-family retention reducer/action contract and D01/D02; presentation fixtures can begin against that contract.
+
+Build the small Material/list projection of actual retained user-derived items. Show why an item appears, its source, and keep/dismiss/done/later/open-source/edit actions. Explicit saves/defer/return evidence should outrank mere exposure as supplied by the core policy. Reuse stable identity, provenance and rejection decisions; do not build another notes database or fill an empty corpus with recommendations. The view must not require manual retyping of retained source content.
+
+Acceptance: a browser/mail/note fixture yields useful source-linked items immediately; no corporate recommendations appear by default; empty input gives an honest actionable empty state; dismissing unchanged evidence remains dismissed after refresh and restart. Keep/done/later commands survive view loss and cannot mutate a different revision/item through stale row reuse. A denied source is marked unavailable without leaking private content. Test explicit error feedback when persistence fails rather than visually pretending an action succeeded.
+
+Non-goals: retention-policy redesign, classifiers, account import, replacement Google Keep, or real Keep writes. Preserve Keep as an optional separately permissioned action hook; the integration owner handles it. Output a bounded view PR plus exact-head interaction fixtures; MIRO first-open usability remains pending.
+
+SUN IB-D08 — Make discovered images directly actionable and measure the task
+Owner: https://github.com/isomorphisms/ib/issues/30 and #102; sources M docs/personal-workbench.md and F. Start READY_CI for core action eligibility/trace fixtures; native image actions depend on D01/D02/D04 and the existing retained-object owner.
+
+Expose Copy, Save, Share and Open source for an already-discovered, source-backed image without first navigating its webpage. Reuse prepared image identity/provenance and browser-owned action commands; keep handoff/persistence in the appropriate platform/store adapters. Record action count, first-actionable-result latency, foreground network waits and task-completion/handoff latency separately. Use the repository's concrete image-task story; success is a usable handoff, not full page load.
+
+Acceptance: a retained local image offers actions while offline with zero mandatory source-page navigation; unavailable bytes cannot be reported shared; denied/revoked grants and chooser cancellation leave retained state intact; restart preserves a saved decision and allows a fresh action. Use a controlled recipient/chooser fixture—never send to a real person. Include a mutant that inserts mandatory source navigation and a false-success adapter to verify rejection. Keep Open source available.
+
+Non-goals: image search backend, recipient automation, inferred consent, renderer redesign or sharing credentials/private corpus by default. Output bounded action PR and trace receipts, naming host/emulator versus physical results. MIRO latency and platform recipient handoff remain unproven until actually exercised.
+
+SUN IB-B01 — Preserve authority failure status through Binder
+
+Owner: isomorphisms/ib issue93 (https://github.com/isomorphisms/ib/issues/93); isolated child of retained longview-renderer-loss-acceptance, inspected 843c7bcf5336c685c4a96a4b4bc28b96fbc7a5dc. Intent: issue93 requires exact denials and distinguishes shell/root/unavailable authority; issue98 forbids silent success. Reuse the retained Longview implementation and merged attempt/publication work.
+
+Concrete defect: lib/android_shizuku_host.grease::ib_shizuku_authority converts every ib_shizuku_effective_uid failure into status1. Existing tests prove raw ib_shizuku_run preserves status37 but never exercise that status through authority or ib_binder_authority. Fix this wrapper to preserve exact nonzero status and stderr, with no authority success row. Validate the successful UID response so malformed/multiline output cannot masquerade as observed authority; preserve valid root, shell and ordinary-app distinctions.
+
+Scope: that wrapper, tests/test_android_shizuku_host.grease, focused Binder-facing regression, and explanatory receipt. No provider replacement, new task types, device mutation, or E2/E3 rewrite. Check active workers before touching shared host tests.
+
+Acceptance: real Grease executes happy UID0/2000/ordinary controls; provider exits37/124 and permission-denial text emerge unchanged through Binder; malformed UID refuses; restored provider succeeds after failure. A mutant collapsing status37 to1 must fail. Report unavailable Grease explicitly; POSIX compatibility execution alone is not Grease acceptance.
+
+Start: READY_CI, no device prerequisite. Output: bounded patch/commit, exact runtime identity and execution receipt; physical authority remains NOT_RUN. This is the first independently useful backend execution slice.
+
+SUN IB-B02 — Bind IB capability provenance to the actual rish bundle
+
+Owner: isomorphisms/ib issue93 and Cat Food issue93 (https://github.com/isomorphisms/catfood/issues/93). IB base: longview-renderer-loss-acceptance@843c7bcf5336c685c4a96a4b4bc28b96fbc7a5dc. Reuse merged Cat Food c67-physical-profile@976c227f9081ad9d87f0535af3fb2ca3c0d93734, android/preserve-shizuku.sh. Intent: issue93's separation of files, persisted grants and actual authority; issue120's bootstrap/restoration requirement.
+
+Gap: lib/android_device_capabilities.grease merely repeats receipt hashes as reported; rish resolution and that recorded bundle are not compared. Implement a read-only consumer observation that distinguishes receipt-present, saved-pair-verified, active-pair-matches, DEX-mode-valid and live-authority-observed. Preserve unknown/invalid states. Resolve the actual explicit/PATH command; never silently switch it to the saved copy. Consult Cat Food's current per-device identity contract rather than hardcoding the obsolete manifest-unavailable claim.
+
+Scope: capability adapter/tests/documentation. Reuse Cat Food preservation; do not create another backup/restore implementation, automatically restore files, start Shizuku, or promise atomic pair replacement. Keep ordinary Binder IPC independent of privileged-provider availability.
+
+Acceptance: valid matching pair; corrupt saved DEX; stale receipt; different active pair; missing sibling; writable DEX; changed current pointer during observation; two devices sharing a model but not identity. Repeating observation changes no files. Recovery after explicit external restoration yields matching provenance without claiming shell/root authority.
+
+Start: READY_CI, independent of B01 except any shared report wiring. Output: bounded consumer patch and fixtures, exact Cat Food/IB pins, reconciled old-reference note. MIRO reboot/reacquisition remains a separate device result.
+
+SUN IB-B03 — Make worker lifetime acceptance restartable across callers
+
+Owner: isomorphisms/ib issue98 (https://github.com/isomorphisms/ib/issues/98), retained Longview@843c7bcf5336c685c4a96a4b4bc28b96fbc7a5dc. Intent: issue98 independently requires UI, initiating caller, worker, Shizuku and reboot outcomes. Consume merged attempt binding unchanged.
+
+Gap: bin/accept_android_longview_worker.grease accepts only immediate or kill, generates identity inside one invocation, and cannot resume after caller/service/reboot loss from a durable handoff. Extend acceptance orchestration with bounded start/observe/resume phases and a plain receipt carrying the exact work/result/launch/boot/UID/PID/start/name/host/attempt tuple. Keep policy in IB.WorkerLifecycle; the harness must not invent a restart policy.
+
+Scope: acceptance entrypoint, fixtures and lifecycle documentation. Reuse lib/android_longview_worker.grease and current provider. No new supervisor, background service, privilege escalation, process immortality claim, automatic nonreplayable retry, or phone reboot during hosted work.
+
+Acceptance: start and later read from distinct caller processes; delayed caller loss; exact owned kill; stale handoff refusal; provider unavailable then restored; committed result retained; simulated changed boot; receipt truncation/tampering refuses before signal or publication. Exercise actual fixed worker program where possible, not only a hand-written fake. A lost running process must remain distinguishable from an already committed result.
+
+Start: READY_CI after B01 if its status contract is consumed. Hosted implementation can proceed now; actual MIRO service-stop/reboot phases require explicit device access and scope. Output: runnable phase-separated Grease harness plus exact-source hosted receipt and an unfilled physical-case matrix, never fabricated device rows.
+
+SUN IB-B04 — Bound live PFD sessions and prove unauthorized access refusal
+
+Owner: isomorphisms/ib issues85/98, https://github.com/isomorphisms/ib/issues/85. Base: longview-renderer-loss-acceptance@843c7bcf5336c685c4a96a4b4bc28b96fbc7a5dc. Intent: issue98 requires bounded framing, caller authorization, stalled-peer handling and cheap waitable events.
+
+Gap: LiveChannelProvider.java creates a daemon thread for every open; read_exact and the final EOF wait have no session deadline or concurrency cap. Current android-webview workflow covers ping/pong and both death directions, but no no-grant/revoked-grant, partial-frame stall or session-exhaustion case. The reader is a separate Android shim; it does not transfer a descriptor into the Termux POSIX process.
+
+Implement bounded sessions and cancellation through the existing narrow Android PFD adapter, with admission/refusal and timeout diagnostics. Keep source-defined ping/pong semantics and URI authorization. Scope LiveChannelProvider, reader fixture, their boundary checks and exact-head Android acceptance. Do not replace Binder/PFD with TCP, select a product transport, or turn the provider into durable storage. Existing Java/Gradle is platform debt, not authorization for a new build fallback; obey the repository's qualified build gate.
+
+Acceptance: authorized exchange; ungranted and revoked callers denied; malformed/partial/oversized frames; idle peer; configured session limit; EOF in both death directions; reconnect after each release; resources return to baseline. Use waitable cancellation, not frequent rish polling.
+
+Start: READY_CI source/test slice once the actual Android build path is qualified; report its exact blocker otherwise. Output: bounded adapter patch and emulator evidence; physical MIRO channel acceptance remains separate.
+
+SUN IB-B05 — Execute the distinct MIRO live-channel and durable-reader gates
+
+Owner: isomorphisms/ib issues84/85/98 and retained Longview@843c7bcf5336c685c4a96a4b4bc28b96fbc7a5dc; https://github.com/isomorphisms/ib/issues/84. Intent: issues85/98 and docs/provider-retirement.md require actual cross-UID behavior and truthful caller boundaries. Reuse current provider/reader packages; the old provider experiment is already superseded.
+
+Implement any missing device receipt orchestration, then execute on the verified MIRO A1 with exact APK digest, source, stable package/signer/version and replacement-install evidence. Record separate app, reader and Termux identities. Demonstrate two independent complete read-only descriptors, host termination followed by a fresh authorized late read, and unchanged committed bytes. Separately perform live ping/pong, no-grant denial, caller-first/provider-first death, no-listener behavior and reconnect. Report accurately whether only the Android shim receives the PFD.
+
+Observe grant loss after package force-stop and separately after reboot only when those device operations are authorized; reacquisition must not recreate the result. Never move private bytes into shared storage to force success. Do not revive the failed Unix-socket experiment or reinterpret an emulator pass as physical evidence.
+
+Acceptance includes unauthorized reader refusal, attempted writes refused, absent provider distinguished from absent result, changed provider generation, and recovery without reacquisition. Preserve negative results.
+
+Start: BLOCKED_EXTERNAL in this environment: no MIRO A1 connection or qualified installed artifacts. Hosted harness preparation can begin; physical run depends on B04's qualified artifact and explicit device scope. Output: executed case receipts or a precise access/artifact blocker, with no blanket IPC-architecture acceptance.
+
+SUN IB-B06 — Bound provider observation time and output
+
+Owner: isomorphisms/ib issues93/98; https://github.com/isomorphisms/ib/issues/98. Base: retained Longview@843c7bcf5336c685c4a96a4b4bc28b96fbc7a5dc; apply after B01 to avoid competing edits. Intent: issue98 explicitly requires bounded stdout, stderr and execution time; issue93 requires precise denial reporting.
+
+Gap: ib_shizuku_run_bounded limits only elapsed time. Identity, process snapshots, process-identity queries, package queries and capability snapshots still call unbounded ib_shizuku_run; remote snapshot row limits do not bound a stalled rish startup or stderr flood. Existing worker result-size checks do not solve this outer provider boundary.
+
+Implement one bounded trusted-operation capture boundary with explicit time/stdout/stderr budgets and preserved exact status when within limits. Route the generic production observations through it while keeping any intentional raw debug executor clearly separate. Retain operation-specific atom validation, Binder-neutral callers and provider-specific lowering. No unrestricted page/model command API, new process supervisor or changed worker identities.
+
+Acceptance: successful identity/snapshot controls; hang before output; hang after partial output; stdout/stderr limit overflow; missing timeout primitive; exact status37 and denial diagnostics; all bounded failures avoid a fabricated success payload. Verify a subsequent valid operation recovers, local helper children are cleaned up and no result/attempt state changes. A local timeout does not prove the remote process stopped: report remote lifetime unknown until separately observed. Test the actual Grease runtime and explicitly account for any native helper's qualified toolchain.
+
+Start: READY_CI after B01; serialize edits in host adapter and its tests. Output: narrow patch, budget rationale, adversarial receipts and exact runtime/source identity. Physical Shizuku latency and Android cancellation behavior remain NOT_RUN until B03's device phase.
+
+SUN IB-B07 — Resume the preserved latency correction with current evidence
+
+Owner: isomorphisms/ib issue90 (https://github.com/isomorphisms/ib/issues/90) and isomorphisms/ib PR #91, “Account for page-load latency without UI-thread receipt fsync,” https://github.com/isomorphisms/ib/pull/91. Continue perf/page-load-accounting@f3533211bc0eca556b3ad58a3ca64ecaaea1d618, inspected against main@10fa7bbe93ff9ffa1ba7b9f62e0dd8f6c10a86bc and retained Longview@843c7bcf5336c685c4a96a4b4bc28b96fbc7a5dc.
+
+Gap: Longview still fsyncs ordinary receipts on the UI thread; this independent preserved line owns the background writer, navigation trace and checkpoint timing. Its old low-memory emulator failed before page load. The repaired harness has not supplied the required fresh hosted or MIRO timing result. Do not rewrite the feature or count the infrastructure failure as browser performance.
+
+Reconcile only the retained latency delta, preserving real durable checkpoints and host-kill sync barrier. Scope LongViewActivity, android-webview workflow, existing latency documentation and focused tests. Coordinate integration after S03/display LongView edits; do not concurrently modify the same Activity. No reduced memory requirement, PiP revival or fabricated real-page pass.
+
+Acceptance: exact-head Android14/1GiB/45-attempt harness reaches actual navigation, commit/finish and timing assertions; producer failure remains nonzero; receipts exclude URL query/fragment secrets; queued writes flush before deliberate host death; recovery checkpoints remain durable. Record construction, checkpoint, DNS/TLS, first-byte, response and paint separately.
+
+Start: READY_CI preserved-line requalification, subject to explicit build qualification. MIRO timings are BLOCKED_EXTERNAL here. Output: source/run/artifact receipt on the existing owner and a separate physical timing gate; no replacement PR or merge claim.
+
+SUN IB-B08 — Finish the existing credential-safe Drive adapter only at its real gates
+
+Owner: isomorphisms/ib PR #79, “Receive local Drive authorization handoffs,” https://github.com/isomorphisms/ib/pull/79. Continue feature/android-drive-authorization@0b0a7bed15cb668a00ba11147618e3d353d58f1b, based on main@10fa7bbe93ff9ffa1ba7b9f62e0dd8f6c10a86bc. Intent: issue100's explicit provider adapter and docs/drive-authorization-c67.md. This is a C67-specific accepted follow-on, not evidence for MIRO A1.
+
+The parser/scope refusal, dedicated DriveAuthorizationActivity and local credential-writer handoff already exist; historical hosted build/lint/signer checks passed. Remaining gates are approved stable private signing identity, exact installed-package match, Google Android/Web client and consent registration, physical Play Services/account state, code return, durable refresh state and one authorized Drive request. Do not generate another generic OAuth implementation or relabel the public CI signer as live enrollment.
+
+Refresh the retained adapter and exact artifact evidence. Test only any newly exposed gap; preserve refusal of duplicate/unknown fields, overlapping requests, incomplete scopes and unapproved destinations. Readonly remains default. Failed or cancelled consent returns safely without ordinary task records, logs, clipboard or public fixtures acquiring codes/tokens. Recovery must allow a later explicit request without replaying a completed handoff.
+
+Start: BLOCKED_EXTERNAL for live completion. Hosted review can proceed independently; enrollment, private signer selection and physical authorization require those explicit inputs, not guesses. No account or cloud-console mutation during preparation.
+
+Output: bounded repair only if evidence finds one, otherwise an exact refreshed blocker receipt tied to the existing PR and Cat Food artifact admission owner. Preserve package/signer/update identity; do not uninstall to conceal mismatch or reopen as a duplicate.
+
+SUN IB-B09 — Close the gap between owned-process validation and signaling
+
+Owner: isomorphisms/ib issue98, https://github.com/isomorphisms/ib/issues/98. Base: longview-renderer-loss-acceptance@843c7bcf5336c685c4a96a4b4bc28b96fbc7a5dc. Intent: signal only the exact owned process; PID reuse must never target another process. Preserve merged E3 attempt semantics.
+
+Source finding: lib/android_shizuku_host.grease::ib_shizuku_signal_owned and lib/android_shizuku_worker_provider.grease::ib_shizuku_worker_signal_owned read process identity, then invoke numeric kill. Same-shell execution does not make those operations atomic. Existing stale-input tests do not exercise exit/reuse between validation and signaling. This is a source-evidenced gap, not demonstrated exploitation or device failure.
+
+First revalidate the claim and build a deterministic controlled-child race test with an explicit barrier after validation. Separate synthetic identity-reuse simulation from actual kernel execution. Diagnose available identity-bound signaling mechanisms against the real Android/Grease boundary before selecting one; do not assume pidfd support, permission, syscall exposure or compiler qualification. If no qualified mechanism meets the contract, fail closed and report that capability gap.
+
+Acceptance: exact owned child receives the intended signal; stale tuple, intervening exit/reuse and unrelated child receive none; authority loss and unavailable primitive refuse; later valid attempt recovers. No phone-wide signaling or task-policy relocation.
+
+Start: READY_CI diagnosis; serialize host/worker edits after B01/B06. Output: bounded repair or precise blocked receipt, controlled-race evidence and exact runtime/toolchain pins. Physical MIRO qualification remains separate.
+
+SUN IB-S01 — Reconcile storage observations before admission
+Owner: isomorphisms/ib issue #95, https://github.com/isomorphisms/ib/issues/95. Base: longview-renderer-loss-acceptance at 843c7bcf5336c685c4a96a4b4bc28b96fbc7a5dc; recheck live ownership before editing. Intent: Oct 1 installation-specific capacity/authority requirement, reaffirmed in #120.
+Implement one Idriç reconciliation consumer for existing shell/Cat Food and app reports. Reuse lib/android_device_capabilities.grease, android-webview/.../AppStorageCapabilities.java, and IB.StorageAdmission; do not create another probe collector. Preserve installation, observation time, app/shell authority, source head, volume/media generation and provenance. Unknown alias relationships cannot enlarge available capacity; differing installation identities cannot combine. A framework root plus canWrite remains reported access, not measured write success. Retain explicit unknown/denied/stale/simulated states.
+Acceptance: same-model phones with/without SD remain different; aliases never double-budget; >4 GiB values survive; shell-only access cannot admit app writes; stale/mismatched observations refuse; internal-low/SD-large still preserves internal floor. Feed results into production admission, with a known-bad authority-promoting consumer rejected. Reopen receipts without changing observations; collect no recursive/private corpus and perform no probe writes.
+Start: READY_CI, independent of E4; coordinate shared capability-file edits with B02's Cat Food/rish provenance repair. Exact-head semantic tests require the real Idriç/Grease path and declared ICK/NDK stages; unavailable runtime is a named blocker. Output: bounded PR plus good/bad report fixtures and exact test receipts. Physical A1/C67 reports and actual bounded-writer proof remain separate NOT_RUN acceptance; do not infer them from historical Cat Food hardware facts.
+
+SUN IB-S02 — Enforce decoder growth limits at the real boundary
+Owner: isomorphisms/ib #96/#104, https://github.com/isomorphisms/ib/issues/96 and https://github.com/isomorphisms/ib/issues/104. Inspected sources: Longview 843c7bcf5336c685c4a96a4b4bc28b96fbc7a5dc, Pensieve b4d93c47327f112433b90c0a77a00b3ddcba0af4. Intent: Oct 1 bounded expansion/decoded-memory requirement, not merely raw-file admission.
+Connect IB.WorkBounds to one actual supported post-acquisition decoder from S03/the retained Pensieve branch. Inspect bin/ib-source.grease, lib/ib/pensieve.grease, and retained-source tests. Start with bounded text/source projection; include image dimensions only if that same path actually decodes images. Charge temporary/output/diagnostic growth and elapsed work; leave network transfer owned by S03. Numeric smoke counters alone cannot establish enforcement. Retain original source bytes and last-complete derivative when a replacement exceeds its budget.
+Acceptance: small valid source yields exact source-linked text; excessive output, parser failure, full quota, interrupted publication and zero/nonzero producer exits remain distinct; no empty complete result replaces previous valid output. A deliberately bypassed bound must fail acceptance. Reopen after producer death without redownloading; preserve partial/unsupported status and provenance. Use tiny isolated quotas, never fill a phone.
+Start: BLOCKED_EXTERNAL on S03's selected decoder contract and qualified runtime; once supplied, READY_CI in a separate worktree. Idriç owns limits; Grease orchestrates; no Python/Ithon runtime or stock-shell substitution. Output: bounded implementation PR and measured stage receipts bound to exact head. Physical memory and whole-device pressure claims remain NOT_RUN.
+
+SUN IB-S03 — Persist source-derived Longview results in Cauldron/Pensieve
+Owner: isomorphisms/ib #83/#99/#100, https://github.com/isomorphisms/ib/issues/99. Sources: Longview 843c7bcf5336c685c4a96a4b4bc28b96fbc7a5dc; isomorphisms/ib PR #46, “Retain source generations and rebuild source-linked Pensieve views,” https://github.com/isomorphisms/ib/pull/46, b4d93c47327f112433b90c0a77a00b3ddcba0af4. Intent: retained useful information survives every producing process; a constant marker is insufficient.
+Complete one bounded public-source path through the existing trusted worker, admission, immutable publication, canonical Cauldron intake and Pensieve projection. Reuse lib/android_shizuku_worker_provider.grease, IB.WorkerLifecycle, IB.StorageAdmission, lib/result_publication.grease and bin/retain-source.grease. E2 immutable publication and E3 attempt binding are already merged; preserve them. Replace fixture-only producer acceptance with a fixed trusted acquisition operation, not an arbitrary command string. Keep page/parser inputs unprivileged. Bind requested/resolved identity, bytes/hash, completeness, acquisition and decoder revision to existing task/event/result identities.
+Acceptance: two changed source bodies produce corresponding recoverable content; hostile arguments cannot become commands; quota/short write/stale attempt fails without false completion; committed bytes survive worker/renderer/host loss and independent late reads; no network rerun on reopen. Private credentials and unsafe requests remain excluded. Display consumer is a separate job, using this actual content contract.
+Start: READY_CI after backend recovery supplies a stable Longview integration base; coordinate worker-file ownership. Output: bounded PR and exact-head source→publication→search/reopen receipts. Preserve Idriç/Grease and qualified ICK/NDK boundaries. Real Shizuku and physical A1 behavior remain NOT_RUN until independently exercised.
+
+SUN IB-S04 — Confine and enumerate durable task records safely
+Owner: isomorphisms/ib #99, https://github.com/isomorphisms/ib/issues/99. Base: main 10fa7bbe93ff9ffa1ba7b9f62e0dd8f6c10a86bc; same adapter persists on Longview 843c7bcf5336c685c4a96a4b4bc28b96fbc7a5dc. Intent: partial/corrupt newest state cannot hide all valid tasks; identities must not escape their root.
+Repair android-webview/.../DurableTaskStore.java and existing DurableTaskRecordTest.java first. Literal '.' and '..' currently pass path_identity; reject before I/O. Add bounded record discovery returning all valid protected records plus explicit per-record failure information, rather than newest-file-only unbounded readAllBytes. Preserve current protected-task semantics and safe neutral navigation. Inspect symlink parents and entries; do not follow a store entry outside the selected root. This job does not make ordinary tabs persistent or promise a multi-file transaction.
+Acceptance: valid records retain exact IDs/order; dot/dot-dot, linked paths and oversized files refuse with no outside-root change; a corrupt newest record leaves older valid records discoverable; interruption leaves previous committed record usable; repeated enumeration is deterministic and does not rewrite sources. Include a positive write/read control and known-bad traversal/discovery mutation.
+Start: source repair READY_CI, independent and suitable first execution slice; compiled acceptance BLOCKED_EXTERNAL until a qualified compile/test stage is supplied. None was established by this audit. Keep Android a narrow adapter; do not add Java browser semantics or run an undeclared Java/Gradle compiler as an ICK/NDK substitute. Output: bounded repair PR, source-level and actually executed test receipts separately. No phone access, migration, deletion, or merge is authorized by this job.
+
+SUN IB-S05 — Preserve ordinary tabs and stable navigation events
+Owner: isomorphisms/ib #99, https://github.com/isomorphisms/ib/issues/99. Inspected main: 10fa7bbe93ff9ffa1ba7b9f62e0dd8f6c10a86bc. Intent: browser-owned ordinary navigation survives renderer loss; equal URLs cannot collapse distinct intentions. Current DurableTaskStore explicitly rejects ordinary tabs and IB.History order is not stable event identity.
+Implement the smallest ordinary sleeping-tab persistence slice in Idriç, adapting the existing store representation after S04. Inspect IB.History, IB.LongViewTask, DurableTaskRecord and storage-model before adding records. Persist tab identity, stable append-only navigation occurrence, resource reference and explicit protection mode; do not turn every tab into a protected authenticated transaction. Do not broaden retained URL/form secrets or treat content hashes as resource/event identity.
+Acceptance: two tabs visiting the same public fixture retain distinct IDs and ordered events across restart; repeated import/replay preserves event identity without duplication; explicit duplicate-tab action differs from revisit; corrupt/truncated append remains an explicit incomplete record without erasing earlier events. Dry-run migration of copied protected fixtures preserves IDs, generations and secret exclusions; rollback reads originals unchanged. Renderer absence must not prevent enumeration. Known-bad URL-deduplication must fail the golden corpus.
+Start: BLOCKED_EXTERNAL until S04 reader contract is stable, then READY_CI. Reuse existing Idriç/Grease and declared ICK/NDK paths; do not implement policy in Java or add a database/framework. Output: bounded implementation PR and exact-head migration/replay evidence; physical replacement-install and Android restart remain separately NOT_RUN. Do not modify real user records during qualification.
+
+SUN IB-S06 — Persist source-linked fragments and ordered strands
+Owner: isomorphisms/ib #101, https://github.com/isomorphisms/ib/issues/101. Sources: main 10fa7bbe93ff9ffa1ba7b9f62e0dd8f6c10a86bc; canonical successor isomorphisms/ib PR #48, “Rewrite canonical IB slice in current Idriç style,” https://github.com/isomorphisms/ib/pull/48, 631052fbeccd183c4fd409428180b3eab824c481. Intent: retained source graph and chosen reading journey outlive replaceable views.
+Implement ordinary-file round-trip for source-revision references, explicitly measured ranges, fragment IDs and ordered traversal. Reuse src/IB/Occurrence.idric exact search/window semantics. Reconcile its MaterializedStrand with the canonical successor branch src/IB/Strand.idric's information-block projection before serialization; neither inherited name nor prepaint format defines reading. Preserve original source bytes and character-versus-byte units, with explicit mapping where needed. Grease handles files; Idriç validates graph meaning. Add only indexes needed for source, reverse-link and window queries.
+Acceptance: overlapping literal matches and Unicode ranges map exactly; two view cuts retain one source revision; changed text cannot inherit old fragment observations; malformed/out-of-range/dangling records refuse; an interrupted write preserves the prior valid graph. Deleting/rebuilding indexes gives identical strand windows and incoming/outgoing edges with no model or renderer. Reject a known-bad coordinate-unit or stale-revision mutation.
+Start: READY_CI for core/store work, independent of Android and Longview; refresh the canonical successor branch ownership before edits and do not duplicate its model. Output: bounded PR, exact fixtures and real Idriç/Grease execution receipts using qualified build stages. Physical scrolling, prepaint expansion, exposure inference and comprehension claims are out of scope.
+
+SUN IB-S07 — Journal private source-linked view observations
+Owner: isomorphisms/ib #101, https://github.com/isomorphisms/ib/issues/101. Baseline: main 10fa7bbe93ff9ffa1ba7b9f62e0dd8f6c10a86bc; source/strand persistence comes from exact accepted S06 head. Intent: preserve what a view exposed, without claiming the user read or understood it.
+Implement an Idriç observation record and append/replay journal over existing source-revision/fragment identities. Accept bounded adapter observations for visibility, entering/leaving, time interval, foreground/occlusion state, selection and activation. Keep adapter and observation IDs explicit. Time aggregation is versioned derived data, never a canonical psychological label. This job supplies a deterministic fake-clock producer and thin adapter contract; the display owner wires actual visibility after its native view exists. No background monitoring of other apps or external analytics.
+Acceptance: slow exposure, fast pass, return, occlusion and background intervals produce distinct exact records; duplicate callback/replay does not create exposure twice; an interrupted final append preserves prior valid observations and reports the tail; source revision mismatch refuses. Two different viewport cuts reference equivalent source ranges without requiring identical observations. Rebuild a derived duration view after deleting its index and recover identical facts. A mutant counting background time must fail.
+Start: BLOCKED_EXTERNAL on S06 record contract, then READY_CI. Keep Idriç semantics and Grease I/O, exact-head producer exits and qualified build stages. Output: bounded PR, schema/adapter contract and fake-clock recovery receipts. Actual phone exposure measurement remains NOT_RUN, private by default, and cannot be inferred from fixture success.
+
+SUN IB-S08 — Persist human decisions and reversible organization
+Owner: isomorphisms/ib #103 and #118, https://github.com/isomorphisms/ib/issues/103 and https://github.com/isomorphisms/ib/issues/118. Sources: main 10fa7bbe93ff9ffa1ba7b9f62e0dd8f6c10a86bc; Pensieve b4d93c47327f112433b90c0a77a00b3ddcba0af4. Intent: source-backed proposals remain untrusted; explicit keep/dismiss/corrections survive rebuild and restart.
+Implement one Idriç append-only decision boundary with bounded Grease persistence. Inspect inference-and-learning, tab-categorization and the retained Pensieve branch source identities. Represent proposal provenance and explicit human decision separately; preserve overlapping membership, category-specific removal and attention-only changes. Provide keep/dismiss/done/later transitions usable by #118's first useful surface. Dismissal binds the evidence revision so unchanged rejected evidence does not immediately regenerate the same candidate. Derive first-useful candidates from explicit save/defer/return activity references through a transparent deterministic reducer; record why each item appears and rank mere exposure below explicit action. Do not import experimental hyperplane labels as human truth or build a new classifier.
+Acceptance: valid source-backed proposal round-trips; malformed, stale-target, command-bearing or secret-requesting proposals refuse without canonical mutation; adding B preserves A, removing B changes only B, attention changes do not train anything. Model absence/disagreement produces no invented negative label. A real retained-activity fixture produces source-linked candidates without manual retyping, and unchanged dismissed evidence stays dismissed. Crash/replay and index rebuild preserve human decisions; rollback appends decisions rather than erasing them. A mutant allowing proposal overwrite of an explicit dismissal must fail.
+Start: READY_CI in new decision-owned files; coordinate interfaces with display #118 owner. Output: bounded PR and exact decision-sequence goldens, actual runtime receipts and consumer contract. Preserve Idriç/Grease and qualified ICK/NDK boundaries. UI and Keep transmission are separate; no private ingestion or message sending is implied.
+
+SUN IB-S09 — Resume a bounded investigation frontier
+Owner: isomorphisms/ib #102, https://github.com/isomorphisms/ib/issues/102. Inspected main: 10fa7bbe93ff9ffa1ba7b9f62e0dd8f6c10a86bc; result/admission baseline: Longview 843c7bcf5336c685c4a96a4b4bc28b96fbc7a5dc. Intent: tasks preserve unfinished work independently of live tabs and cached presentation.
+Implement one bounded documentation investigation in Idriç with Grease persistence. Reuse S05 stable event/tab identities and S03 immutable result references. Persist two roots, source edges, discovered versus queued resources, bounded work state and last-complete result. Several roots may share compatible bytes while retaining their separate edges/purposes; authentication/header/Vary distinctions forbid inappropriate sharing. Discovery cannot itself create a network request or renderer. Start with deterministic fixture scheduling, not unrestricted crawling or a general assistant.
+Acceptance: two roots share one safe child acquisition but retain both edges; different representation partitions do not share; loss while queued/fetching/deriving preserves committed state without repeating an ambiguous state-changing request. A fake-clock return a week later after index/renderer loss shows the same frontier and last-complete result. Two frontends can select different active tasks without changing corpus membership. Source revision updates append and mark stale results rather than erase them. Known-bad URL-only deduplication fails.
+Start: BLOCKED_EXTERNAL until S05 and S03 contracts are pinned; then READY_CI. Output: bounded PR and restart/partition/scale fixtures, exact-head execution receipts. Follow Idriç/Grease and ICK/NDK rules. Physical scheduling/residency and live authenticated tasks remain NOT_RUN; no model or full UI is required.
+
+SUN IB-S10 — Export and reimport selected retained evidence
+Owner: isomorphisms/ib #104, https://github.com/isomorphisms/ib/issues/104. Base: 0.2/pensieve-arxiv at b4d93c47327f112433b90c0a77a00b3ddcba0af4; live isomorphisms/ib PR #46, “Retain source generations and rebuild source-linked Pensieve views,” https://github.com/isomorphisms/ib/pull/46. Intent: portable user-selected evidence remains useful without a renderer/model or profile dump.
+Implement one bounded local directory bundle over existing bin/retain-source.grease and bin/ib-source.grease identities. Do not regenerate their already implemented intake or ChatGPT decoder. Select explicit source IDs and allowed representations; retain source generation/hash/coordinate/provenance and unavailable-reference status. Define a versioned inspectable manifest, without selecting a cloud provider or sync conflict algorithm. Private-source inclusion requires explicit selection; secrets and renderer profiles remain excluded regardless. Build a provider-neutral assistant context projection only from those selected references, with source text always data.
+Acceptance: export/import of two equal-byte different-origin sources preserves distinct identities; repeated import is idempotent; missing optional bytes remain unavailable, never empty success. Tampered manifests/hashes, traversal, symlink escape, unknown schema and oversized bundles refuse without modifying canonical sources. Interrupted import is retryable and leaves prior sources usable. Default export excludes private fixtures; selection cannot run source-supplied commands. Exact round-trip goldens and a malicious-path mutant must run.
+Start: READY_CI against pinned the retained Pensieve branch; newer task/decision formats wait for their owner contracts. Output: bounded PR and exact-head receipts through real Grease/Idriç paths. No upload, external sharing, sync, real private corpus, or physical phone acceptance is included.
+
+SUN IB-S11 — Require retention evidence before cache clearance
+Owner: isomorphisms/ib #83/#96, https://github.com/isomorphisms/ib/issues/83 and https://github.com/isomorphisms/ib/issues/96. Base: main 10fa7bbe93ff9ffa1ba7b9f62e0dd8f6c10a86bc; inspect the retained Pensieve branch retained-source head b4d93c47327f112433b90c0a77a00b3ddcba0af4. Intent: expensive acquired information survives; cold temperature and cache paths do not authorize deletion.
+Repair the semantic classification boundary in src/IB/Storage.idric, IB.Prefetch and lib/scientific_navigation_prefetch.grease. The latter currently labels acquired material clearable because of its cache location. Introduce explicit retention/rebuildability evidence owned by Idriç and adapt the existing prefetch path; do not move everything or add an automatic eviction service. A derived artifact is disposable only when its retained inputs and accepted decisions suffice to reconstruct it without reacquisition or lost human work. Preserve temperature, sensitivity, placement and retention as separate properties.
+Acceptance: hot/warm/cold transitions never delete; an acquired body with no retained source is preserved; a rebuildable derived view may be cleared only in an explicit fixture action; absent SD cannot become deleted; cache clear preserves task/history, source, accepted decisions and last-complete result. Rebuild without renderer/model/network and compare exact evidence. Interrupted clearance leaves canonical inputs usable; a mutant equating cold or cache pathname with disposable must fail.
+Start: READY_CI on isolated fixtures, independent of device and E4; coordinate shared model extensions with S08. Output: bounded repair PR plus exact-head good/bad retention receipts. Idriç/Grease and qualified builds required. No real-user deletion, migration, automatic eviction or phone-fill test is authorized.

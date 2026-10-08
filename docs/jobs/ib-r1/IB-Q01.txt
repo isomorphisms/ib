@@ -1,0 +1,47 @@
+IB-R1 SUN execution contract — 2026-10-08
+Repository: https://github.com/isomorphisms/ib
+Master owner: https://github.com/isomorphisms/ib/issues/120
+
+Refresh live refs, branch/PR ownership, AGENTS.md, README.md, docs/architecture.md and shared isomorphisms/ai-ci instructions before editing. Use an isolated worktree; reuse an existing owner and do not duplicate preserved branches. A READY_CI start is not compiler, CI or device acceptance.
+
+Pinned source aliases:
+M = main@10fa7bbe93ff9ffa1ba7b9f62e0dd8f6c10a86bc.
+L = longview-renderer-loss-acceptance@843c7bcf5336c685c4a96a4b4bc28b96fbc7a5dc.
+P = 0.2/pensieve-arxiv@b4d93c47327f112433b90c0a77a00b3ddcba0af4.
+C = style/current-idric-ib@631052fbeccd183c4fd409428180b3eab824c481.
+V = material3-arxiv-viewer@78d17f8a4683a292db849647c8716a3ab2c1ceeb.
+N = material3-pinned-recents@b72b2ac9f56d3c7a66137dc0c265d1ae9756083d.
+F = 0.2/viewport-figures@778266431c57060080d35324180c71e577c995b6.
+H = ui/prepaint-collapsible-navigation@672fc7febf9a48de3270ac3d8cee6ed54d2a26d1; historical interaction specification ui/collapsible-left-navigation@1c818d85a4e10ac530af4c0e7461f6264f1efbcc.
+Shared guardrails: ai-ci@01608a2493fa409463f70e8fbfd8a123ef59ee85.
+
+Idriç owns semantics and invariants; Grease owns orchestration; Android is a narrow adapter. Qualified ICK/NDK stages only, with exact ICK gaps when NDK is selected. Existing Java/Gradle/POSIX scaffolding is named debt, not automatic qualification. No runtime substitution or builds on phones. Preserve package, stable signer and nondecreasing versionCode. Distinguish source, mocked host, compiler, emulator, artifact and physical evidence; never promote absent/skipped/stale evidence.
+
+The user selected Material 3 over expedient prepaint on September 11. Preserve acquisition, source decoding, semantic extraction and provenance, but do not expand obsolete prepaint rendering. Binder is the chosen boundary; Shizuku is a replaceable current provider. No presentation lifetime may become canonical worker/corpus ownership. E2 publication and E3 attempt binding are already on L. Kernel appendFAT, raw SD writes and a mount are not prerequisites.
+
+Outputs: implement the named slice and focused successful/failing/recovery acceptance, or give the first precise contradiction/blocker. Preserve producer status. Do not claim implementation complete from an issue, plan or handoff. Publish only the bounded review branch/output authorized by the active execution assignment; no merge, closure, deletion, release, real message, account enrollment or device mutation without its actual authority. Stop only the blocked dependency; independent work continues.
+
+Cross-job dependencies use the files beside this assignment. S03 owns source acquisition/publication/projection integration; D02 consumes it. S05 owns durable navigation; D03 projects it. S06 owns fragment/strand persistence; S07 owns observations; D06 supplies the platform observation adapter. S08 owns decisions and the first-useful retention reducer; D07 projects it. B02 and S01 share capability files and must serialize edits. B01/B06/B09 share host files. B07/S03/D02 must coordinate any LongViewActivity edits.
+
+SUN IB-Q01 — Enforce exact-text producer failures
+
+Owner: isomorphisms/ib issue #119.
+Baseline: main at 10fa7bbe93ff9ffa1ba7b9f62e0dd8f6c10a86bc.
+
+Inspect .github/workflows/exact-text.yml and any overlapping work.
+Repair the compile and oracle steps so a producer failure cannot be hidden
+by tee or by correct-looking output. Preserve all twelve semantic checks.
+
+Exercise the actual maintained steps with:
+1. a successful producer;
+2. a producer with incorrect output;
+3. a producer emitting all expected lines, then exiting 7;
+4. a failing compiler that leaves a plausible executable and log.
+
+Only the successful control may pass. Restoring the original masking
+behavior must break the regression. Follow the repository’s Idriç,
+Grease, build-policy, and exact-head evidence rules.
+
+Use an isolated branch. Deliver the patch, focused execution evidence,
+and a draft PR if publication is available. Do not merge or close issues.
+Hosted checks establish no Android or physical-device acceptance.
