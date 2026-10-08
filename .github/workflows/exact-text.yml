@@ -8,6 +8,9 @@ on:
       - 'docs/exact-text-search.md'
       - '.github/workflows/exact-text.yml'
       - 'bin/ci_browser_foundation.grease'
+      - 'tests/exact-text-status.grease'
+      - 'tests/fixtures/exact-text-producer.grease'
+      - 'tests/fixtures/exact-text.expected'
   workflow_dispatch:
 
 permissions:
@@ -42,13 +45,15 @@ jobs:
       - name: Compile exact text oracle
         run: |
           cd src
-          /tmp/idric/bin/idris2 ExactTextSmoke.idric -o ib-exact-text 2>&1 | tee /tmp/exact-text-compile.txt
+          /tmp/idric/bin/idris2 ExactTextSmoke.idric -o ib-exact-text > /tmp/exact-text-compile.txt 2>&1
+          cat /tmp/exact-text-compile.txt
           test -x ./build/exec/ib-exact-text
           ! grep -q '^Error:' /tmp/exact-text-compile.txt
 
       - name: Check exact positions and counts
         run: |
-          src/build/exec/ib-exact-text | tee /tmp/exact-text.txt
+          src/build/exec/ib-exact-text > /tmp/exact-text.txt
+          cat /tmp/exact-text.txt
           grep -Fx 'absent-contains=False' /tmp/exact-text.txt
           grep -Fx 'absent-positions=[]' /tmp/exact-text.txt
           grep -Fx 'absent-count=0' /tmp/exact-text.txt
