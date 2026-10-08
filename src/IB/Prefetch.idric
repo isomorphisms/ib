@@ -1,5 +1,7 @@
 module IB.Prefetch
 
+import IB.Storage
+
 %default total
 
 public export
@@ -59,3 +61,9 @@ reading_target_count (target :: rest) =
   case prefetch_target_retention target of
     transient_cache ⇒ reading_target_count rest
     reading_corpus ⇒ S (reading_target_count rest)
+
+-- The inherited transient_cache value selects placement, not permission to
+-- delete expensive acquired bytes. Both paths acquire source information.
+export
+prefetch_storage_retention : PrefetchTarget → retention_kind
+prefetch_storage_retention _ = acquired_information

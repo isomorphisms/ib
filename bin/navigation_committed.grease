@@ -47,7 +47,8 @@ worker=${IB_SCIENTIFIC_PREFETCH_WORKER:-}
 
 # navigation_committed must not wait for paper parsing or figure downloads.
 # The worker inherits the low CPU priority, owns no caller stdio, and writes
-# only to clearable cache.
+# only to its selected prefetch placement. Acquired bytes are not implicitly
+# clearable; retention approval belongs to the Idriç storage owner.
 if test -n "$worker"; then
   nice -n "$niceness" sh "$worker" "$url" </dev/null >/dev/null 2>&1 &
 else

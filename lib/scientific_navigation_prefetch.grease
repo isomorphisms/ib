@@ -1,6 +1,7 @@
 # Grease source. Navigation policy calls this only for paper URLs that strongly
-# imply the existing scientific-media path. Materialized results live entirely
-# under the ordinary prefetch cache and are therefore clearable.
+# imply the existing scientific-media path. Acquired source bytes retain their
+# information obligation even when placed below the prefetch cache. The Idriç
+# retention consumer must approve clearance from actual rebuild evidence.
 
 scientific_navigation_is_arxiv() {
   input=$1
@@ -44,8 +45,10 @@ prefetch_arxiv_navigation_cache() {
   # as output_directory. Keep this caller's state under distinct names because
   # Grease's shell subset does not provide function-local variables.
   if harvest_arxiv_images "$navigation_input" "$navigation_partial_directory"; then
-    printf 'navigation_committed\ttransient_cache\t%s\n' "$navigation_input" \
+    printf 'navigation_committed\tacquired_information\t%s\n' "$navigation_input" \
       > "$navigation_partial_directory/trigger.tsv"
+    printf 'artifact_origin\tacquisition\nrebuild_evidence\tunavailable\n' \
+      > "$navigation_partial_directory/retention.tsv"
     rm -rf "$navigation_cache_directory"
     mv "$navigation_partial_directory" "$navigation_cache_directory"
 
@@ -60,8 +63,10 @@ prefetch_arxiv_navigation_cache() {
 
     printf '%s\n' "$navigation_cache_directory"
     return 0
+  else
+    navigation_harvest_status=$?
   fi
 
   rm -rf "$navigation_partial_directory"
-  return 1
+  return "$navigation_harvest_status"
 }
