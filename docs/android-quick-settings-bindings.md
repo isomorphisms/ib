@@ -6,7 +6,7 @@ revision; `.gitmodules` records its canonical repository. Initialize that
 submodule before consuming the binding package.
 
 This change pins upstream candidate revision
-[`037f6ef3af2b5e704970255585941a0d1011e5de`](https://github.com/isomorphisms/android-NDK/commit/037f6ef3af2b5e704970255585941a0d1011e5de).
+[`7ea62a3e3cd19f2ab04a27f72ace1ae9e8b1fe66`](https://github.com/isomorphisms/android-NDK/commit/7ea62a3e3cd19f2ab04a27f72ace1ae9e8b1fe66).
 The earlier declaration-only revision was
 [`65769fd68a30a26e0dacd2d0f9ba182850857e86`](https://github.com/isomorphisms/android-NDK/commit/65769fd68a30a26e0dacd2d0f9ba182850857e86).
 
@@ -38,9 +38,12 @@ against the earlier published backend candidate
 [`3fb6a75d8cffe2f9bff77ae58754e7344d65e20a`](https://github.com/isomorphisms/android-NDK/commit/3fb6a75d8cffe2f9bff77ae58754e7344d65e20a)
 in [isomorphisms/android-NDK #20 — Lower checked framework calls and IO directly to DEX](https://github.com/isomorphisms/android-NDK/pull/20).
 Revision `d0d0eb6` repairs the verifier's compiler/library dependency set and
-caches the successful compiler/API build. Current candidate `037f6ef` then
-repairs the cache guard to use a path relative to the checkout root. Its
-binding and fixture sources are unchanged from `3fb6a75`. The earlier source-check receipt keeps
+caches the successful compiler/API build. Revision `037f6ef` repairs the
+cache guard to use a path relative to the checkout root. Current candidate
+`7ea62a3` fixes lowering of the compiler's bounded Boolean enum tags, after
+the preceding IB run built the driver and passed its three host suites but
+stopped at the arithmetic candidate's unsupported case constant. The public
+bindings and IB fixture sources remain unchanged. The earlier source-check receipt keeps
 its original revision and commands. The current candidate is recorded in the
 gitlink so hosted verification uses that exact revision. Runtime acceptance
 remains pending. The example's `attempt.md` and `source-check.txt` distinguish

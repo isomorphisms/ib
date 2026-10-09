@@ -1,7 +1,7 @@
 # Program attempt: Pensieve Quick Settings executable bindings
 
 Status: `PARTIAL` — historical consumer source checking passes against
-candidate `3fb6a75`. This change records repaired candidate `037f6ef` in the gitlink for hosted
+candidate `3fb6a75`. This change records repaired candidate `7ea62a3` in the gitlink for hosted
 verification; DEX emission and runtime acceptance are pending.
 
 ## Purpose and ownership
@@ -86,11 +86,12 @@ candidate
 [`3fb6a75d8cffe2f9bff77ae58754e7344d65e20a`](https://github.com/isomorphisms/android-NDK/commit/3fb6a75d8cffe2f9bff77ae58754e7344d65e20a),
 from [isomorphisms/android-NDK #20 — Lower checked framework calls and IO directly to DEX](https://github.com/isomorphisms/android-NDK/pull/20).
 The current draft dependency is repaired candidate
-[`037f6ef3af2b5e704970255585941a0d1011e5de`](https://github.com/isomorphisms/android-NDK/commit/037f6ef3af2b5e704970255585941a0d1011e5de),
-tree `54cf2974d5879837c6f459a9bc32577f34589586`, whose parent is `d0d0eb6`.
-Revision `d0d0eb6` supplied coherent compiler/library paths; `037f6ef` repairs
-only the cache guard and its evidence documentation. These repairs change verification orchestration; the
-binding and fixture sources are unchanged. Hosted checks use the recorded
+[`7ea62a3e3cd19f2ab04a27f72ace1ae9e8b1fe66`](https://github.com/isomorphisms/android-NDK/commit/7ea62a3e3cd19f2ab04a27f72ace1ae9e8b1fe66),
+tree `2aeffba086695e177523f2ea55428b20751cb3e2`, whose parent is `037f6ef`.
+Revision `d0d0eb6` supplied coherent compiler/library paths; `037f6ef` repaired
+the cache guard. Candidate `7ea62a3` fixes the bounded Boolean enum tags in
+checked DEX lowering and adds a focused host check. The public bindings and
+IB fixture sources are unchanged. Hosted checks use the recorded
 candidate in parallel with upstream verification. Final acceptance requires
 both upstream and consumer evidence for that revision; the historical
 `3fb6a75` source receipt is not relabeled as a new run.
@@ -107,7 +108,8 @@ Its SHA-256 is
 | Historical signature-only access | Preserved in `../quick-settings-bindings/` |
 | Existing public vocabulary check, core `src` and this new example | `PASS` on 2026-10-09 UTC |
 | Historical consumer source check against candidate `3fb6a75` | `PASS` on 2026-10-09 UTC |
-| Candidate dependency pin | `037f6ef`; exact-revision verification and runtime acceptance `PENDING` |
+| Candidate dependency pin | `7ea62a3`; exact-revision verification and runtime acceptance `PENDING` |
+| Earlier IB hosted run with `037f6ef` | Driver and three host suites passed; arithmetic emission rejected before IB compilation |
 | This consumer's direct DEX emission | `NOT_RUN` |
 | This consumer's ART execution | `NOT_RUN` |
 | Upstream candidate ART execution | `PENDING`; no runtime result claimed here |
@@ -192,6 +194,15 @@ it returned 0 with the installed API package and 1 with the package absent.
 The failing witness reported ordinary `test` failure, not an undefined
 variable. These observations validate that bounded guard, not the complete
 workflow, DEX emission, or ART execution.
+
+The subsequent [IB hosted run 37888177558](https://github.com/isomorphisms/ib/actions/runs/37888177558)
+saved the compiler/API cache, built the driver, and passed the invocation,
+foreign-specification, and encoder host suites. It then reproduced the
+arithmetic candidate's unsupported DEX case constant 1, before the IB source
+was compiled. Candidate `7ea62a3` repairs the bounded Boolean tag handling
+behind that refusal. Its [upstream hosted run 37889734090](https://github.com/isomorphisms/android-NDK/actions/runs/37889734090)
+was pending when this local pin update was prepared. No emission or ART pass
+is inferred from source checking or the completed host suites.
 
 ## Language work exposed
 
