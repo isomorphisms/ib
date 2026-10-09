@@ -191,13 +191,27 @@ final class DurableTaskStore {
         return value;
     }
 
-    /** Check every existing ancestor, including the selected app-private root. */
+    /** Trust the Android-provided root; reject links in every IB-owned child. */
     private boolean existing_store_directory(Path directory) throws IOException {
         if (!directory.startsWith(files_root)) {
             throw new IOException("durable path is outside selected files root");
         }
-        Path current = directory.getRoot();
-        for (Path component : directory) {
+        // Android owns getFilesDir() and its parent path. On real devices an
+        // ancestor such as /data/data can be a platform-managed symlink. Follow
+        // those ancestors only to verify the trusted app-private root exists.
+        // Never follow links in the IB-owned state tree below that root.
+        BasicFileAttributes root_attributes;
+        try {
+            root_attributes = Files.readAttributes(files_root, BasicFileAttributes.class);
+        } catch (NoSuchFileException exception) {
+            return false;
+        }
+        if (!root_attributes.isDirectory()) {
+            throw new IOException("selected files root is not a directory");
+        }
+
+        Path current = files_root;
+        for (Path component : files_root.relativize(directory)) {
             current = current.resolve(component);
             BasicFileAttributes attributes;
             try {
