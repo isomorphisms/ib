@@ -69,9 +69,26 @@ not used as proof of termination. The waiting-child case does not prove
 containment of daemonizing providers. Remote worker lifetime stays unknown.
 
 NOT_RUN: physical MIRO A1/Shizuku cancellation, native qualified Grease on
-Android, Android primitive compatibility, latency and C67 behavior. Current
+Android, Android primitive compatibility, latency and C67 behavior. At this 2026-10-08 tested revision,
 `.github/workflows/idric-core.yml` still invokes this host suite through `sh`;
 the new helper deliberately requires qualified Grease, so this workflow needs
 an explicitly qualified runtime stage before CI/merge readiness is claimed.
 This receipt is host source-runtime acceptance, not whole-product or device
 acceptance.
+
+## 2026-10-09 CI follow-up (unverified at publication)
+
+PR #130 now prepares a `shizuku-grease` acceptance job in
+`.github/workflows/idric-core.yml`. It pins the Grease owner to
+`f19c94c6df18cddbdc1e81463e5bd689533e3c13` and verifies its exact
+Oils source gitlink `6d29702a10ea9eb72a43950554dbcd4174d07a89`.
+It uses the existing upstream `cpp-spec` Podman receipt to build the native
+Grease executable, then runs the bounded-capture suite in default Grease and
+the host, capability, Binder, Longview and worker-program suites with the
+inherited compatibility options. Earlier `sh` invocations of the positive
+provider tests have been replaced by syntax-only checks in the Idriç-core job.
+
+This change is a CI **attempt**, not a passing receipt. It is accepted only if
+all jobs execute successfully at the exact PR head. Do not cite previous
+source-runtime results or a shell syntax check as a native Grease pass. The
+Android native Grease path and physical Shizuku cancellation remain NOT_RUN.

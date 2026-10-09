@@ -66,6 +66,10 @@ jobs:
           podman --version
           printf 'IB source %s; Grease %s; Oils source %s\\n' "$EXPECTED_IB_HEAD" "$GREASE_REF" "$OILS_REF"
 
+      # Match the memory-mapping precondition used by the upstream receipt job.
+      - name: Qualify host ASAN memory mapping
+        run: sudo sysctl vm.mmap_rnd_bits=28
+
       - name: Build the pinned native Grease runtime using its upstream receipt job
         working-directory: .tools/oils-source
         shell: bash
@@ -84,6 +88,15 @@ jobs:
           test -x "$IB_GREASE_COMMAND"
           timeout --kill-after=5 120 "$IB_GREASE_COMMAND" tests/test_android_shizuku_capture.grease
           timeout --kill-after=5 120 "$IB_GREASE_COMMAND" +O ysh:all tests/test_android_shizuku_host.grease
+          # These suites source the same provider and must not be claimed from sh.
+          for fixture in \
+            tests/test_android_device_capabilities.grease \
+            tests/test_android_binder_host.grease \
+            tests/test_android_longview_worker.grease \
+            tests/test_android_shizuku_worker_program.grease
+          do
+            timeout --kill-after=5 120 "$IB_GREASE_COMMAND" +O ysh:all "$fixture"
+          done
 
   idric-core:
     runs-on: ubuntu-latest
@@ -115,8 +128,10 @@ jobs:
           sh -n lib/android_shizuku_host.grease
           sh -n tests/test_android_shizuku_host.grease
 
-      - name: Exercise Android device capability report
-        run: sh tests/test_android_device_capabilities.grease
+      # Positive device capability tests run with the same Grease backend as
+      # the Binder/Shizuku adapter; this step checks syntax only.
+      - name: Check shell-compatible device capability test syntax
+        run: sh -n tests/test_android_device_capabilities.grease
 
       - name: Exercise E3 worker attempt boundary
         run: |
