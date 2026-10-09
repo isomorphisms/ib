@@ -1,0 +1,21 @@
+module QuickSettingsBindings
+
+import Android.QuickSettings
+
+-- This module checks direct source access only. It has no entry point and
+-- executes no Android call. The dependency owns every binding declaration.
+
+tile_access_signature : TileService → IO Tile
+tile_access_signature = tile_for_service
+
+tile_state_signature : Tile → TileState → IO ()
+tile_state_signature = set_tile_state
+
+tile_update_signature : Tile → IO ()
+tile_update_signature = update_tile
+
+tile_add_signature : StatusBarManager → ComponentName → CharSequence → Icon → Executor → TileAddResultConsumer → IO ()
+tile_add_signature = request_add_tile
+
+tile_add_result_signature : BoxedInteger → IO AddTileResult
+tile_add_result_signature = read_add_result

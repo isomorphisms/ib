@@ -26,6 +26,7 @@ heap, form, and reconstruction outcomes separately.  See
 - `docs/storage-model.md` — identity levels and canonical, proposed, and derived state
 - `docs/long-view-protected-tasks.md` — durable authenticated task reconstruction
 - `docs/developer-workbench.md` — fixture and memory-pressure harness
+- `docs/android-quick-settings-bindings.md` — reusable Android tile declarations for IB/Pensieve; no tile purpose selected
 
 ## Implementation languages
 
