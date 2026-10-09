@@ -260,6 +260,50 @@ public final class DurableTaskRecordTest {
     }
 
     @Test
+    public void android_managed_ancestor_symlink_preserves_durable_task_recovery() throws Exception {
+        // Emulates an Android app-private path with a platform-managed linked
+        // ancestor. Only IB-owned descendants must be strictly non-linked.
+        Path root = temporary.getRoot().toPath();
+        Path real_user = Files.createDirectories(root.resolve("real-data/user-zero"));
+        Path actual_files = Files.createDirectory(real_user.resolve("app-files"));
+        Path platform_alias = root.resolve("android-user-zero");
+        Files.createSymbolicLink(platform_alias, real_user);
+        DurableTaskStore store = new DurableTaskStore(platform_alias.resolve("app-files"));
+
+        assertNull(store.discover_latest());
+        DurableTaskRecord original = fixture();
+        store.save(original, DurableTaskStore.TabProtection.PROTECTED_AUTHENTICATED_TRANSACTION);
+        store.append_navigation(original);
+        assertEquals(original.serialize(), store.read_task_record(original.task_id));
+        assertEquals(original.task_id, store.discover_latest().task_id);
+        assertTrue(Files.isDirectory(actual_files.resolve("state/tasks/task-1")));
+        assertFalse(Files.isSymbolicLink(actual_files.resolve("state")));
+    }
+
+    @Test
+    public void android_ancestor_link_never_authorizes_a_linked_ib_state_directory()
+        throws Exception {
+        Path root = temporary.getRoot().toPath();
+        Path real_user = Files.createDirectories(root.resolve("real-data/user-zero"));
+        Path actual_files = Files.createDirectory(real_user.resolve("app-files"));
+        Path platform_alias = root.resolve("android-user-zero");
+        Files.createSymbolicLink(platform_alias, real_user);
+        Path outside = temporary.newFolder("outside-ib-state").toPath();
+        Path sentinel = outside.resolve("sentinel.txt");
+        Files.write(sentinel, "untouched".getBytes(StandardCharsets.UTF_8));
+        Files.createSymbolicLink(actual_files.resolve("state"), outside);
+
+        DurableTaskStore store = new DurableTaskStore(platform_alias.resolve("app-files"));
+        assertThrows(IOException.class, store::discover);
+        assertThrows(IOException.class, () -> store.save(
+            fixture(), DurableTaskStore.TabProtection.PROTECTED_AUTHENTICATED_TRANSACTION
+        ));
+        assertFalse(Files.exists(outside.resolve("tasks")));
+        assertEquals("untouched",
+            new String(Files.readAllBytes(sentinel), StandardCharsets.UTF_8));
+    }
+
+    @Test
     public void linked_state_parent_refuses_writes_and_discovery() throws Exception {
         Path outside = temporary.newFolder("outside").toPath();
         Path selected = temporary.newFolder("selected").toPath();
