@@ -96,7 +96,7 @@ jobs:
       - name: Require installed API before caching
         if: steps.idric-cache.outputs.cache-hit != 'true'
         shell: sh
-        run: .tools/runtime/.build/grease/bin/grease -c 'test -s "$GITHUB_WORKSPACE/.tools/Idric/_/bootstrap-build/idris2-0.8.0/idris2-0.8.0/idris2.ipkg"'
+        run: .tools/runtime/.build/grease/bin/grease -c 'test -s .tools/Idric/_/bootstrap-build/idris2-0.8.0/idris2-0.8.0/idris2.ipkg'
       - name: Save pinned Idriç compiler and installed API
         if: steps.idric-cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@caa296126883cff596d87d8935842f9db880ef25

@@ -1,7 +1,7 @@
 # Program attempt: Pensieve Quick Settings executable bindings
 
 Status: `PARTIAL` — historical consumer source checking passes against
-candidate `3fb6a75`. This change records repaired candidate `d0d0eb6` in the gitlink for hosted
+candidate `3fb6a75`. This change records repaired candidate `037f6ef` in the gitlink for hosted
 verification; DEX emission and runtime acceptance are pending.
 
 ## Purpose and ownership
@@ -86,9 +86,10 @@ candidate
 [`3fb6a75d8cffe2f9bff77ae58754e7344d65e20a`](https://github.com/isomorphisms/android-NDK/commit/3fb6a75d8cffe2f9bff77ae58754e7344d65e20a),
 from [isomorphisms/android-NDK #20 — Lower checked framework calls and IO directly to DEX](https://github.com/isomorphisms/android-NDK/pull/20).
 The current draft dependency is repaired candidate
-[`d0d0eb6b702538c2806757b01a078da21dd41c6b`](https://github.com/isomorphisms/android-NDK/commit/d0d0eb6b702538c2806757b01a078da21dd41c6b),
-tree `b83c6aad2d38495a0103bb8ab549de8f0bd5a41c`, whose parent is `3fb6a75`.
-This repair changes verification orchestration and its documentation; the
+[`037f6ef3af2b5e704970255585941a0d1011e5de`](https://github.com/isomorphisms/android-NDK/commit/037f6ef3af2b5e704970255585941a0d1011e5de),
+tree `54cf2974d5879837c6f459a9bc32577f34589586`, whose parent is `d0d0eb6`.
+Revision `d0d0eb6` supplied coherent compiler/library paths; `037f6ef` repairs
+only the cache guard and its evidence documentation. These repairs change verification orchestration; the
 binding and fixture sources are unchanged. Hosted checks use the recorded
 candidate in parallel with upstream verification. Final acceptance requires
 both upstream and consumer evidence for that revision; the historical
@@ -106,7 +107,7 @@ Its SHA-256 is
 | Historical signature-only access | Preserved in `../quick-settings-bindings/` |
 | Existing public vocabulary check, core `src` and this new example | `PASS` on 2026-10-09 UTC |
 | Historical consumer source check against candidate `3fb6a75` | `PASS` on 2026-10-09 UTC |
-| Candidate dependency pin | `d0d0eb6`; exact-revision verification and runtime acceptance `PENDING` |
+| Candidate dependency pin | `037f6ef`; exact-revision verification and runtime acceptance `PENDING` |
 | This consumer's direct DEX emission | `NOT_RUN` |
 | This consumer's ART execution | `NOT_RUN` |
 | Upstream candidate ART execution | `PENDING`; no runtime result claimed here |
@@ -183,6 +184,14 @@ compiler build, and only an exact hit skips compiler/API installation. Save
 follows successful installation and precedes backend verification, so a later
 backend failure can reuse the already built compiler. Repaired upstream
 candidate `d0d0eb6` supplies the matching verifier dependency set.
+
+The subsequent `037f6ef` repair uses a checkout-relative path in the cache
+guard because Grease does not implicitly bind shell environment names as
+language variables. The exact repaired guard executed through actual Grease:
+it returned 0 with the installed API package and 1 with the package absent.
+The failing witness reported ordinary `test` failure, not an undefined
+variable. These observations validate that bounded guard, not the complete
+workflow, DEX emission, or ART execution.
 
 ## Language work exposed
 

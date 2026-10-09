@@ -6,7 +6,7 @@ revision; `.gitmodules` records its canonical repository. Initialize that
 submodule before consuming the binding package.
 
 This change pins upstream candidate revision
-[`d0d0eb6b702538c2806757b01a078da21dd41c6b`](https://github.com/isomorphisms/android-NDK/commit/d0d0eb6b702538c2806757b01a078da21dd41c6b).
+[`037f6ef3af2b5e704970255585941a0d1011e5de`](https://github.com/isomorphisms/android-NDK/commit/037f6ef3af2b5e704970255585941a0d1011e5de).
 The earlier declaration-only revision was
 [`65769fd68a30a26e0dacd2d0f9ba182850857e86`](https://github.com/isomorphisms/android-NDK/commit/65769fd68a30a26e0dacd2d0f9ba182850857e86).
 
@@ -37,9 +37,10 @@ That source and the dependency package passed historical Idriç source checks
 against the earlier published backend candidate
 [`3fb6a75d8cffe2f9bff77ae58754e7344d65e20a`](https://github.com/isomorphisms/android-NDK/commit/3fb6a75d8cffe2f9bff77ae58754e7344d65e20a)
 in [isomorphisms/android-NDK #20 — Lower checked framework calls and IO directly to DEX](https://github.com/isomorphisms/android-NDK/pull/20).
-Current candidate `d0d0eb6` repairs the verifier's compiler/library dependency
-set and caches the successful compiler/API build; its binding and fixture
-sources are unchanged from `3fb6a75`. The earlier source-check receipt keeps
+Revision `d0d0eb6` repairs the verifier's compiler/library dependency set and
+caches the successful compiler/API build. Current candidate `037f6ef` then
+repairs the cache guard to use a path relative to the checkout root. Its
+binding and fixture sources are unchanged from `3fb6a75`. The earlier source-check receipt keeps
 its original revision and commands. The current candidate is recorded in the
 gitlink so hosted verification uses that exact revision. Runtime acceptance
 remains pending. The example's `attempt.md` and `source-check.txt` distinguish
