@@ -57,8 +57,10 @@ if (ARGV[0] === 'host') {
   var compiler = "$compiler_repository/_/build/exec/idris2"
   var compiler_prefix = "$compiler_repository/_/bootstrap-build"
   var driver = "$upstream_evidence/backend/exec/idric-dex"
-  var base_modules = "$compiler_repository/_/libs/base/build/ttc"
-  var prelude_modules = "$compiler_repository/_/libs/prelude/build/ttc"
+  # Use the same installed library modules as the compiler API and upstream
+  # driver; later source-library rebuilds may carry different generated names.
+  var base_modules = "$compiler_prefix/idris2-0.8.0/base-0.8.0"
+  var prelude_modules = "$compiler_prefix/idris2-0.8.0/prelude-0.8.0"
 
   test "$(git -C "$repository" rev-parse HEAD)" = "$expected_head"
   test "$(git -C "$repository" config --file .gitmodules --get submodule.vendor/android-NDK.url)" = 'https://github.com/isomorphisms/android-NDK.git'

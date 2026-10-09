@@ -6,7 +6,7 @@ revision; `.gitmodules` records its canonical repository. Initialize that
 submodule before consuming the binding package.
 
 This change pins upstream candidate revision
-[`3fb6a75d8cffe2f9bff77ae58754e7344d65e20a`](https://github.com/isomorphisms/android-NDK/commit/3fb6a75d8cffe2f9bff77ae58754e7344d65e20a).
+[`d0d0eb6b702538c2806757b01a078da21dd41c6b`](https://github.com/isomorphisms/android-NDK/commit/d0d0eb6b702538c2806757b01a078da21dd41c6b).
 The earlier declaration-only revision was
 [`65769fd68a30a26e0dacd2d0f9ba182850857e86`](https://github.com/isomorphisms/android-NDK/commit/65769fd68a30a26e0dacd2d0f9ba182850857e86).
 
@@ -33,12 +33,16 @@ and independent callback code/constructor observations. Its exported method
 names match upstream's external `QuickSettingsRunner`; the example's `main`
 performs no platform action.
 
-That source and the dependency package pass fresh Idriç source checks against
-the published backend candidate
+That source and the dependency package passed historical Idriç source checks
+against the earlier published backend candidate
 [`3fb6a75d8cffe2f9bff77ae58754e7344d65e20a`](https://github.com/isomorphisms/android-NDK/commit/3fb6a75d8cffe2f9bff77ae58754e7344d65e20a)
 in [isomorphisms/android-NDK #20 — Lower checked framework calls and IO directly to DEX](https://github.com/isomorphisms/android-NDK/pull/20).
-The candidate is recorded in the gitlink so hosted verification uses that exact
-revision. Runtime acceptance remains pending. The example's `attempt.md` and `source-check.txt` distinguish
+Current candidate `d0d0eb6` repairs the verifier's compiler/library dependency
+set and caches the successful compiler/API build; its binding and fixture
+sources are unchanged from `3fb6a75`. The earlier source-check receipt keeps
+its original revision and commands. The current candidate is recorded in the
+gitlink so hosted verification uses that exact revision. Runtime acceptance
+remains pending. The example's `attempt.md` and `source-check.txt` distinguish
 its checked source from its pending DEX emission and ART execution. Upstream
 runtime evidence is a separate result and cannot establish execution of this
 IB-owned source by itself.

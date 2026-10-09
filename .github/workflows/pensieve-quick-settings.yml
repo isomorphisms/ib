@@ -74,12 +74,40 @@ jobs:
       - name: Initialize only the pinned Android dependency
         shell: sh
         run: .tools/runtime/.build/grease/bin/grease -c 'git submodule update --init -- vendor/android-NDK'
+      - name: Restore pinned Idriç compiler and installed API
+        id: idric-cache
+        uses: actions/cache/restore@caa296126883cff596d87d8935842f9db880ef25
+        with:
+          path: |
+            .tools/Idric/_/.tools
+            .tools/Idric/_/build
+            .tools/Idric/_/bootstrap-build
+            .tools/Idric/_/libs/*/build
+            .tools/Idric/_/src/IdrisPaths.idr
+          key: idric-bootstrap-api-v1-ubuntu-24.04-${{ runner.arch }}-ff4d852862a3942592f8ade9afde8d409d9803be
       - name: Build pinned Idriç host compiler
+        if: steps.idric-cache.outputs.cache-hit != 'true'
         shell: sh
         run: sh .tools/Idric/edric all
       - name: Install the pinned compiler API into its bootstrap prefix
+        if: steps.idric-cache.outputs.cache-hit != 'true'
         shell: sh
         run: env IDRIS2_PREFIX="$GITHUB_WORKSPACE/.tools/Idric/_/bootstrap-build" CHEZ="$GITHUB_WORKSPACE/.tools/Idric/_/.tools/bin/scheme" "$GITHUB_WORKSPACE/.tools/Idric/_/build/exec/idris2" --install "$GITHUB_WORKSPACE/.tools/Idric/_/idris2api.ipkg"
+      - name: Require installed API before caching
+        if: steps.idric-cache.outputs.cache-hit != 'true'
+        shell: sh
+        run: .tools/runtime/.build/grease/bin/grease -c 'test -s "$GITHUB_WORKSPACE/.tools/Idric/_/bootstrap-build/idris2-0.8.0/idris2-0.8.0/idris2.ipkg"'
+      - name: Save pinned Idriç compiler and installed API
+        if: steps.idric-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@caa296126883cff596d87d8935842f9db880ef25
+        with:
+          path: |
+            .tools/Idric/_/.tools
+            .tools/Idric/_/build
+            .tools/Idric/_/bootstrap-build
+            .tools/Idric/_/libs/*/build
+            .tools/Idric/_/src/IdrisPaths.idr
+          key: idric-bootstrap-api-v1-ubuntu-24.04-${{ runner.arch }}-ff4d852862a3942592f8ade9afde8d409d9803be
       - uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd
         with:
           packages: 'build-tools;35.0.0'

@@ -1,4 +1,5 @@
 date_utc=2026-10-09
+receipt_scope=HISTORICAL source-only check before publication and before the installed-library orchestration repair; commands, revisions, and index state below describe that earlier run.
 ib_base=d10eeda153dae4be25fd7902338e8b8443e0666e
 ib_branch=bindings/quick-settings-runtime
 working_directory=/workspace/scratch/a85ebfb45f70/ib-quick-settings-runtime

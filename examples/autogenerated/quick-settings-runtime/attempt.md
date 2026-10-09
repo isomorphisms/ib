@@ -1,7 +1,7 @@
 # Program attempt: Pensieve Quick Settings executable bindings
 
-Status: `PARTIAL` — consumer source checking passes against the published
-backend candidate. This change records that candidate in the gitlink for hosted
+Status: `PARTIAL` — historical consumer source checking passes against
+candidate `3fb6a75`. This change records repaired candidate `d0d0eb6` in the gitlink for hosted
 verification; DEX emission and runtime acceptance are pending.
 
 ## Purpose and ownership
@@ -85,9 +85,14 @@ declaration-only pin in the index while checking the isolated submodule at
 candidate
 [`3fb6a75d8cffe2f9bff77ae58754e7344d65e20a`](https://github.com/isomorphisms/android-NDK/commit/3fb6a75d8cffe2f9bff77ae58754e7344d65e20a),
 from [isomorphisms/android-NDK #20 — Lower checked framework calls and IO directly to DEX](https://github.com/isomorphisms/android-NDK/pull/20).
-This draft change records the candidate in the gitlink so its hosted checks
-can run in parallel with upstream verification. Final acceptance requires
-both upstream and consumer evidence for the recorded revision.
+The current draft dependency is repaired candidate
+[`d0d0eb6b702538c2806757b01a078da21dd41c6b`](https://github.com/isomorphisms/android-NDK/commit/d0d0eb6b702538c2806757b01a078da21dd41c6b),
+tree `b83c6aad2d38495a0103bb8ab549de8f0bd5a41c`, whose parent is `3fb6a75`.
+This repair changes verification orchestration and its documentation; the
+binding and fixture sources are unchanged. Hosted checks use the recorded
+candidate in parallel with upstream verification. Final acceptance requires
+both upstream and consumer evidence for that revision; the historical
+`3fb6a75` source receipt is not relabeled as a new run.
 
 Source: `PensieveQuickSettingsRuntime.idric`.
 This attempt and type sketch were written before the source.
@@ -100,8 +105,8 @@ Its SHA-256 is
 | --- | --- |
 | Historical signature-only access | Preserved in `../quick-settings-bindings/` |
 | Existing public vocabulary check, core `src` and this new example | `PASS` on 2026-10-09 UTC |
-| This consumer's source check against candidate `3fb6a75` | `PASS` on 2026-10-09 UTC |
-| Candidate dependency pin | `3fb6a75`; runtime acceptance `PENDING` |
+| Historical consumer source check against candidate `3fb6a75` | `PASS` on 2026-10-09 UTC |
+| Candidate dependency pin | `d0d0eb6`; exact-revision verification and runtime acceptance `PENDING` |
 | This consumer's direct DEX emission | `NOT_RUN` |
 | This consumer's ART execution | `NOT_RUN` |
 | Upstream candidate ART execution | `PENDING`; no runtime result claimed here |
@@ -111,7 +116,7 @@ Upstream fixture emission or ART evidence must be recorded separately from
 this IB-owned source. The consumer needs its own source and emitted-artifact
 identities; an upstream pass alone is not an IB execution receipt.
 
-The fresh source check used actual Idriç
+The historical source check used actual Idriç
 `ff4d852862a3942592f8ade9afde8d409d9803be`, explicit checked prelude/base module
 paths, and an isolated prefix with no installed packages. The candidate's
 binding package was checked first into a fresh output directory, then this
@@ -163,6 +168,21 @@ Grease on 2026-10-09 UTC; `git diff --check` also passes. The exact command and
 script identity are in `orchestration-check.txt`. Local syntax checks do not
 stand in for hosted builds, byte comparison, or ART execution; those results
 remain pending until observed.
+
+The orchestration repair keeps the consumer's standard-library module
+paths aligned with the compiler API: both use the installed base and prelude
+under `_/bootstrap-build/idris2-0.8.0`. Mixing the API's installed modules with
+later rebuilt `_/libs/*/build/ttc` modules exposed a missing helper at the
+upstream driver's host link. The historical `source-check.txt` retains its
+actual earlier commands and does not validate this repaired build path.
+
+The workflow will cache only the successful pinned compiler/API layout. Its
+key includes Ubuntu 24.04, runner architecture, the full Idriç revision, and
+a layout version; no partial-key fallback is allowed. Restore precedes the
+compiler build, and only an exact hit skips compiler/API installation. Save
+follows successful installation and precedes backend verification, so a later
+backend failure can reuse the already built compiler. Repaired upstream
+candidate `d0d0eb6` supplies the matching verifier dependency set.
 
 ## Language work exposed
 
