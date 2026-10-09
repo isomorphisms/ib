@@ -1,0 +1,75 @@
+module PensieveQuickSettingsRuntime
+
+import Android.QuickSettings
+
+-- IB-owned executable acceptance source. An external test caller supplies
+-- framework references; no exported function is attached to browser behavior.
+
+%export "dex:service_tile"
+service_tile : TileService → IO Tile
+service_tile service = tile_for_service service
+
+state_result_code : Maybe TileState → Int32
+state_result_code Nothing = -1
+state_result_code (Just state) = state_code state
+
+%export "dex:tile_state_code"
+tile_state_code : Tile → IO Int32
+tile_state_code tile = do
+  state ← get_tile_state tile
+  pure (state_result_code state)
+
+%export "dex:set_active_then_update"
+set_active_then_update : Tile → IO ()
+set_active_then_update tile = do
+  set_tile_state tile Active
+  update_tile tile
+
+%export "dex:submit_add_request"
+submit_add_request : StatusBarManager → ComponentName → CharSequence → Icon → Executor → TileAddResultConsumer → IO ()
+submit_add_request manager component label icon executor consumer =
+  request_add_tile manager component label icon executor consumer
+
+add_result_code : AddTileResult → Int32
+add_result_code TileNotAdded = 0
+add_result_code TileAlreadyAdded = 1
+add_result_code TileAdded = 2
+add_result_code MismatchedPackage = 1000
+add_result_code RequestInProgress = 1001
+add_result_code BadComponent = 1002
+add_result_code NotCurrentUser = 1003
+add_result_code AppNotInForeground = 1004
+add_result_code NoStatusBarService = 1005
+add_result_code (UnrecognizedAddResult code) = code
+
+-- The shared upstream runner supplies real Integer objects and checks this
+-- scalar observation. It never supplies the candidate implementation.
+%export "dex:callback_result_code"
+callback_result_code : BoxedInteger → IO Int32
+callback_result_code boxed = do
+  result ← read_add_result boxed
+  pure (add_result_code result)
+
+-- An independent constructor observation prevents code identity from hiding
+-- a decoder that always selects the unknown-result constructor.
+add_result_tag : AddTileResult → Int32
+add_result_tag TileNotAdded = 0
+add_result_tag TileAlreadyAdded = 1
+add_result_tag TileAdded = 2
+add_result_tag MismatchedPackage = 3
+add_result_tag RequestInProgress = 4
+add_result_tag BadComponent = 5
+add_result_tag NotCurrentUser = 6
+add_result_tag AppNotInForeground = 7
+add_result_tag NoStatusBarService = 8
+add_result_tag (UnrecognizedAddResult _) = 9
+
+%export "dex:callback_result_tag"
+callback_result_tag : BoxedInteger → IO Int32
+callback_result_tag boxed = do
+  result ← read_add_result boxed
+  pure (add_result_tag result)
+
+-- Compiler entry point only; platform operations require an explicit caller.
+main : IO ()
+main = pure ()
