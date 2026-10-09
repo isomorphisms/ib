@@ -219,19 +219,17 @@ exercise_core() {
   sh -n lib/android_shizuku_capabilities_provider.grease
   sh -n lib/android_binder_host.grease
   sh -n bin/ib_android_binder.grease
+  # Shizuku-dependent positive suites run in the pinned native Grease job.
+  # Keep shell-compatibility syntax here, never substitute sh for Grease.
   sh -n tests/test_android_binder_host.grease
-  sh tests/test_android_binder_host.grease
   sh -n lib/android_device_capabilities.grease
   sh -n bin/ib_android_capabilities.grease
   sh -n tests/test_android_device_capabilities.grease
-  sh tests/test_android_device_capabilities.grease
   sh -n lib/android_longview_worker.grease
   sh -n bin/ib_android_longview_worker.grease
   sh -n bin/accept_android_longview_worker.grease
   sh -n tests/test_android_longview_worker.grease
-  sh tests/test_android_longview_worker.grease
   sh -n tests/test_android_shizuku_worker_program.grease
-  sh tests/test_android_shizuku_worker_program.grease
   cd "$repository_root/src"
   run_logged /tmp/idric-paint-budget-compile.txt "$idric_prefix/bin/idris2" PaintBudgetSmoke.idric -o ib-paint-budget-smoke
   test -x ./build/exec/ib-paint-budget-smoke

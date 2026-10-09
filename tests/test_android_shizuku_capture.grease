@@ -1,0 +1,135 @@
+#!/usr/bin/env grease
+# The production capture and this suite run in Grease default mode.
+var test_root = _this_dir
+var capture_program = "$test_root/../lib/bounded_process_capture.grease"
+var runtime = get(ENV, 'IB_GREASE_COMMAND', '')
+if (runtime === '') {
+  echo 'set IB_GREASE_COMMAND to the qualified absolute Grease executable' >&2
+  exit 127
+}
+if ! test -x $runtime { echo 'Grease executable is not executable' >&2; exit 127 }
+var work = $(mktemp -d)
+trap --add EXIT { rm -rf -- $work }
+mkdir "$work/captures" "$work/pids"
+var provider = "$work/rish"
+printf '#!%s\n' $runtime >$provider
+cat "$test_root/fixtures/bounded-rish.grease" >>$provider
+chmod 700 $provider
+
+proc run-case (mode, expected) {
+  try {
+    env TMPDIR="$work/captures" IB_CAPTURE_PID_DIR="$work/pids" \
+      $runtime $capture_program 1 32 32 $provider -c $mode >"$work/out" 2>"$work/err"
+  }
+  var actual = _error.code
+  if (actual !== int(expected)) {
+    cat "$work/err" >&2
+    echo "$mode: expected $expected, got $actual" >&2
+    exit 1
+  }
+  if (actual !== 0) { test ! -s "$work/out" }
+  test -z "$(ls -A "$work/captures")"
+  printf 'PASS %s status=%s\n' $mode $actual
+}
+run-case ok 0
+printf 'result\n' >"$work/expected"
+cmp "$work/expected" "$work/out"
+printf 'warning\n' >"$work/expected"
+cmp "$work/expected" "$work/err"
+run-case exact 0
+test "$(wc -c <"$work/out")" -eq 32
+test "$(wc -c <"$work/err")" -eq 32
+run-case failed 37
+printf 'permission denied\n' >"$work/expected"
+cmp "$work/expected" "$work/err"
+run-case failed124 124
+printf 'provider-owned-status\n' >"$work/expected"
+cmp "$work/expected" "$work/err"
+for mode in stdout-over stderr-over both-over {
+  run-case $mode 65
+  grep -F 'output budget exceeded:' "$work/err" >/dev/null
+}
+run-case hang-before 124
+run-case hang-after 124
+run-case ignore-term 137
+run-case descendant 124
+# The capture returning after all three direct waits and removing its FIFO
+# directory is local helper completion evidence. Container PID translation
+# makes /proc/$! absence unsuitable evidence here. No remote death is inferred.
+run-case ok 0
+
+# Oversized writes plus a stall must capture only the detection byte, not grow
+# a temporary file until completion. This oracle also rejects an uncapped
+# reader mutation below; no timing-sensitive polling is used.
+run-case oversize-stall 65
+var bounded_diagnostic = 'provider output budget exceeded: stdout=33/32 stderr=33/32; remote-lifetime=unknown'
+grep -Fx $bounded_diagnostic "$work/err" >/dev/null
+mkdir "$work/uncapped-reader"
+printf '#!%s\n' $runtime >"$work/uncapped-reader/head"
+printf '%s\n' 'exec cat $[ARGV[2]]' >>"$work/uncapped-reader/head"
+chmod 700 "$work/uncapped-reader/head"
+try {
+  env PATH="$work/uncapped-reader:$[ENV.PATH]" TMPDIR="$work/captures" \
+    $runtime $capture_program 1 32 32 $provider -c oversize-stall >"$work/out" 2>"$work/err"
+}
+test "$[_error.code]" -eq 65
+test ! -s "$work/out"
+test -z "$(ls -A "$work/captures")"
+if grep -Fx $bounded_diagnostic "$work/err" >/dev/null {
+  echo 'oracle accepted an uncapped reader' >&2
+  exit 1
+}
+grep -F 'stdout=1024/32 stderr=1024/32' "$work/err" >/dev/null
+echo 'PASS byte-count oracle rejects uncapped reader mutation'
+
+# Invalid budgets and missing primitives must fail before starting rish.
+for budget in '-1' 'not-a-number' '99999999' {
+  try { $runtime $capture_program 1 $budget 32 $provider -c ok >"$work/out" 2>"$work/err" }
+  test "$[_error.code]" -eq 2
+  test ! -s "$work/out"
+}
+mkdir "$work/empty-path"
+# The qualified older native wrapper uses dirname before exec. Retain that
+# wrapper primitive while deliberately excluding capture's timeout primitive.
+ln -s "$(command -v dirname)" "$work/empty-path/dirname"
+try {
+  env PATH="$work/empty-path" $runtime $capture_program 1 32 32 $provider -c ok \
+    >"$work/out" 2>"$work/err"
+}
+test "$[_error.code]" -eq 127
+grep -F 'required provider capture primitive missing: timeout' "$work/err" >/dev/null
+test ! -s "$work/out"
+echo 'PASS missing primitive refuses without fallback'
+
+# A reader that fails before opening either FIFO used to strand the provider
+# redirection outside timeout. Bound this regression from outside as well.
+mkdir "$work/bad-reader"
+printf '#!%s\nexit 91\n' $runtime >"$work/bad-reader/head"
+chmod 700 "$work/bad-reader/head"
+rm "$work/pids/provider"
+try {
+  timeout --kill-after=1 8 env PATH="$work/bad-reader:$[ENV.PATH]" \
+    TMPDIR="$work/captures" IB_CAPTURE_PID_DIR="$work/pids" \
+    $runtime $capture_program 1 32 32 $provider -c ok >"$work/out" 2>"$work/err"
+}
+test "$[_error.code]" -eq 74
+test ! -e "$work/pids/provider"
+test ! -s "$work/out"
+test -z "$(ls -A "$work/captures")"
+grep -F 'stdout-status=91 stderr-status=91' "$work/err" >/dev/null
+echo 'PASS reader startup failure cannot strand FIFO open'
+
+# Generic callers receive runtime configuration failure before helper startup.
+try {
+  env IB_GREASE_COMMAND="$work/absent-runtime" TMPDIR="$work/captures" \
+    $runtime $capture_program 1 32 32 $provider -c ok >"$work/out" 2>"$work/err"
+}
+test "$[_error.code]" -eq 127
+test -z "$(ls -A "$work/captures")"
+grep -F 'IB_GREASE_COMMAND is not executable' "$work/err" >/dev/null
+try { $runtime $capture_program 1 0 0 $provider -c empty >"$work/out" 2>"$work/err" }
+test "$[_error.code]" -eq 0
+test ! -s "$work/out"
+test ! -s "$work/err"
+run-case ok 0
+echo 'bounded Shizuku capture tests: ok'

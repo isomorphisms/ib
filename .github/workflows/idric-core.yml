@@ -20,6 +20,84 @@ env:
   IDRIC_REF: 7050c116326c9c8e8d0a56c2db7baf2119cbae19
 
 jobs:
+  shizuku-grease:
+    name: shizuku-grease
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    env:
+      GREASE_REF: f19c94c6df18cddbdc1e81463e5bd689533e3c13
+      OILS_REF: 6d29702a10ea9eb72a43950554dbcd4174d07a89
+      REPO_ROOT: ${{ github.workspace }}/.tools/oils-source
+      IB_GREASE_COMMAND: ${{ github.workspace }}/.tools/oils-source/_bin/cxx-asan/ysh
+    steps:
+      - name: Check out exact IB pull-request head
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      - name: Check out pinned Grease owner revision
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: dilapidated-shed/grease
+          ref: f19c94c6df18cddbdc1e81463e5bd689533e3c13
+          path: .tools/grease
+          persist-credentials: false
+
+      - name: Check out exact Grease source gitlink
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: dilapidated-shed/oils
+          ref: 6d29702a10ea9eb72a43950554dbcd4174d07a89
+          path: .tools/oils-source
+          persist-credentials: false
+
+      - name: Verify the source, toolchain and exact revisions
+        shell: bash
+        env:
+          EXPECTED_IB_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_IB_HEAD"
+          test "$(git -C .tools/grease rev-parse HEAD)" = "$GREASE_REF"
+          test "$(git -C .tools/grease rev-parse HEAD:source)" = "$OILS_REF"
+          test "$(git -C .tools/oils-source rev-parse HEAD)" = "$OILS_REF"
+          test "$(uname -m)" = x86_64
+          podman --version
+          printf 'IB source %s; Grease %s; Oils source %s\\n' "$EXPECTED_IB_HEAD" "$GREASE_REF" "$OILS_REF"
+
+      # Match the memory-mapping precondition used by the upstream receipt job.
+      - name: Qualify host ASAN memory mapping
+        run: sudo sysctl vm.mmap_rnd_bits=28
+
+      - name: Build the pinned native Grease runtime using its upstream receipt job
+        working-directory: .tools/oils-source
+        shell: bash
+        run: |
+          set -euo pipefail
+          soil/github-actions.sh run-job cpp-spec podman
+          soil/host-shim.sh did-all-succeed cpp-spec
+          test -x _bin/cxx-asan/ysh
+          sha256sum _bin/cxx-asan/ysh
+          _bin/cxx-asan/ysh --version
+
+      - name: Exercise bounded Shizuku capture with actual Grease
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -x "$IB_GREASE_COMMAND"
+          timeout --kill-after=5 120 "$IB_GREASE_COMMAND" tests/test_android_shizuku_capture.grease
+          timeout --kill-after=5 120 "$IB_GREASE_COMMAND" +O ysh:all tests/test_android_shizuku_host.grease
+          # These suites source the same provider and must not be claimed from sh.
+          for fixture in \
+            tests/test_android_device_capabilities.grease \
+            tests/test_android_binder_host.grease \
+            tests/test_android_longview_worker.grease \
+            tests/test_android_shizuku_worker_program.grease
+          do
+            timeout --kill-after=5 120 "$IB_GREASE_COMMAND" +O ysh:all "$fixture"
+          done
+
   idric-core:
     runs-on: ubuntu-latest
     env:
@@ -43,14 +121,21 @@ jobs:
           sh tests/idric-public-vocabulary-self-test.sh
           sh tests/idric-public-vocabulary.sh
 
-      - name: Exercise Android Shizuku host adapter
-        run: sh tests/test_android_shizuku_host.grease
-
-      - name: Exercise Android device capability report
-        run: sh tests/test_android_device_capabilities.grease
-
-      - name: Exercise E3 worker attempt boundary
+      # Positive Shizuku host/capture acceptance runs in shizuku-grease below,
+      # with the actual pinned Grease runtime. This shell step is syntax only.
+      - name: Check shell-compatible Shizuku adapter syntax
         run: |
+          sh -n lib/android_shizuku_host.grease
+          sh -n tests/test_android_shizuku_host.grease
+
+      # Positive device capability tests run with the same Grease backend as
+      # the Binder/Shizuku adapter; this step checks syntax only.
+      - name: Check shell-compatible device capability test syntax
+        run: sh -n tests/test_android_device_capabilities.grease
+
+      - name: Check shell-compatible E3 worker syntax
+        run: |
+          # Positive attempts execute under the pinned Grease runtime above.
           sh -n lib/android_shizuku_worker_provider.grease
           sh -n lib/android_binder_host.grease
           sh -n lib/android_longview_worker.grease
@@ -58,9 +143,6 @@ jobs:
           sh -n tests/test_android_binder_host.grease
           sh -n tests/test_android_longview_worker.grease
           sh -n tests/test_android_shizuku_worker_program.grease
-          sh tests/test_android_binder_host.grease
-          sh tests/test_android_longview_worker.grease
-          sh tests/test_android_shizuku_worker_program.grease
 
       - name: Checkout canonical hostile-input corpus
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683

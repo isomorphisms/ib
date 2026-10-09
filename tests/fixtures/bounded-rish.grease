@@ -1,0 +1,33 @@
+# Test double for rish's fixed two-argument process interface. Real Grease,
+# no Android authority and no borrowed production acquisition implementation.
+test "$[len(ARGV)]" -eq 2
+test $[ARGV[0]] = -c
+var mode = ARGV[1]
+if (get(ENV, 'IB_CAPTURE_PID_DIR', '') !== '') {
+  printf '%s\n' $$ >"$[ENV.IB_CAPTURE_PID_DIR]/provider"
+}
+case (mode) {
+  ('ok') { printf 'result\n'; printf 'warning\n' >&2 }
+  ('empty') { true }
+  ('exact') { printf '%032d' 0; printf '%032d' 0 >&2 }
+  ('stdout-over') { printf '%033d' 0 }
+  ('stderr-over') { printf '%033d' 0 >&2 }
+  ('both-over') { printf '%033d' 0; printf '%033d' 0 >&2 }
+  ('failed') { printf 'plausible-success\n'; printf 'permission denied\n' >&2; exit 37 }
+  ('failed124') { printf 'plausible-success\n'; printf 'provider-owned-status\n' >&2; exit 124 }
+  ('hang-before') { sleep 10 }
+  ('hang-after') { printf 'partial-success\n'; sleep 10 }
+  ('ignore-term') { trap --ignore TERM; sleep 10 }
+  ('descendant') {
+    fork { exec sleep 10 }
+    printf '%s\n' $! >"$[ENV.IB_CAPTURE_PID_DIR]/descendant"
+    wait
+  }
+  ('oversize-stall') {
+    trap --ignore PIPE
+    printf '%01024d' 0
+    printf '%01024d' 0 >&2
+    sleep 10
+  }
+  (else) { echo 'unknown provider fixture mode' >&2; exit 92 }
+}
