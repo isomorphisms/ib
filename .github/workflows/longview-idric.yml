@@ -1,0 +1,103 @@
+name: Long View Idric model and direct DEX
+
+on:
+  pull_request:
+    paths:
+      - 'src/**'
+      - 'tests/longview-idric/**'
+      - '.gitmodules'
+      - 'vendor/android-NDK'
+      - '.github/workflows/longview-idric.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: longview-idric-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  source-to-dex:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 50
+    env:
+      CATFOOD_ROOT: ${{ github.workspace }}/.tools/runtime
+      CATFOOD_JOBS: '2'
+      JOBS: '2'
+    steps:
+      - name: Check out exact IB source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: isomorphisms/Idric
+          ref: ff4d852862a3942592f8ade9afde8d409d9803be
+          path: .tools/Idric
+          persist-credentials: false
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: isomorphisms/catfood
+          ref: 609a9628d5a52860f956bf62e0914a0cd03292ae
+          path: .tools/catfood
+          persist-credentials: false
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: dilapidated-shed/grease
+          ref: f19c94c6df18cddbdc1e81463e5bd689533e3c13
+          path: .tools/runtime/grease
+          submodules: true
+          persist-credentials: false
+      # These are the same existing bootstrap entry points and exact pins as
+      # Pensieve's qualified Quick Settings workflow, not a new compiler path.
+      - name: Refresh host package index
+        shell: sh
+        run: sudo apt-get update
+      - name: Install bootstrap prerequisites
+        shell: sh
+        run: sudo apt-get install -y build-essential curl xz-utils libreadline-dev libffi-dev libgmp-dev zlib1g-dev default-jre-headless ripgrep
+      - name: Build pinned Grease through Cat Food
+        shell: sh
+        run: sh .tools/catfood/build-tools.sh
+      - name: Initialize pinned Android compiler dependency
+        shell: sh
+        run: .tools/runtime/.build/grease/bin/grease -c 'git submodule update --init -- vendor/android-NDK'
+      - name: Restore the existing qualified compiler and API cache
+        id: idric-cache
+        uses: actions/cache/restore@caa296126883cff596d87d8935842f9db880ef25
+        with:
+          path: |
+            .tools/Idric/_/.tools
+            .tools/Idric/_/build
+            .tools/Idric/_/bootstrap-build
+            .tools/Idric/_/libs/*/build
+            .tools/Idric/_/src/IdrisPaths.idr
+          key: idric-bootstrap-api-v1-ubuntu-24.04-${{ runner.arch }}-ff4d852862a3942592f8ade9afde8d409d9803be
+      - name: Build pinned Idric compiler on cache miss
+        if: steps.idric-cache.outputs.cache-hit != 'true'
+        shell: sh
+        run: sh .tools/Idric/edric all
+      - name: Install compiler API on cache miss
+        if: steps.idric-cache.outputs.cache-hit != 'true'
+        shell: sh
+        run: env IDRIS2_PREFIX="$GITHUB_WORKSPACE/.tools/Idric/_/bootstrap-build" CHEZ="$GITHUB_WORKSPACE/.tools/Idric/_/.tools/bin/scheme" "$GITHUB_WORKSPACE/.tools/Idric/_/build/exec/idris2" --install "$GITHUB_WORKSPACE/.tools/Idric/_/idris2api.ipkg"
+      - uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd
+        with:
+          packages: 'build-tools;35.0.0'
+      - name: Build existing checked DEX driver and run its controls
+        shell: sh
+        run: .tools/runtime/.build/grease/bin/grease vendor/android-NDK/dex/idric/verify-effects.grease "$GITHUB_WORKSPACE/vendor/android-NDK" "$GITHUB_WORKSPACE/.tools/Idric" "$GITHUB_WORKSPACE/.tools/Idric/_/.tools/bin/scheme" "$ANDROID_HOME/build-tools/35.0.0/dexdump" "$RUNNER_TEMP/longview-upstream"
+      - name: Execute real Idric lifecycle, reject mutants, attempt direct DEX
+        shell: sh
+        run: .tools/runtime/.build/grease/bin/grease tests/longview-idric/verify.grease "$GITHUB_WORKSPACE" "$GITHUB_WORKSPACE/.tools/Idric" "$ANDROID_HOME/build-tools/35.0.0/dexdump" "$RUNNER_TEMP/longview-upstream" "$RUNNER_TEMP/longview-idric" "${{ github.event.pull_request.head.sha || github.sha }}"
+      - name: Preserve exact source, execution, and backend failures
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: longview-idric-${{ github.event.pull_request.head.sha || github.sha }}
+          path: |
+            ${{ runner.temp }}/longview-idric/
+            ${{ runner.temp }}/longview-upstream/*.txt
+          if-no-files-found: warn

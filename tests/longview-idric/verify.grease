@@ -1,0 +1,116 @@
+#!/usr/bin/env grease
+
+# Host execution checks the real Idric model. Only the separate checked-DEX
+# stage can establish Android code generation; neither produces a phone APK.
+if (len(ARGV) !== 6) {
+  echo 'usage: grease verify.grease REPOSITORY IDRIC_REPOSITORY DEXDUMP UPSTREAM_EVIDENCE EVIDENCE EXPECTED_HEAD' >&2
+  exit 2
+}
+var repository = ARGV[0]
+var compiler_repository = ARGV[1]
+var dexdump = ARGV[2]
+var upstream_evidence = ARGV[3]
+var evidence = ARGV[4]
+var expected_head = ARGV[5]
+for path in "$repository" "$compiler_repository" "$dexdump" "$upstream_evidence" "$evidence" {
+  if (path[0] !== '/') { echo 'absolute path required' >&2; exit 2 }
+}
+if test -e "$evidence" { echo 'refusing reused evidence directory' >&2; exit 1 }
+mkdir -p "$evidence"
+var compiler = "$compiler_repository/_/build/exec/idris2"
+var prefix = "$compiler_repository/_/bootstrap-build"
+var scheme = "$compiler_repository/_/.tools/bin/scheme"
+var driver = "$upstream_evidence/backend/exec/idric-dex"
+var library_path = "$prefix/idris2-0.8.0/base-0.8.0:$prefix/idris2-0.8.0/prelude-0.8.0"
+
+test "$(git -C "$repository" rev-parse HEAD)" = "$expected_head"
+test "$(git -C "$compiler_repository" rev-parse HEAD)" = 'ff4d852862a3942592f8ade9afde8d409d9803be'
+test "$(git -C "$repository/vendor/android-NDK" rev-parse HEAD)" = '7ea62a3e3cd19f2ab04a27f72ace1ae9e8b1fe66'
+test "$(git -C "$repository" rev-parse HEAD:vendor/android-NDK)" = '7ea62a3e3cd19f2ab04a27f72ace1ae9e8b1fe66'
+git -C "$repository" diff --exit-code HEAD -- src tests/longview-idric .github/workflows/longview-idric.yml > "$evidence/source-clean.txt"
+for program in "$compiler" "$scheme" "$driver" "$dexdump" { test -x "$program" }
+git -C "$repository" rev-parse HEAD 'HEAD^{tree}' > "$evidence/revision.txt"
+sha256sum "$repository/src/IB/LongViewTask.idric" "$repository/src/IB/LongViewLifecycle.idric" \
+  "$repository/src/LongViewAndroid.idric" "$repository/src/LongViewLifecycleCheck.idric" \
+  "$repository/tests/longview-idric/verify.grease" "$compiler" \
+  "$compiler_repository/_/build/exec/idris2_app/idris2.so" "$driver" \
+  "$upstream_evidence/backend/exec/idric-dex_app/idric-dex.so" > "$evidence/input-sha256.txt"
+
+proc clean_log(path) {
+  if rg -n '^[[:space:]]*(Error:|INTERNAL ERROR)' "$path" {
+    echo "FAIL compiler diagnostics: $path" >&2
+    exit 1
+  }
+}
+
+proc compile_host(source, output) {
+  mkdir -p "$output"
+  env IDRIS2_PREFIX="$prefix" IDRIS2_PATH="$library_path" CHEZ="$scheme" \
+    "$compiler" --cg chez --source-dir "$source" --build-dir "$output/build" \
+    --output-dir "$output" "$source/LongViewLifecycleCheck.idric" -o longview-check \
+    > "$output/compile.txt" 2>&1
+  clean_log "$output/compile.txt"
+  test -x "$output/longview-check"
+}
+
+compile_host "$repository/src" "$evidence/host"
+env CHEZ="$scheme" "$evidence/host/longview-check" > "$evidence/host/execution.txt" 2>&1
+rg -q -x -F 'PASS Long View Idric lifecycle suite' "$evidence/host/execution.txt"
+cat "$evidence/host/execution.txt"
+echo 'PASS actual Idric lifecycle host execution; not Android execution' > "$evidence/host-result.txt"
+
+# Reject wrong behavior through the same executable assertions. Compiler
+# failures never count as a successful mutation test.
+for mutation in wrong-host accept-stale {
+  var mutant_source = "$evidence/$mutation/source"
+  var mutant_output = "$evidence/$mutation/program"
+  mkdir -p "$mutant_source/IB"
+  cp "$repository/src/IB/LongViewTask.idric" "$mutant_source/IB/"
+  cp "$repository/src/LongViewAndroid.idric" "$repository/src/LongViewLifecycleCheck.idric" "$mutant_source/"
+  var expected_failure = ''
+  if (mutation === 'wrong-host') {
+    sed 's/then activity_was_recreated task/then host_process_restarted host task/' \
+      "$repository/src/IB/LongViewLifecycle.idric" > "$mutant_source/IB/LongViewLifecycle.idric"
+    setvar expected_failure = 'FAIL same host means activity recreation'
+  } else {
+    sed 's/if observes_current_renderer observation task/if True/' \
+      "$repository/src/IB/LongViewLifecycle.idric" > "$mutant_source/IB/LongViewLifecycle.idric"
+    setvar expected_failure = 'FAIL duplicate loss is refused'
+  }
+  if cmp -s "$repository/src/IB/LongViewLifecycle.idric" "$mutant_source/IB/LongViewLifecycle.idric" {
+    echo 'FAIL mutation did not change the production module' >&2
+    exit 1
+  }
+  compile_host "$mutant_source" "$mutant_output"
+  try { env CHEZ="$scheme" "$mutant_output/longview-check" > "$mutant_output/execution.txt" 2>&1 }
+  var status = _error.code
+  if (status === 0) { echo "FAIL undetected mutation: $mutation" >&2; exit 1 }
+  rg -q -x -F "$expected_failure" "$mutant_output/execution.txt"
+  echo "PASS rejected executed $mutation mutation" >> "$evidence/host-result.txt"
+}
+cat "$evidence/host-result.txt"
+
+mkdir -p "$evidence/dex"
+try {
+  env IDRIS2_PREFIX="$prefix" CHEZ="$scheme" \
+    IDRIS2_PATH="$upstream_evidence/backend/ttc:$library_path" \
+    "$driver" --cg dex --source-dir "$repository/src" --build-dir "$evidence/dex/build" \
+    --output-dir "$evidence/dex" --dumpanf "$evidence/dex/longview-android.anf" \
+    "$repository/src/LongViewAndroid.idric" -o longview-android \
+    > "$evidence/dex/compile.txt" 2>&1
+}
+var dex_status = _error.code
+printf 'compiler_exit=%s\n' "$dex_status" > "$evidence/dex/result.txt"
+cat "$evidence/dex/compile.txt"
+if (dex_status !== 0) {
+  echo 'FAIL direct-DEX compilation; host success is separate' >> "$evidence/dex/result.txt"
+  exit 1
+}
+clean_log "$evidence/dex/compile.txt"
+for suffix in dex dex.plan checked.anf smali { test -s "$evidence/dex/longview-android.$suffix" }
+"$dexdump" -c "$evidence/dex/longview-android.dex" > "$evidence/dex/checksum.txt" 2>&1
+"$dexdump" -d "$evidence/dex/longview-android.dex" > "$evidence/dex/disassembly.txt" 2>&1
+sha256sum "$evidence/dex/longview-android.dex" > "$evidence/dex/sha256.txt"
+echo 'PASS actual Long View source emitted independently parsed DEX' >> "$evidence/dex/result.txt"
+echo 'NOT_RUN ART caller, Android Activity, APK, physical C67, disk recovery, Shizuku' >> "$evidence/dex/result.txt"
+cat "$evidence/dex/result.txt"

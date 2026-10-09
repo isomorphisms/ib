@@ -1,0 +1,102 @@
+module LongViewLifecycleCheck
+
+import System
+import IB.LongViewTask
+import IB.LongViewLifecycle
+import LongViewAndroid
+
+check : Text → Bool → IO ()
+check name True = putStrLn ("PASS " ++ name)
+check name False = die ("FAIL " ++ name)
+
+was_refused : Maybe LongViewTask → Bool
+was_refused Nothing = True
+was_refused (Just _) = False
+
+same_durable_identity : LongViewTask → LongViewTask → Bool
+same_durable_identity before after =
+  identity_text before.task_identity ≟ identity_text after.task_identity &&
+  identity_text before.tab_identity ≟ identity_text after.tab_identity &&
+  identity_text before.navigation_identity ≟ identity_text after.navigation_identity
+
+session_unproven : LongViewTask → Bool
+session_unproven task = case task.session of
+  session_not_proven ⇒ True
+  _ ⇒ False
+
+heap_unavailable : LongViewTask → Bool
+heap_unavailable task = case task.heap of
+  heap_not_available ⇒ True
+  _ ⇒ False
+
+fixture : Maybe (LongViewTask, DurableIdentity, DurableIdentity)
+fixture = do
+  task ← durable_identity "task-current"
+  tab ← durable_identity "tab-current"
+  navigation ← durable_identity "navigation-current"
+  host ← durable_identity "host-current"
+  renderer ← durable_identity "renderer-current"
+  other ← durable_identity "different-identity"
+  let original = start_protected_task task tab navigation Nothing Nothing no_safe_navigation host
+  pure (attach_initial_renderer renderer original, renderer, other)
+
+main : IO ()
+main = case fixture of
+  Nothing ⇒ die "FAIL validated fixture construction"
+  Just (live, renderer, other) ⇒ do
+    let confirmed = confirm_authenticated_continuation (observe_live_heap live)
+    let recreated = open_in_host live.host_process_identity confirmed
+    let restarted = open_in_host other confirmed
+    check "same host means activity recreation" (case recreated.continuity of
+      activity_recreation ⇒ True
+      _ ⇒ False)
+    check "same host preserves host generation" (recreated.host_generation ≟ live.host_generation)
+    check "activity generation advances" (recreated.activity_generation ≟ live.activity_generation + 1)
+    check "changed host means process restart" (case restarted.continuity of
+      host_process_restart ⇒ True
+      _ ⇒ False)
+    check "host generation advances" (restarted.host_generation ≟ live.host_generation + 1)
+    check "durable identities survive restart" (same_durable_identity live restarted)
+    check "restart does not claim authentication" (session_unproven restarted)
+    check "restart does not claim live heap" (heap_unavailable restarted)
+    let observation = ObservedRenderer live.task_identity live.tab_identity live.navigation_identity
+          live.host_process_identity live.host_generation renderer live.renderer_generation
+    check "current callback is admitted" (observes_current_renderer observation live)
+    case record_renderer_loss observation confirmed of
+      Nothing ⇒ die "FAIL current renderer loss was rejected"
+      Just lost ⇒ do
+        check "renderer loss preserves durable identities" (same_durable_identity live lost)
+        check "renderer loss revokes session and heap claims" (session_unproven lost && heap_unavailable lost)
+        check "duplicate loss is refused" (was_refused (record_renderer_loss observation lost))
+        check "late page commit after loss is refused" (was_refused (record_page_commit observation lost))
+    check "wrong task callback refused" (was_refused (record_renderer_loss
+      (ObservedRenderer other live.tab_identity live.navigation_identity live.host_process_identity
+        live.host_generation renderer live.renderer_generation) live))
+    check "wrong tab callback refused" (was_refused (record_renderer_loss
+      (ObservedRenderer live.task_identity other live.navigation_identity live.host_process_identity
+        live.host_generation renderer live.renderer_generation) live))
+    check "wrong navigation callback refused" (was_refused (record_renderer_loss
+      (ObservedRenderer live.task_identity live.tab_identity other live.host_process_identity
+        live.host_generation renderer live.renderer_generation) live))
+    check "wrong host callback refused" (was_refused (record_renderer_loss
+      (ObservedRenderer live.task_identity live.tab_identity live.navigation_identity other
+        live.host_generation renderer live.renderer_generation) live))
+    check "wrong host generation refused" (was_refused (record_renderer_loss
+      (ObservedRenderer live.task_identity live.tab_identity live.navigation_identity live.host_process_identity
+        (live.host_generation + 1) renderer live.renderer_generation) live))
+    check "wrong renderer callback refused" (was_refused (record_renderer_loss
+      (ObservedRenderer live.task_identity live.tab_identity live.navigation_identity live.host_process_identity
+        live.host_generation other live.renderer_generation) live))
+    check "wrong renderer generation refused" (was_refused (record_renderer_loss
+      (ObservedRenderer live.task_identity live.tab_identity live.navigation_identity live.host_process_identity
+        live.host_generation renderer (live.renderer_generation + 1)) live))
+    check "callback from prior host refused" (was_refused (record_page_commit observation restarted))
+    case record_page_commit observation live of
+      Nothing ⇒ die "FAIL current page commit was rejected"
+      Just committed ⇒ do
+        check "page commit preserves durable identities" (same_durable_identity live committed)
+        check "page commit does not prove authentication" (session_unproven committed)
+    check "DEX entry same-host observation" (longview_host_generation "task" "tab" "nav" "host-a" "host-a" ≟ 1)
+    check "DEX entry changed-host observation" (longview_host_generation "task" "tab" "nav" "host-a" "host-b" ≟ 2)
+    check "DEX entry rejects invalid identity" (longview_host_generation "task\ninvalid" "tab" "nav" "host-a" "host-b" ≟ -1)
+    putStrLn "PASS Long View Idric lifecycle suite"
