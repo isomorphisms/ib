@@ -133,8 +133,9 @@ jobs:
       - name: Check shell-compatible device capability test syntax
         run: sh -n tests/test_android_device_capabilities.grease
 
-      - name: Exercise E3 worker attempt boundary
+      - name: Check shell-compatible E3 worker syntax
         run: |
+          # Positive attempts execute under the pinned Grease runtime above.
           sh -n lib/android_shizuku_worker_provider.grease
           sh -n lib/android_binder_host.grease
           sh -n lib/android_longview_worker.grease
@@ -142,9 +143,6 @@ jobs:
           sh -n tests/test_android_binder_host.grease
           sh -n tests/test_android_longview_worker.grease
           sh -n tests/test_android_shizuku_worker_program.grease
-          sh tests/test_android_binder_host.grease
-          sh tests/test_android_longview_worker.grease
-          sh tests/test_android_shizuku_worker_program.grease
 
       - name: Checkout canonical hostile-input corpus
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
