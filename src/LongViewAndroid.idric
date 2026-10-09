@@ -1,0 +1,30 @@
+module LongViewAndroid
+
+import IB.LongViewTask
+import IB.LongViewLifecycle
+
+-- A callable direct-DEX consumer of the actual Long View model, not an Android
+-- Activity and not an alternative scalar implementation of task semantics.
+-- All five identities arrive at runtime and pass the existing core validator.
+resume_task : Text → Text → Text → Text → Text → Maybe LongViewTask
+resume_task task_name tab_name navigation_name previous_host next_host = do
+  task ← durable_identity task_name
+  tab ← durable_identity tab_name
+  navigation ← durable_identity navigation_name
+  previous ← durable_identity previous_host
+  next ← durable_identity next_host
+  let original = start_protected_task task tab navigation Nothing Nothing no_safe_navigation previous
+  pure (open_in_host next original)
+
+-- -1 is only this diagnostic export's invalid-input result. It is not a
+-- browser state or a generated substitute for the full task record.
+%export "dex:longview_host_generation"
+export
+longview_host_generation : Text → Text → Text → Text → Text → Int32
+longview_host_generation task_name tab_name navigation_name previous_host next_host =
+  case resume_task task_name tab_name navigation_name previous_host next_host of
+    Nothing ⇒ -1
+    Just resumed ⇒ cast resumed.host_generation
+
+main : IO ()
+main = pure ()
