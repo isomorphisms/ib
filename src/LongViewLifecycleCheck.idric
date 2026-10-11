@@ -99,4 +99,34 @@ main = case fixture of
     check "DEX entry same-host observation" (longview_host_generation "task" "tab" "nav" "host-a" "host-a" ≟ 1)
     check "DEX entry changed-host observation" (longview_host_generation "task" "tab" "nav" "host-a" "host-b" ≟ 2)
     check "DEX entry rejects invalid identity" (longview_host_generation "task\ninvalid" "tab" "nav" "host-a" "host-b" ≟ -1)
+
+    -- These are the canonical identity and origin-only address invariants.
+    -- DEX cannot replace them with success constants or skip validation.
+    check "empty durable identity refused" (case durable_identity "" of
+      Nothing ⇒ True
+      _ ⇒ False)
+    check "tab-delimited durable identity refused" (case durable_identity "bad\tname" of
+      Nothing ⇒ True
+      _ ⇒ False)
+    check "line-feed durable identity refused" (case durable_identity "bad\nname" of
+      Nothing ⇒ True
+      _ ⇒ False)
+    check "carriage-return durable identity refused" (case durable_identity "bad\rname" of
+      Nothing ⇒ True
+      _ ⇒ False)
+    check "valid identity preserved exactly" (case durable_identity "origin:example.test" of
+      Nothing ⇒ False
+      Just valid ⇒ identity_text valid ≟ "origin:example.test")
+    check "query-bearing neutral address refused" (case neutral_address "https://example.test/?token=value" of
+      Nothing ⇒ True
+      _ ⇒ False)
+    check "fragment-bearing neutral address refused" (case neutral_address "https://example.test/#section" of
+      Nothing ⇒ True
+      _ ⇒ False)
+    check "valid neutral address preserved" (case neutral_address "https://example.test" of
+      Nothing ⇒ False
+      Just value ⇒ neutral_address_text value ≟ "https://example.test")
+    check "DEX entry rejects empty runtime identity" (longview_host_generation "" "tab" "nav" "host-a" "host-b" ≟ -1)
+    check "DEX entry rejects tab runtime identity" (longview_host_generation "task" "tab\tbad" "nav" "host-a" "host-b" ≟ -1)
+    check "DEX entry rejects CR runtime identity" (longview_host_generation "task" "tab" "nav" "host-a\rbad" "host-b" ≟ -1)
     putStrLn "PASS Long View Idric lifecycle suite"
