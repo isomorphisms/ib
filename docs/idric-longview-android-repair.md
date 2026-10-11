@@ -69,3 +69,36 @@ relationships, durable reopen after host death, denial handling, and independent
 failure controls. Preserve the established package, persistent signer, and
 nondecreasing version code. Do not call a replacement phone-ready until its
 intended implementation actually executes in the delivered artifact.
+
+## 2026-10-10 actual compiler evidence
+
+At exact branch head `a7c6768d9b2c52e728b2fcee91f471cd381a72ad`,
+[workflow 37996968726](https://github.com/isomorphisms/ib/actions/runs/37996968726)
+completed with failure in `source-to-dex` (job `114045388398`). The actual
+Idriç host program **passed** lifecycle checks: same-host Activity recreation,
+changed-host generation, identity preservation, authentication/heap uncertainty,
+and refusal of stale/wrong renderer observations. Deliberately broken wrong-host
+and accept-stale source mutants were both **rejected** by executed tests.
+
+The separate checked DEX stage **failed**, before producing an acceptable
+candidate:
+
+```text
+Error: dex rejected checked program: No checked helper body for DEX call Prelude.Types.fastUnpack
+```
+
+The original `IB.LongViewTask.durable_identity` uses `unpack` to reject empty
+identities and tab/LF/CR; `neutral_address` additionally rejects `?` and
+`#`. These remain required. The pinned DEX lowerer specializes acyclic
+checked helpers but does not yet provide general recursive source helpers or
+runtime algebraic values. `fastUnpack` is the **first observed compiler gap**;
+there may be later gaps. An empty-output DEX, a hardcoded scalar substitute, a
+second Java state implementation or stripping the checks is not an acceptance.
+
+[Flexible Pipes SUN IB-C01](https://github.com/isomorphisms/flexible-pipes/issues/76)
+records the cross-repository compiler dependency, exact starting pins, negative
+controls and required ART execution. **An issue/CI run is not a dispatched FP
+job.** This branch is still a draft authoring candidate; direct DEX runtime,
+ART, APK, app-private durable recovery, Shizuku and physical C67 are **NOT_RUN**.
+The historical C67 Java harness remains diagnostic evidence, not the selected
+application. Do not request another physical phone test of that harness.
