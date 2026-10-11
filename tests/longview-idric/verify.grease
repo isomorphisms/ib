@@ -91,7 +91,7 @@ for mutation in wrong-host accept-stale {
 }
 cat "$evidence/host-result.txt"
 
-# A separate semantic mutation must not slip an invalid tab-delimited identity
+# A separate semantic mutation must not slip an invalid line-delimited identity
 # through the core because a DEX-oriented rewrite skipped String validation.
 var separator_source = "$evidence/accept-separator/source"
 var separator_output = "$evidence/accept-separator/program"
@@ -111,7 +111,7 @@ if (separator_status === 0) {
   echo 'FAIL delimiter-bypass mutation escaped executable checks' >&2
   exit 1
 }
-rg -q -x -F 'FAIL tab-delimited durable identity refused' "$separator_output/execution.txt"
+rg -q -x -F 'FAIL DEX entry rejects invalid identity' "$separator_output/execution.txt"
 echo 'PASS rejected executed identity-separator mutation' >> "$evidence/host-result.txt"
 cat "$separator_output/execution.txt"
 echo 'PASS retained validator semantics; Android lowering remains separate' >> "$evidence/host-result.txt"
