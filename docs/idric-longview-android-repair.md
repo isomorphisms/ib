@@ -32,7 +32,7 @@ This repair is based on PR #132, **Verify Pensieve Quick Settings bindings throu
 direct DEX**, head `edeb7a3b91c821910e5524002f8548ec2052dd42`. It reuses:
 
 - `src/IB/LongViewTask.idric`: task identity, transitions, ordinary serialization;
-- `vendor/android-NDK@7ea62a3e3cd19f2ab04a27f72ace1ae9e8b1fe66`: checked DEX driver;
+- `vendor/android-NDK@2dd7bc593cee22c94cb3927635e9737e398daf8c`: checked DEX driver;
 - `isomorphisms/Idric@ff4d852862a3942592f8ade9afde8d409d9803be`: actual compiler;
 - the existing Cat Food/Grease bootstrap entry points and compiler API cache.
 
@@ -102,3 +102,19 @@ job.** This branch is still a draft authoring candidate; direct DEX runtime,
 ART, APK, app-private durable recovery, Shizuku and physical C67 are **NOT_RUN**.
 The historical C67 Java harness remains diagnostic evidence, not the selected
 application. Do not request another physical phone test of that harness.
+
+## 2026-10-10 generic DEX jump widening candidate
+
+The checked-DEX `LongViewTextProbe.idric` is an independent target-capability
+probe; it does **not** replace `IB.LongViewTask`. [IB workflow 38103345521](https://github.com/isomorphisms/ib/actions/runs/38103345521)
+ran the complete Idriç host semantics and wrong-behavior mutations, then
+failed text-probe emission: `goto` offset `149` exceeded the encoder's
+8-bit signed jump. No target candidate/ART acceptance followed.
+
+[android-NDK draft PR #23 — Relax checked DEX goto jumps to /16 and /32](https://github.com/isomorphisms/android-NDK/pull/23)
+adds source-independent monotone 10t→20t→30t jump promotion with signed-offset
+and invalid-label refusal tests. Its candidate is pinned above for this
+draft integration test. **It remains under CI qualification and unmerged.**
+The [full IB task's fastUnpack/runtime-list/record/Integer gap](https://github.com/isomorphisms/android-NDK/issues/22)
+remains even if the text-probe DEX builds and runs on ART. This is a dependency
+and capability probe, not real Android session-persistence implementation.
