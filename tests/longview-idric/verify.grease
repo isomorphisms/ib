@@ -25,8 +25,8 @@ var library_path = "$prefix/idris2-0.8.0/base-0.8.0:$prefix/idris2-0.8.0/prelude
 
 test "$(git -C "$repository" rev-parse HEAD)" = "$expected_head"
 test "$(git -C "$compiler_repository" rev-parse HEAD)" = 'ff4d852862a3942592f8ade9afde8d409d9803be'
-test "$(git -C "$repository/vendor/android-NDK" rev-parse HEAD)" = '7ea62a3e3cd19f2ab04a27f72ace1ae9e8b1fe66'
-test "$(git -C "$repository" rev-parse HEAD:vendor/android-NDK)" = '7ea62a3e3cd19f2ab04a27f72ace1ae9e8b1fe66'
+test "$(git -C "$repository/vendor/android-NDK" rev-parse HEAD)" = '2dd7bc593cee22c94cb3927635e9737e398daf8c'
+test "$(git -C "$repository" rev-parse HEAD:vendor/android-NDK)" = '2dd7bc593cee22c94cb3927635e9737e398daf8c'
 git -C "$repository" diff --exit-code HEAD -- src tests/longview-idric .github/workflows/longview-idric.yml > "$evidence/source-clean.txt"
 for program in "$compiler" "$scheme" "$driver" "$dexdump" { test -x "$program" }
 git -C "$repository" rev-parse HEAD 'HEAD^{tree}' > "$evidence/revision.txt"
