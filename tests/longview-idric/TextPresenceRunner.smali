@@ -33,7 +33,7 @@
     invoke-static {v1, v2, v3}, LIdric/TextPresenceRunner;->assert_expected(III)V
 
     # tab
-    const-string v0, "alpha\\tbeta"
+    const-string v0, "alpha\tbeta"
     invoke-static {v0}, LIdric/Generated;->record_identity_allowed(Ljava/lang/String;)I
     move-result v1
     const/4 v2, 0x0
@@ -41,7 +41,7 @@
     invoke-static {v1, v2, v3}, LIdric/TextPresenceRunner;->assert_expected(III)V
 
     # line feed
-    const-string v0, "alpha\\nbeta"
+    const-string v0, "alpha\nbeta"
     invoke-static {v0}, LIdric/Generated;->record_identity_allowed(Ljava/lang/String;)I
     move-result v1
     const/4 v2, 0x0
@@ -49,7 +49,7 @@
     invoke-static {v1, v2, v3}, LIdric/TextPresenceRunner;->assert_expected(III)V
 
     # carriage return
-    const-string v0, "alpha\\rbeta"
+    const-string v0, "alpha\rbeta"
     invoke-static {v0}, LIdric/Generated;->record_identity_allowed(Ljava/lang/String;)I
     move-result v1
     const/4 v2, 0x0
@@ -113,7 +113,7 @@
     invoke-static {v1, v2, v3}, LIdric/TextPresenceRunner;->assert_expected(III)V
 
     # neutral tab
-    const-string v0, "https://example.test\\tbad"
+    const-string v0, "https://example.test\tbad"
     invoke-static {v0}, LIdric/Generated;->neutral_address_allowed(Ljava/lang/String;)I
     move-result v1
     const/4 v2, 0x0
