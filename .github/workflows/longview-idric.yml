@@ -83,6 +83,21 @@ jobs:
         if: steps.idric-cache.outputs.cache-hit != 'true'
         shell: sh
         run: env IDRIS2_PREFIX="$GITHUB_WORKSPACE/.tools/Idric/_/bootstrap-build" CHEZ="$GITHUB_WORKSPACE/.tools/Idric/_/.tools/bin/scheme" "$GITHUB_WORKSPACE/.tools/Idric/_/build/exec/idris2" --install "$GITHUB_WORKSPACE/.tools/Idric/_/idris2api.ipkg"
+      - name: Require installed compiler API before caching
+        if: steps.idric-cache.outputs.cache-hit != 'true'
+        shell: sh
+        run: .tools/runtime/.build/grease/bin/grease -c 'test -s .tools/Idric/_/bootstrap-build/idris2-0.8.0/idris2-0.8.0/idris2.ipkg'
+      - name: Save qualified pinned Idric compiler and API
+        if: steps.idric-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@caa296126883cff596d87d8935842f9db880ef25
+        with:
+          path: |
+            .tools/Idric/_/.tools
+            .tools/Idric/_/build
+            .tools/Idric/_/bootstrap-build
+            .tools/Idric/_/libs/*/build
+            .tools/Idric/_/src/IdrisPaths.idr
+          key: idric-bootstrap-api-v1-ubuntu-24.04-${{ runner.arch }}-ff4d852862a3942592f8ade9afde8d409d9803be
       - uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd
         with:
           packages: 'build-tools;35.0.0'
@@ -92,6 +107,31 @@ jobs:
       - name: Execute real Idric lifecycle, reject mutants, attempt direct DEX
         shell: sh
         run: .tools/runtime/.build/grease/bin/grease tests/longview-idric/verify.grease "$GITHUB_WORKSPACE" "$GITHUB_WORKSPACE/.tools/Idric" "$ANDROID_HOME/build-tools/35.0.0/dexdump" "$RUNNER_TEMP/longview-upstream" "$RUNNER_TEMP/longview-idric" "${{ github.event.pull_request.head.sha || github.sha }}"
+      - name: Check text DEX availability independently of full task failure
+        id: text-dex-ready
+        if: always()
+        shell: sh
+        run: |
+          if test -s "$RUNNER_TEMP/longview-idric/text-dex/longview-text.dex"; then
+            echo 'ready=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'ready=false' >> "$GITHUB_OUTPUT"
+          fi
+      - name: Prepare external ART runner only for an emitted DEX probe
+        if: ${{ always() && steps.text-dex-ready.outputs.ready == 'true' }}
+        shell: sh
+        run: .tools/runtime/.build/grease/bin/grease vendor/android-NDK/dex/idric/prepare-effects-ci.grease "$GITHUB_WORKSPACE/vendor/android-NDK" "$RUNNER_TEMP/longview-text-oracles"
+      - name: Run exact checked text DEX probe on Android ART
+        if: ${{ always() && steps.text-dex-ready.outputs.ready == 'true' }}
+        uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d
+        with:
+          api-level: 34
+          target: google_apis
+          arch: x86_64
+          emulator-port: 5554
+          emulator-boot-timeout: 300
+          disable-animations: true
+          script: .tools/runtime/.build/grease/bin/grease tests/longview-idric/verify-text-art.grease "$GITHUB_WORKSPACE" "$RUNNER_TEMP/longview-idric" "$RUNNER_TEMP/longview-text-oracles/smali-3.0.10.jar" "$ANDROID_HOME/platform-tools/adb" "${{ github.event.pull_request.head.sha || github.sha }}"
       - name: Preserve exact source, execution, and backend failures
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
