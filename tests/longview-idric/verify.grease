@@ -32,6 +32,7 @@ for program in "$compiler" "$scheme" "$driver" "$dexdump" { test -x "$program" }
 git -C "$repository" rev-parse HEAD 'HEAD^{tree}' > "$evidence/revision.txt"
 sha256sum "$repository/src/IB/LongViewTask.idric" "$repository/src/IB/LongViewLifecycle.idric" \
   "$repository/src/LongViewAndroid.idric" "$repository/src/LongViewLifecycleCheck.idric" \
+  "$repository/src/LongViewTextProbe.idric" \
   "$repository/tests/longview-idric/verify.grease" "$compiler" \
   "$compiler_repository/_/build/exec/idris2_app/idris2.so" "$driver" \
   "$upstream_evidence/backend/exec/idric-dex_app/idric-dex.so" > "$evidence/input-sha256.txt"
@@ -114,6 +115,36 @@ rg -q -x -F 'FAIL tab-delimited durable identity refused' "$separator_output/exe
 echo 'PASS rejected executed identity-separator mutation' >> "$evidence/host-result.txt"
 cat "$separator_output/execution.txt"
 echo 'PASS retained validator semantics; Android lowering remains separate' >> "$evidence/host-result.txt"
+
+# Probe the existing reusable direct-DEX String.indexOf foreign path before
+# touching the real LongViewTask. This is genuine source-to-DEX output, not a
+# substitute for the later real task compilation or ART execution.
+mkdir -p "$evidence/text-dex"
+try {
+  env IDRIS2_PREFIX="$prefix" CHEZ="$scheme" \
+    IDRIS2_PATH="$upstream_evidence/backend/ttc:$library_path" \
+    "$driver" --cg dex --source-dir "$repository/src" --build-dir "$evidence/text-dex/build" \
+    --output-dir "$evidence/text-dex" --dumpanf "$evidence/text-dex/text-probe.anf" \
+    "$repository/src/LongViewTextProbe.idric" -o longview-text \
+    > "$evidence/text-dex/compile.txt" 2>&1
+}
+var text_dex_status = _error.code
+printf 'probe_compiler_exit=%s\n' "$text_dex_status" > "$evidence/text-dex/result.txt"
+cat "$evidence/text-dex/compile.txt"
+if (text_dex_status !== 0) {
+  echo 'FAIL checked DEX String.indexOf target probe' >> "$evidence/text-dex/result.txt"
+  exit 1
+}
+clean_log "$evidence/text-dex/compile.txt"
+for suffix in dex dex.plan checked.anf smali {
+  test -s "$evidence/text-dex/longview-text.$suffix"
+}
+"$dexdump" -c "$evidence/text-dex/longview-text.dex" > "$evidence/text-dex/checksum.txt" 2>&1
+"$dexdump" -d "$evidence/text-dex/longview-text.dex" > "$evidence/text-dex/disassembly.txt" 2>&1
+sha256sum "$evidence/text-dex/longview-text.dex" > "$evidence/text-dex/sha256.txt"
+rg -q -F 'indexOf' "$evidence/text-dex/disassembly.txt"
+echo 'PASS genuine checked DEX String.indexOf emitted and parsed; ART NOT_RUN' >> "$evidence/text-dex/result.txt"
+cat "$evidence/text-dex/result.txt"
 
 mkdir -p "$evidence/dex"
 try {
