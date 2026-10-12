@@ -16,9 +16,9 @@ request result = request_with_limit result 1024
 location : PublicationLocation
 location = ObservedPublicationLocation "ordinary" "card-a" "observation-1"
 
-emit : Text → SpaceLedger → PublicationLocation → IO ()
-emit name ledger observed =
-  case publication_for ledger (request name) observed of
+emit_with_limit : Text → Integer → SpaceLedger → PublicationLocation → IO ()
+emit_with_limit name limit ledger observed =
+  case publication_for ledger (request_with_limit name limit) observed of
     Nothing ⇒ putStrLn (name ++ "\trefuse")
     Just accepted ⇒
       let accepted_request = accepted.publication_request in
@@ -26,6 +26,9 @@ emit name ledger observed =
           (accepted_request.result_identity ++ "\tpublish\t" ++ show accepted_request.byte_limit ++
            "\t" ++ accepted_request.backend_identity ++ "\t" ++ accepted_request.media_identity ++
            "\t" ++ accepted_request.observation_identity ++ "\t" ++ accepted_request.reservation_receipt)
+
+emit : Text → SpaceLedger → PublicationLocation → IO ()
+emit name ledger observed = emit_with_limit name 1024 ledger observed
 
 publication_reservations_are_bounded : Bool
 publication_reservations_are_bounded =
@@ -154,6 +157,9 @@ main : IO ()
 main = do
   arguments ← getArgs
   case arguments of
+    [_ , "source-action"] ⇒
+      emit_with_limit "source-content" 4096
+        (Ledger measured_writable (Just 12000) 100 0) location
     [_ , "fail-after-action"] ⇒ do
       emit "allowed" (Ledger measured_writable (Just 5000) 100 0) location
       exitWith (ExitFailure 37)
