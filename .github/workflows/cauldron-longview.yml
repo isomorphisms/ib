@@ -1,0 +1,117 @@
+name: Cauldron to Longview source handoff
+
+on:
+  push:
+    branches: [longview-renderer-loss-acceptance]
+    paths:
+      - 'lib/longview_cauldron_handoff.grease'
+      - 'lib/longview_source_result.grease'
+      - 'lib/durable_object_store.grease'
+      - 'tests/test_longview_cauldron_handoff.grease'
+      - 'tests/fixtures/arxiv_site/html/**'
+      - 'docs/longview-source-backed-result.md'
+      - '.github/workflows/cauldron-longview.yml'
+  pull_request:
+    paths:
+      - 'lib/longview_cauldron_handoff.grease'
+      - 'lib/longview_source_result.grease'
+      - 'lib/durable_object_store.grease'
+      - 'tests/test_longview_cauldron_handoff.grease'
+      - 'tests/fixtures/arxiv_site/html/**'
+      - 'docs/longview-source-backed-result.md'
+      - '.github/workflows/cauldron-longview.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  cauldron-source-handoff:
+    name: cauldron-source-handoff
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    env:
+      GREASE_REF: f19c94c6df18cddbdc1e81463e5bd689533e3c13
+      OILS_REF: 6d29702a10ea9eb72a43950554dbcd4174d07a89
+      CAULDRON_REF: d10eeda153dae4be25fd7902338e8b8443e0666e
+      REPO_ROOT: ${{ github.workspace }}/.tools/oils-source
+      IB_NATIVE_GREASE: ${{ github.workspace }}/.tools/oils-source/_bin/cxx-asan/ysh
+    steps:
+      - name: Check out exact Longview consumer head
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      - name: Check out pinned canonical Cauldron source producer
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: isomorphisms/ib
+          ref: d10eeda153dae4be25fd7902338e8b8443e0666e
+          path: .tools/cauldron-producer
+          persist-credentials: false
+
+      - name: Check out pinned Grease owner
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: dilapidated-shed/grease
+          ref: f19c94c6df18cddbdc1e81463e5bd689533e3c13
+          path: .tools/grease
+          persist-credentials: false
+
+      - name: Check out Grease's exact native source gitlink
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: dilapidated-shed/oils
+          ref: 6d29702a10ea9eb72a43950554dbcd4174d07a89
+          path: .tools/oils-source
+          persist-credentials: false
+
+      - name: Verify all input identities before executing source
+        shell: bash
+        env:
+          IB_EXPECTED_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$IB_EXPECTED_HEAD"
+          test "$(git -C .tools/cauldron-producer rev-parse HEAD)" = "$CAULDRON_REF"
+          test "$(git -C .tools/grease rev-parse HEAD)" = "$GREASE_REF"
+          test "$(git -C .tools/grease rev-parse HEAD:source)" = "$OILS_REF"
+          test "$(git -C .tools/oils-source rev-parse HEAD)" = "$OILS_REF"
+          test "$(uname -m)" = x86_64
+          podman --version
+          printf 'IB=%s\nCauldron=%s\nGrease=%s\nOils=%s\n' "$IB_EXPECTED_HEAD" "$CAULDRON_REF" "$GREASE_REF" "$OILS_REF"
+
+      - name: Establish native Grease ASAN memory mapping precondition
+        run: sudo sysctl vm.mmap_rnd_bits=28
+
+      - name: Build pinned native Grease using upstream receipt job
+        working-directory: .tools/oils-source
+        shell: bash
+        run: |
+          set -euo pipefail
+          soil/github-actions.sh run-job cpp-spec podman
+          soil/host-shim.sh did-all-succeed cpp-spec
+          test -x _bin/cxx-asan/ysh
+          sha256sum _bin/cxx-asan/ysh
+          _bin/cxx-asan/ysh --version
+
+      - name: Exercise canonical producer and Longview consumer
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -x "$IB_NATIVE_GREASE"
+          receipt="$RUNNER_TEMP/ib-cauldron-longview.log"
+          if timeout --kill-after=5 120 "$IB_NATIVE_GREASE" +O ysh:all \
+              tests/test_longview_cauldron_handoff.grease .tools/cauldron-producer \
+              >"$receipt" 2>&1; then
+            cat "$receipt"
+          else
+            status=$?
+            cat "$receipt" >&2
+            exit "$status"
+          fi
+          grep -Fx \
+            'Cauldron generation -> bounded E4 result test: ok (native Grease hosted; synthetic source)' \
+            "$receipt"
+          printf 'Cauldron producer %s verified against IB head %s\n' \
+            "$CAULDRON_REF" "$(git rev-parse HEAD)"
