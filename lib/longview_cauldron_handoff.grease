@@ -1,0 +1,153 @@
+# E4: read-only Cauldron -> Longview source-result selection.
+# The existing Cauldron producer (IB 0.2) owns source publication and ID.
+# This verifies its retained record; it creates no parallel corpus/store.
+# Callers must still possess a completed E3 worker attempt and a separate
+# IB.StorageAdmission action before immutable E2 result publication.
+IB_CAULDRON_INVALID=80
+IB_CAULDRON_MISSING=81
+IB_CAULDRON_PRIVATE=82
+IB_CAULDRON_GENERATION=83
+IB_CAULDRON_INTEGRITY=84
+IB_CAULDRON_FORMAT=85
+
+ib_cauldron_handoff_value() {
+  awk -F '\t' -v wanted="$2" '$1 == wanted && NF == 2 {print $2}' "$1"
+}
+
+ib_cauldron_handoff_valid_generation() {
+  test "$#" -eq 1 && test -n "$1" || return 1
+  test "$(printf '%s' "$1" | wc -c | tr -d '[:space:]')" -le 128 || return 1
+  case "$1" in *'
+'*|*'
+'*|*'	'*) return 1 ;; esac
+}
+
+# Verify a particular immutable source generation before any worker-result
+# candidate is created. IB_HOME is a caller-trusted root, NOT page input.
+# Android-managed symlinks above that root are allowed; none below it are.
+ib_cauldron_verify_selected() {
+  test "$#" -eq 5 || return "$IB_CAULDRON_INVALID"
+  cauldron_selected_home=$1
+  cauldron_selected_id=$2
+  cauldron_selected_generation=$3
+  cauldron_selected_sha=$4
+  cauldron_selected_format=$5
+
+  case "$cauldron_selected_home" in /*) ;; *) return "$IB_CAULDRON_INVALID" ;; esac
+  ib_source_result_sha_valid "$cauldron_selected_id" &&
+    ib_source_result_sha_valid "$cauldron_selected_sha" &&
+    ib_cauldron_handoff_valid_generation "$cauldron_selected_generation" ||
+    return "$IB_CAULDRON_INVALID"
+  case "$cauldron_selected_format" in html|text) ;; *) return "$IB_CAULDRON_FORMAT" ;; esac
+  cauldron_selected_root=$(CDPATH= cd -P -- "$cauldron_selected_home" 2>/dev/null && pwd -P) ||
+    return "$IB_CAULDRON_MISSING"
+  cauldron_selected_path="$cauldron_selected_root/cauldron/sources/$cauldron_selected_id"
+  for cauldron_selected_entry in \
+      "$cauldron_selected_root/cauldron" \
+      "$cauldron_selected_root/cauldron/sources" \
+      "$cauldron_selected_path" \
+      "$cauldron_selected_path/raw" \
+      "$cauldron_selected_path/provenance.tsv"; do
+    test ! -L "$cauldron_selected_entry" || return "$IB_CAULDRON_INVALID"
+  done
+  test -d "$cauldron_selected_path" ||
+    return "$IB_CAULDRON_MISSING"
+  cauldron_selected_raw="$cauldron_selected_path/raw"
+  cauldron_selected_manifest="$cauldron_selected_path/provenance.tsv"
+  test -f "$cauldron_selected_raw" && test -f "$cauldron_selected_manifest" ||
+    return "$IB_CAULDRON_MISSING"
+  cauldron_manifest_bytes=$(wc -c <"$cauldron_selected_manifest" | tr -d '[:space:]') ||
+    return "$IB_CAULDRON_INTEGRITY"
+  test "$cauldron_manifest_bytes" -le 65536 && test "$cauldron_manifest_bytes" -gt 0 ||
+    return "$IB_CAULDRON_INTEGRITY"
+
+  # The actual IB 0.2 producer requires these fields, accepts preserved
+  # extra provenance fields, and forbids ambiguous duplicate TSV keys.
+  LC_ALL=C awk -F '\t' '
+    BEGIN {
+      split("source corpus provider object version member acquired_at privacy model source_kind source_identity source_generation exposure sha256 byte_count", fields, " ")
+      for (index in fields) required[fields[index]] = 1
+    }
+    NF != 2 || $1 !~ /^[a-z][a-z0-9_]*$/ || $2 == "" || /\r/ {bad=1}
+    {
+      if (seen[$1]++) bad=1
+    }
+    END {
+      for (key in required) if (seen[key] != 1) bad=1
+      exit bad
+    }
+  ' "$cauldron_selected_manifest" || return "$IB_CAULDRON_INTEGRITY"
+
+  cauldron_record_privacy=$(ib_cauldron_handoff_value "$cauldron_selected_manifest" privacy)
+  test "$cauldron_record_privacy" = ordinary ||
+    return "$IB_CAULDRON_PRIVATE"
+  cauldron_record_exposure=$(ib_cauldron_handoff_value "$cauldron_selected_manifest" exposure)
+  test "$cauldron_record_exposure" = local-only ||
+    return "$IB_CAULDRON_INVALID"
+  cauldron_record_model=$(ib_cauldron_handoff_value "$cauldron_selected_manifest" model)
+  case "$cauldron_record_model" in allow|deny) ;; *) return "$IB_CAULDRON_INVALID" ;; esac
+  cauldron_record_provider=$(ib_cauldron_handoff_value "$cauldron_selected_manifest" provider)
+  case "$cauldron_record_provider" in local|drive) ;; *) return "$IB_CAULDRON_INVALID" ;; esac
+
+  cauldron_record_kind=$(ib_cauldron_handoff_value "$cauldron_selected_manifest" source_kind)
+  # Opaque is *not* automatically HTML. The selected representation is an
+  # explicit caller choice; this adapter neither parses nor executes bytes.
+  case "$cauldron_record_kind:$cauldron_selected_format" in
+    opaque:html|opaque:text|raw_urls:text) ;;
+    *) return "$IB_CAULDRON_FORMAT" ;;
+  esac
+  cauldron_record_version=$(ib_cauldron_handoff_value "$cauldron_selected_manifest" version)
+  cauldron_record_generation=$(ib_cauldron_handoff_value "$cauldron_selected_manifest" source_generation)
+  test "$cauldron_record_generation" = "$cauldron_record_version" &&
+    test "$cauldron_record_generation" = "$cauldron_selected_generation" ||
+    return "$IB_CAULDRON_GENERATION"
+  cauldron_record_identity=$(ib_cauldron_handoff_value "$cauldron_selected_manifest" source_identity)
+  cauldron_record_object=$(ib_cauldron_handoff_value "$cauldron_selected_manifest" object)
+  cauldron_record_member=$(ib_cauldron_handoff_value "$cauldron_selected_manifest" member)
+  test "$cauldron_record_identity" = "$cauldron_record_provider:$cauldron_record_object:$cauldron_record_member" ||
+    return "$IB_CAULDRON_INTEGRITY"
+
+  cauldron_record_sha=$(ib_cauldron_handoff_value "$cauldron_selected_manifest" sha256)
+  cauldron_record_bytes=$(ib_cauldron_handoff_value "$cauldron_selected_manifest" byte_count)
+  ib_source_result_sha_valid "$cauldron_record_sha" ||
+    return "$IB_CAULDRON_INTEGRITY"
+  test "$cauldron_record_sha" = "$cauldron_selected_sha" ||
+    return "$IB_CAULDRON_INTEGRITY"
+  case "$cauldron_record_bytes" in ''|*[!0123456789]*) return "$IB_CAULDRON_INTEGRITY" ;; esac
+  test "$cauldron_record_bytes" -gt 0 &&
+    test "$cauldron_record_bytes" -le 2048 ||
+    return "$IB_CAULDRON_INVALID"
+  test "$(wc -c <"$cauldron_selected_raw" | tr -d '[:space:]')" = "$cauldron_record_bytes" ||
+    return "$IB_CAULDRON_INTEGRITY"
+  test "$(sha256sum "$cauldron_selected_raw" | cut -d ' ' -f1)" = "$cauldron_record_sha" ||
+    return "$IB_CAULDRON_INTEGRITY"
+
+  # Match the producer's canonical source-ID formula: SHA-256 over the
+  # complete original provenance followed by an empty line and payload SHA.
+  cauldron_recomputed_id=$(
+    { cat "$cauldron_selected_manifest"; printf '\n%s\n' "$cauldron_record_sha"; } |
+      sha256sum | cut -d ' ' -f1
+  ) || return "$IB_CAULDRON_INTEGRITY"
+  test "$cauldron_recomputed_id" = "$cauldron_selected_id" ||
+    return "$IB_CAULDRON_INTEGRITY"
+}
+
+# This is only a candidate E4 completion. The E3 completion MUST already
+# bind the same source ID/hash/size/format/privacy; the existing composer
+# enforces it. Idric policy and immutable E2 publication are separate calls.
+ib_cauldron_compose_selected() {
+  test "$#" -eq 7 || return "$IB_CAULDRON_INVALID"
+  cauldron_input_home=$1
+  cauldron_input_id=$2
+  cauldron_input_generation=$3
+  cauldron_input_sha=$4
+  cauldron_input_format=$5
+  cauldron_input_completion=$6
+  cauldron_input_output=$7
+  ib_cauldron_verify_selected "$cauldron_input_home" "$cauldron_input_id" \
+    "$cauldron_input_generation" "$cauldron_input_sha" "$cauldron_input_format" ||
+    return $?
+  ib_source_result_compose "$cauldron_input_completion" "$cauldron_selected_raw" \
+    "$cauldron_input_id" "$cauldron_input_format" "$cauldron_input_sha" ordinary \
+    "$cauldron_input_output"
+}
