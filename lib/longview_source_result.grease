@@ -15,6 +15,28 @@ ib_source_result_field() {
   awk -F '\t' -v wanted="$2" '$1 == wanted && NF == 2 {print $2}' "$1"
 }
 
+# The original E3 completion must bind the selected bytes before E4 composes
+# a derived result. The late reader checks the same binding after publication.
+ib_source_result_binding_matches() {
+  test "$#" -eq 6 || return 1
+  source_binding_record=$1
+  source_binding_identity=$2
+  source_binding_digest=$3
+  source_binding_size=$4
+  source_binding_kind=$5
+  source_binding_privacy=$6
+  test "$(grep -c '^source_binding_' "$source_binding_record")" -eq 5 || return 1
+  for expected in \
+    "$(printf 'source_binding_identity\t%s' "$source_binding_identity")" \
+    "$(printf 'source_binding_sha256\t%s' "$source_binding_digest")" \
+    "$(printf 'source_binding_bytes\t%s' "$source_binding_size")" \
+    "$(printf 'source_binding_kind\t%s' "$source_binding_kind")" \
+    "$(printf 'source_binding_privacy\t%s' "$source_binding_privacy")"
+  do
+    test "$(grep -Fxc "$expected" "$source_binding_record")" -eq 1 || return 1
+  done
+}
+
 # Never emit an unverified prefix. A later renderer can call this after the
 # producer and all former process attachments have gone.
 ib_source_result_decode() {
@@ -59,6 +81,9 @@ ib_source_result_decode() {
     return "$IB_SOURCE_RESULT_CHANGED"
   case "$source_kind" in html|text) ;; *) return "$IB_SOURCE_RESULT_INVALID" ;; esac
   test "$source_privacy" = ordinary || return "$IB_SOURCE_RESULT_PRIVATE"
+  ib_source_result_binding_matches "$source_record" "$source_identity" \
+    "$source_digest" "$source_size" "$source_kind" "$source_privacy" ||
+    return "$IB_SOURCE_RESULT_CHANGED"
   case "$source_size" in ''|*[!0123456789]*) return "$IB_SOURCE_RESULT_INVALID" ;; esac
   test "$source_size" -ge 1 && test "$source_size" -le 2048 ||
     return "$IB_SOURCE_RESULT_INVALID"
@@ -119,6 +144,9 @@ ib_source_result_compose() {
     return "$IB_SOURCE_RESULT_INVALID"
   source_before_sha=$(sha256sum "$source_input" | cut -d ' ' -f1)
   test "$source_before_sha" = "$source_expected_sha" ||
+    return "$IB_SOURCE_RESULT_CHANGED"
+  ib_source_result_binding_matches "$source_completion" "$source_identifier" \
+    "$source_expected_sha" "$source_size" "$source_format" "$source_classification" ||
     return "$IB_SOURCE_RESULT_CHANGED"
   source_output_dir=$(dirname "$source_output")
   test -d "$source_output_dir" && test ! -L "$source_output_dir" ||
