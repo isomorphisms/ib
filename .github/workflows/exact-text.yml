@@ -9,6 +9,8 @@ on:
       - '.github/workflows/exact-text.yml'
       - 'bin/ci_browser_foundation.grease'
       - 'tests/exact-text-status.grease'
+      - 'tests/exact-text-status.md'
+      - 'tests/exact-text-status-provisioning.md'
       - 'tests/fixtures/exact-text-producer.grease'
       - 'tests/fixtures/exact-text.expected'
   workflow_dispatch:

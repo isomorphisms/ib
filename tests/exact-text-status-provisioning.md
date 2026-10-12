@@ -77,3 +77,46 @@ the gate without an expiring sibling artifact.
 The inherited IB Chez compiler bootstrap remains separate unqualified build
 debt. This receipt proves no new compiler build path, Android APK, emulator
 or physical-device acceptance. No release, merge or device mutation occurred.
+
+## 2026-10-12 Q01 execution refresh
+
+The unchanged producer-status implementation at
+`5cfdc9dd2de223962a412e2b4dfcc4a0380a4f87` was exercised again from `/tmp`
+using the maintained Grease implementation artifact whose executable SHA-256
+is `7e31cd05b7a9d8fb2a4a9e003a7f3fcb0159138506d17f0fb28da8cbe22aa85c`.
+The observed host is Ubuntu 24.04.3 / Linux 6.18.44 / x86_64. The current
+Grease checkout is `38a84451ec85a2b6e019e78c540066ac30efa48f`, with source
+gitlink `5651cf97a1b5042f24f14112a7ade9a1518eb0bc`; the executable is the
+same retained artifact already identified above, not a new source build.
+An exec-only local Grease launcher has SHA-256
+`29c673cf786d167e606af96a167c51cf6ee56d4527cfabdf21d727a269a649ee`.
+LeakSanitizer remains disabled only for this ptraced execution environment.
+
+| Control | Compile status | Oracle status | Required result |
+| --- | --- | --- | --- |
+| Successful producer | 0 | 0 | PASS |
+| Incorrect output | 0 | 1 | Refused |
+| All expected lines, then producer exits 7 | 0 | 7 | Refused |
+| Plausible executable/log, then compiler exits 7 | 7 | Not run (sentinel 99) | Refused |
+
+The harness exited 0. Restoring the exact main workflow at `10fa7bbe...`
+made both exit-7 controls pass incorrectly and the harness exit 1. This is
+fresh executed mutation-sensitive process-boundary evidence, not full Grease
+language qualification or Idriç semantic execution.
+
+The prior source head's actual hosted checks were also refreshed read-only:
+[exact-text 37821397603](https://github.com/isomorphisms/ib/actions/runs/37821397603),
+[foundation 37821397751](https://github.com/isomorphisms/ib/actions/runs/37821397751)
+and [universal 37821397666](https://github.com/isomorphisms/ib/actions/runs/37821397666)
+are successful. Those historical runs did not execute the injection harness.
+
+The newer Long View workflow was examined as a possible provisioning input.
+It pins Grease `f19c94c6df18cddbdc1e81463e5bd689533e3c13` but still invokes
+Cat Food `609a9628d5a52860f956bf62e0914a0cd03292ae`'s same `build-tools.sh`.
+That builds vendored Python and native extensions through generic host
+configure/make/compiler calls without the required ICK/NDK stage declaration.
+A successful source build there does not resolve this durable provisioning
+contract. The current release inventory still has no Linux x86_64 Grease
+runtime asset. **BLOCKED_DURABLE_GREASE_PROVISIONING remains the first Q01
+automation prerequisite.** No source bootstrap, stock shell substitution,
+release, merge, issue closure or device mutation was performed for this refresh.
