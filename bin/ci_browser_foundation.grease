@@ -193,6 +193,10 @@ exercise_core() {
   ! grep -q '^Error:' /tmp/idric-result-publication-compile.txt
   sh "$repository_root/tests/test_result_publication.grease" \
     "$repository_root/src/build/exec/ib-result-publication-acceptance"
+  # E4: use actual source bytes (including headings/body), the same compiled
+  # Idric admission and E3 identity checks, and independent late readers.
+  sh "$repository_root/tests/test_longview_source_result.grease" \
+    "$repository_root/src/build/exec/ib-result-publication-acceptance"
   if IB_PUBLICATION_EXIT_PROBE=1 sh "$repository_root/tests/test_result_publication.grease" \
       "$repository_root/src/build/exec/ib-result-publication-acceptance"; then
     printf 'failed policy child became a green parent\n' >&2
