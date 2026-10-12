@@ -1,0 +1,176 @@
+module IB.PensieveHome
+
+import Data.Text
+import Data.List
+import IB.HumanDecisions
+
+-- A disposable presentation of S08 candidates, never another retained store.
+public export
+record HomeBudget where
+  constructor BoundedHome
+  maximum_rows : Number
+  title_characters : Number
+  excerpt_characters : Number
+
+public export
+data SourcePresentation
+  = ReadableSource SourceReference Text Text Text
+  | UnavailableSource SourceReference
+
+public export
+choice source_display_state one_of
+  readable_source
+  source_unavailable
+
+public export
+record HomeRow where
+  constructor DisplayedCandidate
+  candidate : Candidate
+  title : Text
+  excerpt : Maybe Text
+  source_label : Text
+  explanation : Text
+  source_state : source_display_state
+
+public export
+record HomeView where
+  constructor RetainedHome
+  rows : List HomeRow
+  empty_message : Text
+
+public export
+choice home_refusal one_of
+  invalid_budget
+  stale_row
+  item_action_refused
+  source_open_refused
+
+public export
+choice decision_report one_of
+  store_pending
+  store_recorded
+  store_failed
+  store_outcome_unknown
+
+-- These are display limits in decoded Unicode characters, not byte/RAM limits.
+export
+default_home_budget : HomeBudget
+default_home_budget = BoundedHome 32 256 1024
+
+budget_valid : HomeBudget → Bool
+budget_valid budget = budget.maximum_rows > 0 && budget.maximum_rows <= 64 &&
+  budget.title_characters > 0 && budget.title_characters <= 256 &&
+  budget.excerpt_characters <= 1024
+
+explain_candidate : Candidate → Text
+explain_candidate candidate = case candidate.reason of
+  explicit_save ⇒ "You saved this"
+  explicit_defer ⇒ "You put this aside for later"
+  explicit_return ⇒ "You returned to this"
+  observed_exposure ⇒ "This was visible"
+
+presentation_evidence : SourcePresentation → SourceReference
+presentation_evidence (ReadableSource evidence _ _ _) = evidence
+presentation_evidence (UnavailableSource evidence) = evidence
+
+text_fits : Number → Text → Bool
+text_fits limit text = length (unpack text) <= limit &&
+  not (elem '\0' (unpack text))
+
+unavailable_row : Candidate → HomeRow
+unavailable_row candidate = DisplayedCandidate candidate "Source unavailable"
+  Nothing "Source unavailable" (explain_candidate candidate) source_unavailable
+
+display_candidate : HomeBudget → List SourcePresentation → Candidate → HomeRow
+display_candidate budget presentations candidate =
+  case filter (\presentation ⇒ same_evidence candidate.evidence
+                    (presentation_evidence presentation)) presentations of
+    [ReadableSource _ title excerpt source_label] ⇒
+      if not (title ≟ "") && text_fits budget.title_characters title &&
+         text_fits budget.excerpt_characters excerpt &&
+         not (source_label ≟ "") && text_fits budget.title_characters source_label
+        then DisplayedCandidate candidate title
+               (if excerpt ≟ "" then Nothing else Just excerpt)
+               source_label
+               (explain_candidate candidate) readable_source
+        else unavailable_row candidate
+    _ ⇒ unavailable_row candidate
+
+-- References and decisions are supplied by their owners. The list is rebuilt
+-- using the actual S08 reducer; titles and rendered rows do not select items.
+export
+project_home : HomeBudget → List SourceReference → List Decision →
+  List RetainedActivity → List SourcePresentation → Either home_refusal HomeView
+project_home budget current_sources committed_decisions activities presentations =
+  if not (budget_valid budget) then Left invalid_budget else
+  let candidates = take budget.maximum_rows
+        (useful_candidates current_sources committed_decisions activities)
+      displayed = map (display_candidate budget presentations) candidates
+  in Right (RetainedHome displayed
+       (if null displayed
+          then "No retained items yet. Saved pages, mail, notes and explicit later choices can populate this view."
+          else ""))
+
+same_candidate : Candidate → Candidate → Bool
+same_candidate left right = same_evidence left.evidence right.evidence &&
+  left.activity_identity ≟ right.activity_identity
+
+current_row : Candidate → List HomeRow → Maybe HomeRow
+current_row requested rows =
+  case filter (\row ⇒ same_candidate requested row.candidate) rows of
+    [row] ⇒ Just row
+    _ ⇒ Nothing
+
+item_action : human_action → Bool
+item_action keep_item = True
+item_action dismiss_item = True
+item_action finish_item = True
+item_action defer_item = True
+item_action _ = False
+
+-- Only the browser-owned explicit action path calls this. The result remains
+-- a proposed command; the committed view does not change until the store does.
+export
+prepare_item_decision : HomeBudget → List SourceReference → List Decision →
+  List RetainedActivity → List SourcePresentation → Candidate → Text →
+  human_action → Either home_refusal Decision
+prepare_item_decision budget current_sources committed_decisions activities
+    presentations requested decision_identity action = do
+  home ← project_home budget current_sources committed_decisions activities presentations
+  case current_row requested home.rows of
+    Nothing ⇒ Left stale_row
+    Just row ⇒
+      if not (item_action action) then Left item_action_refused else
+      let decision = HumanDecision decision_identity row.candidate.evidence
+                       action Nothing Nothing
+      in case append_decision current_sources decision committed_decisions of
+        Nothing ⇒ Left item_action_refused
+        Just _ ⇒ Right decision
+
+export
+prepare_source_open : HomeBudget → List SourceReference → List Decision →
+  List RetainedActivity → List SourcePresentation → Candidate →
+  Either home_refusal SourceReference
+prepare_source_open budget current_sources committed_decisions activities
+    presentations requested = do
+  home ← project_home budget current_sources committed_decisions activities presentations
+  case current_row requested home.rows of
+    Nothing ⇒ Left stale_row
+    Just row ⇒ case row.source_state of
+      source_unavailable ⇒ Left source_open_refused
+      readable_source ⇒ Right row.candidate.evidence
+
+export
+row_action_labels : HomeRow → List Text
+row_action_labels row = case row.source_state of
+  source_unavailable ⇒ ["Keep", "Dismiss", "Done", "Later"]
+  readable_source ⇒ ["Keep", "Dismiss", "Done", "Later", "Open source"]
+
+-- The existing durable adapter supplies this report. A chooser, prepared
+-- Decision or local animation cannot manufacture store_recorded.
+export
+decision_feedback : decision_report → Text
+decision_feedback store_pending = "Saving decision"
+decision_feedback store_recorded = "Decision saved"
+decision_feedback store_failed = "Decision was not saved. Try again."
+decision_feedback store_outcome_unknown = "Save outcome unknown. Reopen retained state before retrying."
