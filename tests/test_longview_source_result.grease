@@ -93,19 +93,20 @@ refuse_decode "$work/oversize-record"
 # A bad source hash, privacy policy, linked input, or stale owner cannot be
 # promoted into a second immutable result. No output candidate is left behind.
 cp "$fixture" "$work/acquired.html"
-if ib_source_result_compose "$work/later-a" "$work/acquired.html" \
+grep -v '^source_payload_' "$work/later-a" >"$work/worker-completion-again"
+if ib_source_result_compose "$work/worker-completion-again" "$work/acquired.html" \
     "$source_id" html "$source_digest" private "$work/refused-completion"; then
   printf 'private source was admitted into ordinary result\n' >&2; exit 1
 fi
 test ! -e "$work/refused-completion"
-if ib_source_result_compose "$work/later-a" "$work/acquired.html" \
+if ib_source_result_compose "$work/worker-completion-again" "$work/acquired.html" \
     "$source_id" html 0000000000000000000000000000000000000000000000000000000000000000 \
     ordinary "$work/refused-completion"; then
   printf 'wrong expected digest was admitted\n' >&2; exit 1
 fi
 test ! -e "$work/refused-completion"
 ln -s "$work/acquired.html" "$work/linked.html"
-if ib_source_result_compose "$work/later-a" "$work/linked.html" \
+if ib_source_result_compose "$work/worker-completion-again" "$work/linked.html" \
     "$source_id" html "$source_digest" ordinary "$work/refused-completion"; then
   printf 'linked source was admitted\n' >&2; exit 1
 fi
@@ -115,7 +116,7 @@ This oversized source is rejected before publication.
 EOF_SOURCE
 head -c 2049 /dev/zero >>"$work/huge"
 huge_sha=$(sha256sum "$work/huge" | cut -d ' ' -f1)
-if ib_source_result_compose "$work/later-a" "$work/huge" \
+if ib_source_result_compose "$work/worker-completion-again" "$work/huge" \
     "$source_id" text "$huge_sha" ordinary "$work/refused-completion"; then
   printf 'oversized source was admitted\n' >&2; exit 1
 fi
