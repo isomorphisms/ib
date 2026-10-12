@@ -1,0 +1,177 @@
+#!/usr/bin/env grease
+# Canonical Cauldron producer and independent E4 consumer, on hosted Grease.
+set -eu
+test "$#" -eq 1
+repository_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+producer_root=$(CDPATH= cd -- "$1" && pwd)
+test -f "$producer_root/bin/ib-source.grease"
+test -f "$producer_root/bin/retain-source.grease"
+test -x "$IB_NATIVE_GREASE"
+. "$repository_root/lib/durable_object_store.grease"
+. "$repository_root/lib/longview_source_result.grease"
+. "$repository_root/lib/longview_cauldron_handoff.grease"
+work=$(mktemp -d)
+trap 'rm -rf "$work"' EXIT HUP INT TERM
+cat >"$work/grease" <<'GREASE_WRAPPER'
+#!/bin/sh
+exec "$IB_NATIVE_GREASE" +O ysh:all "$@"
+GREASE_WRAPPER
+chmod 700 "$work/grease"
+export GREASE="$work/grease"
+export IB_HOME="$work/state"
+fixture="$repository_root/tests/fixtures/arxiv_site/html/2203.11355"
+test -s "$fixture"
+source_digest=$(sha256sum "$fixture" | cut -d ' ' -f1)
+source_bytes=$(wc -c <"$fixture" | tr -d '[:space:]')
+
+descriptor() {
+  version=$1
+  privacy=$2
+  output=$3
+  {
+    printf 'source\tfixture-arxiv-html\n'
+    printf 'corpus\tsynthetic-browser-docs\n'
+    printf 'provider\tlocal\n'
+    printf 'object\tselected-arxiv-2203.11355\n'
+    printf 'version\t%s\n' "$version"
+    printf 'member\t-\n'
+    printf 'acquired_at\t2026-10-12T00:00:00Z\n'
+    printf 'privacy\t%s\n' "$privacy"
+    printf 'model\tdeny\n'
+  } >"$output"
+}
+canonical_retain() {
+  "$GREASE" "$producer_root/bin/ib-source.grease" retain opaque "$fixture" "$1"
+}
+descriptor generation-one ordinary "$work/provenance.tsv"
+source_id=$(canonical_retain "$work/provenance.tsv")
+test "$(printf '%s' "$source_id" | wc -c | tr -d '[:space:]')" -eq 64
+test "$(canonical_retain "$work/provenance.tsv")" = "$source_id"
+"$GREASE" "$producer_root/bin/ib-source.grease" verify "$source_id" >"$work/producer-verification"
+grep -Fx "PASS retained source $source_id" "$work/producer-verification" >/dev/null
+ib_cauldron_verify_selected "$IB_HOME" "$source_id" generation-one "$source_digest" html
+record="$IB_HOME/cauldron/sources/$source_id"
+test "$(wc -c <"$record/raw" | tr -d '[:space:]')" = "$source_bytes"
+
+# The E3 completion here is a synthetic fixture, not live Shizuku evidence.
+{
+  printf 'schema\tib-longview-worker-result-v2\n'
+  printf 'work_id\tcauldron-work\n'
+  printf 'result_id\tcauldron-result\n'
+  printf 'launch_id\tcauldron-launch\n'
+  printf 'boot_id\tboot-a\n'
+  printf 'uid\t2000\n'
+  printf 'pid\t123\n'
+  printf 'start_ticks\t999\n'
+  printf 'process_name\tibworker\n'
+  printf 'host_generation\t7\n'
+  printf 'attempt_id\tcauldron-attempt\n'
+  printf 'attempt_number\t1\n'
+  printf 'value\tdeterministic-ok\n'
+  printf 'source_binding_identity\t%s\n' "$source_id"
+  printf 'source_binding_sha256\t%s\n' "$source_digest"
+  printf 'source_binding_bytes\t%s\n' "$source_bytes"
+  printf 'source_binding_kind\thtml\n'
+  printf 'source_binding_privacy\tordinary\n'
+} >"$work/completion"
+ib_cauldron_compose_selected "$IB_HOME" "$source_id" generation-one \
+  "$source_digest" html "$work/completion" "$work/candidate"
+ib_source_result_decode "$work/candidate" "$source_id" "$source_digest" >"$work/selected.html"
+cmp "$fixture" "$work/selected.html"
+grep -F 'Feed-forward networks fold input space' "$work/selected.html" >/dev/null
+
+# Two late opens after discarding the transient completion. No renderer is run.
+rm "$work/completion"
+(
+  . "$repository_root/lib/durable_object_store.grease"
+  . "$repository_root/lib/longview_source_result.grease"
+  ib_source_result_decode "$work/candidate" "$source_id" "$source_digest" >"$work/late-one"
+)
+(
+  . "$repository_root/lib/durable_object_store.grease"
+  . "$repository_root/lib/longview_source_result.grease"
+  ib_source_result_decode "$work/candidate" "$source_id" "$source_digest" >"$work/late-two"
+)
+cmp "$fixture" "$work/late-one"
+cmp "$work/late-one" "$work/late-two"
+
+refuse() {
+  expected=$1
+  shift
+  if "$@" >"$work/refusal.out" 2>"$work/refusal.err"; then
+    echo 'Cauldron verifier accepted a forbidden source or generation' >&2
+    exit 1
+  else
+    observed=$?
+  fi
+  test "$observed" -eq "$expected" || {
+    printf 'Cauldron refusal: expected %s, got %s\n' "$expected" "$observed" >&2
+    cat "$work/refusal.err" >&2
+    exit 1
+  }
+  test ! -s "$work/refusal.out"
+  test ! -e "$work/forbidden-candidate"
+}
+refuse "$IB_CAULDRON_GENERATION" ib_cauldron_verify_selected \
+  "$IB_HOME" "$source_id" generation-two "$source_digest" html
+refuse "$IB_CAULDRON_INTEGRITY" ib_cauldron_verify_selected \
+  "$IB_HOME" "$source_id" generation-one \
+  0000000000000000000000000000000000000000000000000000000000000000 html
+refuse "$IB_CAULDRON_FORMAT" ib_cauldron_verify_selected \
+  "$IB_HOME" "$source_id" generation-one "$source_digest" json
+
+# Different immutable generations remain distinct with equal raw bytes.
+descriptor generation-two ordinary "$work/next.tsv"
+other_id=$(canonical_retain "$work/next.tsv")
+test "$other_id" != "$source_id"
+ib_cauldron_verify_selected "$IB_HOME" "$other_id" generation-two "$source_digest" html
+refuse "$IB_CAULDRON_GENERATION" ib_cauldron_verify_selected \
+  "$IB_HOME" "$other_id" generation-one "$source_digest" html
+
+descriptor generation-one private "$work/private.tsv"
+private_id=$(canonical_retain "$work/private.tsv")
+test "$private_id" != "$source_id"
+refuse "$IB_CAULDRON_PRIVATE" ib_cauldron_verify_selected \
+  "$IB_HOME" "$private_id" generation-one "$source_digest" html
+
+cp "$record/provenance.tsv" "$work/saved-provenance"
+printf 'privacy\tordinary\n' >>"$record/provenance.tsv"
+refuse "$IB_CAULDRON_INTEGRITY" ib_cauldron_verify_selected \
+  "$IB_HOME" "$source_id" generation-one "$source_digest" html
+cp "$work/saved-provenance" "$record/provenance.tsv"
+
+sed 's/^source_generation\tgeneration-one$/source_generation\tgeneration-two/' \
+  "$work/saved-provenance" >"$record/provenance.tsv"
+refuse "$IB_CAULDRON_GENERATION" ib_cauldron_verify_selected \
+  "$IB_HOME" "$source_id" generation-one "$source_digest" html
+cp "$work/saved-provenance" "$record/provenance.tsv"
+
+cp "$record/raw" "$work/saved-raw"
+printf 'unexpected change\n' >>"$record/raw"
+refuse "$IB_CAULDRON_INTEGRITY" ib_cauldron_verify_selected \
+  "$IB_HOME" "$source_id" generation-one "$source_digest" html
+cp "$work/saved-raw" "$record/raw"
+mv "$record/raw" "$work/real-raw"
+ln -s "$work/real-raw" "$record/raw"
+refuse "$IB_CAULDRON_INVALID" ib_cauldron_verify_selected \
+  "$IB_HOME" "$source_id" generation-one "$source_digest" html
+rm "$record/raw"
+mv "$work/real-raw" "$record/raw"
+
+sed 's/^source_kind\topaque$/source_kind\traw_urls/' \
+  "$work/saved-provenance" >"$record/provenance.tsv"
+refuse "$IB_CAULDRON_FORMAT" ib_cauldron_verify_selected \
+  "$IB_HOME" "$source_id" generation-one "$source_digest" html
+cp "$work/saved-provenance" "$record/provenance.tsv"
+
+grep -v '^source_binding_identity' "$work/candidate" >"$work/bad-worker"
+printf 'source_binding_identity\twrong-source-id\n' >>"$work/bad-worker"
+refuse "$IB_SOURCE_RESULT_CHANGED" ib_cauldron_compose_selected \
+  "$IB_HOME" "$source_id" generation-one "$source_digest" html \
+  "$work/bad-worker" "$work/forbidden-candidate"
+
+"$GREASE" "$producer_root/bin/ib-source.grease" verify "$source_id" >"$work/reverified"
+cmp "$fixture" "$record/raw"
+cmp "$work/saved-provenance" "$record/provenance.tsv"
+test -f "$work/candidate"
+printf '%s\n' 'Cauldron generation -> bounded E4 result test: ok (native Grease hosted; synthetic source)'
