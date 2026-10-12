@@ -14,6 +14,9 @@ if (not directory.startsWith('/')) {
 var root = $(realpath -- "$(dirname -- "$0")")
 mkdir -p "$directory"
 var output = "$directory/inspection.tsv"
+# A completed TSV belongs to this attempt. Failed reinspection must not leave
+# a previous run's success discoverable as the current result.
+rm -f -- "$output"
 var pending_output = $(mktemp "$directory/inspection.XXXXXX")
 trap --add EXIT { rm -f "$pending_output" }
 printf 'artifact\tsha256\tarchive_bytes\tclasses_jar_bytes\tclass_count\tnative_libraries\tresource_entries\n' > "$pending_output"

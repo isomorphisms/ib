@@ -1,16 +1,23 @@
 # Android Material view qualification
 
-**BLOCKED_NATIVE_VIEW**, 2026-10-08. SUN IB-D01 / [issue #55](https://github.com/isomorphisms/ib/issues/55)
+**BLOCKED_NATIVE_VIEW**, refreshed 2026-10-12. SUN IB-D01 / [issue #55](https://github.com/isomorphisms/ib/issues/55)
 has executable, pinned dependency inspection and a preserved Idriç control.
 It has no accepted native text/action round trip. D02–D04 and D06–D08 must not
 infer a qualified UI compiler or runtime from this receipt.
 
-The first available-executable blocker is that installed Idriç
-`ff4d852862a3942592f8ade9afde8d409d9803be` has no `dex` generator. The
-separately maintained android-NDK DEX driver admits checked Int32/Text exports,
-but does not supply the generic framework object/callback surface needed by
-an Android View. Neither acquiring an AAR nor selecting NDK repairs that
+The October 8 available-executable blocker was that installed Idriç
+`ff4d852862a3942592f8ade9afde8d409d9803be` had no `dex` generator. The
+then-inspected android-NDK DEX driver admitted checked Int32/Text exports,
+but did not supply the generic framework object/callback surface needed by
+an Android View. Neither acquiring an AAR nor selecting NDK repaired that
 source-to-framework gap.
+
+That backend inventory is historical. The newer checked backend has executed
+outbound framework calls and a source-compiled text probe on Android ART; it
+still has no accepted Material view construction/callback round trip. See
+[the current D01–D10 dependency receipt](display-jobs-2026-10-12.md) for exact
+source/run evidence and the separate full-task DEX failure. Do not describe
+all DEX/framework work as absent merely because the native view remains blocked.
 
 ## Choice and ownership
 
@@ -175,3 +182,16 @@ Next required qualification is an owned, build-policy-qualified checked
 compiler/framework or JNI adapter followed by one real typed Text/action
 round trip and refusal cases. Record its full resolved payload before
 claiming APK cost; keep startup/residency and physical MIRO acceptance separate.
+
+## Failed reinspection cannot retain success
+
+On October 12 the real inspector was reproduced leaving `inspection.tsv` from
+a successful prior run after a later cache checksum failure. The inspector now
+removes that derived result at the beginning of each attempt and publishes a
+replacement only after every input succeeds. The previous valid input bytes
+are unaffected. The focused Grease fixture tests successful publication,
+corrupt-cache refusal, recovery, and unavailable-download refusal; restoring
+the old inspector fails the stale-result check.
+
+[Execution receipt](inspection-status-receipt.md). This qualifies the
+inspector's evidence lifetime, not the dependency set or an Android view.
