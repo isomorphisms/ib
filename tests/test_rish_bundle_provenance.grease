@@ -3,6 +3,9 @@
 set -eu
 root=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)
 . "$root/lib/android_shizuku_host.grease"
+. "$root/lib/android_shizuku_worker_provider.grease"
+. "$root/lib/android_shizuku_capabilities_provider.grease"
+. "$root/lib/android_binder_host.grease"
 . "${IB_CAPABILITY_LIBRARY:-$root/lib/android_device_capabilities.grease}"
 fixture=$(mktemp -d)
 trap 'rm -rf "$fixture"' EXIT HUP INT TERM
