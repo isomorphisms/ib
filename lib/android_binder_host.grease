@@ -75,6 +75,13 @@ ib_binder_worker_signal_owned() {
 
 # Capability observation is also selected through Binder. Provider-specific
 # provenance remains visible in the returned rows.
+# Binder-selected provider-command resolution is read-only provenance.
+# Generic capability reporters must never call a Shizuku implementation
+# directly; other Binder providers can substitute their own resolver.
+ib_binder_capabilities_resolved_launcher() {
+  ib_shizuku_rish_command "$@"
+}
+
 ib_binder_capabilities_remote_snapshot() {
   ib_shizuku_capabilities_remote_snapshot "$@"
 }
