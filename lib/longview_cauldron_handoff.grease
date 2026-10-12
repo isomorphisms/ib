@@ -66,7 +66,7 @@ ib_cauldron_verify_selected() {
   LC_ALL=C awk -F '\t' '
     BEGIN {
       split("source corpus provider object version member acquired_at privacy model source_kind source_identity source_generation exposure sha256 byte_count", fields, " ")
-      for (index in fields) required[fields[index]] = 1
+      for (field_number in fields) required[fields[field_number]] = 1
     }
     NF != 2 || $1 !~ /^[a-z][a-z0-9_]*$/ || $2 == "" || /\r/ {bad=1}
     {
