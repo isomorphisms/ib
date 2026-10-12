@@ -1,0 +1,140 @@
+#!/usr/bin/env grease
+set -eu
+repository_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+. "$repository_root/lib/durable_object_store.grease"
+. "$repository_root/lib/result_publication.grease"
+. "$repository_root/lib/longview_source_result.grease"
+test "$#" -eq 1 && test -x "$1"
+policy_program=$1
+work=$(mktemp -d)
+trap 'rm -rf "$work"' EXIT HUP INT TERM
+source_id=arxiv-2203-11355-fixture
+fixture="$repository_root/tests/fixtures/arxiv_site/html/2203.11355"
+test -s "$fixture"
+cp "$fixture" "$work/acquired.html"
+source_digest=$(sha256sum "$work/acquired.html" | cut -d ' ' -f1)
+
+# This is the real Idric StorageAdmission action, not a handwritten permission
+# or a second file-store policy.
+"$policy_program" source-action >"$work/action"
+test "$(wc -l <"$work/action" | tr -d '[:space:]')" = 1
+test "$(cat "$work/action")" = "$(printf 'source-content\tpublish\t4096\tordinary\tcard-a\tobservation-1\treservation-1')"
+mkdir "$work/card"
+ib_store_init "$work/card" card-a
+
+# The completed E3 attempt is a separate identity assertion. The source
+# comes from selected, measured bytes, not from the receipt's value marker.
+cat >"$work/worker-completion" <<'COMPLETION'
+schema	ib-longview-worker-result-v2
+work_id	source-work
+result_id	source-content
+launch_id	source-launch
+boot_id	boot-a
+uid	2000
+pid	123
+start_ticks	999
+process_name	ibworker
+host_generation	7
+attempt_id	source-attempt
+attempt_number	1
+value	deterministic-ok
+COMPLETION
+
+ib_source_result_compose "$work/worker-completion" "$work/acquired.html" \
+  "$source_id" html "$source_digest" ordinary "$work/source-completion"
+ib_source_result_decode "$work/source-completion" "$source_id" "$source_digest" >"$work/prepared.html"
+cmp "$fixture" "$work/prepared.html"
+grep -F 'Origami in N dimensions' "$work/prepared.html" >/dev/null
+grep -F 'Feed-forward networks fold input space' "$work/prepared.html" >/dev/null
+
+ib_publish_owned_admitted_result \
+  "$work/card" "$work/source-completion" "$work/action" ordinary card-a observation-1 \
+  "$work/source-completion" source-work source-content source-launch boot-a 2000 123 999 \
+  ibworker 7 source-attempt 1
+
+# No live worker, producer, or renderer is needed for independent later reads.
+rm "$work/acquired.html" "$work/worker-completion" "$work/source-completion"
+(
+  . "$repository_root/lib/durable_object_store.grease"
+  . "$repository_root/lib/longview_source_result.grease"
+  ib_store_read_bounded "$work/card" card-a source-content 4096 >"$work/later-a"
+  ib_source_result_decode "$work/later-a" "$source_id" "$source_digest" >"$work/later-a.html"
+)
+(
+  . "$repository_root/lib/durable_object_store.grease"
+  . "$repository_root/lib/longview_source_result.grease"
+  ib_store_read_bounded "$work/card" card-a source-content 4096 >"$work/later-b"
+  ib_source_result_decode "$work/later-b" "$source_id" "$source_digest" >"$work/later-b.html"
+)
+cmp "$work/later-a" "$work/later-b"
+cmp "$fixture" "$work/later-a.html"
+cmp "$fixture" "$work/later-b.html"
+
+# Rejection never emits a partially decoded HTML document.
+refuse_decode() {
+  if ib_source_result_decode "$1" "$source_id" "$source_digest" >"$work/refused.out" 2>"$work/refused.err"; then
+    printf 'untrusted/tampered source was decoded\n' >&2
+    exit 1
+  fi
+  test ! -s "$work/refused.out"
+}
+sed 's/^source_payload_sha256.*/source_payload_sha256\t0000000000000000000000000000000000000000000000000000000000000000/' \
+  "$work/later-a" >"$work/bad-digest"
+refuse_decode "$work/bad-digest"
+sed 's/^source_payload_base64.*/source_payload_base64\t@@@@/' "$work/later-a" >"$work/bad-encoding"
+refuse_decode "$work/bad-encoding"
+sed 's/^source_payload_privacy.*/source_payload_privacy\tprivate/' "$work/later-a" >"$work/bad-privacy"
+refuse_decode "$work/bad-privacy"
+sed '/^source_payload_bytes/s/[0-9][0-9]*$/999/' "$work/later-a" >"$work/bad-size"
+refuse_decode "$work/bad-size"
+cat "$work/later-a" "$work/later-a" >"$work/oversize-record"
+refuse_decode "$work/oversize-record"
+
+# A bad source hash, privacy policy, linked input, or stale owner cannot be
+# promoted into a second immutable result. No output candidate is left behind.
+cp "$fixture" "$work/acquired.html"
+if ib_source_result_compose "$work/later-a" "$work/acquired.html" \
+    "$source_id" html "$source_digest" private "$work/refused-completion"; then
+  printf 'private source was admitted into ordinary result\n' >&2; exit 1
+fi
+test ! -e "$work/refused-completion"
+if ib_source_result_compose "$work/later-a" "$work/acquired.html" \
+    "$source_id" html 0000000000000000000000000000000000000000000000000000000000000000 \
+    ordinary "$work/refused-completion"; then
+  printf 'wrong expected digest was admitted\n' >&2; exit 1
+fi
+test ! -e "$work/refused-completion"
+ln -s "$work/acquired.html" "$work/linked.html"
+if ib_source_result_compose "$work/later-a" "$work/linked.html" \
+    "$source_id" html "$source_digest" ordinary "$work/refused-completion"; then
+  printf 'linked source was admitted\n' >&2; exit 1
+fi
+test ! -e "$work/refused-completion"
+cat >"$work/huge" <<'EOF_SOURCE'
+This oversized source is rejected before publication.
+EOF_SOURCE
+head -c 2049 /dev/zero >>"$work/huge"
+huge_sha=$(sha256sum "$work/huge" | cut -d ' ' -f1)
+if ib_source_result_compose "$work/later-a" "$work/huge" \
+    "$source_id" text "$huge_sha" ordinary "$work/refused-completion"; then
+  printf 'oversized source was admitted\n' >&2; exit 1
+fi
+test ! -e "$work/refused-completion"
+
+# The trusted original completion plus correct content cannot be published
+# under a stale attachment, even when the same earlier result exists.
+cp "$work/later-a" "$work/stale-completion"
+sed 's/^boot_id\tboot-a$/boot_id\tboot-b/' "$work/stale-completion" >"$work/stale"
+if ib_publish_owned_admitted_result \
+    "$work/card" "$work/stale" "$work/action" ordinary card-a observation-1 \
+    "$work/stale" source-work source-content source-launch boot-a 2000 123 999 \
+    ibworker 7 source-attempt 1 >"$work/refused.out" 2>"$work/refused.err"; then
+  printf 'stale owner was accepted\n' >&2; exit 1
+else
+  status=$?
+fi
+test "$status" -eq "$IB_PUBLICATION_WORKER_MISMATCH"
+test ! -s "$work/refused.out"
+ib_store_read_bounded "$work/card" card-a source-content 4096 >"$work/unchanged"
+cmp "$work/later-a" "$work/unchanged"
+printf '%s\n' 'longview source-derived result late-read and refusal tests: ok (hosted only)'
