@@ -1,0 +1,184 @@
+module PensieveHomeCases
+
+import Data.Text
+import IB.HumanDecisions
+import IB.PensieveHome
+
+browser : SourceReference
+browser = RetainedSource "browser-source" "browser-revision-one"
+  (TargetReference resource_target "browser-resource")
+
+mail : SourceReference
+mail = RetainedSource "mail-source" "mail-revision-one"
+  (TargetReference event_target "mail-event")
+
+note : SourceReference
+note = RetainedSource "note-source" "note-revision-one"
+  (TargetReference source_target "note-item")
+
+revised_browser : SourceReference
+revised_browser = RetainedSource "browser-source" "browser-revision-two"
+  (TargetReference resource_target "browser-resource")
+
+sources : List SourceReference
+sources = [browser, mail, note]
+
+activities : List RetainedActivity
+activities = [ ActivityReference "note-exposed" note observed_exposure
+             , ActivityReference "browser-returned" browser explicit_return
+             , ActivityReference "mail-later" mail explicit_defer
+             , ActivityReference "browser-saved" browser explicit_save
+             , ActivityReference "note-returned" note explicit_return ]
+
+presentations : List SourcePresentation
+presentations = [ ReadableSource browser "Manual" "\tExact lines\nλ😀\n" "Browser / saved page"
+                , ReadableSource mail "Reply" "Selected mail excerpt" "Mail / selected thread"
+                , ReadableSource note "Reference" "Selected note" "Notes / retained source" ]
+
+saved_browser : Candidate
+saved_browser = UsefulCandidate browser explicit_save "browser-saved"
+
+later_mail : Candidate
+later_mail = UsefulCandidate mail explicit_defer "mail-later"
+
+dismissal : Decision
+dismissal = HumanDecision "dismiss-browser" browser dismiss_item Nothing Nothing
+
+completion : Decision
+completion = HumanDecision "done-browser" browser finish_item Nothing Nothing
+
+home_titles : Either home_refusal HomeView → List Text
+home_titles (Left _) = []
+home_titles (Right home) = map (\row ⇒ row.title) home.rows
+
+home_reasons : Either home_refusal HomeView → List Text
+home_reasons (Left _) = []
+home_reasons (Right home) = map (\row ⇒ row.explanation) home.rows
+
+refused : {value : Type} → Either home_refusal value → Bool
+refused (Left _) = True
+refused (Right _) = False
+
+accepted_action : human_action → Bool
+accepted_action action = case prepare_item_decision default_home_budget
+  sources [] activities presentations saved_browser "explicit-decision" action of
+    Left _ ⇒ False
+    Right decision ⇒ same_evidence decision.evidence browser &&
+      encode_decision decision ≟ encode_decision
+        (HumanDecision "explicit-decision" browser action Nothing Nothing)
+
+recovery_after_dismissal : Bool
+recovery_after_dismissal = case encode_journal [dismissal] of
+  Nothing ⇒ False
+  Just bytes ⇒ case decode_journal bytes of
+    Nothing ⇒ False
+    Just restored ⇒ home_titles (project_home default_home_budget sources
+      restored activities presentations) ≟ ["Reply", "Reference"]
+
+empty_is_honest : Bool
+empty_is_honest = case project_home default_home_budget [] [] [] [] of
+  Left _ ⇒ False
+  Right home ⇒ null home.rows && not (home.empty_message ≟ "")
+
+exact_text_and_provenance : Bool
+exact_text_and_provenance = case project_home default_home_budget sources [] activities presentations of
+  Left _ ⇒ False
+  Right home ⇒ case home.rows of
+    first :: _ ⇒ first.excerpt ≟ Just "\tExact lines\nλ😀\n" &&
+      first.source_label ≟ "Browser / saved page" &&
+      same_evidence first.candidate.evidence browser
+    _ ⇒ False
+
+denied_source_is_safe : Bool
+denied_source_is_safe = case project_home default_home_budget sources [] activities
+  [UnavailableSource browser] of
+    Left _ ⇒ False
+    Right home ⇒ case home.rows of
+      first :: _ ⇒ first.title ≟ "Source unavailable" && first.excerpt ≟ Nothing &&
+        first.source_label ≟ "Source unavailable" &&
+        row_action_labels first ≟ ["Keep", "Dismiss", "Done", "Later"]
+      _ ⇒ False
+
+ambiguous_source_is_safe : Bool
+ambiguous_source_is_safe = case project_home default_home_budget sources [] activities
+  (UnavailableSource browser :: presentations) of
+    Left _ ⇒ False
+    Right home ⇒ case home.rows of
+      first :: _ ⇒ first.title ≟ "Source unavailable" && first.excerpt ≟ Nothing
+      _ ⇒ False
+
+presentation_bounds_are_checked : Bool
+presentation_bounds_are_checked = case project_home (BoundedHome 3 8 8) sources [] activities
+  [ReadableSource browser "too long a title" "SECRET" "Browser"] of
+    Left _ ⇒ False
+    Right home ⇒ case home.rows of
+      first :: _ ⇒ first.title ≟ "Source unavailable" && first.excerpt ≟ Nothing
+      _ ⇒ False
+
+same_titles_keep_distinct_sources : Bool
+same_titles_keep_distinct_sources = case project_home default_home_budget sources [] activities
+  [ReadableSource browser "Same title" "one" "Browser",
+   ReadableSource mail "Same title" "two" "Mail",
+   ReadableSource note "Same title" "three" "Notes"] of
+    Left _ ⇒ False
+    Right home ⇒ case home.rows of
+      first :: second :: _ ⇒ not (same_evidence first.candidate.evidence second.candidate.evidence)
+      _ ⇒ False
+
+decision_is_only_prepared : Bool
+decision_is_only_prepared =
+  not (refused (prepare_item_decision default_home_budget sources [] activities
+    presentations saved_browser "prepare-dismiss" dismiss_item)) &&
+  home_titles (project_home default_home_budget sources [] activities presentations)
+    ≟ ["Manual", "Reply", "Reference"]
+
+source_open_is_bound : Bool
+source_open_is_bound = case prepare_source_open default_home_budget sources [] activities
+  presentations saved_browser of
+    Left _ ⇒ False
+    Right evidence ⇒ same_evidence evidence browser
+
+-- Executable acceptance input over production functions. Dated execution
+-- and mutation results belong to the checking receipt, not this input.
+home_cases : List (Text, Bool)
+home_cases =
+  [ ("browser-mail-note-without-retyping", home_titles (project_home default_home_budget
+       sources [] activities presentations) ≟ ["Manual", "Reply", "Reference"])
+  , ("save-defer-return-before-exposure", home_reasons (project_home default_home_budget
+       sources [] activities presentations) ≟ ["You saved this", "You put this aside for later", "You returned to this"])
+  , ("exact-excerpt-and-source-reference", exact_text_and_provenance)
+  , ("empty-has-no-filler", empty_is_honest)
+  , ("bounded-row-window", home_titles (project_home (BoundedHome 1 256 1024)
+       sources [] activities presentations) ≟ ["Manual"])
+  , ("zero-budget-refuses", refused (project_home (BoundedHome 0 256 1024)
+       sources [] activities presentations))
+  , ("denied-source-does-not-leak-content", denied_source_is_safe)
+  , ("duplicate-presentation-refuses-content", ambiguous_source_is_safe)
+  , ("oversized-presentation-does-not-leak", presentation_bounds_are_checked)
+  , ("same-title-does-not-collapse-identities", same_titles_keep_distinct_sources)
+  , ("keep-prepares-core-decision", accepted_action keep_item)
+  , ("dismiss-prepares-core-decision", accepted_action dismiss_item)
+  , ("done-prepares-core-decision", accepted_action finish_item)
+  , ("later-prepares-core-decision", accepted_action defer_item)
+  , ("category-action-is-not-item-action", refused (prepare_item_decision default_home_budget
+       sources [] activities presentations saved_browser "wrong-action" include_category))
+  , ("stale-revision-refuses", refused (prepare_item_decision default_home_budget
+       [revised_browser, mail, note] [] activities presentations saved_browser "stale-command" keep_item))
+  , ("stale-activity-refuses", refused (prepare_item_decision default_home_budget
+       sources [] activities presentations (UsefulCandidate browser explicit_return "browser-returned")
+       "stale-activity-command" keep_item))
+  , ("row-reuse-cannot-select-other-item", refused (prepare_item_decision default_home_budget
+       sources [] activities presentations (UsefulCandidate mail explicit_save "browser-saved")
+       "reused-row-command" keep_item))
+  , ("dismissal-survives-journal-replay", recovery_after_dismissal)
+  , ("completed-item-stays-absent", home_titles (project_home default_home_budget sources
+       [completion] activities presentations) ≟ ["Reply", "Reference"])
+  , ("preparation-is-not-persistence", decision_is_only_prepared)
+  , ("open-source-retains-exact-evidence", source_open_is_bound)
+  , ("open-denied-source-refuses", refused (prepare_source_open default_home_budget
+       sources [] activities [UnavailableSource browser] saved_browser))
+  , ("pending-is-not-saved", decision_feedback store_pending ≟ "Saving decision")
+  , ("failed-save-is-explicit", decision_feedback store_failed ≟ "Decision was not saved. Try again.")
+  , ("unknown-save-is-explicit", decision_feedback store_outcome_unknown ≟
+       "Save outcome unknown. Reopen retained state before retrying.")
+  ]

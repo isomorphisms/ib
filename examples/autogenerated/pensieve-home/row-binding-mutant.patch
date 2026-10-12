@@ -1,0 +1,14 @@
+diff --git a/src/IB/PensieveHome.idric b/src/IB/PensieveHome.idric
+--- a/src/IB/PensieveHome.idric
++++ b/src/IB/PensieveHome.idric
+@@ -114,8 +114,7 @@
+ same_candidate : Candidate → Candidate → Bool
+-same_candidate left right = same_evidence left.evidence right.evidence &&
+-  left.activity_identity ≟ right.activity_identity
+-
++same_candidate left right = left.activity_identity ≟ right.activity_identity
++
+ current_row : Candidate → List HomeRow → Maybe HomeRow
+ current_row requested rows =
+   case filter (\row ⇒ same_candidate requested row.candidate) rows of
+     [row] ⇒ Just row

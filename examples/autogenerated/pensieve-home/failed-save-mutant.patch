@@ -1,0 +1,10 @@
+diff --git a/src/IB/PensieveHome.idric b/src/IB/PensieveHome.idric
+--- a/src/IB/PensieveHome.idric
++++ b/src/IB/PensieveHome.idric
+@@ -172,5 +172,5 @@
+ decision_feedback : decision_report → Text
+ decision_feedback store_pending = "Saving decision"
+ decision_feedback store_recorded = "Decision saved"
+-decision_feedback store_failed = "Decision was not saved. Try again."
++decision_feedback store_failed = "Decision saved"
+ decision_feedback store_outcome_unknown = "Save outcome unknown. Reopen retained state before retrying."
