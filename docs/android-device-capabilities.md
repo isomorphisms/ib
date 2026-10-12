@@ -37,11 +37,17 @@ machine. Today the concrete shared contract is Cat Food's preserved Shizuku
 `rish` bundle from `isomorphisms/catfood#93` / PR #94. When present, IB reports
 the snapshot id, source path, manager package and hashes from Cat Food's receipt.
 
-Cat Food does not yet publish the full per-device manifest requested by
-`isomorphisms/catfood#65`. The report therefore says that fact is unknown rather
-than deriving an installation identity from a model name or checkout directory.
-`IB_DEVICE_LABEL` is an explicit temporary local label for physical acceptance;
-it is not inferred device identity.
+Cat Food now supplies an existing per-installation `device-id` and versioned
+`device/inventory.tsv`. IB reads those without creating state and checks that
+the inventory identity agrees with the local identity before reporting its
+reference and observation time. Missing and mismatched inventory remains unknown
+or stale; a model name cannot join installations. `IB_DEVICE_LABEL` remains an
+explicit acceptance label, separate from that identity.
+
+Saved and active rish hashes are independently checked rather than treating
+receipt text as verification. See [rish-bundle-provenance.md](rish-bundle-provenance.md)
+for the separate receipt, saved-pair, selected-launcher, DEX-mode and live-authority
+fields and their concurrency/physical limitations.
 
 Cat Food is configuration/history. It cannot prove that a remembered SD card is
 currently mounted or that the IB app UID can write it. Live storage state is
