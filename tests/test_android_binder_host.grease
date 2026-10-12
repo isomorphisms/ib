@@ -60,6 +60,12 @@ ib_shizuku_worker_signal_owned() {
   check_worker_attempt "${1}" "${2}" "${3}" "${4}" "${5}" "${6}" "${7}" "${8}" "${9}" "${10}" "${11}"
   test "${12:-TERM}" = TERM
 }
+ib_shizuku_rish_command() {
+  if test "${provider_launcher_status:-0}" -ne 0; then
+    return "$provider_launcher_status"
+  fi
+  printf '%s\n' "${provider_launcher:-/tmp/qualified-rish}"
+}
 ib_shizuku_capabilities_remote_snapshot() { printf '%s\n' capability-via-provider; }
 ib_shizuku_capabilities_open_app_report() { printf '%s\n' app-report-via-provider; }
 
@@ -102,6 +108,19 @@ test "$(ib_binder_worker_read_result $attempt_args)" = result-via-provider
 test "$(ib_binder_worker_observe $attempt_args)" = committed
 # shellcheck disable=SC2086
 ib_binder_worker_signal_owned $attempt_args TERM
+
+test "$(ib_binder_capabilities_resolved_launcher)" = /tmp/qualified-rish
+provider_launcher=/other/qualified-rish
+test "$(ib_binder_capabilities_resolved_launcher)" = /other/qualified-rish
+provider_launcher_status=37
+if ib_binder_capabilities_resolved_launcher > /dev/null 2>&1; then
+  printf '%s\n' 'Binder provider launcher masked failure' >&2
+  exit 1
+else
+  actual=$?
+fi
+test "$actual" -eq 37
+unset provider_launcher provider_launcher_status
 
 test "$(ib_binder_capabilities_remote_snapshot)" = capability-via-provider
 test "$(ib_binder_capabilities_open_app_report)" = app-report-via-provider
