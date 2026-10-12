@@ -138,8 +138,8 @@ source_open_is_bound = case prepare_source_open default_home_budget sources [] a
     Left _ ⇒ False
     Right evidence ⇒ same_evidence evidence browser
 
--- Expected checks over production functions. They have NOT been evaluated
--- in this executor; this list is an executable acceptance input, not a receipt.
+-- Executable acceptance input over production functions. Dated execution
+-- and mutation results belong to the checking receipt, not this input.
 home_cases : List (Text, Bool)
 home_cases =
   [ ("browser-mail-note-without-retyping", home_titles (project_home default_home_budget

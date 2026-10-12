@@ -1,6 +1,12 @@
 # Program attempt: first useful Pensieve projection
 
-Status: SOURCE_ATTEMPT; compiler checking and execution NOT_RUN
+Status: CHECKED_AND_EVALUATED pure projection; native/store execution NOT_RUN
+
+The initial unavailable-checker attempt below is historical. Continuation
+restored the actual pinned checker, evaluated all 26 cases, rejected both
+production mutants and recovered all 26 passing results. See
+[the dated checking receipt](checking-receipt-2026-10-12.md) for exact inputs
+and stage limits. No generated consumer or native screen is implied.
 
 ## Purpose
 

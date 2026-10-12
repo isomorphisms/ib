@@ -1,0 +1,16 @@
+compiler_source=ff4d852862a3942592f8ade9afde8d409d9803be
+checker_version=0.8.0-ff4d85286
+row_binding_source_check=0
+row_binding_evaluator_process=0
+row_reuse_predicate=False
+failed_save_source_check=0
+failed_save_evaluator_process=0
+failed_save_feedback="Decision saved"
+failed_save_original_assertion=False
+recovery_source_check=0
+recovery_evaluator_process=0
+recovery_named_case_count=26
+recovery_true_case_count=26
+evidence_kind=source-typechecker-evaluator
+native_consumer=NOT_RUN
+durable_store=NOT_RUN
