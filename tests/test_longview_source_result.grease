@@ -75,6 +75,25 @@ cmp "$work/later-a" "$work/later-b"
 cmp "$fixture" "$work/later-a.html"
 cmp "$fixture" "$work/later-b.html"
 
+# Project recovered immutable source bytes through IB's existing compiled
+# Idric information/prepaint program. This is host-side source-backed viewing,
+# NOT a second frontend or an Android Activity.
+retained_prepaint="$repository_root/src/build/exec/ib-arxiv-prepaint"
+test -x "$retained_prepaint"
+"$retained_prepaint" \
+  https://arxiv.org/abs/2203.11355 \
+  https://arxiv.org/html/2203.11355 \
+  "$work/later-a.html" >"$work/retained-prepaint"
+grep -Fx 'prepaint-begin' "$work/retained-prepaint" >/dev/null
+grep -Fx 'prepaint-end' "$work/retained-prepaint" >/dev/null
+grep -Fx 'prepaint-width-bounded=True' "$work/retained-prepaint" >/dev/null
+grep -F 'information-title=Origami in N dimensions' "$work/retained-prepaint" >/dev/null
+grep -F 'Feed-forward networks fold input space' "$work/retained-prepaint" >/dev/null
+if grep -F 'heavyweight-renderer-marker' "$work/retained-prepaint" >/dev/null; then
+  printf 'untrusted script content appeared in recovered Idric prepaint\n' >&2
+  exit 1
+fi
+
 # Rejection never emits a partially decoded HTML document.
 refuse_decode() {
   if ib_source_result_decode "$1" "$source_id" "$source_digest" >"$work/refused.out" 2>"$work/refused.err"; then
