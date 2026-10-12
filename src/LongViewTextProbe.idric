@@ -1,0 +1,43 @@
+module LongViewTextProbe
+
+-- Capability probe only. This uses the qualified checked DEX foreign-call
+-- boundary to determine whether ART's String.indexOf can supply non-lossy
+-- presence tests for the existing Idriç LongViewTask validator. The canonical
+-- task model is NOT replaced and this source is NOT an Android application.
+%foreign "dex:virtual:Ljava/lang/String;:indexOf:(Ljava/lang/String;)I"
+index_of : Text → Text → Int32
+
+-- String.indexOf returns -1 for an absent substring. All restricted
+-- delimiters here are ASCII, so presence has the same truth value under
+-- UTF-16 code-unit indexing and Idriç's Char-based inspection.
+absent : Text → Text → Bool
+absent source pattern = index_of source pattern ≟ -1
+
+-- Mirrored deliberately as an independent target experiment: do not use
+-- this function as a substitute for IB.LongViewTask.durable_identity.
+%export "dex:record_identity_allowed"
+record_identity_allowed : Text → Int32
+record_identity_allowed input =
+  if input ≟ "" then 0
+  else if absent input "\t" then
+    if absent input "\n" then
+      if absent input "\r" then 1 else 0
+    else 0
+  else 0
+
+%export "dex:neutral_address_allowed"
+neutral_address_allowed : Text → Int32
+neutral_address_allowed input =
+  if input ≟ "" then 0
+  else if absent input "?" then
+    if absent input "#" then
+      if absent input "\t" then
+        if absent input "\n" then
+          if absent input "\r" then 1 else 0
+        else 0
+      else 0
+    else 0
+  else 0
+
+main : IO ()
+main = pure ()

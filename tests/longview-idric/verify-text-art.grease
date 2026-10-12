@@ -1,0 +1,58 @@
+#!/usr/bin/env grease
+
+# This is ART execution of the source-compiled text presence probe only.
+# The candidate must come from IB's checked Idriç DEX stage, never from smali.
+# Smali is the independent observation runner.
+if (len(ARGV) !== 5) {
+  echo 'usage: grease verify-text-art.grease REPOSITORY EVIDENCE SMALI_JAR ADB EXPECTED_HEAD' >&2
+  exit 2
+}
+var repository = ARGV[0]
+var evidence = ARGV[1]
+var smali = ARGV[2]
+var adb = ARGV[3]
+var expected_head = ARGV[4]
+for path in "$repository" "$evidence" "$smali" "$adb" {
+  if (path[0] !== '/') {
+    echo 'absolute paths required' >&2
+    exit 2
+  }
+}
+test "$(git -C "$repository" rev-parse HEAD)" = "$expected_head"
+test -x "$adb"
+test -s "$smali"
+var candidate = "$evidence/text-dex/longview-text.dex"
+test -s "$candidate"
+test -s "$evidence/text-dex/sha256.txt"
+sha256sum -c "$evidence/text-dex/sha256.txt"
+var runtime = "$evidence/text-dex/art"
+if test -e "$runtime" {
+  echo "refusing reused ART evidence directory: $runtime" >&2
+  exit 1
+}
+mkdir -p "$runtime/runner"
+cp "$repository/tests/longview-idric/TextPresenceRunner.smali" "$runtime/runner/"
+java -jar "$smali" assemble "$runtime/runner" -o "$runtime/oracle-runner.dex"
+test -s "$runtime/oracle-runner.dex"
+sha256sum "$candidate" "$runtime/oracle-runner.dex" > "$runtime/input-sha256.txt"
+"$adb" -s emulator-5554 get-state
+"$adb" -s emulator-5554 shell getprop ro.build.fingerprint > "$runtime/fingerprint.txt"
+"$adb" -s emulator-5554 shell getprop ro.product.cpu.abi > "$runtime/abi.txt"
+"$adb" -s emulator-5554 shell getprop ro.build.version.sdk > "$runtime/sdk.txt"
+"$adb" -s emulator-5554 shell mkdir -p /data/local/tmp/ib-idric-text
+"$adb" -s emulator-5554 push "$candidate" /data/local/tmp/ib-idric-text/candidate.dex
+"$adb" -s emulator-5554 push "$runtime/oracle-runner.dex" /data/local/tmp/ib-idric-text/oracle.dex
+# Android 14 requires read-only DEX files before dynamic executable loading.
+"$adb" -s emulator-5554 shell chmod 0444 /data/local/tmp/ib-idric-text/candidate.dex /data/local/tmp/ib-idric-text/oracle.dex
+"$adb" -s emulator-5554 pull /data/local/tmp/ib-idric-text/candidate.dex "$runtime/candidate-received.dex"
+"$adb" -s emulator-5554 pull /data/local/tmp/ib-idric-text/oracle.dex "$runtime/oracle-received.dex"
+cmp "$candidate" "$runtime/candidate-received.dex"
+cmp "$runtime/oracle-runner.dex" "$runtime/oracle-received.dex"
+"$adb" -s emulator-5554 shell \
+  'CLASSPATH=/data/local/tmp/ib-idric-text/oracle.dex:/data/local/tmp/ib-idric-text/candidate.dex app_process /system/bin Idric.TextPresenceRunner' \
+  > "$runtime/execution.txt" 2>&1
+cat "$runtime/execution.txt"
+rg -q -x -F 'IB checked DEX text presence ART PASS' "$runtime/execution.txt"
+echo 'PASS exact source-compiled text presence candidate executed on ART' > "$runtime/result.txt"
+echo 'NOT_RUN canonical task model DEX, app callbacks, APK, disk recovery, Shizuku, physical C67' >> "$runtime/result.txt"
+cat "$runtime/result.txt"

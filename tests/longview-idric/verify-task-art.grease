@@ -1,0 +1,75 @@
+#!/usr/bin/env grease
+
+# Candidate semantics come from the actual IB source and its two production
+# mutants. The already qualified pinned upstream smali file is a caller only.
+if (len(ARGV) !== 5) {
+  echo 'usage: grease verify-task-art.grease REPOSITORY EVIDENCE SMALI_JAR ADB EXPECTED_HEAD' >&2
+  exit 2
+}
+var repository = ARGV[0]
+var evidence = ARGV[1]
+var smali = ARGV[2]
+var adb = ARGV[3]
+var expected_head = ARGV[4]
+for path in "$repository" "$evidence" "$smali" "$adb" {
+  if (len(path) === 0) { echo 'empty path' >&2; exit 2 }
+  if (path[0] !== '/') { echo 'absolute path required' >&2; exit 2 }
+}
+test "$(git -C "$repository" rev-parse HEAD)" = "$expected_head"
+test "$(git -C "$repository/vendor/android-NDK" rev-parse HEAD)" = d0080ff0ad938680d319519bf484f98f540d3e89
+rg -q -x -F "ib_head=$expected_head" "$evidence/task-target/revision.txt"
+rg -q -x -F 'PASS both IB production mutants compiled to distinct DEX' "$evidence/task-target/result.txt"
+sha256sum -c "$evidence/input-sha256.txt"
+sha256sum -c "$evidence/task-target/input-sha256.txt"
+test -x "$adb"
+test -s "$smali"
+var runtime = "$evidence/task-art"
+if test -e "$runtime" { echo 'refusing reused task ART evidence' >&2; exit 1 }
+mkdir -p "$runtime/runner-source"
+cp "$repository/vendor/android-NDK/dex/idric/tests/unpack/IBUnpackRunner.smali" "$runtime/runner-source/"
+java -jar "$smali" assemble "$runtime/runner-source" -o "$runtime/runner.dex"
+test -s "$runtime/runner.dex"
+sha256sum "$runtime/runner.dex" "$smali" > "$runtime/runner-sha256.txt"
+"$adb" -s emulator-5554 get-state
+"$adb" -s emulator-5554 shell getprop ro.build.fingerprint > "$runtime/fingerprint.txt"
+"$adb" -s emulator-5554 shell getprop ro.build.version.sdk > "$runtime/sdk.txt"
+"$adb" -s emulator-5554 shell getprop ro.product.cpu.abi > "$runtime/abi.txt"
+rg -q -x -F '34' "$runtime/sdk.txt"
+rg -q -x -F 'x86_64' "$runtime/abi.txt"
+"$adb" -s emulator-5554 shell mkdir -p /data/local/tmp/ib-longview-task
+
+proc execute(name, candidate, manifest, mode, expected) {
+  if (mode !== 'positive' and mode !== 'negative') { echo 'invalid oracle mode' >&2; exit 2 }
+  test -s "$candidate"
+  sha256sum -c "$manifest"
+  "$adb" -s emulator-5554 push "$candidate" "/data/local/tmp/ib-longview-task/$name.dex"
+  "$adb" -s emulator-5554 push "$runtime/runner.dex" "/data/local/tmp/ib-longview-task/$name-runner.dex"
+  "$adb" -s emulator-5554 shell chmod 0444 "/data/local/tmp/ib-longview-task/$name.dex" "/data/local/tmp/ib-longview-task/$name-runner.dex"
+  "$adb" -s emulator-5554 pull "/data/local/tmp/ib-longview-task/$name.dex" "$runtime/$name-received.dex"
+  "$adb" -s emulator-5554 pull "/data/local/tmp/ib-longview-task/$name-runner.dex" "$runtime/$name-runner-received.dex"
+  cmp "$candidate" "$runtime/$name-received.dex"
+  cmp "$runtime/runner.dex" "$runtime/$name-runner-received.dex"
+  try {
+    timeout 45 "$adb" -s emulator-5554 shell \
+      "CLASSPATH=/data/local/tmp/ib-longview-task/$name-runner.dex:/data/local/tmp/ib-longview-task/$name.dex app_process /system/bin Idric.IBUnpackRunner" \
+      > "$runtime/$name.txt" 2>&1
+  }
+  var status = _error.code
+  printf 'process_exit=%s\n' "$status" > "$runtime/$name-status.txt"
+  cat "$runtime/$name.txt"
+  if (mode === 'positive') {
+    if (status !== 0) { echo 'FAIL actual IB target execution' >&2; exit 1 }
+  } else {
+    if (status !== 73) { echo 'FAIL expected production mutation was not rejected by the oracle' >&2; exit 1 }
+  }
+  rg -q -x -F "$expected" "$runtime/$name.txt"
+  sha256sum "$candidate" "$runtime/$name-received.dex" \
+    "$runtime/runner.dex" "$runtime/$name-runner-received.dex" > "$runtime/$name-sha256.txt"
+}
+execute original "$evidence/dex/longview-android.dex" "$evidence/dex/sha256.txt" positive 'PASS actual IB LongViewAndroid on ART'
+execute separator "$evidence/task-target/separator/candidate.dex" "$evidence/task-target/separator/sha256.txt" negative 'FAIL actual IB invalid task'
+execute wrong-host "$evidence/task-target/wrong-host/candidate.dex" "$evidence/task-target/wrong-host/sha256.txt" negative 'FAIL actual IB same host'
+cp "$evidence/task-target/revision.txt" "$runtime/revision.txt"
+echo 'PASS actual IB diagnostic and two production mutations executed on ART' > "$runtime/result.txt"
+echo 'NOT_RUN arbitrary restored tasks, renderer callbacks, storage recovery, authenticated website, APK or physical phone' >> "$runtime/result.txt"
+cat "$runtime/result.txt"

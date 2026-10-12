@@ -1,0 +1,56 @@
+module IB.LongViewLifecycle
+
+import IB.LongViewTask
+
+-- This module selects existing browser-owned transitions. Android supplies
+-- observations; it does not implement a second task or persistence model.
+
+export
+open_in_host : DurableIdentity → LongViewTask → LongViewTask
+open_in_host host task =
+  if identity_text host ≟ identity_text task.host_process_identity
+    then activity_was_recreated task
+    else host_process_restarted host task
+
+-- A callback is attached to one navigation and one host/renderer generation.
+-- Neither a PID nor an Android object reference substitutes for this identity.
+public export
+record RendererObservation where
+  constructor ObservedRenderer
+  observed_task : DurableIdentity
+  observed_tab : DurableIdentity
+  observed_navigation : DurableIdentity
+  observed_host : DurableIdentity
+  observed_host_generation : Number
+  observed_renderer : DurableIdentity
+  observed_renderer_generation : Number
+
+export
+observes_current_renderer : RendererObservation → LongViewTask → Bool
+observes_current_renderer observation task =
+  case task.renderer_identity of
+    Nothing ⇒ False
+    Just renderer ⇒
+      identity_text observation.observed_task ≟ identity_text task.task_identity &&
+      identity_text observation.observed_tab ≟ identity_text task.tab_identity &&
+      identity_text observation.observed_navigation ≟ identity_text task.navigation_identity &&
+      identity_text observation.observed_host ≟ identity_text task.host_process_identity &&
+      observation.observed_host_generation ≟ task.host_generation &&
+      identity_text observation.observed_renderer ≟ identity_text renderer &&
+      observation.observed_renderer_generation ≟ task.renderer_generation
+
+-- Nothing is a refused/stale observation, not a request to delete durable
+-- state. Callers retain their existing task when an observation is refused.
+export
+record_renderer_loss : RendererObservation → LongViewTask → Maybe LongViewTask
+record_renderer_loss observation task =
+  if observes_current_renderer observation task
+    then Just (renderer_was_lost task)
+    else Nothing
+
+export
+record_page_commit : RendererObservation → LongViewTask → Maybe LongViewTask
+record_page_commit observation task =
+  if observes_current_renderer observation task
+    then Just (reconstruction_committed task)
+    else Nothing
