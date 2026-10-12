@@ -17,9 +17,9 @@ ib_cauldron_handoff_value() {
 ib_cauldron_handoff_valid_generation() {
   test "$#" -eq 1 && test -n "$1" || return 1
   test "$(printf '%s' "$1" | wc -c | tr -d '[:space:]')" -le 128 || return 1
-  case "$1" in *'
-'*|*'
-'*|*'	'*) return 1 ;; esac
+  # Command substitution does not preserve trailing LF, so compare with an
+  # explicit stripping pass rather than testing $(printf '\n') in a pattern.
+  test "$1" = "$(printf '%s' "$1" | tr -d '\r\n\t')"
 }
 
 # Verify a particular immutable source generation before any worker-result
@@ -149,5 +149,16 @@ ib_cauldron_compose_selected() {
     return $?
   ib_source_result_compose "$cauldron_input_completion" "$cauldron_selected_raw" \
     "$cauldron_input_id" "$cauldron_input_format" "$cauldron_input_sha" ordinary \
-    "$cauldron_input_output"
+    "$cauldron_input_output" || return $?
+  # The source may change while a candidate is prepared. Recheck both the
+  # canonical metadata identity and its bytes, and discard only this candidate
+  # when validation fails. A completed durable E2 publication is untouched.
+  if ib_cauldron_verify_selected "$cauldron_input_home" "$cauldron_input_id" \
+      "$cauldron_input_generation" "$cauldron_input_sha" "$cauldron_input_format"; then
+    return 0
+  else
+    cauldron_recheck_status=$?
+    rm -f -- "$cauldron_input_output"
+    return "$cauldron_recheck_status"
+  fi
 }
