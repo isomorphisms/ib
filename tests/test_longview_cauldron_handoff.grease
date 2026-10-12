@@ -164,7 +164,7 @@ refuse "$IB_CAULDRON_FORMAT" ib_cauldron_verify_selected \
   "$IB_HOME" "$source_id" generation-one "$source_digest" html
 cp "$work/saved-provenance" "$record/provenance.tsv"
 
-grep -v '^source_binding_identity' "$work/candidate" >"$work/bad-worker"
+grep -v '^source_payload_' "$work/candidate" | grep -v '^source_binding_identity' >"$work/bad-worker"
 printf 'source_binding_identity\twrong-source-id\n' >>"$work/bad-worker"
 refuse "$IB_SOURCE_RESULT_CHANGED" ib_cauldron_compose_selected \
   "$IB_HOME" "$source_id" generation-one "$source_digest" html \
