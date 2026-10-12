@@ -19,6 +19,15 @@ still has no accepted Material view construction/callback round trip. See
 source/run evidence and the separate full-task DEX failure. Do not describe
 all DEX/framework work as absent merely because the native view remains blocked.
 
+In the later continuation, the existing C01 backend passed the unchanged
+LongViewAndroid diagnostic on ART at `d0080ff0ad938680d319519bf484f98f540d3e89`.
+The earlier fastUnpack failure is historical for that diagnostic with the newer
+backend. It must not remain the claimed current reason Material views cannot
+run. Material construction/callback qualification is still missing. D07 now
+has an independent published source projection against S08; its checker
+attempt is blocked by the unavailable local Idriç executable, so no source or
+runtime acceptance is claimed for it.
+
 ## Choice and ownership
 
 Keep the user's selected **Material 3** product target. Qualify a narrow

@@ -7,7 +7,7 @@ Their IDs refer to the reconciled assignments, not the original search probes.
 The source boundary remains Idriç semantics, Grease orchestration and narrow
 platform adapters; the selected presentation is Material 3.
 
-## Current native gate
+## Native gate and continuation
 
 The October 8 statement that the checked backend supports only Int32/Text
 exports is superseded by actual outbound framework/IO lowering. Reused owner:
@@ -22,7 +22,7 @@ This outbound surface does not supply a generated View/Activity callback.
 [isomorphisms/ib PR #134, “Move Long View lifecycle dispatch into Idriç and
 exercise its direct-DEX path”](https://github.com/isomorphisms/ib/pull/134)
 is the existing application/compiler consumer, at
-`a624cef0c1f8b867154e49c7f172f7069b4a3708` during inspection. Its
+`a624cef0c1f8b867154e49c7f172f7069b4a3708` during the initial inspection. Its
 [exact-head run 38107554419](https://github.com/isomorphisms/ib/actions/runs/38107554419)
 contains distinct results:
 
@@ -36,10 +36,27 @@ contains distinct results:
 - No Material view construction, input callback, native text/action round trip,
   APK, clipboard, restored reading surface or physical phone run is established.
 
+The subsequent C01 owner has advanced:
+[isomorphisms/android-NDK PR #24, “Lower checked unpack-derived character views
+and tail scans to DEX”](https://github.com/isomorphisms/android-NDK/pull/24),
+head `d0080ff0ad938680d319519bf484f98f540d3e89`, has a completed successful
+[exact-head run 38216174983](https://github.com/isomorphisms/android-NDK/actions/runs/38216174983).
+Its retained [artifact 11732488764](https://github.com/isomorphisms/android-NDK/actions/runs/38216174983/artifacts/11732488764)
+has ZIP digest `a8dfa65f2684c1d6a1744fd4e796daf730160dd48b00365cc76207ab5d614e12`.
+The unchanged original LongViewAndroid diagnostic at IB
+`446a183e245632608bf2868d4a34eb2f5225bd67` has recorded Android 14 x86_64
+ART success, including nine identity/host observations and rejected separator
+and wrong-host mutants. Current compiler work removes the earlier fastUnpack
+obstruction for that diagnostic. The IB consumer's older backend pin still
+needs its separately owned C01 propagation; this D task changes neither it nor
+IB storage. This result does not establish every persisted task input or
+arbitrary generation arithmetic.
+
 The current shared D-family product blocker is the missing qualified checked
-Idriç-to-Material view/action adapter. Full-task DEX has an additional concrete
-compiler blocker owned by C01/android-NDK; fixing it does not itself qualify
-the view. No parallel compiler or Java/Gradle implementation was introduced.
+Idriç-to-Material view/action adapter. The diagnostic's DEX/ART success does
+not supply Material construction, callbacks, source display or a native
+text/action round trip. No parallel compiler or Java/Gradle implementation was
+introduced.
 This executor additionally lacks an installed Idriç compiler for the independent
 pure D-family work. The dated October 8 compiler paths no longer exist; neither
 `idric` nor `idris2` resolves. That is local availability, not proof that the
@@ -55,7 +72,7 @@ language cannot implement these semantics.
 | D04 — scientific figures | Existing `0.2/viewport-figures@778266431c57060080d35324180c71e577c995b6`, `docs/viewport.md`, owns prepared-local-image + optional-caption presentation. | D01/D02 prepared-image adapter; decoded memory, color, recreation and physical visual behavior NOT_RUN. |
 | D05 — trusted Copy | Existing `feature/source-bound-exact-copy@7ded5b7ecec37579f72513449c82af8566fe1706` owns CopyPolicy over S06 fragments, exact source spans, disable policy and stale/payload refusal. Historical 25-case normalization and whitespace mutant are recorded there. | Qualified consumer executable and D01/D02 clipboard/trusted-chrome adapter; clipboard write/readback and hostile-page separation NOT_RUN. No duplicate policy was created. |
 | D06 — source-linked observations | Existing S07 `35541d40c16533fa4385c879c3c83c45821b4e3e` owns code-point ranges, revision/clock identity, replay refusal and visibility facts. | D01/D02 native geometry, foreground/occlusion and platform-offset adapter; S06/S07 qualified runtime. Journal fixtures are not actual viewport observation. |
-| D07 — first useful Pensieve | Existing S08 `cb8cdc14b6065b91240b97b580055c0d18375fae`, `IB.HumanDecisions.useful_candidates`, owns accepted decisions and save/defer/return/exposure ordering. | S08 executable/store + live retained activity wiring, then D01/D02 presentation; no empty notes database or invented recommendations. |
+| D07 — first useful Pensieve | S08 `cb8cdc14b6065b91240b97b580055c0d18375fae` remains the decision/reducer owner. New [source attempt `bc1bbfe7`](https://github.com/isomorphisms/ib/blob/bc1bbfe7b4300a0afd807b42f2a97732dfe9097a/docs/pensieve-home-projection.md) adds disposable source-linked rows, action preparation and 26 unrun acceptance cases. | Actual compiler attempt exits 127: idris2 unavailable. Source/type/behavior NOT_RUN; then S08 producer/store, D01/D02 native presentation and Edit owner remain. |
 | D08 — actionable images | Existing prepared-image contract and browser-owned action intent remain the owners. Copy, Save, Share and Open source must use actual retained-object/grant identity. | D01/D02/D04 and executable action consumer. Offline handoff, chooser cancellation, byte availability and task latency NOT_RUN; no real recipient transmission. |
 | D09 — temporary preview | Existing viewport prepared-image reference is reused; PDF engine remains owned by `house-of-government/pdf`, `notes/androidx-pdf-engine-gate.md`. | D01/D02/S05 parent identity/scroll/selection restoration; PDF additionally needs actual read-only engine output. No parallel tab or PDF model. |
 | D10 — optional Keep | Existing S08 accepted-item and S10 export/privacy boundaries are reused. Verified primary documentation supplies the channel limits below. | Qualified payload consumer and D01/D02 share adapter, plus observed Keep capability. No account or note write occurred. |
@@ -63,8 +80,9 @@ language cannot implement these semantics.
 All ten jobs remain incomplete at their end-to-end acceptance boundaries. The
 new executed repair is D01's inspection result lifetime. Previously recorded
 source/normalization results are not presented as new execution or runtime
-acceptance. No new source-only frontend model was created when the selected
-consumer could not execute it.
+acceptance. D07's independent pure source projection is now preserved and
+published; it reuses canonical identities/decisions and creates no new store.
+It is not typechecked or accepted runtime behavior.
 
 ## D10 channel limits from primary documentation
 
