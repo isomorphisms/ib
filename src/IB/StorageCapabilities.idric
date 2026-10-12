@@ -1,0 +1,232 @@
+module IB.StorageCapabilities
+
+import Data.Text
+import Data.String
+import Data.List
+import IB.StorageAdmission
+
+-- Consumer of existing five-column observation rows, never another probe.
+public export
+record CapabilityRow where
+  constructor ObservedCapability
+  kind : Text
+  name : Text
+  status : Text
+  authority : Text
+  value : Text
+
+same_text : Text → Text → Bool
+same_text left right = case compare left right of
+  EQ ⇒ True
+  _ ⇒ False
+
+split_chars : Char → List Char → List Char → List Text
+split_chars delimiter [] current = [pack (reverse current)]
+split_chars delimiter (character :: rest) current =
+  if character == delimiter
+    then pack (reverse current) :: split_chars delimiter rest []
+    else split_chars delimiter rest (character :: current)
+
+fields : Char → Text → List Text
+fields delimiter text = split_chars delimiter (unpack text) []
+
+decode_rows : List Text → Maybe (List CapabilityRow)
+decode_rows [] = Just []
+decode_rows (line :: remaining) =
+  if same_text line "" then decode_rows remaining else
+  case fields '\t' line of
+    ["schema", "ib-android-capabilities-v1"] ⇒ decode_rows remaining
+    ["schema", "ib-app-storage-capabilities-v1", "", "", ""] ⇒ decode_rows remaining
+    [kind, name, status, authority, value] ⇒
+      case decode_rows remaining of
+        Nothing ⇒ Nothing
+        Just rows ⇒ Just (ObservedCapability kind name status authority value :: rows)
+    _ ⇒ Nothing
+
+public export
+capability_rows : Text → Maybe (List CapabilityRow)
+capability_rows source =
+  case fields '\n' source of
+    "schema\tib-android-capabilities-v1" :: lines ⇒ decode_rows lines
+    "schema\tib-app-storage-capabilities-v1\t\t\t" :: lines ⇒ decode_rows lines
+    _ ⇒ Nothing
+
+unique_row : Text → Text → List CapabilityRow → Maybe CapabilityRow
+unique_row kind name rows =
+  case filter (\row ⇒ same_text row.kind kind && same_text row.name name) rows of
+    [row] ⇒ Just row
+    _ ⇒ Nothing
+
+reported_field : Text → List CapabilityRow → Maybe Text
+reported_field name rows = case unique_row "field" name rows of
+  Nothing ⇒ Nothing
+  Just row ⇒
+    if same_text row.authority "android-app" &&
+       (same_text row.status "reported" || same_text row.status "measured")
+      then Just row.value else Nothing
+
+field_matches : Text → Text → List CapabilityRow → Bool
+field_matches name expected rows = case reported_field name rows of
+  Just observed ⇒ not (same_text expected "") && same_text expected observed
+  Nothing ⇒ False
+
+decimal_value : Text → Maybe Integer
+decimal_value text =
+  if null (unpack text) || not (all (\digit ⇒ digit >= '0' && digit <= '9') (unpack text))
+    then Nothing else parseInteger text
+
+public export
+record StorageExpectation where
+  constructor ExpectedStorage
+  installation_identity : Text
+  source_head : Text
+  expected_uid : Text
+  root_name : Text
+  backend_identity : Text
+  media_identity : Text
+  volume_generation : Text
+  observation_identity : Text
+  capacity_pool_identity : Text
+  current_seconds : Integer
+  maximum_age_seconds : Integer
+  safety_floor_bytes : Integer
+  commitments_bytes : Integer
+
+fresh_observation : StorageExpectation → List CapabilityRow → Bool
+fresh_observation expected rows = case reported_field "observed_seconds" rows of
+  Nothing ⇒ False
+  Just time ⇒ case decimal_value time of
+    Nothing ⇒ False
+    Just observed ⇒ expected.current_seconds >= observed &&
+      expected.maximum_age_seconds >= 0 &&
+      expected.current_seconds - observed <= expected.maximum_age_seconds
+
+attribute : Text → Text → Maybe Text
+attribute name text =
+  case filter (\entry ⇒ case fields '=' entry of
+                      [key, _] ⇒ same_text key name
+                      _ ⇒ False) (fields ' ' text) of
+    [entry] ⇒ case fields '=' entry of
+      [_, value] ⇒ Just value
+      _ ⇒ Nothing
+    _ ⇒ Nothing
+
+root_attribute : Text → Text → List CapabilityRow → Maybe Text
+root_attribute root_name key rows = case unique_row "app_storage_root" root_name rows of
+  Nothing ⇒ Nothing
+  Just root ⇒
+    if same_text root.authority "android-app" && same_text root.status "reported"
+      then attribute key root.value else Nothing
+
+root_matches : Text → Text → Text → List CapabilityRow → Bool
+root_matches root_name key expected rows = case root_attribute root_name key rows of
+  Nothing ⇒ False
+  Just observed ⇒ not (same_text expected "") && same_text expected observed
+
+bound_observation : StorageExpectation → List CapabilityRow → Bool
+bound_observation expected rows =
+  field_matches "installation_identity" expected.installation_identity rows &&
+  field_matches "source_head" expected.source_head rows &&
+  field_matches "app_uid" expected.expected_uid rows &&
+  root_matches expected.root_name "backend-identity" expected.backend_identity rows &&
+  root_matches expected.root_name "volume-uuid" expected.media_identity rows &&
+  root_matches expected.root_name "volume-generation" expected.volume_generation rows &&
+  root_matches expected.root_name "observation-identity" expected.observation_identity rows &&
+  root_matches expected.root_name "capacity-pool-identity" expected.capacity_pool_identity rows &&
+  fresh_observation expected rows
+
+app_available : Text → List CapabilityRow → Maybe Integer
+app_available root_name rows = case unique_row "app_storage_capacity" root_name rows of
+  Nothing ⇒ Nothing
+  Just capacity ⇒
+    if not (same_text capacity.authority "android-app") ||
+       not (same_text capacity.status "measured") then Nothing else
+    case (attribute "available-bytes" capacity.value, attribute "total-bytes" capacity.value) of
+      (Just available, Just total_text) ⇒ case (decimal_value available, decimal_value total_text) of
+        (Just available_bytes, Just total_bytes) ⇒
+          if available_bytes <= total_bytes then Just available_bytes else Nothing
+        _ ⇒ Nothing
+      _ ⇒ Nothing
+
+writer_state : Text → List CapabilityRow → capacity_observation
+writer_state root_name rows = case unique_row "app_storage_writer" root_name rows of
+  Nothing ⇒ capacity_unknown
+  Just writer ⇒
+    if not (same_text writer.authority "android-app") then writer_denied else
+    case writer.status of
+      "denied" ⇒ writer_denied
+      "read-only" ⇒ writer_read_only
+      "absent" ⇒ volume_absent
+      "stale" ⇒ observation_stale
+      "measured" ⇒ if same_text writer.value "bounded-write-pass"
+                      then measured_writable else capacity_unknown
+      _ ⇒ capacity_unknown
+
+public export
+ledger_from_report : StorageExpectation → List CapabilityRow → SpaceLedger
+ledger_from_report expected rows =
+  let floor = expected.safety_floor_bytes
+      commitments = expected.commitments_bytes in
+  if not (bound_observation expected rows)
+    then
+      let binding_fields = ["installation_identity", "source_head", "app_uid", "observed_seconds"]
+          binding_attributes = ["backend-identity", "volume-uuid", "volume-generation",
+                                "observation-identity", "capacity-pool-identity"] in
+      if all (\name ⇒ case reported_field name rows of
+                        Just value ⇒ not (same_text value "")
+                        Nothing ⇒ False) binding_fields &&
+         all (\key ⇒ case root_attribute expected.root_name key rows of
+                       Just value ⇒ not (same_text value "")
+                       Nothing ⇒ False) binding_attributes
+        then Ledger observation_stale Nothing floor commitments
+        else Ledger capacity_unknown Nothing floor commitments
+    else Ledger (writer_state expected.root_name rows)
+           (app_available expected.root_name rows) floor commitments
+
+-- The internal floor is checked even when the target is a large removable
+-- root. An identified alias shares one conservative budget; no observations
+-- are added together. Unknown pool identity never establishes independence.
+public export
+record ReconciledPublication where
+  constructor AdmittedFromObservations
+  publication : AdmittedPublication
+  internal_reservation : SpaceLedger
+
+public export
+publication_from_reports :
+  StorageExpectation → List CapabilityRow →
+  StorageExpectation → List CapabilityRow →
+  Integer → PublicationRequest → PublicationLocation → Maybe ReconciledPublication
+publication_from_reports internal internal_rows target target_rows internal_peak request location =
+  let internal_ledger = ledger_from_report internal internal_rows
+      target_ledger = ledger_from_report target target_rows in
+  if not (same_text internal.installation_identity target.installation_identity) ||
+     not (same_text location.backend_identity target.backend_identity) ||
+     not (same_text location.media_identity target.media_identity) ||
+     not (same_text location.observation_identity target.observation_identity) ||
+     same_text internal.capacity_pool_identity "" ||
+     same_text target.capacity_pool_identity "" || internal_peak < 0
+    then Nothing else
+  if same_text internal.capacity_pool_identity target.capacity_pool_identity
+    then
+      case reserve_peak internal_peak internal_ledger of
+        Nothing ⇒ Nothing
+        Just reserved ⇒
+          -- Both aliases must independently retain authority/provenance, then
+          -- use the smaller availability and stricter floor/commitment.
+          case (reserved.observed_available_bytes, target_ledger.observed_available_bytes) of
+            (Just internal_available, Just target_available) ⇒
+              let shared = Ledger target_ledger.observation
+                             (Just (min internal_available target_available))
+                             (max reserved.safety_floor_bytes target_ledger.safety_floor_bytes)
+                             (max internal_ledger.unreflected_commitments_bytes target_ledger.unreflected_commitments_bytes + internal_peak) in
+              case publication_for shared request location of
+                Nothing ⇒ Nothing
+                Just accepted ⇒
+                  Just (AdmittedFromObservations accepted accepted.reserved_ledger)
+            _ ⇒ Nothing
+    else case reserve_peak internal_peak internal_ledger of
+      Nothing ⇒ Nothing
+      Just internal_reserved ⇒ case publication_for target_ledger request location of
+        Nothing ⇒ Nothing
+        Just accepted ⇒ Just (AdmittedFromObservations accepted internal_reserved)
