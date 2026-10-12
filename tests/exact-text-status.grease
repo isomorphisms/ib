@@ -1,0 +1,78 @@
+#!/usr/bin/env grease
+# Exercise the actual maintained Actions run bodies, not a parallel oracle.
+set -eu -o pipefail
+
+var repository = $(realpath -- "$(dirname -- "$0")/..")
+var workflow = "$repository/.github/workflows/exact-text.yml"
+if (len(ARGV) === 1) {
+  setvar workflow = ARGV[0]
+} elif (len(ARGV) !== 0) {
+  echo 'usage: grease tests/exact-text-status.grease [WORKFLOW]'
+  exit 2
+}
+var work = $(mktemp -d)
+trap --add EXIT { rm -rf "$work" }
+
+# The existing Actions boundary uses its implicit Linux bash -e runner.
+# Fail on a changed execution contract rather than silently testing a lookalike.
+if grep -Eq '^[[:space:]]+(shell|defaults|working-directory):' "$workflow" {
+  echo 'FAIL: workflow runner contract changed; update the extracted-step test'
+  exit 1
+}
+test $(grep -c '^          grep -Fx ' "$workflow") = 12
+test $(wc -l < "$repository/tests/fixtures/exact-text.expected") = 12
+
+sed -n '/^      - name: Compile exact text oracle$/,/^      - name: Check exact positions and counts$/ { /^          / { s/^          //; p; } }' "$workflow" > "$work/compile.original"
+sed -n '/^      - name: Check exact positions and counts$/,$ { /^          / { s/^          //; p; } }' "$workflow" > "$work/oracle.original"
+test -s "$work/compile.original"
+test -s "$work/oracle.original"
+
+setglobal ENV.IB_TEST_FIXTURE = "$repository/tests/fixtures/exact-text-producer.grease"
+setglobal ENV.IB_TEST_EXPECTED = "$repository/tests/fixtures/exact-text.expected"
+setglobal ENV.IB_TEST_OUTPUT = 'good'
+setglobal ENV.IB_TEST_PRODUCER_EXIT = '0'
+setglobal ENV.IB_TEST_COMPILER_EXIT = '0'
+
+var failed = 0
+for case_name in (['success', 'wrong-output', 'producer-exit-7', 'compiler-exit-7']) {
+  var directory = "$work/$case_name"
+  mkdir -p "$directory/src" "$directory/compiler/bin"
+  cp "$[ENV.IB_TEST_FIXTURE]" "$directory/compiler/bin/idris2"
+  chmod +x "$directory/compiler/bin/idris2"
+  sed "s@/tmp/idric@$directory/compiler@g; s@/tmp/exact-text@$directory/exact-text@g" "$work/compile.original" > "$directory/compile.runner"
+  sed "s@/tmp/exact-text@$directory/exact-text@g" "$work/oracle.original" > "$directory/oracle.runner"
+  setvar ENV.IB_TEST_OUTPUT = 'good'
+  setvar ENV.IB_TEST_PRODUCER_EXIT = '0'
+  setvar ENV.IB_TEST_COMPILER_EXIT = '0'
+  if (case_name === 'wrong-output') { setvar ENV.IB_TEST_OUTPUT = 'wrong' }
+  if (case_name === 'producer-exit-7') { setvar ENV.IB_TEST_PRODUCER_EXIT = '7' }
+  if (case_name === 'compiler-exit-7') { setvar ENV.IB_TEST_COMPILER_EXIT = '7' }
+  cd "$directory"
+  try { bash --noprofile --norc -e compile.runner > compile.log 2>&1 }
+  var compile_status = _error.code
+  var oracle_status = 99
+  if (compile_status === 0) {
+    try { bash --noprofile --norc -e oracle.runner > oracle.log 2>&1 }
+    setvar oracle_status = _error.code
+  }
+  var passed = false
+  if (case_name === 'success') {
+    setvar passed = (compile_status === 0 and oracle_status === 0)
+  } elif (case_name === 'wrong-output') {
+    setvar passed = (compile_status === 0 and oracle_status === 1)
+  } elif (case_name === 'producer-exit-7') {
+    setvar passed = (compile_status === 0 and oracle_status === 7)
+    cmp "$[ENV.IB_TEST_EXPECTED]" "$directory/exact-text.txt"
+  } else {
+    setvar passed = (compile_status === 7 and oracle_status === 99)
+    test -x src/build/exec/ib-exact-text
+    grep -Fx 'ExactTextSmoke compiled; executable written' "$directory/exact-text-compile.txt" > /dev/null
+  }
+  printf '%s\tcompile=%s\toracle=%s\texpected=%s\n' "$case_name" "$compile_status" "$oracle_status" "$passed"
+  if (not passed) {
+    cat compile.log
+    if test -f oracle.log { cat oracle.log }
+    setvar failed = 1
+  }
+}
+exit "$failed"
