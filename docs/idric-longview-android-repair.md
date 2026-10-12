@@ -32,7 +32,7 @@ This repair is based on PR #132, **Verify Pensieve Quick Settings bindings throu
 direct DEX**, head `edeb7a3b91c821910e5524002f8548ec2052dd42`. It reuses:
 
 - `src/IB/LongViewTask.idric`: task identity, transitions, ordinary serialization;
-- `vendor/android-NDK@2dd7bc593cee22c94cb3927635e9737e398daf8c`: checked DEX driver;
+- `vendor/android-NDK@940cf63f655ae9e2031e03a574b2ce22176af155`: checked DEX driver;
 - `isomorphisms/Idric@ff4d852862a3942592f8ade9afde8d409d9803be`: actual compiler;
 - the existing Cat Food/Grease bootstrap entry points and compiler API cache.
 
@@ -118,3 +118,28 @@ draft integration test. **It remains under CI qualification and unmerged.**
 The [full IB task's fastUnpack/runtime-list/record/Integer gap](https://github.com/isomorphisms/android-NDK/issues/22)
 remains even if the text-probe DEX builds and runs on ART. This is a dependency
 and capability probe, not real Android session-persistence implementation.
+
+## 2026-10-12 finalized layout and precise dependency receipt
+
+The previous checked text-probe ART success at source `a624cef0...` is verified
+in the retained [IB run 38107554419](https://github.com/isomorphisms/ib/actions/runs/38107554419).
+The canonical task still failed at `fastUnpack`. Its exact ANF, reachable
+dependencies, and analyzed later language boundaries are recorded in
+[the dependency closure](longview-dex-dependency-closure.md); this distinguishes
+the first executed failure from unexecuted later requirements.
+
+The new pinned backend finalizes layout once for the binary, plan and smali.
+[android-NDK run 38205035202](https://github.com/isomorphisms/android-NDK/actions/runs/38205035202)
+at `940cf63f655ae9e2031e03a574b2ce22176af155` compiled and independently parsed
+the candidates, matched all nine reports against decoded DEX instruction bytes,
+and rejected stale plan, stale smali and jointly stale reports. Its first ART
+attempt then failed before candidate execution because the emulator could not
+start `chmod` due to insufficient memory; a same-head retry was requested.
+These results do not qualify full-task execution.
+
+The consumer now pins that exact repaired backend and attempts the unchanged
+canonical task again. `verify.grease` records `BLOCKED_COMPILER_GAP` plus the
+exact target rejection even if the compiler process returns zero. The new
+receipt block was executed locally against the retained actual `fastUnpack`
+diagnostic: it exited 1 and recorded the rejection. A clean-log control exited
+0 without a blocked marker. Those checks qualify the receipt handling only.
