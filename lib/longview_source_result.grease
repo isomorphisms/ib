@@ -1,0 +1,154 @@
+# E4 bounded source-backed continuation for the existing E2/E3 result.
+# The caller supplies an actual Idric admission and exact E3 worker attachment.
+# This adapter does not acquire sources, authorize privacy, or own task state.
+IB_SOURCE_RESULT_INVALID=77
+IB_SOURCE_RESULT_PRIVATE=78
+IB_SOURCE_RESULT_CHANGED=79
+
+ib_source_result_sha_valid() {
+  test "$#" -eq 1 || return 1
+  test "$(printf '%s' "$1" | wc -c | tr -d '[:space:]')" -eq 64 || return 1
+  case "$1" in ''|*[!0123456789abcdef]*) return 1 ;; esac
+}
+
+ib_source_result_field() {
+  awk -F '\t' -v wanted="$2" '$1 == wanted && NF == 2 {print $2}' "$1"
+}
+
+# Never emit an unverified prefix. A later renderer can call this after the
+# producer and all former process attachments have gone.
+ib_source_result_decode() {
+  test "$#" -eq 3 || return "$IB_SOURCE_RESULT_INVALID"
+  source_record=$1
+  source_expected_identity=$2
+  source_expected_digest=$3
+  test -f "$source_record" && test ! -L "$source_record" ||
+    return "$IB_SOURCE_RESULT_INVALID"
+  ib_store_valid_atom "$source_expected_identity" || return "$IB_SOURCE_RESULT_INVALID"
+  ib_source_result_sha_valid "$source_expected_digest" ||
+    return "$IB_SOURCE_RESULT_INVALID"
+  test "$(wc -c <"$source_record" | tr -d '[:space:]')" -le 4096 ||
+    return "$IB_SOURCE_RESULT_INVALID"
+  awk -F '\t' '
+    /^source_payload_/ {
+      if (NF != 2 || seen[$1]++) exit 1
+      if ($1 != "source_payload_identity" &&
+          $1 != "source_payload_kind" &&
+          $1 != "source_payload_privacy" &&
+          $1 != "source_payload_sha256" &&
+          $1 != "source_payload_bytes" &&
+          $1 != "source_payload_base64") exit 1
+    }
+    END {
+      if (seen["source_payload_identity"] != 1 ||
+          seen["source_payload_kind"] != 1 ||
+          seen["source_payload_privacy"] != 1 ||
+          seen["source_payload_sha256"] != 1 ||
+          seen["source_payload_bytes"] != 1 ||
+          seen["source_payload_base64"] != 1) exit 1
+    }
+  ' "$source_record" || return "$IB_SOURCE_RESULT_INVALID"
+  source_identity=$(ib_source_result_field "$source_record" source_payload_identity)
+  source_kind=$(ib_source_result_field "$source_record" source_payload_kind)
+  source_privacy=$(ib_source_result_field "$source_record" source_payload_privacy)
+  source_digest=$(ib_source_result_field "$source_record" source_payload_sha256)
+  source_size=$(ib_source_result_field "$source_record" source_payload_bytes)
+  source_encoding=$(ib_source_result_field "$source_record" source_payload_base64)
+  test "$source_identity" = "$source_expected_identity" &&
+    test "$source_digest" = "$source_expected_digest" ||
+    return "$IB_SOURCE_RESULT_CHANGED"
+  case "$source_kind" in html|text) ;; *) return "$IB_SOURCE_RESULT_INVALID" ;; esac
+  test "$source_privacy" = ordinary || return "$IB_SOURCE_RESULT_PRIVATE"
+  case "$source_size" in ''|*[!0123456789]*) return "$IB_SOURCE_RESULT_INVALID" ;; esac
+  test "$source_size" -ge 1 && test "$source_size" -le 2048 ||
+    return "$IB_SOURCE_RESULT_INVALID"
+  printf '%s\n' "$source_encoding" |
+    LC_ALL=C grep -Eq '^[A-Za-z0-9+/]+={0,2}$' ||
+    return "$IB_SOURCE_RESULT_INVALID"
+
+  source_tmp=$(mktemp -d) || return "$IB_SOURCE_RESULT_INVALID"
+  umask 077
+  if ! printf '%s' "$source_encoding" | base64 -d >"$source_tmp/raw" 2>/dev/null; then
+    rm -rf "$source_tmp"
+    return "$IB_SOURCE_RESULT_INVALID"
+  fi
+  decoded_size=$(wc -c <"$source_tmp/raw" | tr -d '[:space:]')
+  decoded_sha=$(sha256sum "$source_tmp/raw" | cut -d ' ' -f1)
+  if test "$decoded_size" != "$source_size" ||
+     test "$decoded_sha" != "$source_digest"; then
+    rm -rf "$source_tmp"
+    return "$IB_SOURCE_RESULT_CHANGED"
+  fi
+  cat "$source_tmp/raw"
+  result=$?
+  rm -rf "$source_tmp"
+  return "$result"
+}
+
+# Content is an actual selected source, not the constant worker receipt.
+# The original E3 completion is retained verbatim at the front of the record.
+# This is bounded transport only; Cauldron still owns canonical source bytes.
+ib_source_result_compose() {
+  test "$#" -eq 7 || return "$IB_SOURCE_RESULT_INVALID"
+  source_completion=$1
+  source_input=$2
+  source_identifier=$3
+  source_format=$4
+  source_expected_sha=$5
+  source_classification=$6
+  source_output=$7
+  test -f "$source_completion" && test ! -L "$source_completion" ||
+    return "$IB_SOURCE_RESULT_INVALID"
+  test -f "$source_input" && test ! -L "$source_input" ||
+    return "$IB_SOURCE_RESULT_INVALID"
+  ib_store_valid_atom "$source_identifier" || return "$IB_SOURCE_RESULT_INVALID"
+  ib_source_result_sha_valid "$source_expected_sha" ||
+    return "$IB_SOURCE_RESULT_INVALID"
+  case "$source_format" in html|text) ;; *) return "$IB_SOURCE_RESULT_INVALID" ;; esac
+  test "$source_classification" = ordinary || return "$IB_SOURCE_RESULT_PRIVATE"
+  test ! -e "$source_output" && test ! -L "$source_output" ||
+    return "$IB_SOURCE_RESULT_INVALID"
+  test "$(grep -Fxc "$(printf 'schema\tib-longview-worker-result-v2')" "$source_completion")" = 1 ||
+    return "$IB_SOURCE_RESULT_INVALID"
+  if grep -q '^source_payload_' "$source_completion"; then
+    return "$IB_SOURCE_RESULT_INVALID"
+  fi
+  source_size=$(wc -c <"$source_input" | tr -d '[:space:]')
+  case "$source_size" in ''|*[!0123456789]*) return "$IB_SOURCE_RESULT_INVALID" ;; esac
+  test "$source_size" -ge 1 && test "$source_size" -le 2048 ||
+    return "$IB_SOURCE_RESULT_INVALID"
+  source_before_sha=$(sha256sum "$source_input" | cut -d ' ' -f1)
+  test "$source_before_sha" = "$source_expected_sha" ||
+    return "$IB_SOURCE_RESULT_CHANGED"
+  source_output_dir=$(dirname "$source_output")
+  test -d "$source_output_dir" && test ! -L "$source_output_dir" ||
+    return "$IB_SOURCE_RESULT_INVALID"
+  source_stage=$(mktemp "$source_output_dir/.ib-source.XXXXXXXX") ||
+    return "$IB_SOURCE_RESULT_INVALID"
+  umask 077
+  {
+    cat "$source_completion"
+    printf 'source_payload_identity\t%s\nsource_payload_kind\t%s\nsource_payload_privacy\t%s\nsource_payload_sha256\t%s\nsource_payload_bytes\t%s\nsource_payload_base64\t' \
+      "$source_identifier" "$source_format" "$source_classification" \
+      "$source_expected_sha" "$source_size"
+    base64 <"$source_input" | tr -d '\r\n'
+    printf '\n'
+  } >"$source_stage"
+  source_after_sha=$(sha256sum "$source_input" | cut -d ' ' -f1)
+  source_after_size=$(wc -c <"$source_input" | tr -d '[:space:]')
+  if test "$source_after_sha" != "$source_expected_sha" ||
+     test "$source_after_size" != "$source_size" ||
+     test "$(wc -c <"$source_stage" | tr -d '[:space:]')" -gt 4096; then
+    rm -f "$source_stage"
+    return "$IB_SOURCE_RESULT_CHANGED"
+  fi
+  if ! ib_source_result_decode "$source_stage" "$source_identifier" "$source_expected_sha" >/dev/null; then
+    rm -f "$source_stage"
+    return "$IB_SOURCE_RESULT_INVALID"
+  fi
+  if ! ln "$source_stage" "$source_output" 2>/dev/null; then
+    rm -f "$source_stage"
+    return "$IB_SOURCE_RESULT_INVALID"
+  fi
+  rm -f "$source_stage"
+}
