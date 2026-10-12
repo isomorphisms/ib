@@ -74,3 +74,56 @@ as the chosen browser implementation. Physical MIRO evidence remains distinct.
 **Evidence at initial authoring:** source and tests committed; execution and
 source-to-device acceptance are NOT_RUN until a fresh exact-head CI receipt
 exists. Do not cite ancestor green runs as acceptance of this new slice.
+
+## Canonical Cauldron generation verification (2026-10-12)
+
+The next bounded host-side bridge is `lib/longview_cauldron_handoff.grease`.
+It consumes the existing `cauldron/sources/<source-id>/{raw,provenance.tsv}`
+record from PR #46, **Retain source generations and rebuild source-linked Pensieve views**.
+It does **not** create a new store, claim user authority, fetch web pages or
+treat a manifest path as an authenticated capability. It requires an approved
+`IB_HOME` root, checks only read-only Cauldron descendants, and tolerates
+platform-managed symlink aliases *above* that trusted root while refusing
+links in the source subtree.
+
+Before handing bytes to the existing E4 composer it validates the canonical
+source ID (SHA-256 of the complete original provenance, a newline, then
+its declared raw-payload checksum and newline), the independently measured
+raw SHA-256 and length, unique required TSV fields, original provider/object/member
+identity, selected generation versus provider version, ordinary privacy,
+local-only exposure, and recognized source kind. A new generation with
+identical raw bytes must have a different source ID. It checks metadata and
+source again **after** the candidate was prepared; on failure it discards
+that candidate and never publishes an E2 result.
+
+The first explicit representation selections are `opaque` to `html`/`text`
+or `raw_urls` to `text`. This is a caller-supplied *representation choice*,
+not a claim that untrusted HTML is safe to execute, nor a parser that elevates
+an opaque blob to canonical semantic truth. Private sources cannot enter the
+ordinary result. Model policy `deny` still permits local display; it is not
+an upload permit. E3 source bindings and the separate Idriç admission action
+remain required for actual E2 publication.
+
+`tests/test_longview_cauldron_handoff.grease` calls the existing canonical
+Cauldron producer/verify commands from exact PR #46 source
+`d10eeda153dae4be25fd7902338e8b8443e0666e`, using the pinned native
+Grease runtime (owner `f19c94c6...`, Oils gitlink `6d29702a...`) and
+synthetic source data. It tests distinct generations, private classification,
+tampered/doubled manifest keys, changed raw bytes, symlinks, bad kinds
+and incorrect worker source bindings. The native workflow is
+`.github/workflows/cauldron-longview.yml`; only its own exact-head successful
+run qualifies this new seam. No previous source-runtime receipt is reused.
+
+Separately, `tests/test_longview_source_result.grease` now feeds verified
+late-opened E2 result bytes to the **existing compiled Idriç**
+`ArxivPrepaint` information view. It checks the real title, abstract, bounded
+phone text projection, and exclusion of page-controlled script text. This
+is source-backed **host** projection, not an Android viewport.
+
+**Outstanding:** real source acquisition through the trusted E3 worker,
+Cauldron provenance obtained from an authorized live provider rather than
+synthetic fixtures, native Idriç DEX/ART execution, and actual renderer/app
+death with a user-facing recoverable view on MIRO. The bridge is not a
+cryptographic authenticity guarantee against a hostile writer with the same
+app UID and does not elevate declared privacy into proof that data contain
+no credential values. Those limits remain explicit.
