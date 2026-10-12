@@ -5,6 +5,7 @@ on:
     paths:
       - 'src/**'
       - 'tests/longview-idric/**'
+      - 'docs/idric-longview-android-repair.md'
       - '.gitmodules'
       - 'vendor/android-NDK'
       - '.github/workflows/longview-idric.yml'
@@ -50,8 +51,8 @@ jobs:
           path: .tools/runtime/grease
           submodules: true
           persist-credentials: false
-      # These are the same existing bootstrap entry points and exact pins as
-      # Pensieve's qualified Quick Settings workflow, not a new compiler path.
+      # Existing inherited bootstrap entry points and compiler API cache.
+      # Their qualification debt is not erased by consumer target success.
       - name: Refresh host package index
         shell: sh
         run: sudo apt-get update
@@ -101,28 +102,22 @@ jobs:
       - uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd
         with:
           packages: 'build-tools;35.0.0'
-      - name: Build existing checked DEX driver and run its controls
+      - name: Build checked DEX driver and run upstream source and layout controls
         shell: sh
         run: .tools/runtime/.build/grease/bin/grease vendor/android-NDK/dex/idric/verify-effects.grease "$GITHUB_WORKSPACE/vendor/android-NDK" "$GITHUB_WORKSPACE/.tools/Idric" "$GITHUB_WORKSPACE/.tools/Idric/_/.tools/bin/scheme" "$ANDROID_HOME/build-tools/35.0.0/dexdump" "$RUNNER_TEMP/longview-upstream"
-      - name: Execute real Idric lifecycle, reject mutants, attempt direct DEX
+      - name: Execute real Idric lifecycle, reject host mutants and compile direct DEX
         shell: sh
         run: .tools/runtime/.build/grease/bin/grease tests/longview-idric/verify.grease "$GITHUB_WORKSPACE" "$GITHUB_WORKSPACE/.tools/Idric" "$ANDROID_HOME/build-tools/35.0.0/dexdump" "$RUNNER_TEMP/longview-upstream" "$RUNNER_TEMP/longview-idric" "${{ github.event.pull_request.head.sha || github.sha }}"
-      - name: Check text DEX availability independently of full task failure
-        id: text-dex-ready
-        if: always()
+      - name: Compile both actual IB production mutations for independent ART rejection
         shell: sh
-        run: |
-          if test -s "$RUNNER_TEMP/longview-idric/text-dex/longview-text.dex"; then
-            echo 'ready=true' >> "$GITHUB_OUTPUT"
-          else
-            echo 'ready=false' >> "$GITHUB_OUTPUT"
-          fi
-      - name: Prepare external ART runner only for an emitted DEX probe
-        if: ${{ always() && steps.text-dex-ready.outputs.ready == 'true' }}
+        run: .tools/runtime/.build/grease/bin/grease tests/longview-idric/compile-task-controls.grease "$GITHUB_WORKSPACE" "$GITHUB_WORKSPACE/.tools/Idric" "$ANDROID_HOME/build-tools/35.0.0/dexdump" "$RUNNER_TEMP/longview-upstream" "$RUNNER_TEMP/longview-idric" "${{ github.event.pull_request.head.sha || github.sha }}"
+      - name: Prepare external ART callers and layout oracle
         shell: sh
         run: .tools/runtime/.build/grease/bin/grease vendor/android-NDK/dex/idric/prepare-effects-ci.grease "$GITHUB_WORKSPACE/vendor/android-NDK" "$RUNNER_TEMP/longview-text-oracles"
-      - name: Run exact checked text DEX probe on Android ART
-        if: ${{ always() && steps.text-dex-ready.outputs.ready == 'true' }}
+      - name: Match finalized upstream plans with independently decoded candidate bytes
+        shell: sh
+        run: .tools/runtime/.build/grease/bin/grease vendor/android-NDK/dex/idric/verify-layout.grease "$GITHUB_WORKSPACE/vendor/android-NDK" "$RUNNER_TEMP/longview-upstream" "$RUNNER_TEMP/longview-text-oracles/smali-3.0.10.jar" "$ANDROID_HOME/build-tools/35.0.0/dexdump"
+      - name: Execute text probe and actual IB diagnostic with production mutants on Android ART
         uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d
         with:
           api-level: 34
@@ -131,7 +126,12 @@ jobs:
           emulator-port: 5554
           emulator-boot-timeout: 300
           disable-animations: true
-          script: .tools/runtime/.build/grease/bin/grease tests/longview-idric/verify-text-art.grease "$GITHUB_WORKSPACE" "$RUNNER_TEMP/longview-idric" "$RUNNER_TEMP/longview-text-oracles/smali-3.0.10.jar" "$ANDROID_HOME/platform-tools/adb" "${{ github.event.pull_request.head.sha || github.sha }}"
+          script: |
+            .tools/runtime/.build/grease/bin/grease tests/longview-idric/verify-text-art.grease "$GITHUB_WORKSPACE" "$RUNNER_TEMP/longview-idric" "$RUNNER_TEMP/longview-text-oracles/smali-3.0.10.jar" "$ANDROID_HOME/platform-tools/adb" "${{ github.event.pull_request.head.sha || github.sha }}"
+            .tools/runtime/.build/grease/bin/grease tests/longview-idric/verify-task-art.grease "$GITHUB_WORKSPACE" "$RUNNER_TEMP/longview-idric" "$RUNNER_TEMP/longview-text-oracles/smali-3.0.10.jar" "$ANDROID_HOME/platform-tools/adb" "${{ github.event.pull_request.head.sha || github.sha }}"
+      - name: Require actual IB target success and both precise mutation failures
+        shell: sh
+        run: .tools/runtime/.build/grease/bin/grease tests/longview-idric/require-task-acceptance.grease "$RUNNER_TEMP/longview-idric" "${{ github.event.pull_request.head.sha || github.sha }}"
       - name: Preserve exact source, execution, and backend failures
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
@@ -140,4 +140,5 @@ jobs:
           path: |
             ${{ runner.temp }}/longview-idric/
             ${{ runner.temp }}/longview-upstream/*.txt
+            ${{ runner.temp }}/longview-upstream/layout-consistency/
           if-no-files-found: warn

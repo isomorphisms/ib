@@ -1,0 +1,81 @@
+#!/usr/bin/env grease
+
+# Reuse the actual production variants already produced and rejected by the
+# host lifecycle suite. A compiler failure must never count as a rejected
+# Android mutation. No browser source is patched in the repository checkout.
+if (len(ARGV) !== 6) {
+  echo 'usage: grease compile-task-controls.grease REPOSITORY COMPILER DEXDUMP UPSTREAM EVIDENCE EXPECTED_HEAD' >&2
+  exit 2
+}
+var repository = ARGV[0]
+var compiler_repository = ARGV[1]
+var dexdump = ARGV[2]
+var upstream = ARGV[3]
+var evidence = ARGV[4]
+var expected_head = ARGV[5]
+for path in "$repository" "$compiler_repository" "$dexdump" "$upstream" "$evidence" {
+  if (len(path) === 0) { echo 'empty path' >&2; exit 2 }
+  if (path[0] !== '/') { echo 'absolute path required' >&2; exit 2 }
+}
+test "$(git -C "$repository" rev-parse HEAD)" = "$expected_head"
+test "$(git -C "$repository/vendor/android-NDK" rev-parse HEAD)" = d0080ff0ad938680d319519bf484f98f540d3e89
+test "$(git -C "$compiler_repository" rev-parse HEAD)" = ff4d852862a3942592f8ade9afde8d409d9803be
+sha256sum -c "$evidence/input-sha256.txt"
+sha256sum -c "$evidence/dex/sha256.txt"
+rg -q -x -F 'PASS actual Long View source emitted independently parsed DEX' "$evidence/dex/result.txt"
+rg -q -x -F 'PASS rejected executed wrong-host mutation' "$evidence/host-result.txt"
+rg -q -x -F 'PASS rejected executed identity-separator mutation' "$evidence/host-result.txt"
+var root = "$evidence/task-target"
+if test -e "$root" { echo 'refusing reused task-target evidence' >&2; exit 1 }
+mkdir -p "$root"
+var compiler_prefix = "$compiler_repository/_/bootstrap-build"
+var scheme = "$compiler_repository/_/.tools/bin/scheme"
+var libraries = "$compiler_prefix/idris2-0.8.0/base-0.8.0:$compiler_prefix/idris2-0.8.0/prelude-0.8.0"
+var driver = "$upstream/backend/exec/idric-dex"
+for program in "$driver" "$scheme" "$dexdump" { test -x "$program" }
+sha256sum "$repository/tests/longview-idric/compile-task-controls.grease" \
+  "$repository/tests/longview-idric/verify-task-art.grease" \
+  "$repository/tests/longview-idric/require-task-acceptance.grease" \
+  "$repository/vendor/android-NDK/dex/idric/tests/unpack/IBUnpackRunner.smali" \
+  "$driver" "$upstream/backend/exec/idric-dex_app/idric-dex.so" > "$root/input-sha256.txt"
+printf 'ib_head=%s\nbackend_head=%s\n' "$expected_head" \
+  d0080ff0ad938680d319519bf484f98f540d3e89 > "$root/revision.txt"
+
+for name in wrong-host separator {
+  var source = "$evidence/wrong-host/source"
+  if (name === 'separator') { setvar source = "$evidence/accept-separator/source" }
+  var output = "$root/$name"
+  mkdir -p "$output"
+  # The wrapper itself is identical. Only the intended production variant
+  # differs, and the completed host suite independently executed that change.
+  cmp "$repository/src/LongViewAndroid.idric" "$source/LongViewAndroid.idric"
+  if (name === 'separator') {
+    cmp "$repository/src/IB/LongViewLifecycle.idric" "$source/IB/LongViewLifecycle.idric"
+  } else {
+    cmp "$repository/src/IB/LongViewTask.idric" "$source/IB/LongViewTask.idric"
+  }
+  sha256sum "$source/LongViewAndroid.idric" "$source/IB/LongViewTask.idric" \
+    "$source/IB/LongViewLifecycle.idric" > "$output/source-sha256.txt"
+  try {
+    env IDRIS2_PREFIX="$compiler_prefix" CHEZ="$scheme" \
+      IDRIS2_PATH="$upstream/backend/ttc:$libraries" \
+      "$driver" --cg dex --source-dir "$source" --build-dir "$output/build" \
+      --output-dir "$output" --dumpanf "$output/source.anf" \
+      "$source/LongViewAndroid.idric" -o candidate > "$output/compile.txt" 2>&1
+  }
+  var compile_status = _error.code
+  printf 'compiler_exit=%s\n' "$compile_status" > "$output/result.txt"
+  cat "$output/compile.txt"
+  if (compile_status !== 0) { echo 'FAIL mutation did not compile' >&2; exit 1 }
+  try { rg -n '^[[:space:]]*(Error:|INTERNAL ERROR)' "$output/compile.txt" }
+  if (_error.code !== 1) { echo 'FAIL mutation compiler diagnostic or unreadable log' >&2; exit 1 }
+  for suffix in dex dex.plan checked.anf smali { test -s "$output/candidate.$suffix" }
+  "$dexdump" -c "$output/candidate.dex" > "$output/checksum.txt" 2>&1
+  "$dexdump" -d "$output/candidate.dex" > "$output/disassembly.txt" 2>&1
+  sha256sum "$output/candidate.dex" > "$output/sha256.txt"
+  try { cmp -s "$output/candidate.dex" "$evidence/dex/longview-android.dex" }
+  if (_error.code !== 1) { echo 'FAIL mutation did not produce distinct executable bytes' >&2; exit 1 }
+  echo 'PASS production mutant emitted independent DEX; runtime rejection still required' >> "$output/result.txt"
+}
+echo 'PASS both IB production mutants compiled to distinct DEX' > "$root/result.txt"
+cat "$root/result.txt"

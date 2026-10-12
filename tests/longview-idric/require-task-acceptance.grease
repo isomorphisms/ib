@@ -1,0 +1,35 @@
+#!/usr/bin/env grease
+
+# This required final gate cannot be satisfied by a successful text probe,
+# a missing/conditionally skipped task runner, or a failed compiler/loader.
+if (len(ARGV) !== 2) {
+  echo 'usage: grease require-task-acceptance.grease EVIDENCE EXPECTED_HEAD' >&2
+  exit 2
+}
+var evidence = ARGV[0]
+var expected_head = ARGV[1]
+if (len(evidence) === 0) { echo 'empty evidence path' >&2; exit 2 }
+if (evidence[0] !== '/') { echo 'absolute evidence path required' >&2; exit 2 }
+rg -q -x -F "ib_head=$expected_head" "$evidence/task-art/revision.txt"
+rg -q -x -F 'backend_head=d0080ff0ad938680d319519bf484f98f540d3e89' "$evidence/task-art/revision.txt"
+rg -q -x -F 'PASS Long View Idric lifecycle suite' "$evidence/host/execution.txt"
+rg -q -x -F 'PASS rejected executed wrong-host mutation' "$evidence/host-result.txt"
+rg -q -x -F 'PASS rejected executed accept-stale mutation' "$evidence/host-result.txt"
+rg -q -x -F 'PASS rejected executed identity-separator mutation' "$evidence/host-result.txt"
+rg -q -x -F 'IB checked DEX text presence ART PASS' "$evidence/text-dex/art/execution.txt"
+rg -q -x -F 'PASS actual IB diagnostic and two production mutations executed on ART' "$evidence/task-art/result.txt"
+rg -q -x -F 'PASS actual IB LongViewAndroid on ART' "$evidence/task-art/original.txt"
+rg -q -x -F 'process_exit=0' "$evidence/task-art/original-status.txt"
+rg -q -x -F 'FAIL actual IB invalid task' "$evidence/task-art/separator.txt"
+rg -q -x -F 'process_exit=73' "$evidence/task-art/separator-status.txt"
+rg -q -x -F 'FAIL actual IB same host' "$evidence/task-art/wrong-host.txt"
+rg -q -x -F 'process_exit=73' "$evidence/task-art/wrong-host-status.txt"
+sha256sum -c "$evidence/input-sha256.txt"
+sha256sum -c "$evidence/task-target/input-sha256.txt"
+sha256sum -c "$evidence/task-art/runner-sha256.txt"
+for name in original separator wrong-host {
+  sha256sum -c "$evidence/task-art/$name-sha256.txt"
+}
+echo 'PASS required IB-owned source-to-DEX-to-ART diagnostic acceptance' > "$evidence/acceptance.txt"
+echo 'NOT_ACCEPTED full browser/session persistence or physical-device behavior' >> "$evidence/acceptance.txt"
+cat "$evidence/acceptance.txt"
