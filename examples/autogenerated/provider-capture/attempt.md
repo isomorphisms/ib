@@ -21,3 +21,21 @@ nonzero result stdout is withheld so a plausible prefix cannot claim success.
 The hosted recipe must record the actual Grease/coreutils executable identities
 and exercise flood, partial hang, denial, exact exit 37, descriptor-retaining
 children and later recovery. Android Shizuku and device evidence remain NOT_RUN.
+
+## 2026-10-12 reconciliation
+
+The separate capture above is historical. B03 now delegates its existing
+operation-specific budgets to B06's `lib/bounded_process_capture.grease`,
+reused byte-for-byte from `6b3350acccb22ba27a3546a7ea56fc672313cf2a`.
+`lib/android_shizuku_capture.grease` is removed; no production caller uses it.
+The shared helper starts each finite deadline before FIFO open, including a
+reader that fails before opening. Missing shared primitives now return 127;
+an incomplete stream returns 74. B03's missing entrypoint still returns 69.
+Exact producer failures remain unchanged and never expose success stdout.
+
+Actual native Grease 5651cf97 executes the shared positive/adversarial capture
+suite, including the uncapped-reader mutant and failed-reader case, plus B03's
+handoff suite. Existing host and worker adapter tests pass in their explicit
+compatibility mode. Actual fixed-worker identity remains blocked at exit 44;
+Android cancellation and physical-device results remain unrun. See
+`docs/ib-b01-b09-resumption.md` for exact inputs and evidence boundaries.

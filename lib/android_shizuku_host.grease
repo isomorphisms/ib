@@ -5,6 +5,10 @@
 # ib_shizuku_run accepts trusted IB/Grease command text. It is not a quoting or
 # authorization boundary for arbitrary user-supplied strings.
 
+# Resolve the shared B06 capture source when this module is sourced by Grease.
+# A stock-shell caller has no qualified source context and fails closed.
+ib_shizuku_capture_program="${_this_dir:-}/bounded_process_capture.grease"
+
 ib_shizuku_fail() {
   printf '%s\n' "$*" >&2
   return 1
@@ -71,10 +75,6 @@ ib_shizuku_capture() {
     test "${#capture_number}" -le 7 || return 2
   done
   test "$capture_seconds" -le 60 && test "$capture_stdout_limit" -le 1048576 && test "$capture_stderr_limit" -le 65536 || return 2
-  capture_timeout=$(command -v timeout) || {
-    ib_shizuku_fail 'timeout is not available; refusing unbounded provider capture'
-    return 69
-  }
   capture_grease=${IB_GREASE_COMMAND:-}
   if test -z "$capture_grease"; then
     capture_grease=$(command -v grease) || {
@@ -82,41 +82,16 @@ ib_shizuku_capture() {
       return 69
     }
   fi
-  capture_helper=${IB_SHIZUKU_CAPTURE_HELPER:-${repository_root:-.}/lib/android_shizuku_capture.grease}
-  test -x "$capture_grease" && test -f "$capture_helper" || {
-    ib_shizuku_fail 'bounded provider capture helper is not available'
+  test -x "$capture_grease" && test -f "$ib_shizuku_capture_program" || {
+    ib_shizuku_fail 'qualified Grease capture entrypoint/source context is unavailable'
     return 69
   }
   capture_rish=$(ib_shizuku_rish_command) || return $?
-  capture_directory=$(mktemp -d) || return 69
-  chmod 700 "$capture_directory" || { rm -rf "$capture_directory"; return 69; }
-  if "$capture_timeout" --kill-after=1 "$capture_seconds" "$capture_grease" "$capture_helper" \
-    "$capture_directory" "$capture_stdout_limit" "$capture_stderr_limit" "$capture_rish" "$capture_command_text" \
-    >"$capture_directory/helper.out" 2>"$capture_directory/helper.err"; then
-    capture_status=0
-  else
-    capture_status=$?
-  fi
-  if test "$capture_status" -ne 0; then
-    head -c 8192 "$capture_directory/helper.err" >&2
-    printf 'provider capture failed (%s); remote lifetime unknown\n' "$capture_status" >&2
-    rm -rf "$capture_directory"
-    return "$capture_status"
-  fi
-  capture_stdout_bytes=$(wc -c <"$capture_directory/stdout") || { rm -rf "$capture_directory"; return 69; }
-  capture_stderr_bytes=$(wc -c <"$capture_directory/stderr") || { rm -rf "$capture_directory"; return 69; }
-  if test "$capture_stdout_bytes" -gt "$capture_stdout_limit" || test "$capture_stderr_bytes" -gt "$capture_stderr_limit"; then
-    ib_shizuku_fail 'provider capture exceeded an output budget; remote lifetime unknown'
-    rm -rf "$capture_directory"
-    return 65
-  fi
-  capture_status=$(cat "$capture_directory/status") || { rm -rf "$capture_directory"; return 69; }
-  cat "$capture_directory/stderr" >&2
-  if test "$capture_status" -eq 0; then
-    cat "$capture_directory/stdout"
-  fi
-  rm -rf "$capture_directory"
-  return "$capture_status"
+  # B03 keeps its operation-specific budgets; B06 owns FIFO/process capture.
+  # Its timed children start before any FIFO open, including reader failure.
+  IB_GREASE_COMMAND="$capture_grease" "$capture_grease" "$ib_shizuku_capture_program" \
+    "$capture_seconds" "$capture_stdout_limit" "$capture_stderr_limit" \
+    "$capture_rish" -c "$capture_command_text"
 }
 
 ib_shizuku_effective_uid() {

@@ -130,3 +130,13 @@ retry was added. Outer caller death may leave the bounded temporary capture
 directory behind; this is not a remote cancellation or caller-death cleanup
 claim. New source is reviewable on its branch without starting inherited stock
 shell/Chez/Java workflows via another PR.
+
+## 2026-10-12 continuation
+
+The B06 implementation described above is historical. This branch now reuses
+the shared published B06 capture helper instead of its separate implementation;
+operation-specific budgets and B03/B09 interfaces remain intact. Fresh local
+native and compatibility execution, the dedicated B02 setup repair, and the
+distinct B01–B09 blockers are recorded in
+[`ib-b01-b09-resumption.md`](ib-b01-b09-resumption.md). The old actual-worker,
+Android signaling, CI qualification and physical-device boundaries remain open.
