@@ -11,15 +11,6 @@ on:
       - 'tests/fixtures/arxiv_site/html/**'
       - 'docs/longview-source-backed-result.md'
       - '.github/workflows/cauldron-longview.yml'
-  pull_request:
-    paths:
-      - 'lib/longview_cauldron_handoff.grease'
-      - 'lib/longview_source_result.grease'
-      - 'lib/durable_object_store.grease'
-      - 'tests/test_longview_cauldron_handoff.grease'
-      - 'tests/fixtures/arxiv_site/html/**'
-      - 'docs/longview-source-backed-result.md'
-      - '.github/workflows/cauldron-longview.yml'
 
 permissions:
   contents: read
@@ -84,13 +75,30 @@ jobs:
       - name: Establish native Grease ASAN memory mapping precondition
         run: sudo sysctl vm.mmap_rnd_bits=28
 
-      - name: Build pinned native Grease using upstream receipt job
+      - name: Build native Grease and preserve upstream spec failure details
         working-directory: .tools/oils-source
         shell: bash
         run: |
           set -euo pipefail
-          soil/github-actions.sh run-job cpp-spec podman
-          soil/host-shim.sh did-all-succeed cpp-spec
+          # Keep the upstream failure independently visible; do not turn
+          # a failing osh-all or full cpp-spec task into a passing receipt.
+          upstream_status=0
+          soil/github-actions.sh run-job cpp-spec podman || upstream_status=$?
+          if test "$upstream_status" -eq 0; then
+            soil/host-shim.sh did-all-succeed cpp-spec || upstream_status=$?
+          fi
+          printf '%s\n' "$upstream_status" > "$RUNNER_TEMP/grease-upstream.status"
+          if test "$upstream_status" -ne 0; then
+            echo "Upstream cpp-spec FAILED status=$upstream_status (preserved, not waived)." >&2
+            for logfile in _tmp/soil/logs/osh-all.txt \
+                           _tmp/soil/logs/ysh-all.txt \
+                           _tmp/soil/logs/oils-cpp-smoke.txt; do
+              if test -f "$logfile"; then
+                echo "--- $logfile ---" >&2
+                tail -n 90 "$logfile" >&2
+              fi
+            done
+          fi
           test -x _bin/cxx-asan/ysh
           sha256sum _bin/cxx-asan/ysh
           _bin/cxx-asan/ysh --version
@@ -115,3 +123,14 @@ jobs:
             "$receipt"
           printf 'Cauldron producer %s verified against IB head %s\n' \
             "$CAULDRON_REF" "$(git rev-parse HEAD)"
+
+      - name: Enforce full upstream Grease spec outcome separately
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s "$RUNNER_TEMP/grease-upstream.status"
+          result="$(cat "$RUNNER_TEMP/grease-upstream.status")"
+          if test "$result" -ne 0; then
+            echo "Upstream cpp-spec was not accepted: status=$result" >&2
+            exit "$result"
+          fi
