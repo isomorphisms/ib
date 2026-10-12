@@ -39,6 +39,11 @@ attempt_id	source-attempt
 attempt_number	1
 value	deterministic-ok
 COMPLETION
+# The trusted completion binds selected content and declared privacy before
+# the E4 adapter sees it. Arbitrary later source substitution must fail.
+printf 'source_binding_identity\t%s\nsource_binding_sha256\t%s\nsource_binding_bytes\t%s\nsource_binding_kind\thtml\nsource_binding_privacy\tordinary\n' \
+  "$source_id" "$source_digest" "$(wc -c <"$work/acquired.html" | tr -d '[:space:]')" \
+  >>"$work/worker-completion"
 
 ib_source_result_compose "$work/worker-completion" "$work/acquired.html" \
   "$source_id" html "$source_digest" ordinary "$work/source-completion"
@@ -81,6 +86,9 @@ refuse_decode() {
 sed 's/^source_payload_sha256.*/source_payload_sha256\t0000000000000000000000000000000000000000000000000000000000000000/' \
   "$work/later-a" >"$work/bad-digest"
 refuse_decode "$work/bad-digest"
+sed 's/^source_binding_sha256.*/source_binding_sha256\t0000000000000000000000000000000000000000000000000000000000000000/' \
+  "$work/later-a" >"$work/bad-worker-binding"
+refuse_decode "$work/bad-worker-binding"
 sed 's/^source_payload_base64.*/source_payload_base64\t@@@@/' "$work/later-a" >"$work/bad-encoding"
 refuse_decode "$work/bad-encoding"
 sed 's/^source_payload_privacy.*/source_payload_privacy\tprivate/' "$work/later-a" >"$work/bad-privacy"
