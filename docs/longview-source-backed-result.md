@@ -12,9 +12,14 @@ through IB.WorkerLifecycle, and task identity through IB.LongViewTask.
    selected regular source file, a stable source identifier and the **expected**
    SHA-256 from its retained-source provenance. The Grease composer does not
    fetch pages or infer a privacy classification from the URL or file contents.
-2. E3 supplies a completed, attempt-bound worker receipt. The adapter refuses
-   symlink sources, source hash mismatches, private classification, unsupported
-   formats, empty/oversized sources, and a preexisting output candidate.
+2. E3 supplies a completed, attempt-bound worker receipt that **already
+   binds** the selected source identity, SHA-256, byte count, kind and ordinary
+   classification as five distinct source_binding fields. The adapter refuses
+   missing, conflicting or duplicated bindings as well as symlink sources,
+   source hash mismatches, private classification, unsupported formats,
+   empty/oversized sources, and a preexisting output candidate. This binds the
+   bytes to an existing completion, but does not prove a real Shizuku worker
+   generated the receipt or that a Cauldron generation authorized its privacy.
 3. lib/longview_source_result.grease appends source kind, source identity,
    classification, measured SHA-256, measured byte count and bounded base64
    payload to that exact E3 completion. It verifies the composed content by
@@ -28,7 +33,8 @@ through IB.WorkerLifecycle, and task identity through IB.LongViewTask.
 5. Any later process may independently open the immutable result using
    ib_store_read_bounded and decode it. The reader verifies record shape,
    source identity, classification, byte count and SHA-256 *before emitting
-   any bytes*. A renderer is not required for the read.
+   any bytes*. It also checks all five original worker source bindings against
+   the recovered content. A renderer is not required for the read.
 
 The first source selection is deliberately limited to 1–2048 bytes of
 text/html or text/plain, an ordinary classification, and a 4096-byte result
