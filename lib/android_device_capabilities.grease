@@ -132,7 +132,7 @@ ib_capabilities_bundle_details() (
     return 0
   fi
   ib_capabilities_emit field catfood_saved_pair_verified measured local-files 'saved bytes match receipt'
-  active=$(ib_shizuku_rish_command 2>/dev/null) || active=
+  active=$(ib_binder_capabilities_resolved_launcher 2>/dev/null) || active=
   case "$active" in
     /*) ;;
     */*) parent=$(CDPATH='' cd -- "${active%/*}" && pwd -P) || parent=
