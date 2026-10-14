@@ -128,16 +128,24 @@ scan_entity (S fuel) collected (';' :: rest) = Just (pack (reverse collected), r
 scan_entity (S fuel) collected (value :: rest) =
   scan_entity fuel (value :: collected) rest
 
-decode_entity_chars : List Char → List Char
-decode_entity_chars [] = []
-decode_entity_chars ('&' :: rest) =
+-- Each recursive call consumes one fuel unit even if an entity scan
+-- discards several input characters. This is total regardless of the scanner
+-- implementation, and source-length fuel suffices for every input code point.
+decode_entity_chars_fuel : Nat → List Char → List Char
+decode_entity_chars_fuel Z remaining = remaining
+decode_entity_chars_fuel (S fuel) [] = []
+decode_entity_chars_fuel (S fuel) ('&' :: rest) =
   case scan_entity 16 [] rest of
-    Nothing ⇒ '&' :: decode_entity_chars rest
+    Nothing ⇒ '&' :: decode_entity_chars_fuel fuel rest
     Just (name, remaining) ⇒
       case entity_character name of
-        Nothing ⇒ '&' :: decode_entity_chars rest
-        Just value ⇒ value :: decode_entity_chars remaining
-decode_entity_chars (value :: rest) = value :: decode_entity_chars rest
+        Nothing ⇒ '&' :: decode_entity_chars_fuel fuel rest
+        Just value ⇒ value :: decode_entity_chars_fuel fuel remaining
+decode_entity_chars_fuel (S fuel) (value :: rest) =
+  value :: decode_entity_chars_fuel fuel rest
+
+decode_entity_chars : List Char → List Char
+decode_entity_chars chars = decode_entity_chars_fuel (length chars) chars
 
 public export
 decode_html_entities : Text → Text
