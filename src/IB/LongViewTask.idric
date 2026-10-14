@@ -62,7 +62,8 @@ choice persistence_policy one_of
 
 export
 persistence_for : tab_protection → persistence_policy
-persistence_for ordinary_tab = renderer_lifetime_only
+-- Renderer attachment is disposable; ordinary browser identity/history is not.
+persistence_for ordinary_tab = durable_browser_task
 persistence_for protected_authenticated_transaction = durable_browser_task
 
 public export
