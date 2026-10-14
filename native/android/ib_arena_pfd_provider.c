@@ -89,13 +89,33 @@ static binder_status_t transact(AIBinder *binder, transaction_code_t code,
         return respond(out, 2);
 
     int descriptor = -1;
+    ib_reader_source_ticket ticket = {0};
     int result = provider->open_verified_fd(provider->source_owner,
                                            request.request_id,
                                            (uint64_t)generation,
+                                           &ticket,
                                            &descriptor);
     if (result != 0 || descriptor < 0) {
         if (descriptor >= 0) close(descriptor);
         return respond(out, 3);
+    }
+    /* The callback must return metadata from the exact verified receipt.
+     * Never trust a caller's URL or claim navigation based on source bytes. */
+    if (strcmp(ticket.request_id, request.request_id) != 0 ||
+        ticket.navigation_generation != (uint64_t)generation ||
+        ticket.byte_count == 0 ||
+        ticket.byte_count > IB_READER_SOURCE_MAX_BYTES ||
+        strnlen(ticket.sha256_hex, sizeof(ticket.sha256_hex)) != 64U) {
+        close(descriptor);
+        return respond(out, 3);
+    }
+    for (size_t index = 0; index < 64U; ++index) {
+        char digit = ticket.sha256_hex[index];
+        if (!((digit >= '0' && digit <= '9') ||
+              (digit >= 'a' && digit <= 'f'))) {
+            close(descriptor);
+            return respond(out, 3);
+        }
     }
     /* Never parcel a file-backed Arena descriptor or a writable capability.
      * A fresh read-only anonymous pipe is the only admitted publication. */
@@ -107,6 +127,10 @@ static binder_status_t transact(AIBinder *binder, transaction_code_t code,
         return respond(out, 3);
     }
     status = respond(out, 0);
+    if (status == STATUS_OK)
+        status = AParcel_writeInt32(out, (int32_t)ticket.byte_count);
+    if (status == STATUS_OK)
+        status = AParcel_writeString(out, ticket.sha256_hex, 64);
     if (status == STATUS_OK)
         status = AParcel_writeParcelFileDescriptor(out, descriptor);
     close(descriptor);
