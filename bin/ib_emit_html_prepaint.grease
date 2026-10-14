@@ -14,7 +14,7 @@ test -f "$body" && test ! -L "$body" || fail 'missing or linked admitted body'
 test ! -L "$output" || fail 'refusing output symlink'
 test "$(wc -c < "$manifest" | tr -d '[:space:]')" -le 4096 || fail 'oversized admission'
 awk -F '\t' '
-  NF != 2 || $1 !~ /^[a-z_]+$/ || $2 == "" || /\r/ { bad=1 }
+  NF != 2 || $1 !~ /^[a-z_][a-z_0-9]*$/ || $2 == "" || /\r/ { bad=1 }
   { if (seen[$1]++) bad=1 }
   END { if (bad || NR != 13) exit 1 }
 ' "$manifest" || fail 'bad admission structure'
