@@ -3,6 +3,7 @@
 #include "ib_shizuku_arena_ingress.h"
 
 #include <errno.h>
+#include <stdbool.h>
 #include <fcntl.h>
 #include <poll.h>
 #include <stdlib.h>
