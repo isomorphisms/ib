@@ -128,6 +128,22 @@ checked_link base label href =
         Nothing ⇒ ([IB.Strand.TextBlock label], ["empty-link"])
         Just ref ⇒ ([IB.Strand.Link label ref], [])
 
+request_image : HtmlEvidence → String → String → String → String → List PendingImage
+request_image evidence base address alternate caption =
+  case resolve_html_reference base address of
+    Nothing ⇒ []
+    Just absolute_address ⇒
+      [NeedImageAcquisition absolute_address alternate caption evidence.source_key]
+
+image_limitations : String → List PendingImage → List String
+image_limitations original [] = ["unsupported-image-reference:" ++ original]
+image_limitations original (_ :: _) = ["image-requires-separate-admission:" ++ original]
+
+image_navigation : String → String → String →
+  (List InformationBlock, List String)
+image_navigation base label "" = ([], [])
+image_navigation base label target = checked_link base label target
+
 map_item : HtmlEvidence → String → InformationItem →
   (List InformationBlock, List PendingImage, List String)
 map_item e base (IB.Information.Heading text) =
@@ -151,22 +167,6 @@ map_item e base (IB.Information.TableRow []) =
   ([], [], ["empty-table-row"])
 map_item e base (IB.Information.TableRow (first :: cells)) =
   ([IB.Strand.TableRow (table_row first cells)], [], [])
-request_image : HtmlEvidence → String → String → String → String → List PendingImage
-request_image evidence base address alternate caption =
-  case resolve_html_reference base address of
-    Nothing ⇒ []
-    Just absolute_address ⇒
-      [NeedImageAcquisition absolute_address alternate caption evidence.source_key]
-
-image_limitations : String → List PendingImage → List String
-image_limitations original [] = ["unsupported-image-reference:" ++ original]
-image_limitations original (_ :: _) = ["image-requires-separate-admission:" ++ original]
-
-image_navigation : String → String → String →
-  (List InformationBlock, List String)
-image_navigation base label "" = ([], [])
-image_navigation base label target = checked_link base label target
-
 map_item e base (IB.Information.Image url alt caption destination) =
   let text = if alt == "" then "Unretrieved image" else alt in
   let label = if caption == "" then text else text ++ " — " ++ caption in
