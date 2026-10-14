@@ -9,6 +9,8 @@ on:
       - 'native/android/ib_arena_pfd_provider.h'
       - 'native/android/ib_arena_source_owner.c'
       - 'native/android/ib_arena_source_owner.h'
+      - 'native/android/ib_reader_host_assembly.c'
+      - 'native/android/ib_reader_host_assembly.h'
       - 'tests/test_android_arena_source_owner.c'
       - 'tests/test_android_arena_source_owner.sh'
       - 'tests/test_android_reader_pfd.c'
@@ -79,6 +81,7 @@ jobs:
               -Wpedantic -Werror -fPIC -shared native/android/ib_reader_pfd.c \
               native/android/ib_arena_pfd_provider.c \
               native/android/ib_arena_source_owner.c \
+              native/android/ib_reader_host_assembly.c \
               -pthread -lbinder_ndk -o "build/c67-pfd/$abi/libib_reader_pfd.so"
             "$toolchain/llvm-readelf" -h "build/c67-pfd/$abi/libib_reader_pfd.so" \
               > "build/c67-pfd/$abi/elf.txt"
