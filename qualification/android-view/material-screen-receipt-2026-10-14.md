@@ -9,8 +9,8 @@ ACTION_VIEW inside Android's chooser from the trusted application-owned address.
 
 The reusable platform extension is
 [isomorphisms/android-NDK PR #26, “Construct native framework objects and generate checked Activity lifecycle”](https://github.com/isomorphisms/android-NDK/pull/26),
-at `ee665014ddd98206cc7f80d711468e5d47fc0c31`, tree
-`aedd6dff8c79dcc655135d6ce80e12b4c6493ed7`. It owns construction, register
+at `37714fa1a28b51ba485744e6a17769cc806550cb`, tree
+`5cd02e6016a1ee6cd0b3c9ae9d87ffb134cd5eee`. It owns construction, register
 placement and the bounded original-Bundle lifecycle bridge. Browser, source,
 retained-item and store owners remain unchanged. The body is a bounded snapshot
 of IB README at `9027d5ea0ce8718b0337b4cd3d16c0549dc2b2ed`, UTF8 SHA256
@@ -62,11 +62,14 @@ Standalone observers exited137 because DeviceConfig used the system Application
 identity under shell UID2000. A later attempt also exposed uninitialized lazy
 fonts outside normal application binding. Creating a shell view Context alone
 was insufficient because that API preserves its container's app-ops attribution.
-The observer now uses Android's real app-context initializer with the actual
-shell LoadedApk, verifies its app-ops package, loads Android's actual fonts and
-binds its initial Application context. All failed runs remain failures. Native text,
-selection, width reflow and all three mutant rejections must pass independently.
-The normal APK uses its own Activity/Application context.
+Further standalone setup still had no registered Application process for the
+Settings provider. The active independent observer now runs through Android
+Instrumentation in a real target process. Android supplies normal Application,
+UID, provider registration and fonts. Candidate DEX remains source-generated in
+a separate target APK; smali supplies only the observer. All failed standalone
+runs remain failures. Native text, selection, width reflow and all three production
+mutant rejections must pass independently. The screen APK uses its own normal
+Activity/Application context.
 
 The platform PR extends the existing CI gate with constructor original/recovery
 observations and received-byte comparisons. Hosted acceptance must bind to its
