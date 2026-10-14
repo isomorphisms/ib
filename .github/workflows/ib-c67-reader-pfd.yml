@@ -5,6 +5,8 @@ on:
     paths:
       - 'native/android/ib_reader_pfd.c'
       - 'native/android/ib_reader_pfd.h'
+      - 'native/android/ib_arena_pfd_provider.c'
+      - 'native/android/ib_arena_pfd_provider.h'
       - 'tests/test_android_reader_pfd.c'
       - '.github/workflows/ib-c67-reader-pfd.yml'
   workflow_dispatch:
@@ -41,6 +43,7 @@ jobs:
             mkdir -p "build/c67-pfd/$abi"
             "$toolchain/$target-clang" -std=c11 -O2 -Wall -Wextra \
               -Wpedantic -Werror -fPIC -shared native/android/ib_reader_pfd.c \
+              native/android/ib_arena_pfd_provider.c \
               -lbinder_ndk -o "build/c67-pfd/$abi/libib_reader_pfd.so"
             "$toolchain/llvm-readelf" -h "build/c67-pfd/$abi/libib_reader_pfd.so" \
               > "build/c67-pfd/$abi/elf.txt"
