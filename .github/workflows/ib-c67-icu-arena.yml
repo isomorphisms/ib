@@ -1,0 +1,77 @@
+name: IB C67 ICU to Arena slice
+
+on:
+  pull_request:
+    paths:
+      - 'bin/ib_android_icu_arena.grease'
+      - 'lib/android_binder_icu.grease'
+      - 'lib/android_shizuku_icu_provider.grease'
+      - 'native/android/ib_arena_slice.c'
+      - 'tests/test_android_icu_arena.sh'
+      - '.github/workflows/ib-c67-icu-arena.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  checked-arena:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out IB
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Check out pinned canonical appendfat arena
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: isomorphisms/sd-card-append-fat
+          ref: 05a0cb7246c5a9f46abfbe92925812e7b607f454
+          path: .deps/appendfat
+          persist-credentials: false
+      - name: Compile storage and checked slice reader
+        run: |
+          test "$(git -C .deps/appendfat rev-parse HEAD)" = 05a0cb7246c5a9f46abfbe92925812e7b607f454
+          mkdir -p build/c67-icu-arena
+          cc -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror \
+            .deps/appendfat/tools/appendfat_arena.c -o build/c67-icu-arena/appendfat_arena
+          cc -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror \
+            native/android/ib_arena_slice.c -o build/c67-icu-arena/ib-arena-slice
+          sh -n bin/ib_android_icu_arena.grease
+          sh -n lib/android_binder_icu.grease
+          sh -n lib/android_shizuku_icu_provider.grease
+          sh -n tests/test_android_icu_arena.sh
+      - name: Run source-bound Arena and Binder refusal tests
+        env:
+          IB_APPEND_ARENA: /home/runner/work/ib/ib/build/c67-icu-arena/appendfat_arena
+          IB_ARENA_SLICE: /home/runner/work/ib/ib/build/c67-icu-arena/ib-arena-slice
+        run: |
+          export IB_APPEND_ARENA="$GITHUB_WORKSPACE/build/c67-icu-arena/appendfat_arena"
+          export IB_ARENA_SLICE="$GITHUB_WORKSPACE/build/c67-icu-arena/ib-arena-slice"
+          sh tests/test_android_icu_arena.sh
+          echo 'real_ICU_HTTPS=NOT_RUN physical_C67=NOT_RUN browser_UI=NOT_RUN'
+      - name: Cross-build ARM32 and ARM64 native range readers
+        run: |
+          ndk_version=27.3.13750724
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "ndk;$ndk_version" > /dev/null
+          toolchain="$ANDROID_HOME/ndk/$ndk_version/toolchains/llvm/prebuilt/linux-x86_64/bin"
+          for entry in 'armeabi-v7a armv7a-linux-androideabi24 ARM' 'arm64-v8a aarch64-linux-android24 AArch64'; do
+            set -- $entry
+            abi=$1; target=$2; machine=$3
+            mkdir -p "build/c67-icu-arena/$abi"
+            "$toolchain/$target-clang" -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror \
+              -fPIE -pie native/android/ib_arena_slice.c \
+              -o "build/c67-icu-arena/$abi/ib-arena-slice"
+            "$toolchain/llvm-readelf" -h "build/c67-icu-arena/$abi/ib-arena-slice" \
+              > "build/c67-icu-arena/$abi/elf.txt"
+            grep -F "Machine:" "build/c67-icu-arena/$abi/elf.txt" | grep -F "$machine"
+            sha256sum "build/c67-icu-arena/$abi/ib-arena-slice" \
+              > "build/c67-icu-arena/$abi/sha256.txt"
+            printf 'abi\t%s\nphysical_device\tNOT_RUN\n' "$abi" \
+              > "build/c67-icu-arena/$abi/receipt.tsv"
+          done
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: ib-c67-arena-slice-native
+          path: |
+            build/c67-icu-arena/armeabi-v7a/
+            build/c67-icu-arena/arm64-v8a/
+          if-no-files-found: error
