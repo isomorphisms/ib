@@ -24,6 +24,8 @@ case "$root" in /*) ;; *) usage ;; esac
 # path, no world-readable fetched response, no other canonical browser store.
 test -d "$root" && test ! -L "$root" || fail 'private Arena directory absent or a symlink'
 root=$(CDPATH='' cd -P -- "$root" && pwd -P)
+root_mode=$(stat -c '%a' "$root") || fail 'cannot inspect Arena directory permissions'
+case "$root_mode" in 700|0700) ;; *) fail 'Arena root must be owner-only mode 0700' ;; esac
 for directory in "$root/staging" "$root/receipts" "$root/locks"; do
   test ! -L "$directory" || fail 'symlink below Arena root'
   mkdir -p "$directory"
