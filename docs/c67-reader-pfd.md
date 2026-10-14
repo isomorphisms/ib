@@ -29,14 +29,18 @@ Private Binder implementation contract, transaction code **1**:
   generation. A real provider authorizes Binder calling UID against an
   explicit same-signer/allowed-reader identity before opening a source.
   Missing/denied authorization returns a nonzero status and no descriptor.
-- Reply parcel: int32 status **0** then a ParcelFileDescriptor with **only**
+- Reply parcel: int32 status **0**, source byte_count (int32), 64-character
+  lowercase source SHA-256, then a ParcelFileDescriptor with **only**
   the already checked committed source's bytes. Provider closes its write
   side after the declared byte count. A successful receipt alone does not
   admit browser navigation.
 - Browser-held admission ticket: request ID, generation, byte count
   (1–4194304) and lowercase SHA-256 copied from the previously checked
   immutable source receipt, **never from untrusted page content**. The
-  ticket must be authenticated at the broker/reader boundary. For a
+  ticket must be authenticated at the broker/reader boundary. The client
+  also rejects any length or SHA difference between its browser-held ticket
+  and the provider's receipt-derived reply metadata before accepting the FD.
+  For a
   matching ticket, the receiver verifies the entire stream, checks for EOF,
   and compares SHA-256 before replacing the last displayed source.
 - A newer browser navigation updates the expected generation. Late results,
