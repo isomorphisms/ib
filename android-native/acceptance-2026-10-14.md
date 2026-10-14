@@ -47,3 +47,18 @@ No source.dex is emitted. Full retained-source recovery, image projections,
 acquisition, Binder workers and Longview/durable navigation remain INCOMPLETE.
 The inherited compiler bootstrap and independent ai-ci producer promotion
 remain UNQUALIFIED/NOT_RUN. No release, merge or complete migration is claimed.
+
+## Continuation of the retained-source attempt
+
+The exact backend tree a09a17865f2fe250d4d3527196c3c33e25e6eb8f, published as
+78522f32576b7c14f138a875c0c572f8243dc2eb, carries checked Char/Text/Boolean loop
+values and writes DEX modified UTF-8 with UTF-16 string ordering. Local host
+controls and independent AOSP parsing pass for the reduced source program;
+unbounded Number and non-Boolean byte loop states typecheck and refuse DEX.
+
+The original NativeSourceProjection consumer and canonical IB source are
+unchanged. Source checking still passes; the actual checked driver now reports
+`DEX unpack cannot reinterpret a source object as an integer: source constructor _builtin.NIL in checked helper IB.Information.tokenize_chars`.
+No source DEX is emitted. Existing changing character/token accumulators and
+recovered records still need checked runtime representation. This advances
+the diagnosis; it does not close the full-source recovery obligation above.
