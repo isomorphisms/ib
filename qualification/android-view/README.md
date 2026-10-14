@@ -1,5 +1,12 @@
 # Android Material view qualification
 
+The 14 October continuation now supplies source-generated native construction,
+Activity lifecycle, Material 3 resources and a test-signed snapshot reader APK.
+Source/package gates pass; full Android text/mutant and two-width/source-action
+acceptance remains pending after retained observer and software-emulator failures.
+See [the current screen receipt](material-screen-receipt-2026-10-14.md) and
+`android-material-reader/README.md`. The historical status below is preserved.
+
 **BLOCKED_NATIVE_VIEW**, refreshed 2026-10-13. SUN IB-D01 / [issue #55](https://github.com/isomorphisms/ib/issues/55)
 has executable, pinned dependency inspection and a preserved Idriç control.
 It has no accepted native text/action round trip. D02–D04 and D06–D08 must not

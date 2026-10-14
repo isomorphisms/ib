@@ -43,12 +43,15 @@ for name in positive text-mutant reflow-mutant selection-mutant recovery {
   "$adb" -s emulator-5554 pull "$remote/observer.dex" "$evidence/art/$name-observer-received.dex" >> "$evidence/art/$name-pull.txt" 2>&1
   cmp "$candidate" "$evidence/art/$name-received.dex"
   cmp "$evidence/art/observer.dex" "$evidence/art/$name-observer-received.dex"
+  "$adb" -s emulator-5554 shell cat /proc/meminfo > "$evidence/art/$name-memory.txt"
+  "$adb" -s emulator-5554 logcat -c
   try {
-    "$adb" -s emulator-5554 shell app_process -cp "$remote/candidate.dex:$remote/observer.dex" \
-      /system/bin ReaderTextObserver > "$evidence/art/$name.txt" 2>&1
+    "$adb" -s emulator-5554 shell app_process -Xmx128m -cp "$remote/candidate.dex:$remote/observer.dex" \
+      /system/bin --nice-name=ib-reader-oracle ReaderTextObserver > "$evidence/art/$name.txt" 2>&1
   }
   var status = _error.code
   printf '%s\n' "$status" > "$evidence/art/$name.status"
+  "$adb" -s emulator-5554 logcat -b all -d > "$evidence/art/$name-logcat.txt"
   cat "$evidence/art/$name.txt"
   if (name === 'positive' or name === 'recovery') {
     test "$status" = 0

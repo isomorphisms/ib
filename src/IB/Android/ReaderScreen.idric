@@ -1,0 +1,214 @@
+module IB.Android.ReaderScreen
+
+import Data.Text
+import IB.Android.ReaderText
+
+export
+data ReaderActivity : Type where [external]
+data ReaderWindow : Type where [external]
+data ReaderContext : Type where [external]
+data ReaderResources : Type where [external]
+data ReaderColumn : Type where [external]
+data ReaderScroll : Type where [external]
+data ReaderButton : Type where [external]
+export
+data AttachedReaderView : Type where [external]
+data ReaderLayoutParameters : Type where [external]
+data ReaderCharacters : Type where [external]
+data SourceAddress : Type where [external]
+data SourceIntent : Type where [external]
+
+%foreign "dex:virtual:Landroid/app/Activity;:getWindow:()Landroid/view/Window;"
+reader_window : ReaderActivity → PrimIO ReaderWindow
+%foreign "dex:virtual:Landroid/view/Window;:getContext:()Landroid/content/Context;"
+reader_context : ReaderWindow → PrimIO ReaderContext
+%foreign "dex:virtual:Landroid/content/Context;:getResources:()Landroid/content/res/Resources;"
+reader_resources : ReaderContext → PrimIO ReaderResources
+%foreign "dex:virtual:Landroid/content/res/Resources;:getIdentifier:(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)I"
+resource_identity : ReaderResources → Text → Text → Text → PrimIO Int32
+%foreign "dex:virtual:Landroid/content/res/Resources;:getString:(I)Ljava/lang/String;"
+resource_text : ReaderResources → Int32 → PrimIO Text
+%foreign "dex:virtual:Landroid/content/res/Resources;:getDimensionPixelSize:(I)I"
+resource_pixels : ReaderResources → Int32 → PrimIO Int32
+%foreign "dex:virtual:Landroid/content/res/Resources;:getColor:(I)I"
+resource_color : ReaderResources → Int32 → PrimIO Int32
+
+%foreign "dex:construct:Landroid/widget/LinearLayout;:<init>:(Landroid/content/Context;)V"
+create_reader_column : ReaderContext → PrimIO ReaderColumn
+%foreign "dex:construct:Landroid/widget/ScrollView;:<init>:(Landroid/content/Context;)V"
+create_reader_scroll : ReaderContext → PrimIO ReaderScroll
+%foreign "dex:construct:Landroid/widget/TextView;:<init>:(Landroid/content/Context;)V"
+create_reader_text : ReaderContext → PrimIO ReaderTextView
+%foreign "dex:construct:Landroid/widget/Button;:<init>:(Landroid/content/Context;)V"
+create_reader_button : ReaderContext → PrimIO ReaderButton
+%foreign "dex:construct:Landroid/view/ViewGroup$LayoutParams;:<init>:(II)V"
+reader_layout_parameters : Int32 → Int32 → PrimIO ReaderLayoutParameters
+
+%foreign "dex:virtual:Landroid/widget/LinearLayout;:setOrientation:(I)V"
+column_orientation : ReaderColumn → Int32 → PrimIO ()
+%foreign "dex:virtual:Landroid/widget/LinearLayout;:setPadding:(IIII)V"
+column_padding : ReaderColumn → Int32 → Int32 → Int32 → Int32 → PrimIO ()
+%foreign "dex:virtual:Landroid/widget/LinearLayout;:setBackgroundColor:(I)V"
+column_color : ReaderColumn → Int32 → PrimIO ()
+%foreign "dex:virtual:Landroid/widget/LinearLayout;:addView:(Landroid/view/View;)V"
+append_reader_view : ReaderColumn → AttachedReaderView → PrimIO ()
+%foreign "dex:virtual:Landroid/widget/LinearLayout;:getRootView:()Landroid/view/View;"
+column_view : ReaderColumn → PrimIO AttachedReaderView
+%foreign "dex:virtual:Landroid/widget/ScrollView;:addView:(Landroid/view/View;)V"
+scroll_contents : ReaderScroll → AttachedReaderView → PrimIO ()
+%foreign "dex:virtual:Landroid/widget/ScrollView;:getRootView:()Landroid/view/View;"
+scroll_view : ReaderScroll → PrimIO AttachedReaderView
+%foreign "dex:virtual:Landroid/widget/ScrollView;:setFillViewport:(Z)V"
+fill_reader_viewport : ReaderScroll → Int32 → PrimIO ()
+%foreign "dex:virtual:Landroid/widget/TextView;:getRootView:()Landroid/view/View;"
+text_view : ReaderTextView → PrimIO AttachedReaderView
+%foreign "dex:virtual:Landroid/widget/TextView;:setTextAppearance:(I)V"
+text_appearance : ReaderTextView → Int32 → PrimIO ()
+%foreign "dex:virtual:Landroid/widget/TextView;:setLineHeight:(I)V"
+text_line_height : ReaderTextView → Int32 → PrimIO ()
+%foreign "dex:virtual:Landroid/widget/TextView;:setLayoutParams:(Landroid/view/ViewGroup$LayoutParams;)V"
+text_layout_parameters : ReaderTextView → ReaderLayoutParameters → PrimIO ()
+%foreign "dex:virtual:Landroid/widget/TextView;:setPadding:(IIII)V"
+text_padding : ReaderTextView → Int32 → Int32 → Int32 → Int32 → PrimIO ()
+%foreign "dex:virtual:Landroid/widget/TextView;:setId:(I)V"
+text_identity : ReaderTextView → Int32 → PrimIO ()
+
+%foreign "dex:virtual:Landroid/widget/Button;:setText:(Ljava/lang/CharSequence;)V"
+button_text : ReaderButton → ReaderCharacters → PrimIO ()
+%foreign "dex:virtual:Landroid/widget/Button;:setTextAppearance:(I)V"
+button_appearance : ReaderButton → Int32 → PrimIO ()
+%foreign "dex:virtual:Landroid/widget/Button;:setLineHeight:(I)V"
+button_line_height : ReaderButton → Int32 → PrimIO ()
+%foreign "dex:virtual:Landroid/widget/Button;:setBackgroundResource:(I)V"
+button_background : ReaderButton → Int32 → PrimIO ()
+%foreign "dex:virtual:Landroid/widget/Button;:setMinHeight:(I)V"
+button_touch_height : ReaderButton → Int32 → PrimIO ()
+%foreign "dex:virtual:Landroid/widget/Button;:setPadding:(IIII)V"
+button_padding : ReaderButton → Int32 → Int32 → Int32 → Int32 → PrimIO ()
+%foreign "dex:virtual:Landroid/widget/Button;:getRootView:()Landroid/view/View;"
+button_view : ReaderButton → PrimIO AttachedReaderView
+
+%foreign "dex:virtual:Ljava/lang/String;:length:()I"
+text_units : Text → PrimIO Int32
+%foreign "dex:virtual:Ljava/lang/String;:subSequence:(II)Ljava/lang/CharSequence;"
+text_characters : Text → Int32 → Int32 → PrimIO ReaderCharacters
+%foreign "dex:static:Landroid/net/Uri;:parse:(Ljava/lang/String;)Landroid/net/Uri;"
+source_address : Text → PrimIO SourceAddress
+%foreign "dex:construct:Landroid/content/Intent;:<init>:(Ljava/lang/String;Landroid/net/Uri;)V"
+source_view_intent : Text → SourceAddress → PrimIO SourceIntent
+%foreign "dex:static:Landroid/content/Intent;:createChooser:(Landroid/content/Intent;Ljava/lang/CharSequence;)Landroid/content/Intent;"
+source_chooser : SourceIntent → ReaderCharacters → PrimIO SourceIntent
+%foreign "dex:virtual:Landroid/content/Context;:startActivity:(Landroid/content/Intent;)V"
+open_source_chooser : ReaderContext → SourceIntent → PrimIO ()
+%foreign "dex:virtual:Landroid/view/View;:getContext:()Landroid/content/Context;"
+clicked_context : AttachedReaderView → PrimIO ReaderContext
+%foreign "dex:virtual:Landroid/view/View;:setTransitionName:(Ljava/lang/String;)V"
+source_action_address : AttachedReaderView → Text → PrimIO ()
+%foreign "dex:virtual:Landroid/view/View;:getTransitionName:()Ljava/lang/String;"
+source_action_target : AttachedReaderView → PrimIO Text
+%foreign "dex:virtual:Landroid/app/Activity;:setContentView:(Landroid/view/View;)V"
+attach_reader_screen : ReaderActivity → AttachedReaderView → PrimIO ()
+
+private
+find_resource : ReaderResources → Text → Text → IO Int32
+find_resource resources name kind = primIO (resource_identity resources name kind "org.isomorphisms.ib.material3")
+
+private
+read_resource_text : ReaderResources → Text → IO Text
+read_resource_text resources name = do
+  identity ← find_resource resources name "string"
+  primIO (resource_text resources identity)
+
+private
+read_resource_pixels : ReaderResources → Text → IO Int32
+read_resource_pixels resources name = do
+  identity ← find_resource resources name "dimen"
+  primIO (resource_pixels resources identity)
+
+private
+apply_text_style : ReaderResources → ReaderTextView → Text → Text → IO ()
+apply_text_style resources view name height_name = do
+  identity ← find_resource resources name "style"
+  primIO (text_appearance view identity)
+  -- Framework TextView's text appearance does not supply MaterialTextView's
+  -- line-height behavior. Apply the actual scaled role dimension explicitly.
+  line_height ← read_resource_pixels resources height_name
+  primIO (text_line_height view line_height)
+
+export
+present_reader_screen : ReaderActivity → IO ()
+present_reader_screen activity = do
+  window ← primIO (reader_window activity)
+  context ← primIO (reader_context window)
+  resources ← primIO (reader_resources context)
+  page_padding ← read_resource_pixels resources "reader_page_padding"
+  paragraph_spacing ← read_resource_pixels resources "reader_paragraph_spacing"
+  surface_identity ← find_resource resources "reader_surface" "color"
+  surface ← primIO (resource_color resources surface_identity)
+  column ← primIO (create_reader_column context)
+  -- Android VERTICAL is 1; dimensions below come from density-scaled resources.
+  primIO (column_orientation column 1)
+  primIO (column_color column surface)
+  primIO (column_padding column page_padding page_padding page_padding page_padding)
+  heading ← primIO (create_reader_text context)
+  title ← read_resource_text resources "reader_title"
+  apply_text_style resources heading "ReaderTitleLarge" "reader_title_line_height"
+  present_reader_text heading title
+  primIO (text_padding heading 0 0 0 paragraph_spacing)
+  heading_view ← primIO (text_view heading)
+  primIO (append_reader_view column heading_view)
+  subtitle ← primIO (create_reader_text context)
+  origin ← read_resource_text resources "reader_origin"
+  apply_text_style resources subtitle "ReaderLabelLarge" "reader_label_line_height"
+  present_reader_text subtitle origin
+  subtitle_view ← primIO (text_view subtitle)
+  primIO (append_reader_view column subtitle_view)
+  button ← primIO (create_reader_button context)
+  label ← read_resource_text resources "reader_open_source"
+  label_units ← primIO (text_units label)
+  label_characters ← primIO (text_characters label 0 label_units)
+  primIO (button_text button label_characters)
+  button_style ← find_resource resources "ReaderButtonLabel" "style"
+  primIO (button_appearance button button_style)
+  button_height ← read_resource_pixels resources "reader_label_line_height"
+  primIO (button_line_height button button_height)
+  button_shape ← find_resource resources "reader_source_button" "drawable"
+  primIO (button_background button button_shape)
+  touch_height ← read_resource_pixels resources "reader_touch_height"
+  primIO (button_touch_height button touch_height)
+  primIO (button_padding button page_padding 0 page_padding 0)
+  action_view ← primIO (button_view button)
+  address ← read_resource_text resources "reader_source_url"
+  primIO (source_action_address action_view address)
+  primIO (append_reader_view column action_view)
+  body ← primIO (create_reader_text context)
+  content ← read_resource_text resources "reader_body"
+  apply_text_style resources body "ReaderBodyLarge" "reader_body_line_height"
+  present_reader_text body content
+  -- Stable application view ID only; it is not a browser/source identifier.
+  primIO (text_identity body 101)
+  -- Android MATCH_PARENT (-1) and WRAP_CONTENT (-2), not content coordinates.
+  layout ← primIO (reader_layout_parameters (-1) (-2))
+  primIO (text_layout_parameters body layout)
+  primIO (text_padding body 0 paragraph_spacing 0 paragraph_spacing)
+  body_view ← primIO (text_view body)
+  primIO (append_reader_view column body_view)
+  scroll ← primIO (create_reader_scroll context)
+  primIO (fill_reader_viewport scroll 1)
+  contents ← primIO (column_view column)
+  primIO (scroll_contents scroll contents)
+  screen ← primIO (scroll_view scroll)
+  primIO (attach_reader_screen activity screen)
+
+export
+open_reader_source : AttachedReaderView → IO ()
+open_reader_source view = do
+  address ← primIO (source_action_target view)
+  uri ← primIO (source_address address)
+  intent ← primIO (source_view_intent "android.intent.action.VIEW" uri)
+  let label = "Open source"
+  count ← primIO (text_units label)
+  characters ← primIO (text_characters label 0 count)
+  chooser ← primIO (source_chooser intent characters)
+  context ← primIO (clicked_context view)
+  primIO (open_source_chooser context chooser)
