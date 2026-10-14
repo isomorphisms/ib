@@ -36,7 +36,7 @@ record PendingImage where
   image_url : String
   alternate : String
   caption : String
-  source_key : String
+  image_source_key : String
 
 public export
 record HtmlPrepaintResult where
@@ -174,7 +174,10 @@ map_items e base [] = ([], [], [])
 map_items e base
   (IB.Information.Image source alt caption target :: FigureCaption figure_text :: rest) =
   let effective_caption = if figure_text == "" then caption else figure_text in
-  map_items e base (IB.Information.Image source alt effective_caption target :: rest)
+  let (blocks, images, notes) =
+    map_item e base (IB.Information.Image source alt effective_caption target) in
+  let (other_blocks, other_images, other_notes) = map_items e base rest in
+  (blocks ++ other_blocks, images ++ other_images, notes ++ other_notes)
 map_items e base (item :: rest) =
   let (block, images, notes) = map_item e base item in
   let (other_blocks, other_images, other_notes) = map_items e base rest in
