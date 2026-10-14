@@ -6,6 +6,7 @@ public export
 data InformationItem
   = Heading Text
   | HeadingAt Text Text
+  | FigureCaption Text
   | TextBlock Text
   | Link Text Text
   | Image Text Text Text Text
@@ -43,6 +44,7 @@ data Capture
   = NoCapture
   | CaptureTitle
   | CaptureHeading Text
+  | CaptureCaption
   | CaptureText Text
   | CaptureLink Text Bool Capture
   | CaptureForm Text
@@ -351,6 +353,7 @@ capture_target : Capture → Text
 capture_target NoCapture = ""
 capture_target CaptureTitle = "title"
 capture_target (CaptureHeading name) = name
+capture_target CaptureCaption = "figcaption"
 capture_target (CaptureText name) = name
 capture_target (CaptureLink _ _ _) = "a"
 capture_target (CaptureForm _) = "form"
@@ -365,6 +368,8 @@ finish_capture NoCapture text title items row = (title, items, row)
 finish_capture CaptureTitle text title items row = (text, items, row)
 finish_capture (CaptureHeading name) text title items row =
   if text ≟ "" then (title, items, row) else (title, HeadingAt name text :: items, row)
+finish_capture CaptureCaption text title items row =
+  if text ≟ "" then (title, items, row) else (title, FigureCaption text :: items, row)
 finish_capture (CaptureText _) text title items row =
   if text ≟ "" then (title, items, row) else (title, TextBlock text :: items, row)
 finish_capture (CaptureLink href has_image parent) text title items row =
@@ -452,6 +457,8 @@ collect_information (OpenTag name tag :: rest) skip capture chars row title item
                 then collect_information rest NotSkipping (CaptureHeading name) [] row title items
                 else if name ≟ "p" || name ≟ "li"
                   then collect_information rest NotSkipping (CaptureText name) [] row title items
+                  else if name ≟ "figcaption"
+                    then collect_information rest NotSkipping CaptureCaption [] row title items
                   else if name ≟ "a"
                     then collect_information rest NotSkipping
                       (CaptureLink (attribute_or_empty "href" tag) False NoCapture) [] row title items
@@ -583,6 +590,7 @@ join_cells (value :: rest) = value ++ " " ++ join_cells rest
 item_text : InformationItem → Text
 item_text (Heading text) = text
 item_text (HeadingAt name text) = text
+item_text (FigureCaption text) = text
 item_text (TextBlock text) = text
 item_text (Link text href) = text ++ " " ++ href
 item_text (Image source alt caption href) = alt ++ " " ++ source ++ " " ++ caption ++ " " ++ href
@@ -618,6 +626,7 @@ join_with separator (value :: rest) = value ++ separator ++ join_with separator 
 render_item : Number → InformationItem → Text
 render_item width (Heading text) = clip_text width ("# " ++ text)
 render_item width (HeadingAt name text) = clip_text width ("# " ++ text)
+render_item width (FigureCaption text) = clip_text width ("caption: " ++ text)
 render_item width (TextBlock text) = clip_text width text
 render_item width (Link text href) = clip_text width ("link: " ++ text ++ " -> " ++ href)
 render_item width (Image source alt caption href) =
