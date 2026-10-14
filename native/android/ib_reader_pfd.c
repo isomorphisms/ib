@@ -291,7 +291,21 @@ failed:
 
 #if defined(__ANDROID__) && __ANDROID_API__ >= 29
 #include <android/binder_parcel.h>
+#include <stdbool.h>
 #include "ib_arena_pfd_provider.h"
+
+typedef struct {
+    char digest[65];
+    int32_t allocated_bytes;
+} ib_digest_reply;
+
+static bool digest_reply_allocate(void *opaque, int32_t length, char **buffer) {
+    ib_digest_reply *reply = opaque;
+    if (!reply || !buffer || length != 65) return false;
+    reply->allocated_bytes = length;
+    *buffer = reply->digest;
+    return true;
+}
 
 /* The private provider owns authorization and obtains the descriptor from a
  * committed, receipt-verified source. The Binder transaction contains only a
@@ -332,12 +346,26 @@ int ib_reader_source_fetch_binder(ib_reader_source *source,
         return IB_READER_PFD_BINDER;
     }
     int32_t provider_status = -1;
+    int32_t provider_length = 0;
+    ib_digest_reply supplied = {{0}, 0};
     int descriptor = -1;
     status = AParcel_readInt32(reply, &provider_status);
     if (status == STATUS_OK && provider_status == 0)
-        status = AParcel_readParcelFileDescriptor(reply, &descriptor);
+        status = AParcel_readInt32(reply, &provider_length);
+    if (status == STATUS_OK && provider_status == 0) {
+        status = AParcel_readString(reply, &supplied, digest_reply_allocate);
+    }
+    if (status != STATUS_OK || provider_status != 0 ||
+        provider_length <= 0 ||
+        (uint32_t)provider_length != ticket->byte_count ||
+        supplied.allocated_bytes != 65 ||
+        memcmp(supplied.digest, ticket->sha256_hex, 65) != 0) {
+        AParcel_delete(reply);
+        return IB_READER_PFD_BINDER;
+    }
+    status = AParcel_readParcelFileDescriptor(reply, &descriptor);
     AParcel_delete(reply);
-    if (status != STATUS_OK || provider_status != 0 || descriptor < 0) {
+    if (status != STATUS_OK || descriptor < 0) {
         if (descriptor >= 0) close(descriptor);
         return IB_READER_PFD_BINDER;
     }
