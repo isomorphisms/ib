@@ -27,6 +27,18 @@ evidence =
     "https://example.com/docs/page" "https://example.com/docs/page"
     "text/html" "utf-8" "200" True True
 
+base_and_omissions : String
+base_and_omissions =
+  "<html><head><base href='https://example.org/docs/'></head><body>" ++
+  "<h2>First<h3>Second<p>A<p>B<a href='?q=3'>Query</a>" ++
+  "<ul><li>Alpha<li>Beta</ul></body></html>"
+
+base_projection : String
+base_projection =
+  case convert_admitted_html evidence base_and_omissions of
+    Left reason ⇒ "REFUSED:" ++ reason
+    Right produced ⇒ produced.wire
+
 bad_evidence : HtmlEvidence
 bad_evidence =
   HtmlSourceEvidence "arena:fixture-example" "generation-1"
@@ -86,6 +98,12 @@ main =
             Just "https://example.com/a?q=2")
         , ("unsafe-scheme", resolve_html_reference "https://example.com/" "javascript:bad" ==
             Nothing)
+        , ("html-base-query", has "link\tQuery\thttps://example.org/docs/?q=3\n" base_projection)
+        , ("implied-heading-two", has "heading\t2\tFirst\n" base_projection)
+        , ("implied-heading-three", has "heading\t3\tSecond\n" base_projection)
+        , ("implied-paragraph", has "text\tA\n" base_projection && has "text\tB\n" base_projection)
+        , ("list-alpha", has "text\tAlpha\n" base_projection)
+        , ("list-beta", has "text\tBeta\n" base_projection)
         ]
       okay <- check tests
       if okay then pure () else exitFailure
