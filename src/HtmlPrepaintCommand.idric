@@ -1,0 +1,33 @@
+module HtmlPrepaintCommand
+
+import IB.HtmlPrepaint
+import System
+import System.File
+
+-- The caller must independently reopen/hash the *exact* Arena range before
+-- constructing these arguments. This executable does no I/O except one
+-- bounded already-verified UTF-8 body read and writing the disposable wire.
+program_arguments : List String → List String
+program_arguments [] = []
+program_arguments (_ :: args) = args
+
+covering
+main : IO ()
+main = do
+  arguments <- getArgs
+  case program_arguments arguments of
+    [source_id, generation, claimed_sha, reopened_sha,
+     claimed_bytes, reopened_bytes, requested, resolved,
+     mime, charset, status, body_path] ⇒ do
+      data_result <- readFile body_path
+      case data_result of
+        Left _ ⇒ die "html-prepaint: admitted body unreadable"
+        Right html ⇒ do
+          let evidence =
+            HtmlSourceEvidence source_id generation claimed_sha reopened_sha
+              (cast claimed_bytes) (cast reopened_bytes)
+              requested resolved mime charset status True True
+          case convert_admitted_html evidence html of
+            Left reason ⇒ die ("html-prepaint: " ++ reason)
+            Right prepaint ⇒ putStr prepaint.wire
+    _ ⇒ die "usage: ib-html-prepaint SOURCE GENERATION CLAIM_SHA REOPEN_SHA CLAIM_COUNT REOPEN_COUNT REQUESTED FINAL MIME CHARSET STATUS ADMITTED_BODY_PATH"
