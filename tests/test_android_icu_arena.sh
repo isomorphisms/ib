@@ -13,6 +13,7 @@ trap 'rm -rf "$work"' EXIT HUP INT TERM
 mkdir -p "$work/lib" "$work/bin" "$work/test-commands"
 cp "$root/lib/android_shizuku_icu_provider.grease" "$root/lib/android_binder_icu.grease" "$work/lib/"
 cp "$root/bin/ib_android_icu_arena.grease" "$work/bin/"
+cp "$root/bin/ib_android_arena_read.grease" "$work/bin/"
 
 # A fake Binder authority adapter exercises only the host boundary. Physical
 # Shizuku, app_process, TLS and real ICU remain explicitly NOT_RUN here.
@@ -58,6 +59,8 @@ test "$(sed -n 's/^arena_offset[[:space:]]*//p' "$work/private/receipts/first.ts
 "$reader" slice "$work/private/responses.arena" 0 "$first_bytes" > "$work/first-body"
 printf '<html><body>C67 π ☼</body></html>\n' > "$work/expected"
 cmp "$work/expected" "$work/first-body"
+sh "$work/bin/ib_android_arena_read.grease" first "$work/private" > "$work/read1"
+cmp "$work/expected" "$work/read1"
 grep -q "^http_status[[:space:]]*UNOBSERVED$" "$work/private/receipts/first.tsv"
 grep -q "^navigation_admitted[[:space:]]*NO$" "$work/private/receipts/first.tsv"
 
@@ -68,6 +71,17 @@ second_bytes=$(sed -n 's/^byte_count[[:space:]]*//p' "$work/private/receipts/sec
 "$reader" slice "$work/private/responses.arena" "$second_offset" "$second_bytes" > "$work/second-body"
 printf 'bin\000ary\377\n' > "$work/expected-binary"
 cmp "$work/expected-binary" "$work/second-body"
+sh "$work/bin/ib_android_arena_read.grease" second "$work/private" > "$work/read2"
+cmp "$work/expected-binary" "$work/read2"
+
+# Corrupted provenance must refuse to emit even the first byte.
+cp "$work/private/receipts/first.tsv" "$work/first.original.tsv"
+sed -i 's/^sha256[[:space:]].*/sha256\t0000000000000000000000000000000000000000000000000000000000000000/' \
+  "$work/private/receipts/first.tsv"
+if sh "$work/bin/ib_android_arena_read.grease" first "$work/private" \
+  > "$work/read-invalid" 2>/dev/null; then exit 1; fi
+test ! -s "$work/read-invalid"
+cp "$work/first.original.tsv" "$work/private/receipts/first.tsv"
 used=$(cat "$work/private/responses.arena.used")
 
 # Refuse duplicate request identity, a partial producer and oversized input.
