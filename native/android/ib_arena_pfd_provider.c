@@ -6,6 +6,8 @@
 #include <android/binder_parcel.h>
 #include <android/binder_status.h>
 #include <stdbool.h>
+#include <fcntl.h>
+#include <sys/stat.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h>
@@ -94,6 +96,15 @@ static binder_status_t transact(AIBinder *binder, transaction_code_t code,
         if (descriptor >= 0) close(descriptor);
         return respond(out, 3);
     }
+    /* Never parcel a file-backed Arena descriptor or a writable capability.
+     * A fresh read-only anonymous pipe is the only admitted publication. */
+    struct stat info;
+    int flags = fcntl(descriptor, F_GETFL);
+    if (flags < 0 || fstat(descriptor, &info) != 0 ||
+        !S_ISFIFO(info.st_mode) || (flags & O_ACCMODE) != O_RDONLY) {
+        close(descriptor);
+        return respond(out, 3);
+    }
     status = respond(out, 0);
     if (status == STATUS_OK)
         status = AParcel_writeParcelFileDescriptor(out, descriptor);
@@ -103,7 +114,7 @@ static binder_status_t transact(AIBinder *binder, transaction_code_t code,
 
 AIBinder *ib_arena_pfd_provider_new(ib_arena_pfd_provider *provider) {
     if (!provider || !provider->open_verified_fd ||
-        provider->allowed_reader_uid == (uid_t)-1)
+        provider->allowed_reader_uid < (uid_t)10000)
         return NULL;
     /* Called at single-threaded host initialization, not once per request. */
     static AIBinder_Class *binder_class = NULL;
