@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - 'bin/ib_android_icu_arena.grease'
+      - 'bin/ib_android_arena_read.grease'
       - 'lib/android_binder_icu.grease'
       - 'lib/android_shizuku_icu_provider.grease'
       - 'native/android/ib_arena_slice.c'
@@ -41,6 +42,7 @@ jobs:
           cc -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror \
             native/android/ib_arena_slice.c -o build/c67-icu-arena/ib-arena-slice
           sh -n bin/ib_android_icu_arena.grease
+          sh -n bin/ib_android_arena_read.grease
           sh -n lib/android_binder_icu.grease
           sh -n lib/android_shizuku_icu_provider.grease
           sh -n tests/test_android_icu_arena.sh
