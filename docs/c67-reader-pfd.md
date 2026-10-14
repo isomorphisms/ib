@@ -1,6 +1,6 @@
 # IB C67: private Binder/PFD reader handoff (bounded receiver)
 
-**Status:** native Binder provider/receiver contracts and independent host simulation only.
+**Status:** native Binder provider/receiver, verified Arena source-owner callback and app-host assembly, with hosted fixture tests. No phone APK.
 This branch is stacked on IB PR #152, which stores checked ICU body bytes in
 the existing userspace appendfat Arena. **No URL-capable APK, provider service,
 Idriç screen connection, or physical C67 Binder execution is claimed.**
@@ -47,8 +47,14 @@ Private Binder implementation contract, transaction code **1**:
 native/android/ib_arena_pfd_provider.{h,c} implement a narrowly UID-gated
 **serving** Binder object (the host supplies its verified-source callback).
 The object must be handed privately to the checked reader by the app host:
-no global Binder service registration is used here. The callback that opens
-the validated Arena receipt and populates its read-only pipe is still missing.
+no global Binder service registration is used here. The callback is now implemented in native/android/ib_arena_source_owner.{h,c}:
+it opens the app's existing 0700 Arena root, reads an immutable source receipt,
+checks canonical .used and locked range, independently rehashes the complete
+body, and emits an anonymous read-only pipe from a bounded writer thread.
+It never returns the Arena's file descriptor. Host assembly wiring in
+native/android/ib_reader_host_assembly.{h,c} binds that callback to the
+private Binder provider object. **The app lifecycle has not yet instantiated
+this assembly, and no Binder reference has been delivered to the Idriç DEX.**
 
 native/android/ib_reader_pfd.{h,c} implement the **receiving** C11
 boundary. On Android API 29+ they use NDK Binder parcel transactions and
@@ -75,18 +81,26 @@ over-limit tickets and stale navigation generations. **SCM_RIGHTS is a
 host stand-in for descriptor ownership, not a claim of tested Android
 Binder delivery or tested cross-UID Android authority.**
 
-The independent Android CI lane cross-compiles the actual NDK Binder
-calls for ARM32 and ARM64 and retains digests. Cross-compilation does
+The second host test constructs a real pinned sd-card-append-fat Arena,
+appends binary bytes using its canonical append command, publishes the
+existing IB v1 receipt, then drives the actual C source owner and reader
+verifiers end-to-end. It mutates receipts, source bytes, commit pointer,
+generation, root permissions and path identity, requiring refusal and
+last-good preservation. This is still Linux-hosted source admission.
+
+The independent Android CI lane cross-compiles actual NDK Binder calls,
+source-owner assembly and pipe writer for ARM32 and ARM64 and retains digests. Cross-compilation does
 **not** prove the provider exists, the Idriç DEX can call this library,
 or that an Android Binder transaction has happened.
 
 ## Required next integration
 
-1. Connect the native provider object to the existing Binder host. Implement
-   its checked-source callback, producing a fresh anonymous read-only pipe
-   only after canonical Arena verification. Resolve reader app UID from
-   trusted package identity. Keep shell UID 2000 outside reader authorization;
-   it cannot assume access to the app-private Arena.
+1. Instantiate the newly connected native host assembly in the existing
+   Android application lifecycle, resolve the real reader UID from trusted
+   package identity and privately supply its Binder handle to the checked
+   Idriç DEX. The assembly cannot use root paths owned by Termux or shell:
+   add the separate authorized Shizuku-worker-to-app-private-Arena ingress
+   through scoped IPC. Shell UID 2000 cannot read the app's private Arena.
 2. Bind the native C receiver to the **existing checked Idriç Material
    reader** (#129/#147), with qualified DEX/native FFI and lifecycle.
    Do not introduce Java/Kotlin application logic or a replacement UI.
