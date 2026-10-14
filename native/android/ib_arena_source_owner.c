@@ -371,8 +371,9 @@ done:
 
 int ib_arena_source_owner_open_binder(void *owner, const char *request_id,
                                       uint64_t navigation_generation,
+                                      ib_reader_source_ticket *verified_ticket,
                                       int *read_fd) {
     return ib_arena_source_owner_open((ib_arena_source_owner *)owner,
                                       request_id, navigation_generation,
-                                      NULL, read_fd);
+                                      verified_ticket, read_fd);
 }
