@@ -86,6 +86,7 @@ main =
         , ("paragraph-before-link", has "text\tprefix\n" wire)
         , ("paragraph-after-link", has "text\tsuffix\n" wire)
         , ("non-bmp", has "🙂" wire)
+        , ("rtl-preserved", has "שלום" wire)
         , ("numeric-combining", has "é" wire)
         , ("table-row", has "row\tA\tB\n" wire)
         , ("unsafe-no-link", not (has "link\tUnsafe" wire))
