@@ -1,6 +1,6 @@
 # IB C67: private Binder/PFD reader handoff (bounded receiver)
 
-**Status:** reader-side native receiver and independent host simulation only.
+**Status:** native Binder provider/receiver contracts and independent host simulation only.
 This branch is stacked on IB PR #152, which stores checked ICU body bytes in
 the existing userspace appendfat Arena. **No URL-capable APK, provider service,
 Idriç screen connection, or physical C67 Binder execution is claimed.**
@@ -16,10 +16,10 @@ Idriç screen connection, or physical C67 Binder execution is claimed.**
        → native reader verifies exact stream length + SHA-256 + epoch
        → source-linked extraction / Idriç Prepaint → existing native views
 
-The supplier must first consume the **real** committed source using
+The eventual app-scoped source owner must first consume the **real** committed source using
 bin/ib_android_arena_read.grease (which does not emit bytes until its
 digest check passes). Materialize the verified bounded source into a
-fresh pipe/memfd whose descriptor, rather than a path, is transferred.
+fresh **read-only anonymous pipe** whose descriptor, rather than a path, is transferred. A backing Arena file descriptor, writable descriptor or socket is refused.
 Never hand out the appendfat Arena's descriptor or rely on a shared
 /data/local/tmp response. Never give the reader a network client.
 
@@ -43,6 +43,12 @@ Private Binder implementation contract, transaction code **1**:
   corrupt/replayed metadata, malformed IDs, extra/short input, over-limit
   bodies, reader/provider death and stalled streams are refused. The
   existing last-good snapshot remains owned by the reader.
+
+native/android/ib_arena_pfd_provider.{h,c} implement a narrowly UID-gated
+**serving** Binder object (the host supplies its verified-source callback).
+The object must be handed privately to the checked reader by the app host:
+no global Binder service registration is used here. The callback that opens
+the validated Arena receipt and populates its read-only pipe is still missing.
 
 native/android/ib_reader_pfd.{h,c} implement the **receiving** C11
 boundary. On Android API 29+ they use NDK Binder parcel transactions and
@@ -76,10 +82,11 @@ or that an Android Binder transaction has happened.
 
 ## Required next integration
 
-1. Implement the existing Binder host provider's private authenticated
-   descriptor operation, creating a fresh bounded FD only after the
-   canonical Arena receipt checks. Handle shell UID 2000 and app-private
-   storage correctly; do not assume they share a directory or UID.
+1. Connect the native provider object to the existing Binder host. Implement
+   its checked-source callback, producing a fresh anonymous read-only pipe
+   only after canonical Arena verification. Resolve reader app UID from
+   trusted package identity. Keep shell UID 2000 outside reader authorization;
+   it cannot assume access to the app-private Arena.
 2. Bind the native C receiver to the **existing checked Idriç Material
    reader** (#129/#147), with qualified DEX/native FFI and lifecycle.
    Do not introduce Java/Kotlin application logic or a replacement UI.
