@@ -1,8 +1,6 @@
 # IB-C67 HTML → typed Prepaint Version 1
 
-Status: **DRAFT / NOT QUALIFIED** until an actual Idriç execution, independent
-consumer and source admission have succeeded. This is the first complete-revision
-conversion only. It is not a C67 URL-browser acceptance receipt.
+Status: **host fixture converter QUALIFIED / retained Arena HTML BLOCKED / physical C67 NOT_RUN**. Executed [IB CI run 38653082213](https://github.com/isomorphisms/ib/actions/runs/38653082213) passed both `idric-core` and `scientific-media` on `d228f78b00e56a34a93f9f58ca908977ef1c1249`; the pinned separate `isomorphisms/ai-ci@0fb20839a2da68be0aafc10511e13c634bfa02b9` independently consumed the actual generated fixture bytes and ran its wrong-output self-tests. [Retained artifact 11935167962](https://github.com/isomorphisms/ib/actions/runs/38653082213/artifacts/11935167962) SHA-256: `acfe20c464eb4955a75fd5f27a31f038dcaa806c1936557f01dc3e1a5b20f9c6`. These are offline fixtures, **not live ICU network data or a C67 device receipt**.
 
 ## Owners and immutable starting points
 
@@ -80,11 +78,11 @@ PR #152 must be reconciled before an Arena-owner receipt can be supplied.
 
 | Check | Authority | Current status |
 |---|---|---|
-| Idriç typecheck + actual executable | IB CI | NOT_RUN until workflow completes |
-| Offline example.com-shaped fixture | Idriç + independent C11 oracle and frozen golden | NOT_RUN |
-| Offline arXiv-shaped fixture | Idriç + independent C11 oracle and frozen golden | NOT_RUN |
-| Bad digest, generation, source ID, UTF-8 and omitted/stale metadata | Grease refusal, last-valid byte comparison | NOT_RUN |
-| Mutated heading, link, dropped text and malformed escaping | Independent oracle/golden | NOT_RUN |
+| Idriç typecheck + actual executable | IB CI #38653082213 | **PASS**, Linux/host fixtures |
+| Offline example.com-shaped fixture | Actual Idriç output + independent C11/AI-CI oracle and frozen golden | **PASS** |
+| Offline arXiv-shaped fixture | Actual Idriç output + independent C11/AI-CI oracle and frozen golden | **PASS** |
+| Bad digest, generation, source ID, UTF-8 and incomplete admission | Grease refusal, last-valid byte comparison | **PASS**, fixture-only |
+| Mutated heading, link, dropped text and malformed escaping | C11 oracle + independent AI-CI + golden | **PASS**, fixture-only |
 | Real ICU HTTPS → committed Arena → admitted metadata | ICU PR #35 + IB PR #152 | BLOCKED |
 | Binder/PFD delivers new projection to reader | IB PR #153 | NOT_RUN |
 | Physical C67 paints example.com and navigates links | User-observed device + receipts | NOT_RUN |
