@@ -1,0 +1,31 @@
+name: IB independent Prepaint Version 1 oracle
+
+on:
+  pull_request:
+    paths:
+      - 'src/IB/HtmlPrepaint.idric'
+      - 'src/IB/HtmlLinks.idric'
+      - 'src/IB/Information.idric'
+      - 'src/IB/RecoveredInformation.idric'
+      - 'tests/prepaint_v1_oracle.c'
+      - 'tests/test_prepaint_oracle_static.sh'
+      - 'tests/fixtures/ib-html/**'
+      - '.github/workflows/ib-html-prepaint-static.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  independent-wire:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Independently parse frozen Version 1 witnesses and reject mutants
+        run: |
+          test "$(git rev-parse HEAD)" = "${{ github.event.pull_request.head.sha || github.sha }}"
+          sh -n tests/test_prepaint_oracle_static.sh
+          sh tests/test_prepaint_oracle_static.sh
