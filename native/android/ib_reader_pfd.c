@@ -276,6 +276,7 @@ failed:
 
 #if defined(__ANDROID__) && __ANDROID_API__ >= 29
 #include <android/binder_parcel.h>
+#include "ib_arena_pfd_provider.h"
 
 /* The private provider owns authorization and obtains the descriptor from a
  * committed, receipt-verified source. The Binder transaction contains only a
@@ -288,6 +289,13 @@ int ib_reader_source_fetch_binder(ib_reader_source *source,
     if (ticket->navigation_generation !=
         atomic_load(&source->wanted_navigation_generation))
         return IB_READER_PFD_STALE;
+
+    /* A binder proxy requires typed class association before transaction.
+     * Check the exact private interface descriptor; never send to an
+     * unassociated or unrelated Binder endpoint. */
+    const AIBinder_Class *clazz = ib_arena_pfd_provider_class();
+    if (!clazz || !AIBinder_associateClass(provider, clazz))
+        return IB_READER_PFD_BINDER;
 
     AParcel *request = NULL, *reply = NULL;
     binder_status_t status = AIBinder_prepareTransaction(provider, &request);
