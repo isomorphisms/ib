@@ -138,6 +138,9 @@ map_item e base (HeadingAt name text) =
     Just level ⇒ ([IB.Strand.Heading level text], [], [])
 map_item e base (IB.Information.TextBlock text) =
   ([IB.Strand.TextBlock text], [], [])
+map_item e base (FigureCaption caption) =
+  ([IB.Strand.TextBlock ("Figure caption: " ++ caption)], [],
+   ["orphaned-figure-caption"])
 map_item e base (IB.Information.Link text href) =
   let (blocks, notes) = checked_link base text href in
   (blocks, [], notes)
@@ -168,6 +171,10 @@ map_item e base (IB.Information.Image url alt caption destination) =
 map_items : HtmlEvidence → String → List InformationItem →
   (List InformationBlock, List PendingImage, List String)
 map_items e base [] = ([], [], [])
+map_items e base
+  (IB.Information.Image source alt caption target :: FigureCaption figure_text :: rest) =
+  let effective_caption = if figure_text == "" then caption else figure_text in
+  map_items e base (IB.Information.Image source alt effective_caption target :: rest)
 map_items e base (item :: rest) =
   let (block, images, notes) = map_item e base item in
   let (other_blocks, other_images, other_notes) = map_items e base rest in
