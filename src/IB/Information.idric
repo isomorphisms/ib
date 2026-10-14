@@ -5,6 +5,7 @@ import Data.Text
 public export
 data InformationItem
   = Heading Text
+  | HeadingAt Text Text
   | TextBlock Text
   | Link Text Text
   | Image Text Text Text Text
@@ -67,10 +68,83 @@ collapse_space_chars previous_space (value :: rest) =
       else ' ' :: collapse_space_chars True rest
     else value :: collapse_space_chars False rest
 
+-- Decode only explicit, bounded HTML character references. Unknown names
+-- and malformed numerical references remain visible, not fabricated Unicode.
+entity_digit : Char → Maybe Integer
+entity_digit digit =
+  let value : Integer = cast (ord digit) in
+  if value >= 48 && value <= 57 then Just (value - 48)
+  else if value >= 65 && value <= 70 then Just (value - 55)
+  else if value >= 97 && value <= 102 then Just (value - 87)
+  else Nothing
+
+entity_number : Integer → Integer → List Char → Maybe Integer
+entity_number base number [] =
+  if number > 0 && number <= 1114111 &&
+    not (number >= 55296 && number <= 57343)
+    then Just number else Nothing
+entity_number base number (digit :: rest) =
+  case entity_digit digit of
+    Nothing ⇒ Nothing
+    Just value ⇒
+      if value >= base || number > 1114111
+        then Nothing
+        else entity_number base (number * base + value) rest
+
+named_character : Text → Maybe Char
+named_character "amp" = Just '&'
+named_character "lt" = Just '<'
+named_character "gt" = Just '>'
+named_character "quot" = Just '"'
+named_character "apos" = Just '\''
+named_character "nbsp" = Just ' '
+named_character "copy" = Just '©'
+named_character "reg" = Just '®'
+named_character "ndash" = Just '–'
+named_character "mdash" = Just '—'
+named_character "hellip" = Just '…'
+named_character "bull" = Just '•'
+named_character "times" = Just '×'
+named_character "minus" = Just '−'
+named_character "alpha" = Just 'α'
+named_character "beta" = Just 'β'
+named_character "pi" = Just 'π'
+named_character _ = Nothing
+
+entity_character : Text → Maybe Char
+entity_character name =
+  case unpack name of
+    '#' :: 'x' :: digits ⇒ map (chr . cast) (entity_number 16 0 digits)
+    '#' :: 'X' :: digits ⇒ map (chr . cast) (entity_number 16 0 digits)
+    '#' :: digits ⇒ map (chr . cast) (entity_number 10 0 digits)
+    _ ⇒ named_character name
+
+scan_entity : Nat → List Char → List Char → Maybe (Text, List Char)
+scan_entity Z collected remaining = Nothing
+scan_entity (S fuel) collected [] = Nothing
+scan_entity (S fuel) collected (';' :: rest) = Just (pack (reverse collected), rest)
+scan_entity (S fuel) collected (value :: rest) =
+  scan_entity fuel (value :: collected) rest
+
+decode_entity_chars : List Char → List Char
+decode_entity_chars [] = []
+decode_entity_chars ('&' :: rest) =
+  case scan_entity 16 [] rest of
+    Nothing ⇒ '&' :: decode_entity_chars rest
+    Just (name, remaining) ⇒
+      case entity_character name of
+        Nothing ⇒ '&' :: decode_entity_chars rest
+        Just value ⇒ value :: decode_entity_chars remaining
+decode_entity_chars (value :: rest) = value :: decode_entity_chars rest
+
+public export
+decode_html_entities : Text → Text
+decode_html_entities value = pack (decode_entity_chars (unpack value))
+
 public export
 clean_text : Text → Text
 clean_text text =
-  let collapsed = collapse_space_chars False (unpack text) in
+  let collapsed = collapse_space_chars False (decode_entity_chars (unpack text)) in
   let left_trimmed = drop_space_chars collapsed in
   pack (reverse (drop_space_chars (reverse left_trimmed)))
 
@@ -265,7 +339,7 @@ attribute_or_empty : Text → Text → Text
 attribute_or_empty name tag =
   case attribute_value name tag of
     Nothing ⇒ ""
-    Just value ⇒ value
+    Just value ⇒ decode_html_entities value
 
 skipped_tag : Text → Bool
 skipped_tag name = elem name ["script", "style", "svg", "canvas", "video", "audio", "template"]
@@ -283,14 +357,14 @@ capture_target (CaptureForm _) = "form"
 capture_target (CaptureCell name) = name
 
 append_capture_text : Text → List Char → List Char
-append_capture_text text chars = reverse (unpack text) ++ (' ' :: chars)
+append_capture_text text chars = reverse (unpack text) ++ chars
 
 finish_capture : Capture → Text → Text → List InformationItem → Maybe (List Text) →
   (Text, List InformationItem, Maybe (List Text))
 finish_capture NoCapture text title items row = (title, items, row)
 finish_capture CaptureTitle text title items row = (text, items, row)
-finish_capture (CaptureHeading _) text title items row =
-  if text ≟ "" then (title, items, row) else (title, Heading text :: items, row)
+finish_capture (CaptureHeading name) text title items row =
+  if text ≟ "" then (title, items, row) else (title, HeadingAt name text :: items, row)
 finish_capture (CaptureText _) text title items row =
   if text ≟ "" then (title, items, row) else (title, TextBlock text :: items, row)
 finish_capture (CaptureLink href has_image parent) text title items row =
@@ -508,6 +582,7 @@ join_cells (value :: rest) = value ++ " " ++ join_cells rest
 
 item_text : InformationItem → Text
 item_text (Heading text) = text
+item_text (HeadingAt name text) = text
 item_text (TextBlock text) = text
 item_text (Link text href) = text ++ " " ++ href
 item_text (Image source alt caption href) = alt ++ " " ++ source ++ " " ++ caption ++ " " ++ href
@@ -542,6 +617,7 @@ join_with separator (value :: rest) = value ++ separator ++ join_with separator 
 
 render_item : Number → InformationItem → Text
 render_item width (Heading text) = clip_text width ("# " ++ text)
+render_item width (HeadingAt name text) = clip_text width ("# " ++ text)
 render_item width (TextBlock text) = clip_text width text
 render_item width (Link text href) = clip_text width ("link: " ++ text ++ " -> " ++ href)
 render_item width (Image source alt caption href) =
