@@ -3,3 +3,9 @@
 ib_binder_icu_get() {
   ib_shizuku_icu_get "$@"
 }
+
+# Same source-of-truth pinned ICU request, but stdout is a binary transport
+# stream to an authorized caller-held write PFD rather than an Arena pathname.
+ib_binder_icu_stream() {
+  ib_shizuku_icu_stream "$@"
+}
