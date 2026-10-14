@@ -21,6 +21,8 @@ awk -F '\t' '
 field() { awk -F '\t' -v key="$1" '$1 == key { print $2 }' "$manifest"; }
 test "$(field schema)" = ib-html-admission-v1 || fail 'unsupported admission schema'
 test "$(field source_key)" = "$expected_key" || fail 'stale or modified source key'
+expected_generation=$(printenv IB_EXPECTED_SOURCE_GENERATION 2>/dev/null || :)
+test -n "$expected_generation" && test "$(field source_generation)" = "$expected_generation" || fail 'stale or unpinned generation'
 case "$(field source_kind)" in
   arena) test "$(field arena_reopen)" = MATCH || fail 'Arena readback absent' ;;
   fixture) test "$(printenv IB_ALLOW_FIXTURE 2>/dev/null || :)" = 1 || fail 'fixture not allowed as production source' ;;
