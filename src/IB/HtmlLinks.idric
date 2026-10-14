@@ -122,7 +122,7 @@ directory_for origin base relative =
 
 relative_address : String → String → String → String
 relative_address origin base reference =
-  let (relative_path, suffix) = split_path_suffix (unpack reference) in
+  let (relative_path, suffix) = split_path_suffix (unpack reference) [] in
   origin ++ path_normalised (directory_for origin base reference ++ relative_path) ++ suffix
 
 scheme_for : String → String
