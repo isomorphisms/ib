@@ -1,0 +1,18 @@
+module ReaderActivity
+
+import IB.Android.ReaderScreen
+
+%cg dex extends Landroid/app/Activity;
+%cg dex override onCreate (Landroid/os/Bundle;)V reader_created
+%cg dex callback Landroid/view/View$OnClickListener; onClick (Landroid/view/View;)V source_clicked
+
+%export "dex:reader_created"
+reader_created : ReaderActivity → IO ()
+reader_created = present_reader_screen
+
+%export "dex:source_clicked"
+source_clicked : AttachedReaderView → IO ()
+source_clicked = open_reader_source
+
+main : IO ()
+main = pure ()
