@@ -1,0 +1,64 @@
+# Shizuku-specific ICU Android app_process lowering. This is not an IB browser
+# interface; callers use ib_binder_icu_get in android_binder_icu.grease.
+# ICU binaries must be installed in a shell-executable private directory and
+# matched against Cat Food's pinned hashes before any request is sent.
+
+ib_shizuku_icu_atom_path() {
+  case "$1" in
+    /data/local/tmp/ib-icu/*) ;;
+    *) return 2 ;;
+  esac
+  case "$1" in
+    *..*|*[!abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._/-]*) return 2 ;;
+  esac
+}
+
+ib_shizuku_icu_sha256() {
+  test "${#1}" -eq 64 || return 2
+  case "$1" in ''|*[!0123456789abcdef]*) return 2 ;; esac
+}
+
+ib_shizuku_icu_url() {
+  test "${#1}" -gt 8 && test "${#1}" -le 2048 || return 2
+  case "$1" in http://*|https://*) ;; *) return 2 ;; esac
+  # A single-quoted remote shell argument: reject the only delimiter, controls,
+  # whitespace and non-ASCII. Idric-Net performs the actual URL parsing.
+  case "$1" in *"'"*) return 2 ;; esac
+  printf '%s' "$1" | LC_ALL=C grep -Eq '^[!-&(-~]+$'
+}
+
+ib_shizuku_icu_get() {
+  if test "$#" -ne 2; then
+    printf 'ib_shizuku_icu_get requires URL OUTPUT\n' >&2
+    return 2
+  fi
+  icu_url=$1
+  icu_output=$2
+  icu_dex=${IB_C67_ICU_DEX:-}
+  icu_so=${IB_C67_ICU_SO:-}
+  icu_dex_sha=${IB_C67_ICU_DEX_SHA256:-}
+  icu_so_sha=${IB_C67_ICU_SO_SHA256:-}
+  ib_shizuku_icu_url "$icu_url" || { printf 'unsupported or unsafe ICU URL\n' >&2; return 2; }
+  ib_shizuku_icu_atom_path "$icu_dex" || { printf 'unapproved ICU DEX path\n' >&2; return 2; }
+  ib_shizuku_icu_atom_path "$icu_so" || { printf 'unapproved ICU native path\n' >&2; return 2; }
+  ib_shizuku_icu_sha256 "$icu_dex_sha" || { printf 'missing pinned ICU DEX hash\n' >&2; return 2; }
+  ib_shizuku_icu_sha256 "$icu_so_sha" || { printf 'missing pinned ICU native hash\n' >&2; return 2; }
+  test ! -e "$icu_output" || { printf 'refusing reused ICU capture file\n' >&2; return 2; }
+
+  # No user input is interpolated into the remote script except one validated,
+  # single-quoted URL. Only shell-safe fixed path atoms are allowed for binaries.
+  # Remote ICU writes binary body to stdout. Any nonzero exit rejects ALL bytes.
+  command_text="set -eu
+  test \"\$(sha256sum '$icu_dex' | cut -d ' ' -f 1)\" = '$icu_dex_sha' || exit 78
+  test \"\$(sha256sum '$icu_so' | cut -d ' ' -f 1)\" = '$icu_so_sha' || exit 78
+  export CLASSPATH='$icu_dex'
+  exec app_process -Dicu.library='$icu_so' /system/bin Idric.Generated get '$icu_url'"
+
+  # File limit is an additional defense; caller enforces the exact 4 MiB bound.
+  # On Linux/Android sh the -f unit is 1024 bytes, hence an 8 MiB hard cap.
+  (
+    umask 077
+    ulimit -f 8192
+    ib_shizuku_run_bounded 30 "$command_text" > "$icu_output"
+  ) || return $?
+}
