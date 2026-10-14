@@ -154,6 +154,62 @@ jobs:
           path: ${{ runner.temp }}/ib-html-prepaint-receipts/
           if-no-files-found: error
 
+      - name: Check out verified Arena v2 acquisition and reader implementation
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: isomorphisms/ib
+          ref: e2a2a17a4378b7c3845ec43f42d1d3360b12f051
+          path: .deps/ib-arena
+          persist-credentials: false
+
+      - name: Check out canonical append-fat userspace Arena
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: isomorphisms/sd-card-append-fat
+          ref: 05a0cb7246c5a9f46abfbe92925812e7b607f454
+          path: .deps/appendfat
+          persist-credentials: false
+
+      - name: Resolve qualified host ICK compiler
+        uses: isomorphisms/ai-ci/ick-host@015cc7901ae0b3ad262b476f24e129b53c56db95
+        id: ick
+
+      - name: Reopen real canonical Arena bytes and compile with actual Idriç converter
+        env:
+          ICK: ${{ steps.ick.outputs.compiler }}
+          IB_AICI_PREPAINT_VERIFIER: ${{ github.workspace }}/.tools/ai-ci-prepaint/ib-prepaint/verify.sh
+          IB_HTML_PREPAINT_RECEIPT_ROOT: ${{ runner.temp }}/ib-html-prepaint-receipts
+        run: |
+          test "$(git -C .deps/ib-arena rev-parse HEAD)" = e2a2a17a4378b7c3845ec43f42d1d3360b12f051
+          test "$(git -C .deps/appendfat rev-parse HEAD)" = 05a0cb7246c5a9f46abfbe92925812e7b607f454
+          mkdir -p build/ib-html-arena
+          "$ICK" -fno-link-libatomic -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror \
+            .deps/appendfat/lib/appendfat_arena.c \
+            .deps/appendfat/tools/appendfat_arena.c \
+            -o build/ib-html-arena/appendfat_arena
+          cc -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror \
+            .deps/ib-arena/native/android/ib_arena_slice.c \
+            -o build/ib-html-arena/ib-arena-slice
+          cc -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror \
+            tests/prepaint_v1_oracle.c -o build/ib-html-arena/prepaint-oracle
+          export IB_APPEND_ARENA="$GITHUB_WORKSPACE/build/ib-html-arena/appendfat_arena"
+          export IB_ARENA_SLICE="$GITHUB_WORKSPACE/build/ib-html-arena/ib-arena-slice"
+          export IB_HTML_PREPAINT_EXEC="$GITHUB_WORKSPACE/src/build/exec/ib-html-prepaint"
+          export IB_PREPAINT_ORACLE="$GITHUB_WORKSPACE/build/ib-html-arena/prepaint-oracle"
+          sh -n tests/test_arena_v2_to_html_prepaint.sh
+          sh tests/test_arena_v2_to_html_prepaint.sh
+          sha256sum build/ib-html-arena/appendfat_arena build/ib-html-arena/ib-arena-slice \
+            build/ib-html-arena/prepaint-oracle \
+            > "$IB_HTML_PREPAINT_RECEIPT_ROOT/arena-host-executables.sha256"
+          (cd "$IB_HTML_PREPAINT_RECEIPT_ROOT" && sha256sum *.prepaint > wire.sha256)
+
+      - name: Retain qualified Arena-v2 mocked-origin integration evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: ib-html-prepaint-arena-v2-mock
+          path: ${{ runner.temp }}/ib-html-prepaint-receipts/
+          if-no-files-found: error
+
       - name: Exercise browser-owned Idriç core
         run: sh bin/ci_browser_foundation.grease exercise-core
 
