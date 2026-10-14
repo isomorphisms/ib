@@ -112,11 +112,9 @@ static binder_status_t transact(AIBinder *binder, transaction_code_t code,
     return status;
 }
 
-AIBinder *ib_arena_pfd_provider_new(ib_arena_pfd_provider *provider) {
-    if (!provider || !provider->open_verified_fd ||
-        provider->allowed_reader_uid < (uid_t)10000)
-        return NULL;
-    /* Called at single-threaded host initialization, not once per request. */
+const AIBinder_Class *ib_arena_pfd_provider_class(void) {
+    /* Initialized by the host before concurrent Binder dispatch. A reader
+     * proxy associates this same interface descriptor before transacting. */
     static AIBinder_Class *binder_class = NULL;
     if (!binder_class) {
         binder_class = AIBinder_Class_define(
@@ -124,6 +122,14 @@ AIBinder *ib_arena_pfd_provider_new(ib_arena_pfd_provider *provider) {
             created, destroyed, transact
         );
     }
+    return binder_class;
+}
+
+AIBinder *ib_arena_pfd_provider_new(ib_arena_pfd_provider *provider) {
+    if (!provider || !provider->open_verified_fd ||
+        provider->allowed_reader_uid < (uid_t)10000)
+        return NULL;
+    const AIBinder_Class *binder_class = ib_arena_pfd_provider_class();
     if (!binder_class) return NULL;
     return AIBinder_new(binder_class, provider);
 }
