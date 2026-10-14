@@ -1,0 +1,57 @@
+#!/usr/bin/env grease
+# Read only independently verified, committed ICU responses. No networking.
+set -eu
+umask 077
+fail() { printf 'ib Arena read: %s\n' "$1" >&2; exit 1; }
+usage() { printf 'usage: %s REQUEST_ID PRIVATE_ARENA_DIRECTORY\n' "$0" >&2; exit 2; }
+test "$#" -eq 2 || usage
+request_id=$1
+root=$2
+case "$request_id" in ''|.|..|*[!abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._-]*) usage ;; esac
+case "$root" in /*) ;; *) usage ;; esac
+test -d "$root" && test ! -L "$root" || fail 'Arena directory is absent or a symlink'
+root=$(CDPATH='' cd -P -- "$root" && pwd -P)
+case "$(stat -c '%a' "$root")" in 700|0700) ;; *) fail 'Arena root must be 0700' ;; esac
+manifest="$root/receipts/$request_id.tsv"
+arena="$root/responses.arena"
+reader=${IB_ARENA_SLICE:-}
+test -n "$reader" && test -x "$reader" || fail 'checked native reader is missing'
+test -f "$manifest" && test ! -L "$manifest" || fail 'receipt absent'
+for entry in "$arena" "$arena.used" "$arena.lock"; do
+  test -f "$entry" && test ! -L "$entry" || fail 'invalid canonical Arena file'
+done
+test "$(wc -c < "$manifest" | tr -d '[:space:]')" -le 8192 || fail 'oversized receipt'
+awk -F '\t' '
+  NF != 2 || $1 !~ /^[a-z_]+$/ || $2 == "" || /\r/ {bad=1}
+  { if (seen[$1]++) bad=1 }
+  END { if (bad || NR != 14) exit 1 }
+' "$manifest" || fail 'invalid receipt structure'
+field() { awk -F '\t' -v key="$1" '$1==key {print $2}' "$manifest"; }
+test "$(field schema)" = ib-icu-arena-v1 || fail 'unsupported receipt'
+test "$(field request_id)" = "$request_id" || fail 'receipt identity mismatch'
+test "$(field arena_name)" = responses.arena || fail 'wrong Arena'
+test "$(field reopen_check)" = MATCH || fail 'producer readback absent'
+test "$(field navigation_admitted)" = NO || fail 'invalid receipt state'
+test "$(field transport)" = icu-app-process-via-binder-shizuku || fail 'wrong producer'
+begin=$(field arena_offset)
+end=$(field arena_end)
+length=$(field byte_count)
+expected=$(field sha256)
+for number in "$begin" "$end" "$length"; do
+  case "$number" in ''|*[!0123456789]*) fail 'invalid source range' ;; esac
+  test "${#number}" -le 18 || fail 'source range exceeds implemented bound'
+done
+test "$length" -gt 0 && test "$length" -le 4194304 || fail 'invalid source length'
+test "$((begin + length))" -eq "$end" || fail 'receipt range mismatch'
+test "${#expected}" -eq 64 || fail 'bad digest length'
+case "$expected" in *[!0123456789abcdef]*) fail 'bad digest characters' ;; esac
+test -d "$root/staging" && test ! -L "$root/staging" || fail 'staging absent'
+work=$(mktemp -d "$root/staging/reader.$request_id.XXXXXXXX") || fail 'private read stage failed'
+cleanup() { rm -rf "$work"; }
+trap cleanup EXIT HUP INT TERM
+"$reader" slice "$arena" "$begin" "$length" > "$work/body" || fail 'committed range unreadable'
+test "$(wc -c < "$work/body" | tr -d '[:space:]')" -eq "$length" || fail 'short source range'
+observed=$(sha256sum "$work/body" | cut -d ' ' -f 1)
+test "$observed" = "$expected" || fail 'source digest mismatch'
+# Emit no data before all checks succeed.
+cat "$work/body"
