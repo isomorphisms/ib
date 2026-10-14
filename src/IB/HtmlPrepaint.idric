@@ -203,39 +203,38 @@ unsupported_events [] = []
 unsupported_events (event :: rest) =
   unsupported_event event ++ unsupported_events rest
 
+make_html_strand : HtmlEvidence → InformationView →
+  List InformationBlock → Maybe Strand
+make_html_strand evidence view blocks = do
+  source_id ← nonempty_text
+    (evidence.source_key ++ ";generation=" ++ evidence.source_generation ++
+     ";sha256=" ++ evidence.claimed_sha256)
+  requested ← requested_address evidence.requested_url
+  resolved ← resolved_address evidence.resolved_url
+  let source = Source source_id HtmlSource CompleteSource
+  let heading_title = if view_title view == "" then Nothing else Just (view_title view)
+  pure (MakeStrand source requested resolved heading_title blocks)
+
 public export
 convert_admitted_html : HtmlEvidence → String → Either String HtmlPrepaintResult
 convert_admitted_html admission html =
   case source_admission_reason admission of
-    Just error ⇒ Left error
+    Just refusal ⇒ Left refusal
     Nothing ⇒
       let log = recover_document_log admission.source_key html in
-      let view = information_from_log admission.requested_url
-        admission.resolved_url log in
+      let view = information_from_log admission.requested_url admission.resolved_url log in
       let (base, base_notes) = link_base admission.resolved_url log in
       let (blocks, images, notes) = map_items admission base (view_items view) in
       if length blocks > 4096
         then Left "prepaint-block-budget-exceeded"
-        else do
-          source_id ← case nonempty_text
-            (admission.source_key ++ ";generation=" ++ admission.source_generation ++
-             ";sha256=" ++ admission.claimed_sha256) of
-               Nothing ⇒ Left "empty-source"
-               Just value ⇒ Right value
-          requested ← case requested_address admission.requested_url of
-            Nothing ⇒ Left "empty-requested-address"
-            Just value ⇒ Right value
-          resolved ← case resolved_address admission.resolved_url of
-            Nothing ⇒ Left "empty-resolved-address"
-            Just value ⇒ Right value
-          let source = Source source_id HtmlSource CompleteSource
-          let title =
-            if view_title view == "" then Nothing else Just (view_title view)
-          let strand = MakeStrand source requested resolved title blocks
-          let revision = prepaint_from_strand first_revision CompleteRevision strand
-          case serialize_version1 [revision] of
-            Nothing ⇒ Left "version1-serialization-refused"
-            Just wire ⇒
-              Right (MadeHtmlPrepaint admission log view strand revision wire
-                images (base_notes ++ notes ++
-                unsupported_events (document_log_events log)))
+        else
+          case make_html_strand admission view blocks of
+            Nothing ⇒ Left "invalid-source-strand"
+            Just strand ⇒
+              let revision = prepaint_from_strand first_revision CompleteRevision strand in
+              case serialize_version1 [revision] of
+                Nothing ⇒ Left "version1-serialization-refused"
+                Just wire ⇒
+                  Right (MadeHtmlPrepaint admission log view strand revision wire
+                    images (base_notes ++ notes ++
+                    unsupported_events (document_log_events log)))
