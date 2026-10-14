@@ -203,12 +203,15 @@ unsupported_events [] = []
 unsupported_events (event :: rest) =
   unsupported_event event ++ unsupported_events rest
 
+source_reference_text : HtmlEvidence → String
+source_reference_text evidence =
+  evidence.source_key ++ ";generation=" ++ evidence.source_generation ++
+  ";sha256=" ++ evidence.claimed_sha256
+
 make_html_strand : HtmlEvidence → InformationView →
   List InformationBlock → Maybe Strand
 make_html_strand evidence view blocks = do
-  source_id ← nonempty_text
-    (evidence.source_key ++ ";generation=" ++ evidence.source_generation ++
-     ";sha256=" ++ evidence.claimed_sha256)
+  source_id ← nonempty_text (source_reference_text evidence)
   requested ← requested_address evidence.requested_url
   resolved ← resolved_address evidence.resolved_url
   let source = Source source_id HtmlSource CompleteSource
