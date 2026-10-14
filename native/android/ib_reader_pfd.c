@@ -152,6 +152,21 @@ static int valid_ticket(const ib_reader_source_ticket *ticket) {
     return 1;
 }
 
+void ib_reader_sha256_hex(const unsigned char *bytes, size_t count,
+                          char hex[65]) {
+    static const char alphabet[] = "0123456789abcdef";
+    sha256_state hash;
+    unsigned char digest[32];
+    sha256_init(&hash);
+    if (count != 0) sha256_update(&hash, bytes, count);
+    sha256_finish(&hash, digest);
+    for (size_t index = 0; index < 32; ++index) {
+        hex[index * 2U] = alphabet[digest[index] >> 4U];
+        hex[index * 2U + 1U] = alphabet[digest[index] & 15U];
+    }
+    hex[64] = '\0';
+}
+
 static int matching_digest(const unsigned char digest[32],
                            const char expected[65]) {
     static const char alphabet[] = "0123456789abcdef";
