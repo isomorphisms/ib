@@ -110,6 +110,24 @@ has_scheme_colon ('#' :: _) = False
 has_scheme_colon (':' :: _) = True
 has_scheme_colon (_ :: rest) = has_scheme_colon rest
 
+checked_url : String → Maybe String
+checked_url address =
+  if cheap_http_url address then Just address else Nothing
+
+directory_for : String → String → String → String
+directory_for origin base relative =
+  if starts "/" relative
+    then ""
+    else parent_path (unpack (url_path origin base))
+
+relative_address : String → String → String → String
+relative_address origin base reference =
+  let (relative_path, suffix) = split_path_suffix (unpack reference) in
+  origin ++ path_normalised (directory_for origin base reference ++ relative_path) ++ suffix
+
+scheme_for : String → String
+scheme_for base = if starts "https://" base then "https:" else "http:"
+
 -- Returns a navigation *candidate*. ICU and navigation admission still decide
 -- whether another retrieval occurs; the renderer must never fetch a link.
 public export
@@ -120,24 +138,14 @@ resolve_html_reference base reference =
     else if cheap_http_url reference
       then Just reference
       else if starts "//" reference
-        then
-          let candidate = (if starts "https://" base then "https:" else "http:") ++ reference in
-          if cheap_http_url candidate then Just candidate else Nothing
+        then checked_url (scheme_for base ++ reference)
         else if has_scheme_colon (unpack reference)
           then Nothing
           else do
             origin ← http_origin base
             let current = strip_fragment base
             if starts "#" reference
-              then Just (current ++ reference)
+              then checked_url (current ++ reference)
               else if starts "?" reference
-                then Just (strip_query current ++ reference)
-                else
-                  let (relative_path, suffix) = split_path_suffix (unpack reference) in
-                  let parent_directory =
-                    if starts "/" reference
-                      then ""
-                      else parent_path (unpack (url_path origin base)) in
-                  let candidate = origin ++
-                    path_normalised (parent_directory ++ relative_path) ++ suffix in
-                  if cheap_http_url candidate then Just candidate else Nothing
+                then checked_url (strip_query current ++ reference)
+                else checked_url (relative_address origin base reference)
