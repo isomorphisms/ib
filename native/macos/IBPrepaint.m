@@ -220,7 +220,6 @@ static BOOL IBParsePrepaint(NSData *bytes, NSString **text,
     self.window.contentView = scroll;
     [self.window center];
     [self.window makeKeyAndOrderFront:nil];
-    [NSApp activateIgnoringOtherApps:YES];
 }
 - (BOOL)applicationShouldTerminateAfterLastWindowClosed:(NSApplication *)sender
 {
@@ -240,7 +239,17 @@ int main(int argc, const char *argv[])
         }
         const char *path = argv[argc - 1];
         NSString *name = [NSString stringWithUTF8String:path];
-        NSData *bytes = name ? [NSData dataWithContentsOfFile:name] : nil;
+        NSDictionary *attributes = name ?
+            [[NSFileManager defaultManager] attributesOfItemAtPath:name error:NULL] : nil;
+        unsigned long long fileSize = [attributes[NSFileSize] unsignedLongLongValue];
+        if (attributes == nil ||
+            ![attributes[NSFileType] isEqualToString:NSFileTypeRegular] ||
+            fileSize == 0 || fileSize > IBMaxBytes) {
+            fprintf(stderr, "missing, nonregular or oversized input file\n");
+            return 3;
+        }
+        NSData *bytes = [NSData dataWithContentsOfFile:name
+                options:NSDataReadingMappedIfSafe error:NULL];
         NSString *projection = nil;
         NSString *state = nil;
         unsigned long long revision = 0;
