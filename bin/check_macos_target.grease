@@ -5,7 +5,7 @@ root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 test "$(uname -s)" = Darwin || { echo 'macOS host required' >&2; exit 2; }
 case "$(uname -m)" in arm64|x86_64) ;; *) echo 'unsupported host architecture' >&2; exit 2 ;; esac
 
-work=$(mktemp -d "$${TMPDIR:-/tmp}/ib-macos.XXXXXX")
+work=$(mktemp -d "${TMPDIR:-/tmp}/ib-macos.XXXXXX")
 trap 'rm -rf "$work"' EXIT HUP INT TERM
 compiler=$(xcrun --sdk macosx --find clang)
 "$compiler" --version
@@ -67,7 +67,7 @@ otool -L "$work/libib_macos.dylib"
 echo 'PASS: native ABI, prepaint contract, refused mutations, headless smoke'
 echo 'NOT_RUN: Idriç/Chez FFI, GUI interaction, real network, durable browser recovery'
 
-if [ -n "$${IB_MACOS_OUTPUT:-}" ]; then
+if [ -n "${IB_MACOS_OUTPUT:-}" ]; then
   mkdir -p "$IB_MACOS_OUTPUT/IB Prepaint.app/Contents/MacOS"
   mkdir -p "$IB_MACOS_OUTPUT/native"
   cp "$work/IBPrepaint" "$IB_MACOS_OUTPUT/IB Prepaint.app/Contents/MacOS/IBPrepaint"
