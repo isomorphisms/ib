@@ -1,0 +1,30 @@
+module IB.Linux.Platform
+
+import Data.Text
+
+-- Bounded C integers are confined to this ABI boundary.
+%foreign "C:ib_linux_abi_version,libib_linux,ib_platform.h"
+prim_abi_version : PrimIO Int
+
+%foreign "C:ib_linux_pointer_bits,libib_linux,ib_platform.h"
+prim_pointer_bits : PrimIO Int
+
+%foreign "C:ib_linux_utf8_bytes,libib_linux,ib_platform.h"
+prim_utf8_bytes : Text → PrimIO Int
+
+export
+native_abi_version : IO Number
+native_abi_version = cast <$> primIO prim_abi_version
+
+export
+native_pointer_bits : IO Number
+native_pointer_bits = cast <$> primIO prim_pointer_bits
+
+export
+utf8_text_bytes : Text → IO (Maybe Number)
+utf8_text_bytes text =
+  if elem '\0' (unpack text)
+    then pure Nothing
+    else do
+      bytes ← primIO (prim_utf8_bytes text)
+      pure (if bytes < 0 then Nothing else Just (cast bytes))

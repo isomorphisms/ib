@@ -120,8 +120,8 @@ evidence_passes evidence =
   evidence.generations_advanced &&
   evidence.false_continuity_refused &&
   (case evidence.ordinary_tab_policy of
-     renderer_lifetime_only ⇒ True
-     durable_browser_task ⇒ False) &&
+     renderer_lifetime_only ⇒ False
+     durable_browser_task ⇒ True) &&
   evidence.sensitive_url_refused &&
   evidence.record_contract_matches
 

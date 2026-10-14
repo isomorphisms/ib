@@ -147,6 +147,37 @@ utf8_byte_offset : SourceCoordinate → RevisionedSource → Maybe Number
 utf8_byte_offset coordinate source =
   byte_boundary coordinate (unpack (source_text source.authoritative))
 
+-- Android character APIs count UTF-16 units. A non-BMP Unicode scalar uses
+-- a surrogate pair (two units); a GTK character offset still counts one scalar.
+utf16_width : Char → Number
+utf16_width character = if ord character < 65536 then 1 else 2
+
+utf16_boundary : Number → List Char → Maybe Number
+utf16_boundary Z _ = Just 0
+utf16_boundary (S remaining) [] = Nothing
+utf16_boundary (S remaining) (character :: rest) =
+  map (utf16_width character +) (utf16_boundary remaining rest)
+
+export
+utf16_code_unit_offset : SourceCoordinate → RevisionedSource → Maybe Number
+utf16_code_unit_offset coordinate source =
+  utf16_boundary coordinate (unpack (source_text source.authoritative))
+
+-- Read the already checked fragment from its admitted source revision.
+-- Neither display text nor a renderer's offsets become authoritative here.
+export
+fragment_source_text : RevisionedSource → Text → FragmentGraph → Maybe Text
+fragment_source_text admitted identity graph =
+  if not (source_binding admitted ≟ source_binding graph.source) ||
+     not (source_text admitted.authoritative ≟ source_text graph.source.authoritative)
+    then Nothing
+    else case filter (\fragment ⇒ fragment_id fragment ≟ identity) graph.fragments of
+      [fragment] ⇒
+        Just (pack (drop (fragment_source_start fragment)
+                    (take (fragment_source_end fragment)
+                          (unpack (source_text admitted.authoritative)))))
+      _ ⇒ Nothing
+
 fields : List Text → Text
 fields [] = ""
 fields [value] = value

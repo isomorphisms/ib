@@ -39,9 +39,11 @@ state/tabs/<tab-id>/history.log
 ```
 
 Task and tab manifests are replaced by a synced same-directory atomic rename.
-Navigation history is append-only and synced.  Ordinary unprotected tabs remain
-renderer-lifetime state in this slice; the store refuses to create a durable
-task file for them.
+Navigation history is append-only and synced. The shared Idriç policy now marks
+ordinary unprotected tabs as durable browser tasks too: renderer lifetime cannot
+decide the lifetime of navigation/history. The legacy Android store still refuses
+ordinary tabs. That adapter mismatch remains an outstanding cross-platform
+acceptance obligation; the policy change does not claim disk restoration.
 
 ## Navigation and authentication
 
@@ -121,8 +123,9 @@ The Idriç smoke path exercises both required transitions:
 Android unit tests additionally cover record round trips, atomic discovery,
 Activity-versus-host distinction, lack of false authenticated or heap
 continuity, explicit incomplete remote state, query/code exclusion,
-provider-neutral authorization references, unsafe path refusal, and refusal to
-persist ordinary tabs.
+provider-neutral authorization references, unsafe path refusal, and the legacy
+store's refusal to persist ordinary tabs. That final refusal is an implementation
+gap against the shared durable-tab policy, not an accepted parity condition.
 
 These are semantic and host-side Android build tests.  They are not MIRO A1
 physical acceptance.
