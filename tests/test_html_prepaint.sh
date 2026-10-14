@@ -98,6 +98,15 @@ export IB_EXPECTED_SOURCE_GENERATION
 sed 's@^mime_type.*@mime_type\tapplication/octet-stream@' "$work/good.tsv" > "$manifest"
 test_failure_preserves unsupported_mime
 cp "$work/good.tsv" "$manifest"
+sed 's@^charset.*@charset\tiso-8859-1@' "$work/good.tsv" > "$manifest"
+test_failure_preserves unsupported_charset
+cp "$work/good.tsv" "$manifest"
+sed 's@^byte_count.*@byte_count\t4194305@' "$work/good.tsv" > "$manifest"
+test_failure_preserves oversized_body
+cp "$work/good.tsv" "$manifest"
+sed 's@^resolved_url.*@resolved_url\tUNOBSERVED@' "$work/good.tsv" > "$manifest"
+test_failure_preserves unobserved_final_url
+cp "$work/good.tsv" "$manifest"
 sed 's@^acquisition_complete.*@acquisition_complete\tNO@' "$work/good.tsv" > "$manifest"
 test_failure_preserves incomplete_source
 cp "$work/good.tsv" "$manifest"
