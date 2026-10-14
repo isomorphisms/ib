@@ -32,6 +32,7 @@ jobs:
           test "$(git -C .deps/appendfat rev-parse HEAD)" = 05a0cb7246c5a9f46abfbe92925812e7b607f454
           mkdir -p build/c67-icu-arena
           cc -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror \
+            .deps/appendfat/lib/appendfat_arena.c \
             .deps/appendfat/tools/appendfat_arena.c -o build/c67-icu-arena/appendfat_arena
           cc -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror \
             native/android/ib_arena_slice.c -o build/c67-icu-arena/ib-arena-slice
