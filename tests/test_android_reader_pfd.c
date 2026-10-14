@@ -140,6 +140,23 @@ int main(void) {
     intact(&source, abc, 3, "first", 7);
     assert(source.bytes[3] == '\0');
 
+    /* A readable file, even one with valid data/digest, is not an
+     * accepted PFD: the reader must never receive the Arena file. */
+    FILE *file = tmpfile();
+    assert(file != NULL);
+    assert(fwrite(abc, 1, 3, file) == 3U);
+    assert(fflush(file) == 0 && fseek(file, 0, SEEK_SET) == 0);
+    assert(ib_reader_source_accept_fd(&source, &first, fileno(file)) ==
+           IB_READER_PFD_BAD_TICKET);
+    assert(fclose(file) == 0);
+    int rejected_pipe[2];
+    assert(pipe(rejected_pipe) == 0);
+    assert(ib_reader_source_accept_fd(&source, &first, rejected_pipe[1]) ==
+           IB_READER_PFD_BAD_TICKET);
+    close(rejected_pipe[0]);
+    close(rejected_pipe[1]);
+    intact(&source, abc, 3, "first", 7);
+
     /* Corrupt stream and metadata never evict the last published source. */
     ib_reader_source_ticket invalid_digest = ticket("broken", 7, 5, hello_digest);
     invalid_digest.sha256_hex[0] = '0';
@@ -195,7 +212,7 @@ int main(void) {
 
     ib_reader_source_clear(&source);
     assert(source.bytes == NULL && source.byte_count == 0U);
-    puts("PASS: two-process descriptor transfer, SHA-256, bounded exact binary, stale/partial/extra/corrupt/oversized refusal, last-good preservation");
+    puts("PASS: two-process descriptor transfer, SHA-256, bounded exact binary, file/writable/stale/partial/extra/corrupt/oversized refusal, last-good preservation");
     puts("NOT_RUN: Android Binder service, Shizuku, native Idric screen wiring, actual C67");
     return 0;
 }
