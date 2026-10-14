@@ -26,5 +26,9 @@ typedef struct {
  * the global Android service manager. Provider configuration must outlive
  * the returned Binder object. Caller releases returned Binder reference. */
 AIBinder *ib_arena_pfd_provider_new(ib_arena_pfd_provider *provider);
+
+/* Local service and remote proxy must associate the same Binder interface
+ * class before sending typed transactions. */
+const AIBinder_Class *ib_arena_pfd_provider_class(void);
 #endif
 #endif
