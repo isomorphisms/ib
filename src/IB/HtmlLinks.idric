@@ -128,14 +128,16 @@ resolve_html_reference base reference =
           else do
             origin ← http_origin base
             let current = strip_fragment base
-            let candidate =
-              if starts "#" reference then current ++ reference
+            if starts "#" reference
+              then Just (current ++ reference)
               else if starts "?" reference
-                then strip_query current ++ reference
+                then Just (strip_query current ++ reference)
                 else
-                  let (relative_path, suffix) = split_path_suffix (unpack reference) [] in
+                  let (relative_path, suffix) = split_path_suffix (unpack reference) in
                   let parent_directory =
-                    if starts "/" reference then ""
-                    else parent_path (unpack (url_path origin base)) in
-                  origin ++ path_normalised (parent_directory ++ relative_path) ++ suffix
-            if cheap_http_url candidate then Just candidate else Nothing
+                    if starts "/" reference
+                      then ""
+                      else parent_path (unpack (url_path origin base)) in
+                  let candidate = origin ++
+                    path_normalised (parent_directory ++ relative_path) ++ suffix in
+                  if cheap_http_url candidate then Just candidate else Nothing
