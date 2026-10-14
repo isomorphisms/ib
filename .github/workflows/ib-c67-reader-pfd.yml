@@ -1,0 +1,58 @@
+name: IB checked reader Binder PFD admission
+
+on:
+  pull_request:
+    paths:
+      - 'native/android/ib_reader_pfd.c'
+      - 'native/android/ib_reader_pfd.h'
+      - 'tests/test_android_reader_pfd.c'
+      - '.github/workflows/ib-c67-reader-pfd.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  pfd-source-admission:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout pinned PR source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Host C11 two-process descriptor tests
+        run: |
+          set -eu
+          mkdir -p build/c67-pfd/host
+          cc -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror \
+            native/android/ib_reader_pfd.c tests/test_android_reader_pfd.c \
+            -o build/c67-pfd/host/test-reader-pfd
+          ./build/c67-pfd/host/test-reader-pfd | tee build/c67-pfd/host/receipt.txt
+          grep -F 'NOT_RUN: Android Binder service' build/c67-pfd/host/receipt.txt
+          sha256sum build/c67-pfd/host/test-reader-pfd \
+            > build/c67-pfd/host/sha256.txt
+      - name: Cross-build real Android libbinder_ndk PFD reader on both ABIs
+        run: |
+          set -eu
+          ndk_version=27.3.13750724
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "ndk;$ndk_version" >/dev/null
+          toolchain="$ANDROID_HOME/ndk/$ndk_version/toolchains/llvm/prebuilt/linux-x86_64/bin"
+          for entry in 'armeabi-v7a armv7a-linux-androideabi29 ARM' 'arm64-v8a aarch64-linux-android29 AArch64'; do
+            set -- $entry
+            abi=$1 target=$2 machine=$3
+            mkdir -p "build/c67-pfd/$abi"
+            "$toolchain/$target-clang" -std=c11 -O2 -Wall -Wextra \
+              -Wpedantic -Werror -fPIC -shared native/android/ib_reader_pfd.c \
+              -lbinder_ndk -o "build/c67-pfd/$abi/libib_reader_pfd.so"
+            "$toolchain/llvm-readelf" -h "build/c67-pfd/$abi/libib_reader_pfd.so" \
+              > "build/c67-pfd/$abi/elf.txt"
+            grep -F "Machine:" "build/c67-pfd/$abi/elf.txt" | grep -F "$machine"
+            sha256sum "build/c67-pfd/$abi/libib_reader_pfd.so" \
+              > "build/c67-pfd/$abi/sha256.txt"
+            printf 'abi\t%s\nandroid_link\tlibbinder_ndk\nphysical_device\tNOT_RUN\nidric_screen\tNOT_CONNECTED\n' \
+              "$abi" > "build/c67-pfd/$abi/receipt.tsv"
+          done
+      - name: Publish ABI artifacts, not an APK
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: ib-c67-reader-pfd-native
+          path: build/c67-pfd/
+          if-no-files-found: error
