@@ -46,6 +46,12 @@ requirement rather than selecting Java, Gradle, or handwritten candidate DEX.
 
 ## Result
 
+The result below records the 13 October source-only stage. The 14 October
+continuation adds source-generated constructors, a real Activity and registered
+instrumentation; see the [current screen receipt](../../../qualification/android-view/material-screen-receipt-2026-10-14.md).
+Standalone runtime attempts are preserved in `standalone-observer-history.md`;
+they are not the active acceptance path.
+
 Production module and importing fixture now check and emit independently
 decoded DEX. The original/recovery bytes match. Three actual production
 mutations emit different DEX. The external Android observer assembles; its

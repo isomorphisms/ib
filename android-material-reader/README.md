@@ -36,6 +36,20 @@ emits fresh DEX twice, independently decodes both, compares recovery bytes,
 and invokes android-NDK's checked Activity candidate packager. Android execution
 uses the separate text and screen observers; build success does not supply it.
 
+Active Android acceptance lives in android-NDK's existing Checked DEX framework
+effects workflow. It builds this pinned IB screen, runs registered Android
+Instrumentation against the actual ReaderText source and three production
+mutants, then requires the actual Activity's display, scrolling, two widths and
+chooser delivery to an independent source-address receiver. The receiver is
+first started without source data and must show failure, preventing a seeded
+success marker. Installed APKs are pulled and compared with the build inputs.
+Two disposable observer packages supply the chooser choices; the factory Chrome
+package is disabled only in that emulator because its restored browser preference
+otherwise dispatches directly. Actual chooser selection must deliver ACTION_VIEW
+and the exact pinned address to the independent receiver.
+The older `run-android.grease` and standalone `verify-art.grease` are failed
+software-emulator diagnostics retained for history.
+
 See the [qualification receipt](../qualification/android-view/material-screen-receipt-2026-10-14.md)
 for exact artifacts, failures and acceptance boundaries.
 

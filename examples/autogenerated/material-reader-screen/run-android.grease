@@ -1,4 +1,7 @@
 #!/usr/bin/env grease
+# Historical software-emulator diagnostic: its standalone text observer failed
+# Android application registration. Active acceptance is android-NDK's pinned
+# checked-effects workflow with registered instrumentation and the actual IB UI.
 # Emulator and ADB must share the same execution session on this build host.
 set -eu -o pipefail
 if (len(ARGV) !== 8) {

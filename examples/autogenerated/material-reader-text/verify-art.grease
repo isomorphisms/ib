@@ -1,4 +1,6 @@
 #!/usr/bin/env grease
+# Historical standalone attempt, not the active Android acceptance gate.
+# See standalone-observer-history.md and the 2026-10-14 screen receipt.
 set -eu -o pipefail
 if (len(ARGV) !== 4) {
   echo 'usage: grease verify-art.grease IB EVIDENCE SMALI_JAR ADB' >&2

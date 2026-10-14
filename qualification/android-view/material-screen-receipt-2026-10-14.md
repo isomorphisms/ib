@@ -1,83 +1,116 @@
 # Native Material 3 reader — 14 October 2026
 
-Checked Idriç now constructs a real Activity, LinearLayout, ScrollView, selectable
-TextViews, source Button and layout parameters. Application-owned XML supplies
-Material 3 dark colors and TitleLarge/BodyLarge/LabelLarge roles. Framework
-TextView needs explicit scaled line heights; the current source applies
-28/24/20sp rather than relying on text appearance alone. Source handoff prepares
-ACTION_VIEW inside Android's chooser from the trusted application-owned address.
+The source-snapshot reader passes its Android14/SDK34/x86_64 acceptance gate.
+Checked Idriç constructs the actual Activity, LinearLayout, ScrollView,
+selectable TextViews, source Button and layout parameters. App-owned resources
+supply Material 3 dark colors and TitleLarge/BodyLarge/LabelLarge roles, with
+explicit 28/24/20sp line heights. The body remains IB's own pinned README.
 
-The reusable platform extension is
-[isomorphisms/android-NDK PR #26, “Construct native framework objects and generate checked Activity lifecycle”](https://github.com/isomorphisms/android-NDK/pull/26),
-at `37714fa1a28b51ba485744e6a17769cc806550cb`, tree
-`5cd02e6016a1ee6cd0b3c9ae9d87ffb134cd5eee`. It owns construction, register
-placement and the bounded original-Bundle lifecycle bridge. Browser, source,
-retained-item and store owners remain unchanged. The body is a bounded snapshot
-of IB README at `9027d5ea0ce8718b0337b4cd3d16c0549dc2b2ed`, UTF8 SHA256
-`23a8e104147e94cb1bf27f5b63d4ddb6007dd1b73479e0dfe83796f3965e5867`.
-Its exact address is in `android-material-reader/content-source.tsv`; this is
-not live Pensieve acquisition, a parallel browser/store or a Markdown parser.
+## Accepted source and artifact
 
-## Passing source/package checks
+[Run 38530691032](https://github.com/isomorphisms/android-NDK/actions/runs/38530691032)
+passes at backend head `8040820ebd06e7441aab244ee7e62e727919c764`, tree
+`ff25925ceb70e72a72368461160aac6ba5c14f06`. The separate NativeActivity packager
+and native audio workflows also pass at that exact head. The platform owner is
+[isomorphisms/android-NDK PR #26, “Construct native framework objects and generate checked Activity lifecycle”](https://github.com/isomorphisms/android-NDK/pull/26).
 
-Fresh actual production source emits the Activity twice. Independent baksmali
-decoding verifies its superclass/constructor, onCreate superclass call and
-checked handler, native setters and Intent construction. Recovery DEX is
-identical. All twelve backend modules source-check; 23 constructor/lifecycle
-controls, inherited callback/foreign/encoder/layout suites, two production
-mutations and wrong-name/nonvoid source refusals pass. Three ReaderText
-production mutants emit distinct DEX; runtime rejection remains a separate gate.
+The workflow consumes immutable IB application source
+`e53df40034f7e0413f07b5f34b0510f17ae52fd2` and Idriç
+`ff4d852862a3942592f8ade9afde8d409d9803be`. Later IB commits add receipts and
+historical-observer annotations; application source, resources, manifest,
+build procedure and active screen verifier remain identical to that input.
+The retained artifact's source-head files match these identities.
 
 | Artifact/input | Exact identity |
 | --- | --- |
-| Current screen DEX | 5,160 bytes; `b2ce30b0af52bc52beffd167fcbac331d447eeb7ac4a13db0e068662be2d0c17` |
-| Final current-producer test APK | 20,990 bytes; `9d589b84564fe25bc9999ed000d96d94c00aff8df79e7adc174a263e199f63d7` |
+| Retained artifact | `11877668095`; `dex-framework-effects-8040820ebd06e7441aab244ee7e62e727919c764` |
+| Downloaded ZIP SHA256 | `dfc5bcee9140a236a447204e9a4ff3fed55d5268c94aa654119f7f7745c0479c` |
+| Qualified, installed and delivered APK | 20,990 bytes; `6794bf03fc06d023e354db954d8d58f853f3f8058d4e9fea36332d6275fcf448` |
+| Positive/recovery screen DEX | 5,160 bytes; `b2ce30b0af52bc52beffd167fcbac331d447eeb7ac4a13db0e068662be2d0c17` |
 | Package/version | `org.isomorphisms.ib.material3`, versionCode1/versionName0.1.0 |
-| SDK bounds/tools | min28, target34, platform34, Build Tools35.0.0 |
+| SDK bounds/tools | min28, target34; platform34, Build Tools35.0.0 |
 | Existing public test certificate | `de9b1d47c5a65e6d46a204b79dd9ee566b9d3c9832ba81ebc4213d3392e92ff9` |
 | Public key fixture | `isomorphismes/wegert`, commit `89dcfb840cec1a66ee04c7f7404954cbd6c09839`, blob `7dc3fd0f38608bfcfe8e6942c8b2d183557b6396` |
-| Observed Idriç compiler | `2734ac5a86610eddfab73b1644d72b4ac85a65ee` |
-| Compiled driver object | `b06499beb4b378b3103fbf146a3b3d83cc805cf6ff75489c8b1f622488949104` |
-| baksmali 3.0.10 | `37ae4a41a8886e15c20b8362fa4250f96bbdb55e1a608199ad8b5dff068b588f` |
-| smali 3.0.10 | `32fa0e88a6c397b3922201adf5f3e534fbaed5a663c71d0c558c3ddce0af844a` |
+| Reader text/source document | IB `9027d5ea0ce8718b0337b4cd3d16c0549dc2b2ed`; README UTF8 SHA256 `23a8e104147e94cb1bf27f5b63d4ddb6007dd1b73479e0dfe83796f3965e5867` |
 
-The candidate packager verifies linkage, DEX checksum/extracted bytes, alignment,
-certificate, package and launcher. Wrong certificate, missing signer and wrong
-package exit1 at their intended gates and expose no final APK. No signer was
-generated. Existing Chez host-bootstrap/shared build-policy debt remains explicit.
+The downloaded archive hash was checked against the retained artifact digest.
+The delivered APK is byte-identical to the APK pulled from the installed
+Android package; its existing public test certificate was verified again.
+The positive and recovery DEX hashes match. This delivers the actual hosted
+Android candidate, rather than substituting a separately packaged APK.
 
-## Android history, not an overall PASS
+## Passing Android behavior
 
-The disposable Ubuntu24.04/x86_64 host runs Android14/SDK34/default/x86_64 with
-software emulation/SwiftShader and no KVM. Emulator and ADB share one Grease
-session. An earlier APK (`eb0496c32e84222a32d71e213b848a5301b6459d3009b09f895e3381761fb6cd`)
-installed, launched, displayed the source text and scrolled after an actual swipe.
-Its DEX (`96ba9d572835d8f8a6fc46602a19f80c8b51b669fc5efba55b981f76c67cfdc3`)
-predates the explicit line-height correction. Current-body APK attempts installed
-and reported Activity launch, but UI observations were interrupted by system/
-system-UI ANR dialogs and one package-manager restart. The full current-width
-and source-chooser gate is **NOT_PASS**. This is not a performance/device claim.
+Registered Android Instrumentation checks the actual production ReaderText at
+the pinned IB input in a normal target Application/UID/provider/font context.
+The target APK contains only source-generated candidate DEX. Separate smali
+supplies independent observation, never candidate behavior.
 
-Standalone observers exited137 because DeviceConfig used the system Application
-identity under shell UID2000. A later attempt also exposed uninitialized lazy
-fonts outside normal application binding. Creating a shell view Context alone
-was insufficient because that API preserves its container's app-ops attribution.
-Further standalone setup still had no registered Application process for the
-Settings provider. The active independent observer now runs through Android
-Instrumentation in a real target process. Android supplies normal Application,
-UID, provider registration and fonts. Candidate DEX remains source-generated in
-a separate target APK; smali supplies only the observer. All failed standalone
-runs remain failures. Native text, selection, width reflow and all three production
-mutant rejections must pass independently. The screen APK uses its own normal
-Activity/Application context.
+| Executed source case | Instrumentation code | Required observed result |
+| --- | ---: | --- |
+| Original | 0 | Exact Unicode/whitespace text, selectable text, empty replacement and narrow/wide line reflow |
+| Text production mutant | 73 | `FAIL exact native reader text` |
+| Reflow production mutant | 73 | `FAIL native reader width reflow` |
+| Selection production mutant | 73 | `FAIL native reader selection` |
+| Clean recovery | 0 | Full original marker |
 
-The platform PR extends the existing CI gate with constructor original/recovery
-observations and received-byte comparisons. Hosted acceptance must bind to its
-exact head and actual retained artifact. Current CI is running; its earlier
-green dependencies do not supply current-head success.
+All five installed fixture APKs were pulled and byte-compared with their signed
+inputs. The retained runtime files confirm each code and distinct marker.
 
-Live retained-source/store wiring, central package registration, independent
-AICI promotion, versioned upgrade/data compatibility and physical MIRO A1/TAB_P10
-acceptance remain NOT_RUN. The result is a test-signed source-snapshot candidate,
-draft and unmerged. No release, production signing, physical install or
-device-side compilation occurred.
+The actual IB APK freshly installs and launches, displays its pinned text,
+scrolls after an actual swipe and reflows at 320×640 and 720×640 with density160.
+The retained screenshots were visually inspected: actual native views show the
+dark surface, pale foreground, primary rounded source button and explicit
+Material type roles/line heights.
+
+The source-button coordinates come from its observed native hierarchy.
+An actual touch opens Android's ChooserActivity. A real chooser choice starts
+the independent `org.isomorphisms.idric.construct.oracle` receiver, which
+requires ACTION_VIEW and the exact trusted README address. Its received
+hierarchy belongs to that receiver package and displays
+`PASS exact native source address`.
+
+Two disposable observer packages make the chooser observable in this SDK
+fixture. Each first shows failure on a MAIN/no-data launch; the factory Chrome
+package is disabled only in the disposable emulator. Its automatically restored
+browser preference otherwise routes web intents directly. Default-only handler
+resolution contains both observed receiver components before the IB touch.
+Neither source data, provider permissions nor native results are replaced.
+
+## Source/package gates and earlier failures
+
+Fresh production source emits the Activity twice; independent baksmali verifies
+its parent constructor, original-Bundle superclass onCreate, checked handler,
+native setters and Intent construction. All twelve backend modules source-check.
+Twenty-three constructor/lifecycle controls, inherited callback/foreign/encoder/
+layout suites, wrong-name/nonvoid source refusals and two actual backend
+production mutations pass. High allocation staging and parent Bundle transport
+are checked at their production boundaries.
+
+The candidate packager verifies resources, DEX checksum/extracted bytes,
+alignment, certificate, package and launcher. Wrong certificate, missing signer
+and wrong package reject without exposing a final APK. No signer is generated.
+
+The earlier local APK `9d589b84564fe25bc9999ed000d96d94c00aff8df79e7adc174a263e199f63d7`
+has the same screen DEX, but is a separate ZIP/signature artifact. Its source/
+package receipt and Flexible Pipes package-slice closure remain scoped to those
+original bytes. The qualified APK above supersedes it for delivery.
+
+Software-emulator system ANRs and standalone app_process observer failures
+remain failures. Standalone Context/Application reflection did not establish
+the registered application identity required by selection's Settings provider.
+Hosted chooser setup attempts also refused on observed browser-resolution,
+help-status and restored-role conditions before the final fixture passed.
+Exact failed heads, runs and artifact hashes remain in the platform
+[construction receipt](https://github.com/isomorphisms/android-NDK/blob/8040820ebd06e7441aab244ee7e62e727919c764/examples/autogenerated/framework-construction/receipt-2026-10-14.md)
+and `examples/autogenerated/material-reader-text/standalone-observer-history.md`.
+Historical standalone scripts are not the active acceptance path.
+
+## Remaining scope
+
+This is a test-signed source-snapshot view. Browser, source, retained-item and
+store ownership remains unchanged. Live Pensieve/source/store wiring, central
+package registration, independent AICI/build-policy promotion, versioned
+upgrade/data compatibility and physical MIRO A1/TAB_P10 acceptance remain
+NOT_RUN. Inherited Chez host-bootstrap/shared build-policy debt is explicit.
+Both PRs remain draft and unmerged; no release or physical install occurred.

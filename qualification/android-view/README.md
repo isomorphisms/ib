@@ -2,8 +2,10 @@
 
 The 14 October continuation now supplies source-generated native construction,
 Activity lifecycle, Material 3 resources and a test-signed snapshot reader APK.
-Source/package gates pass; full Android text/mutant and two-width/source-action
-acceptance remains pending after retained observer and software-emulator failures.
+Source/package and Android snapshot gates pass at the exact retained backend
+head: native text/selection/reflow, three production-mutant rejections, actual
+display/scrolling at two widths, chooser dispatch and exact source-address receipt.
+Live Pensieve/store wiring and physical-device acceptance remain separate.
 See [the current screen receipt](material-screen-receipt-2026-10-14.md) and
 `android-material-reader/README.md`. The historical status below is preserved.
 
