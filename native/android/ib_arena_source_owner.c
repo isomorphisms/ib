@@ -187,7 +187,7 @@ static int read_committed_bytes(int root_fd, uint64_t offset, uint32_t length,
     char pointer[64];
     lock = openat(root_fd, "responses.arena.lock",
                   O_RDONLY | O_NOFOLLOW | O_CLOEXEC);
-    if (lock < 0 || flock(lock, LOCK_SH) != 0) goto done;
+    if (lock < 0 || flock(lock, LOCK_SH | LOCK_NB) != 0) goto done;
     used = openat(root_fd, "responses.arena.used",
                   O_RDONLY | O_NOFOLLOW | O_CLOEXEC);
     arena = openat(root_fd, "responses.arena",
