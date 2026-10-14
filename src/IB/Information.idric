@@ -321,21 +321,30 @@ read_attribute_value chars =
         value ⇒ Just (pack (read_unquoted value))
     _ ⇒ Nothing
 
-seek_attribute_fuel : Number → List Char → List Char → Maybe Text
-seek_attribute_fuel Z wanted chars = Nothing
-seek_attribute_fuel (S fuel) wanted [] = Nothing
-seek_attribute_fuel (S fuel) wanted chars@(_ :: rest) =
-  if starts_with_chars wanted chars
+starts_with_attribute : List Char → List Char → Bool
+starts_with_attribute [] chars = True
+starts_with_attribute (_ :: _) [] = False
+starts_with_attribute (wanted :: wanted_rest) (actual :: rest) =
+  wanted == ascii_lower_char actual &&
+  starts_with_attribute wanted_rest rest
+
+-- Require the beginning of a complete HTML attribute name, not a suffix of
+-- data-href or characters inside a quoted attribute. Preserve value case.
+seek_attribute_fuel : Number → Bool → List Char → List Char → Maybe Text
+seek_attribute_fuel Z boundary wanted chars = Nothing
+seek_attribute_fuel (S fuel) boundary wanted [] = Nothing
+seek_attribute_fuel (S fuel) boundary wanted chars@(value :: rest) =
+  if boundary && starts_with_attribute wanted chars
     then case read_attribute_value (drop_chars (length wanted) chars) of
       Just found ⇒ Just found
-      Nothing ⇒ seek_attribute_fuel fuel wanted rest
-    else seek_attribute_fuel fuel wanted rest
+      Nothing ⇒ seek_attribute_fuel fuel (is_space_char value) wanted rest
+    else seek_attribute_fuel fuel (is_space_char value) wanted rest
 
 public export
 attribute_value : Text → Text → Maybe Text
 attribute_value name tag =
   let chars = tag_remainder tag in
-  seek_attribute_fuel (length chars) (unpack name) chars
+  seek_attribute_fuel (length chars) True (unpack name) chars
 
 attribute_or_empty : Text → Text → Text
 attribute_or_empty name tag =
