@@ -2,6 +2,7 @@
 #define IB_ANDROID_ARENA_PFD_PROVIDER_H
 
 #include <stdint.h>
+#include "ib_reader_pfd.h"
 #include <sys/types.h>
 
 #if defined(__ANDROID__) && __ANDROID_API__ >= 29
@@ -13,6 +14,7 @@
 typedef int (*ib_open_committed_source)(void *source_owner,
                                         const char *request_id,
                                         uint64_t navigation_generation,
+                                        ib_reader_source_ticket *verified_ticket,
                                         int *owned_read_fd);
 
 typedef struct {
