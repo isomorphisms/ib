@@ -129,6 +129,8 @@ jobs:
           test "$(git -C .tools/ai-ci-prepaint rev-parse HEAD)" = 0fb20839a2da68be0aafc10511e13c634bfa02b9
           sh -n bin/ib_emit_html_prepaint.grease
           sh -n bin/ib_arena_to_html_prepaint.grease
+          sh -n tests/test_arena_html_refusals.sh
+          sh tests/test_arena_html_refusals.sh
           sh -n tests/test_html_prepaint.sh
           sh .tools/ai-ci-prepaint/ib-prepaint/self-test.sh
           sh tests/test_html_prepaint.sh
