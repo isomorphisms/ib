@@ -1,0 +1,16 @@
+module MaterialReaderText
+
+import Data.Text
+import IB.Android.ReaderText
+
+-- Qualification exports call the real application-owned platform adapter.
+%export "dex:reader_text"
+reader_text : ReaderTextView → Text → IO ()
+reader_text = present_reader_text
+
+%export "dex:read_reader_text"
+read_reader_text : ReaderTextView → IO Text
+read_reader_text = observed_reader_text
+
+main : IO ()
+main = pure ()

@@ -1,9 +1,16 @@
 # Android Material view qualification
 
-**BLOCKED_NATIVE_VIEW**, refreshed 2026-10-12. SUN IB-D01 / [issue #55](https://github.com/isomorphisms/ib/issues/55)
+**BLOCKED_NATIVE_VIEW**, refreshed 2026-10-13. SUN IB-D01 / [issue #55](https://github.com/isomorphisms/ib/issues/55)
 has executable, pinned dependency inspection and a preserved Idriç control.
 It has no accepted native text/action round trip. D02–D04 and D06–D08 must not
 infer a qualified UI compiler or runtime from this receipt.
+
+The continuation now implements the actual decoded-text adapter in
+`src/IB/Android/ReaderText.idric`. Importing checked source emits independently
+decoded DEX that configures selectable, wrapping TextView text. Three real
+production mutants emit distinct DEX, and recovery matches original bytes.
+Android behavior, Material styling, screen construction and source/store
+wiring remain unestablished. See [the reader text receipt](reader-text-receipt-2026-10-13.md).
 
 The October 8 available-executable blocker was that installed Idriç
 `ff4d852862a3942592f8ade9afde8d409d9803be` had no `dex` generator. The
@@ -23,7 +30,7 @@ In the later continuation, the existing C01 backend passed the unchanged
 LongViewAndroid diagnostic on ART at `d0080ff0ad938680d319519bf484f98f540d3e89`.
 The earlier fastUnpack failure is historical for that diagnostic with the newer
 backend. It must not remain the claimed current reason Material views cannot
-run. Material construction/callback qualification is still missing. D07 now
+run. Material screen construction and application action wiring remain missing. D07 now
 has an independent published source projection against S08. The checker is
 now restored: its production module and cases typecheck, all 26 assertions
 evaluate True, both actual production mutants violate their assertions, and
@@ -139,7 +146,7 @@ The Compose POMs carry their own larger dependency sets. Full variant-aware
 resolution, merged resources/manifests, desugaring and packaging have not run;
 these POMs advertise richer Gradle module metadata, which remains unresolved.
 
-## Source-to-platform capability
+## Historical source-to-platform inspection — October 8
 
 The actual [android-NDK checked backend](https://github.com/isomorphisms/android-NDK/tree/7c61ee43e75f7c2dab9288edb0e10055898b36e6/dex/idric/src/Backend/DEX)
 must be read beyond its older Int32-only README. `IR.idr`, `Codegen.idr` and

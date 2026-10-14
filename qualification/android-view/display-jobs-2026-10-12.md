@@ -7,6 +7,13 @@ Their IDs refer to the reconciled assignments, not the original search probes.
 The source boundary remains Idriç semantics, Grease orchestration and narrow
 platform adapters; the selected presentation is Material 3.
 
+October 13 continuation: the real application-owned decoded-text adapter now
+checks and emits independently decoded DEX for TextView text, selection and
+wrapping. Recovery is byte-identical and three production mutants emit
+different DEX. Its Android observer has assembled but has not executed.
+[Reader text receipt](reader-text-receipt-2026-10-13.md). This advances D01's
+text source/emission boundary; all end-to-end product gates below remain open.
+
 ## Native gate and continuation
 
 The October 8 statement that the checked backend supports only Int32/Text
