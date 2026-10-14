@@ -61,13 +61,15 @@ url_path origin url =
     '/' :: _ ⇒ strip_query (strip_fragment rest)
     _ ⇒ "/"
 
-parent_path : List Char → List Char → List Char
-parent_path [] parent = reverse parent
-parent_path ('/' :: rest) previous = parent_path rest ('/' :: previous)
-parent_path (value :: rest) previous =
-  case rest of
-    [] ⇒ reverse previous
-    _ ⇒ parent_path rest (value :: previous)
+-- Directory of the final URL path, ending at its last slash.
+-- Removing the last *character* rather than the last segment breaks ../ links.
+at_last_slash : List Char → List Char
+at_last_slash [] = []
+at_last_slash ('/' :: rest) = '/' :: rest
+at_last_slash (_ :: rest) = at_last_slash rest
+
+parent_path : List Char → String
+parent_path path_chars = pack (reverse (at_last_slash (reverse path_chars)))
 
 -- Segment operations keep the origin outside the path stack.
 segments : List Char → List Char → List String → List String
@@ -134,6 +136,6 @@ resolve_html_reference base reference =
                   let (relative_path, suffix) = split_path_suffix (unpack reference) [] in
                   let parent_directory =
                     if starts "/" reference then ""
-                    else pack (parent_path (unpack (url_path origin base)) []) in
+                    else parent_path (unpack (url_path origin base)) in
                   origin ++ path_normalised (parent_directory ++ relative_path) ++ suffix
             if cheap_http_url candidate then Just candidate else Nothing
