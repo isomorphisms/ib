@@ -6,6 +6,7 @@
 #include <android/binder_parcel.h>
 #include <android/binder_status.h>
 #include <stdbool.h>
+#include <pthread.h>
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <stddef.h>
@@ -112,16 +113,18 @@ static binder_status_t transact(AIBinder *binder, transaction_code_t code,
     return status;
 }
 
+static pthread_once_t binder_class_once = PTHREAD_ONCE_INIT;
+static AIBinder_Class *binder_class = NULL;
+
+static void initialize_binder_class(void) {
+    binder_class = AIBinder_Class_define(
+        "org.isomorphisms.ib.ArenaCommittedSource.v1",
+        created, destroyed, transact
+    );
+}
+
 const AIBinder_Class *ib_arena_pfd_provider_class(void) {
-    /* Initialized by the host before concurrent Binder dispatch. A reader
-     * proxy associates this same interface descriptor before transacting. */
-    static AIBinder_Class *binder_class = NULL;
-    if (!binder_class) {
-        binder_class = AIBinder_Class_define(
-            "org.isomorphisms.ib.ArenaCommittedSource.v1",
-            created, destroyed, transact
-        );
-    }
+    (void)pthread_once(&binder_class_once, initialize_binder_class);
     return binder_class;
 }
 
