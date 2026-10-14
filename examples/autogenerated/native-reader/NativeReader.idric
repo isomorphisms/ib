@@ -1,0 +1,92 @@
+module NativeReader
+
+import Data.Text
+
+-- These domains belong to the Android adapter; none represents a browser task.
+data ActivityReference : Type where [external]
+data IntentReference : Type where [external]
+data ViewReference : Type where [external]
+data TextViewReference : Type where [external]
+data CharacterSequenceReference : Type where [external]
+
+%foreign "dex:virtual:Landroid/app/Activity;:setContentView:(I)V"
+apply_reader_layout : ActivityReference → Int32 → PrimIO ()
+%foreign "dex:virtual:Landroid/app/Activity;:findViewById:(I)Landroid/view/View;"
+find_reader_view : ActivityReference → Int32 → PrimIO ViewReference
+%foreign "dex:virtual:Landroid/app/Activity;:getIntent:()Landroid/content/Intent;"
+incoming_intent : ActivityReference → PrimIO IntentReference
+%foreign "dex:virtual:Landroid/content/Intent;:getStringExtra:(Ljava/lang/String;)Ljava/lang/String;"
+incoming_text : IntentReference → Text → PrimIO Text
+%foreign "dex:static:Landroid/text/TextUtils;:isEmpty:(Ljava/lang/CharSequence;)Z"
+raw_text_is_empty : Text → PrimIO Int32
+%foreign "dex:cast:Landroid/view/View;:Landroid/widget/TextView;"
+as_text_view : ViewReference → PrimIO TextViewReference
+%foreign "dex:virtual:Landroid/widget/TextView;:setText:(Ljava/lang/CharSequence;)V"
+write_reader_text : TextViewReference → Text → PrimIO ()
+%foreign "dex:virtual:Landroid/widget/TextView;:getText:()Ljava/lang/CharSequence;"
+read_reader_characters : TextViewReference → PrimIO CharacterSequenceReference
+%foreign "dex:interface:Ljava/lang/CharSequence;:toString:()Ljava/lang/String;"
+characters_as_text : CharacterSequenceReference → PrimIO Text
+%foreign "dex:virtual:Landroid/view/View;:getId:()I"
+clicked_view_identity : ViewReference → PrimIO Int32
+%foreign "dex:virtual:Landroid/view/View;:getVisibility:()I"
+reader_view_visibility : ViewReference → PrimIO Int32
+%foreign "dex:virtual:Landroid/view/View;:setVisibility:(I)V"
+set_reader_view_visibility : ViewReference → Int32 → PrimIO ()
+
+-- Stable resource IDs are checked against android-native/res/values/public.xml.
+reader_layout : Int32
+reader_layout = 2130837504
+reader_body : Int32
+reader_body = 2130903040
+reader_input : Int32
+reader_input = 2130903041
+sources_panel : Int32
+sources_panel = 2130903042
+sources_button : Int32
+sources_button = 2130903043
+read_button : Int32
+read_button = 2130903044
+
+%export "dex:present_source_text"
+present_source_text : ActivityReference → Text → IO ()
+present_source_text activity text = do
+  view ← primIO (find_reader_view activity reader_body)
+  text_view ← primIO (as_text_view view)
+  primIO (write_reader_text text_view text)
+
+%export "dex:create_reader"
+create_reader : ActivityReference → IO ()
+create_reader activity = do
+  primIO (apply_reader_layout activity reader_layout)
+  intent ← primIO (incoming_intent activity)
+  raw_text ← primIO (incoming_text intent "android.intent.extra.TEXT")
+  empty ← primIO (raw_text_is_empty raw_text)
+  if empty ≟ 0
+    then present_source_text activity raw_text
+    else present_source_text activity "Share text to IB or paste it in Sources to read it here."
+
+%export "dex:receive_reader_action"
+receive_reader_action : ActivityReference → ViewReference → IO ()
+receive_reader_action activity clicked = do
+  identity ← primIO (clicked_view_identity clicked)
+  if identity ≟ sources_button
+    then do
+      panel ← primIO (find_reader_view activity sources_panel)
+      visibility ← primIO (reader_view_visibility panel)
+      primIO (set_reader_view_visibility panel (if visibility ≟ 0 then 8 else 0))
+    else if identity ≟ read_button
+      then do
+        input_view ← primIO (find_reader_view activity reader_input)
+        input_text_view ← primIO (as_text_view input_view)
+        characters ← primIO (read_reader_characters input_text_view)
+        text ← primIO (characters_as_text characters)
+        present_source_text activity text
+        panel ← primIO (find_reader_view activity sources_panel)
+        primIO (set_reader_view_visibility panel 8)
+      else pure ()
+
+%cg dex activity create_reader receive_reader_action
+
+main : IO ()
+main = pure ()

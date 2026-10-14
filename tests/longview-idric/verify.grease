@@ -25,8 +25,8 @@ var library_path = "$prefix/idris2-0.8.0/base-0.8.0:$prefix/idris2-0.8.0/prelude
 
 test "$(git -C "$repository" rev-parse HEAD)" = "$expected_head"
 test "$(git -C "$compiler_repository" rev-parse HEAD)" = 'ff4d852862a3942592f8ade9afde8d409d9803be'
-test "$(git -C "$repository/vendor/android-NDK" rev-parse HEAD)" = 'd0080ff0ad938680d319519bf484f98f540d3e89'
-test "$(git -C "$repository" rev-parse HEAD:vendor/android-NDK)" = 'd0080ff0ad938680d319519bf484f98f540d3e89'
+source "$repository/tests/longview-idric/backend-pin.grease"
+var expected_backend = $(verified_backend_pin "$repository" "$expected_head")
 git -C "$repository" diff --exit-code HEAD -- src tests/longview-idric .github/workflows/longview-idric.yml > "$evidence/source-clean.txt"
 for program in "$compiler" "$scheme" "$driver" "$dexdump" { test -x "$program" }
 git -C "$repository" rev-parse HEAD 'HEAD^{tree}' > "$evidence/revision.txt"
@@ -34,6 +34,7 @@ sha256sum "$repository/src/IB/LongViewTask.idric" "$repository/src/IB/LongViewLi
   "$repository/src/LongViewAndroid.idric" "$repository/src/LongViewLifecycleCheck.idric" \
   "$repository/src/LongViewTextProbe.idric" \
   "$repository/tests/longview-idric/verify.grease" "$compiler" \
+  "$repository/tests/longview-idric/backend-pin.grease" \
   "$compiler_repository/_/build/exec/idris2_app/idris2.so" "$driver" \
   "$upstream_evidence/backend/exec/idric-dex_app/idric-dex.so" > "$evidence/input-sha256.txt"
 

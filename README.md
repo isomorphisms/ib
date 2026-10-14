@@ -10,10 +10,10 @@ The browser core owns resource, tab, event, and task identity; sleeping and waki
 
 Low-memory behavior has a harder exception: an active authenticated transaction may be protected from ordinary sleeping or eviction. Opening another tab or app to retrieve information must not silently destroy the login/session or in-progress form state. See `docs/architecture.md` and #59.
 
-The first integrated protected long-view path now gives that work a durable
-task/tab/navigation identity across renderer and host-process loss.  It restores
-only a neutral URL through the existing WebView profile and reports session,
-heap, form, and reconstruction outcomes separately.  See
+The Idriç protected long-view model defines durable task/tab/navigation identity
+and distinguishes renderer loss from host restart. The native reader has not
+integrated its store and worker path. The former Java WebView harness is
+retired on this line; its historical recovery limits remain recorded in
 `docs/long-view-protected-tasks.md`.
 
 ## Design notes
@@ -38,10 +38,12 @@ Python and Ithon are not IB implementation layers. A disposable comparison may e
 
 Android or other native code is a narrow platform boundary for facilities Idriç and Grease cannot yet reach directly: NativeActivity, EGL, renderers, kernel-enforced filesystem operations, clipboard and share handoff, and similar FFI edges. Those adapters do not own browser state.
 
-`android-prepaint/` is a deliberately small phone-visible harness for the Idriç
-information prepaint. It uses native Android views rather than `WebView`, applies
-a fixed dark presentation to extracted text, preserves fetched image colors, and
-replaces partial projections with later complete revisions.
+`android-native/` is the current Java-free native text/action reader. It is
+written in Idriç and emits DEX directly. The old Java/Gradle prepaint and WebView
+build paths are retired on this migration line. The reader currently consumes
+supplied text; retained-source projection, image blocks, acquisition, Binder
+workers and durable navigation integration remain incomplete. See
+`android-native/README.md` for the actual compiler rejection and evidence limits.
 
 The current Idriç core covers ordered history values, rebuildable indexes,
 storage classification and read policy, the renderer-independent inspector

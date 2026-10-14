@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent" android:layout_height="match_parent"
+    android:orientation="vertical" android:background="?attr/readerSurfaceColor">
+    <LinearLayout android:layout_width="match_parent" android:layout_height="64dp"
+        android:orientation="horizontal" android:gravity="center_vertical" android:paddingHorizontal="12dp">
+        <Button android:id="@id/sources_button" android:layout_width="56dp"
+            android:layout_height="48dp" android:text="☰" android:contentDescription="Sources"
+            android:textColor="#ECECEC" android:backgroundTint="#292929" android:onClick="onClick" />
+        <TextView android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content"
+            android:text="IB" android:textSize="21sp" android:textColor="#ECECEC" android:paddingStart="16dp" />
+        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+            android:text="Reading" android:textSize="14sp" android:textColor="#ACACAC" android:paddingEnd="8dp" />
+    </LinearLayout>
+    <LinearLayout android:id="@id/sources_panel" android:layout_width="match_parent"
+        android:layout_height="wrap_content" android:orientation="vertical"
+        android:padding="16dp" android:background="#212121" android:visibility="gone">
+        <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:text="Sources" android:textSize="18sp" android:textColor="#ECECEC" />
+        <EditText android:id="@id/reader_input" android:layout_width="match_parent"
+            android:layout_height="120dp" android:gravity="top" android:inputType="textMultiLine"
+            android:hint="Paste source text" android:textSize="16sp" android:textColor="#ECECEC"
+            android:textColorHint="#ACACAC" android:padding="8dp" />
+        <Button android:id="@id/read_button" android:layout_width="wrap_content"
+            android:layout_height="48dp" android:text="Read" android:onClick="onClick"
+            android:textColor="#171717" android:backgroundTint="#B8C7DE" />
+    </LinearLayout>
+    <ScrollView android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1"
+        android:fillViewport="true" android:padding="20dp">
+        <TextView android:id="@id/reader_body" android:layout_width="match_parent"
+            android:layout_height="wrap_content" android:textSize="18sp" android:lineSpacingExtra="5dp"
+            android:textColor="#ECECEC" android:textIsSelectable="true" android:fontFamily="sans"
+            android:paddingBottom="40dp" />
+    </ScrollView>
+</LinearLayout>

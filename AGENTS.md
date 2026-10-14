@@ -45,10 +45,17 @@ they are not IB runtime acceptance.
 
 ## Preserve Android update identity
 
+First-party Java/Kotlin source, Gradle, javac and d8 application paths are
+forbidden. Use the existing checked Idriç -> direct DEX Android boundary.
+Run `android-native/check-source.grease` with the verified Grease entrypoint
+after any application or build-path change. Source absence is separate from
+source-to-DEX, ART, APK and physical acceptance. Unsupported Idriç lowering
+must remain a visible blocker; never restore a Java parser or state owner.
+
 Every installable Android harness in this repository must keep its package name,
 persistent test signer, and nondecreasing version code across builds. This
-includes prepaint, WebView acceptance, and later device fixtures. Do not let
-Gradle fall back to a runner-local debug key, and do not uninstall an existing
+includes the native reader and later device fixtures. Do not substitute
+a runner-local debug key, and do not uninstall an existing
 copy to hide a signer or downgrade mismatch. Replacement installation without
 uninstall is required Android acceptance for each harness. Keep the public/test
 signing identity separate from any production or store signing identity.

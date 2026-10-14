@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <public type="attr" name="readerSurfaceColor" id="0x7f010000" />
+    <public type="layout" name="reader" id="0x7f020000" />
+    <public type="id" name="reader_body" id="0x7f030000" />
+    <public type="id" name="reader_input" id="0x7f030001" />
+    <public type="id" name="sources_panel" id="0x7f030002" />
+    <public type="id" name="sources_button" id="0x7f030003" />
+    <public type="id" name="read_button" id="0x7f030004" />
+</resources>
