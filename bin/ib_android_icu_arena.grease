@@ -1,0 +1,101 @@
+#!/usr/bin/env grease
+# Checked slice: fetch under Binder/Shizuku with ICU, then retain exact body
+# bytes in the already-existing appendfat userspace arena. No renderer fetch.
+set -eu
+umask 077
+
+case "$0" in */*) script_directory=${0%/*} ;; *) script_directory=. ;; esac
+repository_root=$(CDPATH='' cd -- "$script_directory/.." && pwd)
+. "$repository_root/lib/android_shizuku_host.grease"
+. "$repository_root/lib/android_shizuku_icu_provider.grease"
+. "$repository_root/lib/android_binder_icu.grease"
+
+fail() { printf 'ib ICU/Arena: %s\n' "$1" >&2; exit 1; }
+usage() { printf 'usage: %s REQUEST_ID HTTP_URL PRIVATE_ARENA_DIRECTORY\n' "$0" >&2; exit 2; }
+
+test "$#" -eq 3 || usage
+request_id=$1
+url=$2
+root=$3
+case "$request_id" in ''|.|..|*[!abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._-]*) usage ;; esac
+ib_shizuku_icu_url "$url" || usage
+case "$root" in /*) ;; *) usage ;; esac
+# The storage owner, not Shizuku, selects this directory. No fixed global arena
+# path, no world-readable fetched response, no other canonical browser store.
+test -d "$root" && test ! -L "$root" || fail 'private Arena directory absent or a symlink'
+root=$(CDPATH='' cd -P -- "$root" && pwd -P)
+for directory in "$root/staging" "$root/receipts" "$root/locks"; do
+  test ! -L "$directory" || fail 'symlink below Arena root'
+  mkdir -p "$directory"
+  test -d "$directory" && test ! -L "$directory" || fail 'bad Arena subdirectory'
+done
+arena=$root/responses.arena
+for path in "$arena" "$arena.used" "$arena.lock"; do
+  test -f "$path" && test ! -L "$path" || fail 'Arena is not preinitialized by its owner'
+done
+arena_tool=${IB_APPEND_ARENA:-}
+slice_tool=${IB_ARENA_SLICE:-}
+test -n "$arena_tool" && test -x "$arena_tool" || fail 'canonical appendfat_arena executable required'
+test -n "$slice_tool" && test -x "$slice_tool" || fail 'checked ib-arena-slice executable required'
+
+receipt=$root/receipts/$request_id.tsv
+test ! -e "$receipt" && test ! -L "$receipt" || fail 'request identity already published'
+lock=$root/locks/$request_id
+mkdir "$lock" || fail 'request identity is already running'
+# Lock survives failure for inspection. A new request ID is required for retry.
+work=$(mktemp -d "$root/staging/$request_id.XXXXXXXX") || fail 'cannot create private staging'
+cleanup() { rm -rf "$work"; }
+trap cleanup EXIT HUP INT TERM
+capture=$work/icu.body
+
+# Authorization is checked before the network operation and must identify
+# Shizuku shell or root, not an arbitrary app-process UID.
+authority=$(ib_shizuku_authority) || fail 'Shizuku unavailable or unauthorized'
+case "$authority" in shell|root) ;; *) fail 'Shizuku lacks authorized shell/root authority' ;; esac
+if ! ib_binder_icu_get "$url" "$capture"; then
+  fail 'ICU or Shizuku failed; no Arena bytes were committed'
+fi
+test -f "$capture" && test ! -L "$capture" || fail 'ICU returned no regular capture'
+bytes=$(wc -c < "$capture" | tr -d '[:space:]')
+case "$bytes" in ''|*[!0123456789]*) fail 'bad ICU body size' ;; esac
+test "$bytes" -gt 0 && test "$bytes" -le 4194304 || fail 'ICU body empty or exceeds 4 MiB'
+digest=$(sha256sum "$capture" | cut -d ' ' -f 1)
+
+# Canonical appendfat_arena owns the prezeroed data file, locking, fsync,
+# and commit-pointer protocol. It returns exact offsets for this one append.
+append_result=$("$arena_tool" append "$arena" "$capture") || fail 'Arena append failed'
+old=$(printf '%s\n' "$append_result" | sed -n 's/^APPENDED old_used=\([0-9][0-9]*\) new_used=[0-9][0-9]* capacity_bytes=[0-9][0-9]*$/\1/p')
+new=$(printf '%s\n' "$append_result" | sed -n 's/^APPENDED old_used=[0-9][0-9]* new_used=\([0-9][0-9]*\) capacity_bytes=[0-9][0-9]*$/\1/p')
+test -n "$old" && test -n "$new" || fail 'unrecognized Arena commit receipt'
+test "$new" -ge "$old" && test "$((new - old))" -eq "$bytes" || fail 'Arena appended different byte count'
+
+# Reopen the committed range through the same bounded native read primitive
+# that a later Binder/PFD reader will use, and compare the exact response.
+"$slice_tool" slice "$arena" "$old" "$bytes" > "$work/reopened" || fail 'Arena committed range is not readable'
+cmp -s "$capture" "$work/reopened" || fail 'Arena reopened bytes mismatch'
+
+# ICU currently emits body only: status, final resolved URL, charset and MIME
+# are UNOBSERVED. Do not invent their values or grant navigation authority.
+{
+  printf 'schema\tib-icu-arena-v1\n'
+  printf 'request_id\t%s\n' "$request_id"
+  printf 'requested_url\t%s\n' "$url"
+  printf 'resolved_url\tUNOBSERVED\n'
+  printf 'http_status\tUNOBSERVED\n'
+  printf 'mime_type\tUNOBSERVED\n'
+  printf 'transport\ticu-app-process-via-binder-shizuku\n'
+  printf 'arena_name\tresponses.arena\n'
+  printf 'arena_offset\t%s\n' "$old"
+  printf 'arena_end\t%s\n' "$new"
+  printf 'byte_count\t%s\n' "$bytes"
+  printf 'sha256\t%s\n' "$digest"
+  printf 'reopen_check\tMATCH\n'
+  printf 'navigation_admitted\tNO\n'
+} > "$work/receipt.tsv"
+"$slice_tool" sync "$work/receipt.tsv" || fail 'could not sync staged receipt'
+# No clobbering: the per-request mkdir lock prevents cooperating writers.
+test ! -e "$receipt" || fail 'receipt already exists before publication'
+mv "$work/receipt.tsv" "$receipt" || fail 'cannot publish immutable receipt'
+"$slice_tool" sync "$receipt" || fail 'could not sync published receipt'
+# Only a receipt with this independently checked range is reader-eligible.
+printf 'committed\t%s\t%s\t%s\n' "$request_id" "$old" "$bytes"
