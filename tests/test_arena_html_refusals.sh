@@ -40,7 +40,11 @@ refuse 'navigation not admitted'
 sed 's/navigation_admitted.*$/navigation_admitted	YES/' "$manifest" > "$work/replaced"
 mv "$work/replaced" "$manifest"
 refuse 'out-of-order or missing generation'
-sed '/^mime_type/d' "$manifest" > "$work/replaced"
+{
+  printf 'source_generation\tgeneration-1\n'
+  printf 'acquisition_complete\tYES\n'
+} >> "$manifest"
+sed 's@^mime_type.*@mime_type\tUNOBSERVED@' "$manifest" > "$work/replaced"
 mv "$work/replaced" "$manifest"
 refuse 'unadmitted content type'
 printf 'arena-v1-unobserved-refused\tPASS\n'
