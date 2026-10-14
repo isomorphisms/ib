@@ -13,8 +13,8 @@ strip_prefix (wanted :: following) (actual :: rest) =
   if wanted == actual then strip_prefix following rest else Nothing
 
 starts : String → String → Bool
-starts prefix value =
-  case strip_prefix (unpack prefix) (unpack value) of
+starts sought_prefix value =
+  case strip_prefix (unpack sought_prefix) (unpack value) of
     Nothing ⇒ False
     Just _ ⇒ True
 
@@ -132,8 +132,8 @@ resolve_html_reference base reference =
                 then strip_query current ++ reference
                 else
                   let (relative_path, suffix) = split_path_suffix (unpack reference) [] in
-                  let prefix =
+                  let parent_directory =
                     if starts "/" reference then ""
                     else pack (parent_path (unpack (url_path origin base)) []) in
-                  origin ++ path_normalised (prefix ++ relative_path) ++ suffix
+                  origin ++ path_normalised (parent_directory ++ relative_path) ++ suffix
             if cheap_http_url candidate then Just candidate else Nothing
