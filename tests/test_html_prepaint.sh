@@ -44,6 +44,23 @@ run_fixture() {
     > "$work/$kind.receipt"
   "$IB_PREPAINT_ORACLE" "$output"
   cmp "$expected" "$output"
+  if test -n "${IB_AICI_PREPAINT_VERIFIER:-}"; then
+    test -f "$IB_AICI_PREPAINT_VERIFIER" || exit 1
+    {
+      printf 'source_key\t%s\n' "$key"
+      printf 'source_generation\tgeneration-1\n'
+      printf 'source_sha256\t%s\n' "$(sha256sum "$body" | cut -d ' ' -f 1)"
+      printf 'source_bytes\t%s\n' "$(wc -c < "$body" | tr -d '[:space:]')"
+    } > "$work/$kind.ai-source.tsv"
+    sh "$IB_AICI_PREPAINT_VERIFIER" "$output" "$expected" \
+      "$work/$kind.ai-source.tsv" "$body" "$key" generation-1
+  fi
+  if test -n "${IB_HTML_PREPAINT_RECEIPT_ROOT:-}"; then
+    mkdir -p "$IB_HTML_PREPAINT_RECEIPT_ROOT"
+    cp "$output" "$IB_HTML_PREPAINT_RECEIPT_ROOT/$kind.prepaint"
+    cp "$manifest" "$IB_HTML_PREPAINT_RECEIPT_ROOT/$kind.admission.tsv"
+    cp "$work/$kind.receipt" "$IB_HTML_PREPAINT_RECEIPT_ROOT/$kind.conversion.tsv"
+  fi
   grep -Fx "$(printf 'conversion\tPASS')" "$work/$kind.receipt"
   printf 'fixture\t%s\tPASS\n' "$kind"
 }
