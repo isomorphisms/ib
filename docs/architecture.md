@@ -97,12 +97,13 @@ This requirement does not promise exact JavaScript-heap continuity across render
 
 Acceptance must distinguish at least session-cookie survival, form-state survival, live-renderer survival, and reconstruction after renderer death. Evidence for one is not evidence for the others. See #59.
 
-The first implemented product slice is the protected long-view task described
-in `long-view-protected-tasks.md`.  Its durable identity also crosses whole-host
-restart.  It intentionally restores a neutral navigation target and reuses the
-platform WebView profile without copying cookies or claiming that profile
-availability proves authentication.  Generic third-party form values remain
-excluded until a field has an explicit ordinary-state permission.
+The Idriç protected long-view task is described in
+`long-view-protected-tasks.md`. Its former Java WebView harness was a historical
+recovery experiment and is retired on the native migration line. The native
+reader does not yet integrate disk reopen, authenticated continuation, worker
+or durable navigation behavior. Platform profile availability never proves
+authentication. Generic third-party form values remain excluded until a field
+has an explicit ordinary-state permission.
 
 ## Renderer swapping
 

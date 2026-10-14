@@ -1,0 +1,13 @@
+module NativeSourceProjection
+
+import Data.Text
+import IB.Information
+import IB.RecoveredInformation
+
+%export "dex:source_title"
+source_title : Text → Text
+source_title source = view_title
+  (information_from_log "source" "source" (recover_document_log "source" source))
+
+main : IO ()
+main = pure ()
