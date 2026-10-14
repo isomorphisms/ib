@@ -113,11 +113,44 @@ jobs:
           /tmp/idric/bin/idris2 HtmlPrepaintCommand.idric -o ib-html-prepaint
           test -x build/exec/ib-html-prepaint
 
-      - name: Independent HTML prepaint wire and corruption-oracle acceptance
+      - name: Check out independently accepted AI-CI Prepaint consumer
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: isomorphisms/ai-ci
+          ref: 0fb20839a2da68be0aafc10511e13c634bfa02b9
+          path: .tools/ai-ci-prepaint
+          persist-credentials: false
+
+      - name: Independently verify actual Idriç output and source-bound mutations
+        env:
+          IB_AICI_PREPAINT_VERIFIER: ${{ github.workspace }}/.tools/ai-ci-prepaint/ib-prepaint/verify.sh
+          IB_HTML_PREPAINT_RECEIPT_ROOT: ${{ runner.temp }}/ib-html-prepaint-receipts
         run: |
+          test "$(git -C .tools/ai-ci-prepaint rev-parse HEAD)" = 0fb20839a2da68be0aafc10511e13c634bfa02b9
           sh -n bin/ib_emit_html_prepaint.grease
+          sh -n bin/ib_arena_to_html_prepaint.grease
           sh -n tests/test_html_prepaint.sh
+          sh .tools/ai-ci-prepaint/ib-prepaint/self-test.sh
           sh tests/test_html_prepaint.sh
+          {
+            printf 'repository\tisomorphisms/ib\n'
+            printf 'source_commit\t%s\n' "$(git rev-parse HEAD)"
+            printf 'idric_commit\t%s\n' "$IDRIC_REF"
+            printf 'independent_ai_ci_commit\t0fb20839a2da68be0aafc10511e13c634bfa02b9\n'
+            printf 'compiler_version\t%s\n' "$(/tmp/idric/bin/idris2 --version)"
+            printf 'platform\t%s\n' "$(uname -sm)"
+          } > "$IB_HTML_PREPAINT_RECEIPT_ROOT/inputs.tsv"
+          sha256sum src/build/exec/ib-html-prepaint src/build/exec/ib-html-prepaint-smoke \
+            tests/prepaint_v1_oracle.c src/IB/HtmlPrepaint.idric src/IB/HtmlLinks.idric \
+            > "$IB_HTML_PREPAINT_RECEIPT_ROOT/artifact-inputs.sha256"
+          (cd "$IB_HTML_PREPAINT_RECEIPT_ROOT" && sha256sum *.prepaint > wire.sha256)
+
+      - name: Retain independently checked fixture receipts
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: ib-html-prepaint-idric-and-aici
+          path: ${{ runner.temp }}/ib-html-prepaint-receipts/
+          if-no-files-found: error
 
       - name: Exercise browser-owned Idriç core
         run: sh bin/ci_browser_foundation.grease exercise-core
