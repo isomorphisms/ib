@@ -7,7 +7,7 @@ import IB.Prepaint
 import IB.Prepaint.Version1
 import IB.HtmlLinks
 
-%default total
+-- Bounded by caller/admission; explicit conversion failures are returned.
 
 -- A producer supplies this ONLY after checking the exact committed Arena range.
 -- Claimed and reopened digest/length are independent inputs, not a hash of an
