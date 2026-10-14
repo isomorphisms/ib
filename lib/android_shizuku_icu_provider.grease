@@ -54,6 +54,7 @@ ib_shizuku_icu_prepare() {
 # ICU exit remains separately visible to the broker for FINISH admission.
 ib_shizuku_icu_stream() {
   test "$#" -eq 1 || return 2
+  ib_shizuku_icu_prepare "$1" || return $?
   authority=$(ib_shizuku_authority) || {
     printf 'Shizuku identity unavailable\n' >&2
     return 1
@@ -62,7 +63,6 @@ ib_shizuku_icu_stream() {
     shell|root) ;;
     *) printf 'Shizuku authority denied\n' >&2; return 1 ;;
   esac
-  ib_shizuku_icu_prepare "$1" || return $?
   (
     umask 077
     ib_shizuku_run_bounded 30 "$command_text"
