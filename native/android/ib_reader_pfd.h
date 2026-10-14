@@ -42,6 +42,11 @@ void ib_reader_source_init(ib_reader_source *source);
 void ib_reader_source_clear(ib_reader_source *source);
 void ib_reader_source_want(ib_reader_source *source, uint64_t generation);
 
+/* Same checked SHA-256 implementation for reader and source owner; never
+ * substitute textual CLI output for the captured binary response. */
+void ib_reader_sha256_hex(const unsigned char *bytes, size_t count,
+                          char hex[65]);
+
 /* Does NOT close fd. Requires a finite stream ending at exactly byte_count.
  * Checks deadline, length, SHA-256 and generation before exposing any byte. */
 int ib_reader_source_accept_fd(ib_reader_source *source,
