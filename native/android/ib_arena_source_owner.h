@@ -34,6 +34,7 @@ int ib_arena_source_owner_open(ib_arena_source_owner *owner,
 /* Adapter for ib_arena_pfd_provider.open_verified_fd. */
 int ib_arena_source_owner_open_binder(void *owner, const char *request_id,
                                       uint64_t navigation_generation,
+                                      ib_reader_source_ticket *verified_ticket,
                                       int *read_fd);
 
 #endif
