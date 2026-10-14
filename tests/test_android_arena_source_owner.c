@@ -23,9 +23,10 @@ static void full_file(const char *path, unsigned char **bytes, size_t *length) {
     long size = ftell(file);
     assert(size > 0 && size < 8192);
     assert(fseek(file, 0, SEEK_SET) == 0);
-    *bytes = malloc((size_t)size);
+    *bytes = malloc((size_t)size + 1U);
     assert(*bytes != NULL);
     assert(fread(*bytes, 1, (size_t)size, file) == (size_t)size);
+    (*bytes)[size] = '\0';
     assert(fclose(file) == 0);
     *length = (size_t)size;
 }
@@ -95,9 +96,9 @@ int main(int argc, char **argv) {
     unsigned char *original = NULL;
     size_t count = 0;
     full_file(receipt, &original, &count);
-    unsigned char *damaged = malloc(count);
+    unsigned char *damaged = malloc(count + 1U);
     assert(damaged != NULL);
-    memcpy(damaged, original, count);
+    memcpy(damaged, original, count + 1U);
     char *digest = strstr((char *)damaged, "sha256\t");
     assert(digest != NULL);
     digest += strlen("sha256\t");
