@@ -88,7 +88,8 @@ int main(int argc, char **argv) {
     accept(&owner, &reader, 1);
 
     int fd = -1;
-    assert(ib_arena_source_owner_open_binder(&owner, request_id, 2, &fd) != 0);
+    ib_reader_source_ticket binder_ticket = {0};
+    assert(ib_arena_source_owner_open_binder(&owner, request_id, 2, &binder_ticket, &fd) != 0);
     assert(fd == -1);
     assert(ib_arena_source_owner_open(&owner, "../bad", 1, NULL, &fd) != 0);
     preserved(&reader, request_id, 1);
