@@ -13,6 +13,7 @@ on:
       - 'native/android/ib_reader_host_assembly.h'
       - 'tests/test_android_arena_source_owner.c'
       - 'tests/test_android_arena_source_owner.sh'
+      - 'tests/test_android_arena_source_owner_synthetic.sh'
       - 'tests/test_android_reader_pfd.c'
       - '.github/workflows/ib-c67-reader-pfd.yml'
   workflow_dispatch:
@@ -21,6 +22,25 @@ permissions:
   contents: read
 
 jobs:
+  pfd-host-fast:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout candidate source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Compile native receiver and fake-boundary source owner
+        run: |
+          set -eu
+          mkdir -p build/c67-pfd/fast
+          cc -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror -pthread \
+            native/android/ib_reader_pfd.c native/android/ib_arena_source_owner.c \
+            tests/test_android_arena_source_owner.c \
+            -o build/c67-pfd/fast/test-arena-pfd
+          env IB_TEST_VERIFIED_ARENA_PIPE="$GITHUB_WORKSPACE/build/c67-pfd/fast/test-arena-pfd" \
+            sh tests/test_android_arena_source_owner_synthetic.sh \
+            | tee build/c67-pfd/fast/receipt.txt
+          grep -F 'fixture' build/c67-pfd/fast/receipt.txt | grep -F 'synthetic-pointer-not-canonical-appendfat'
+          sha256sum build/c67-pfd/fast/test-arena-pfd > build/c67-pfd/fast/sha256.txt
+
   pfd-source-admission:
     runs-on: ubuntu-24.04
     steps:
