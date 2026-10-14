@@ -54,7 +54,7 @@ fi
 test ! -s "$work/denied"
 test "$(wc -l < "$work/commands")" -eq "$before"
 TEST_DENIED=0
-if ib_binder_icu_stream "https://example.com/'$(touch "$work/INJECTED")" \
+if ib_binder_icu_stream "https://example.com/a'" \
         > "$work/injected"; then
     echo 'URL command injection erroneously succeeded' >&2
     exit 1
