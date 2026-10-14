@@ -27,11 +27,15 @@ jobs:
           ref: 05a0cb7246c5a9f46abfbe92925812e7b607f454
           path: .deps/appendfat
           persist-credentials: false
+      - id: ick
+        uses: isomorphisms/ai-ci/ick-host@015cc7901ae0b3ad262b476f24e129b53c56db95
       - name: Compile storage and checked slice reader
+        env:
+          ICK: ${{ steps.ick.outputs.compiler }}
         run: |
           test "$(git -C .deps/appendfat rev-parse HEAD)" = 05a0cb7246c5a9f46abfbe92925812e7b607f454
           mkdir -p build/c67-icu-arena
-          cc -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror \
+          "$ICK" -fno-link-libatomic -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror \
             .deps/appendfat/lib/appendfat_arena.c \
             .deps/appendfat/tools/appendfat_arena.c -o build/c67-icu-arena/appendfat_arena
           cc -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror \
