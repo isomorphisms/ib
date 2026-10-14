@@ -1,0 +1,73 @@
+#!/usr/bin/env grease
+if (len(ARGV) !== 2) {
+  echo 'usage: grease verify.grease IB NEW_EVIDENCE' >&2
+  exit 2
+}
+var repository = ARGV[0]
+var evidence = ARGV[1]
+for path in "$repository" "$evidence" {
+  if (len(path) === 0 or path[0] !== '/') { echo 'absolute path required' >&2; exit 2 }
+}
+if test -e "$evidence" { echo 'refusing reused evidence' >&2; exit 1 }
+source "$repository/tests/longview-idric/backend-pin.grease"
+var fixture = "$evidence/fixture"
+var backend = "$fixture/vendor/android-NDK"
+mkdir -p "$backend"
+git -C "$fixture" init -q
+git -C "$fixture" config user.name 'Backend pin fixture'
+git -C "$fixture" config user.email 'fixture@example.invalid'
+git -C "$backend" init -q
+git -C "$backend" config user.name 'Backend pin fixture'
+git -C "$backend" config user.email 'fixture@example.invalid'
+printf '%s\n' 'first compiler revision' > "$backend/revision.txt"
+git -C "$backend" add revision.txt
+git -C "$backend" commit -q -m 'first fixture compiler'
+var first = $(git -C "$backend" rev-parse HEAD)
+git -C "$fixture" update-index --add --cacheinfo 160000 "$first" vendor/android-NDK
+git -C "$fixture" commit -q -m 'declare fixture compiler'
+var head = $(git -C "$fixture" rev-parse HEAD)
+var observed = $(verified_backend_pin "$fixture" "$head")
+test "$observed" = "$first"
+echo 'PASS exact committed compiler checkout' > "$evidence/result.txt"
+
+proc refuses(name, expected_head, diagnostic) {
+  try { verified_backend_pin "$fixture" "$expected_head" > "$evidence/$name.stdout" 2> "$evidence/$name.stderr" }
+  if (_error.code !== 1) { echo "FAIL wrong refusal status: $name" >&2; exit 1 }
+  rg -q -x -F "$diagnostic" "$evidence/$name.stderr"
+  echo "PASS $name refusal" >> "$evidence/result.txt"
+}
+refuses wrong-source-head "$first" 'FAIL IB source head differs from expected head'
+printf '%s\n' 'second compiler revision' > "$backend/revision.txt"
+git -C "$backend" add revision.txt
+git -C "$backend" commit -q -m 'different fixture compiler'
+var second = $(git -C "$backend" rev-parse HEAD)
+refuses wrong-backend "$head" 'FAIL Android compiler checkout differs from committed IB gitlink'
+git -C "$backend" switch -q --detach "$first"
+git -C "$fixture" update-index --cacheinfo 160000 "$second" vendor/android-NDK
+refuses staged-pin "$head" 'FAIL staged Android compiler input differs from committed IB source'
+git -C "$fixture" update-index --cacheinfo 160000 "$first" vendor/android-NDK
+printf '%s\n' 'uncommitted compiler source' > "$backend/revision.txt"
+refuses dirty-backend "$head" 'FAIL Android compiler checkout has uncommitted source changes'
+git -C "$backend" add revision.txt
+refuses staged-backend "$head" 'FAIL Android compiler checkout has staged source changes'
+git -C "$backend" restore --staged revision.txt
+git -C "$backend" restore revision.txt
+test "$(verified_backend_pin "$fixture" "$head")" = "$first"
+echo 'PASS clean recovery' >> "$evidence/result.txt"
+
+# A regular file at the dependency path must never count as a compiler lock.
+var wrong_kind = "$evidence/not-a-gitlink"
+mkdir -p "$wrong_kind/vendor"
+git -C "$wrong_kind" init -q
+git -C "$wrong_kind" config user.name 'Backend pin fixture'
+git -C "$wrong_kind" config user.email 'fixture@example.invalid'
+printf '%s\n' "$first" > "$wrong_kind/vendor/android-NDK"
+git -C "$wrong_kind" add vendor/android-NDK
+git -C "$wrong_kind" commit -q -m 'invalid fixture dependency object'
+var wrong_kind_head = $(git -C "$wrong_kind" rev-parse HEAD)
+try { verified_backend_pin "$wrong_kind" "$wrong_kind_head" > "$evidence/wrong-kind.stdout" 2> "$evidence/wrong-kind.stderr" }
+if (_error.code !== 1) { echo 'FAIL non-gitlink input accepted' >&2; exit 1 }
+rg -q -x -F 'FAIL committed Android compiler input is not a gitlink' "$evidence/wrong-kind.stderr"
+echo 'PASS non-gitlink refusal' >> "$evidence/result.txt"
+cat "$evidence/result.txt"
+echo 'NOT_RUN Idriç compilation, ART or physical device; Git boundary controls only'
