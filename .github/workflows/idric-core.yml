@@ -101,6 +101,18 @@ jobs:
           grep -Fx 'nonincreasing-revision-refused=True' /tmp/ib-canonical-information.txt
           grep -Fx 'version1=serialized' /tmp/ib-canonical-information.txt
 
+      - name: Compile and exercise admitted HTML to Prepaint Version 1
+        working-directory: src
+        run: |
+          /tmp/idric/bin/idris2 HtmlPrepaintSmoke.idric -o ib-html-prepaint-smoke
+          test -x build/exec/ib-html-prepaint-smoke
+          build/exec/ib-html-prepaint-smoke | tee /tmp/html-prepaint-smoke.txt
+          grep -Fx 'version1=True' /tmp/html-prepaint-smoke.txt
+          grep -Fx 'heading-six=True' /tmp/html-prepaint-smoke.txt
+          grep -Fx 'digest-mismatch-refused=True' /tmp/html-prepaint-smoke.txt
+          /tmp/idric/bin/idris2 HtmlPrepaintCommand.idric -o ib-html-prepaint
+          test -x build/exec/ib-html-prepaint
+
       - name: Exercise browser-owned Idriç core
         run: sh bin/ci_browser_foundation.grease exercise-core
 
