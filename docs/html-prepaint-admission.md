@@ -7,12 +7,19 @@ Status: **host fixture converter QUALIFIED / retained Arena HTML BLOCKED / physi
 - Semantic base: PR #148, `work/linux-shared-contract`, originally
   `2425d21d984de21e5b65ae0d2e09c586120239ee`.
   This includes the types and existing serializer from #48/#123.
-- Upstream Arena producer: PR #152, original head
-  `cc5f64b84c316b88d4c5c67fe4ea7ee5fa1b9bbe`.
-  `bin/ib_android_arena_read.grease` supplies a digest-checked range but its
-  receipt has `resolved_url=UNOBSERVED`, `mime_type=UNOBSERVED`,
-  `http_status=UNOBSERVED`, `navigation_admitted=NO`, and no pinned source
-  generation or charset. **No live HTML can pass source admission yet.**
+- Upstream Arena producer and verified source reader: PR #152, whose
+  Version 2 candidate was pinned at
+  `e2a2a17a4378b7c3845ec43f42d1d3360b12f051`.
+  It now consumes ICU #35's *paired same-request* response body and actual
+  metadata, validates source key/generation, HTTP status, MIME/charset,
+  response completeness, final URL and SHA-256, and independently reopens the
+  committed canonical Arena range. Its legacy v1 body-only receipt remains
+  permanently navigation-denied. Its v2 host test passed at
+  [run 38652958137](https://github.com/isomorphisms/ib/actions/runs/38652958137),
+  **with mocked Shizuku/ICU transport**, not actual C67 HTTPS. The separate
+  converter now has a pinned cross-branch mock-integration test for the same
+  v2 producer/reader and the actual Idriç command; that test is not yet a
+  live device acceptance claim.
 - Separate reader-handoff owner: PR #153, original head
   `9cf28c2f6c38cb12bb906a844e061ebfab34f943`.
 - C67 native Material reader: PR #129. It currently paints a pinned snapshot.
@@ -53,8 +60,9 @@ receipt and an **already verified** body path, then requires an exact expected
 source key and `IB_EXPECTED_SOURCE_GENERATION`. The receipt is authority only
 when supplied by the trusted source-store owner, not by an app/remote page.
 The `fixture` kind is prohibited unless `IB_ALLOW_FIXTURE=1`; tests always
-label fixtures. This adapter does **not** grant Arena metadata qualification:
-PR #152 must be reconciled before an Arena-owner receipt can be supplied.
+label fixtures. For a v2 Arena source, this adapter passes through the
+**unchanged pinned** #152 producer/verified reader. Mocked metadata proves only
+contract compatibility, never live acquisition or Android reader delivery.
 
 ## Supported now / explicit limitations
 
@@ -83,7 +91,8 @@ PR #152 must be reconciled before an Arena-owner receipt can be supplied.
 | Offline arXiv-shaped fixture | Actual Idriç output + independent C11/AI-CI oracle and frozen golden | **PASS** |
 | Bad digest, generation, source ID, UTF-8 and incomplete admission | Grease refusal, last-valid byte comparison | **PASS**, fixture-only |
 | Mutated heading, link, dropped text and malformed escaping | C11 oracle + independent AI-CI + golden | **PASS**, fixture-only |
-| Real ICU HTTPS → committed Arena → admitted metadata | ICU PR #35 + IB PR #152 | BLOCKED |
+| Mock ICU metadata → actual canonical Arena v2 → Idriç V1 | Pinned PR #152 + canonical appendfat + AICI | COMMITTED / exact-head CI queued |
+| Real ICU HTTPS → committed Arena → admitted metadata | ICU PR #35 + IB PR #152 | NOT_RUN on physical C67 |
 | Binder/PFD delivers new projection to reader | IB PR #153 | NOT_RUN |
 | Physical C67 paints example.com and navigates links | User-observed device + receipts | NOT_RUN |
 | ARM32 A1/C67, ARM64 C67 converter execution | Cat Food/CI evidence | NOT_RUN |
