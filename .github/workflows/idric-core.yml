@@ -101,6 +101,115 @@ jobs:
           grep -Fx 'nonincreasing-revision-refused=True' /tmp/ib-canonical-information.txt
           grep -Fx 'version1=serialized' /tmp/ib-canonical-information.txt
 
+      - name: Compile and exercise admitted HTML to Prepaint Version 1
+        working-directory: src
+        run: |
+          /tmp/idric/bin/idris2 HtmlPrepaintSmoke.idric -o ib-html-prepaint-smoke
+          test -x build/exec/ib-html-prepaint-smoke
+          build/exec/ib-html-prepaint-smoke | tee /tmp/html-prepaint-smoke.txt
+          grep -Fx 'version1=True' /tmp/html-prepaint-smoke.txt
+          grep -Fx 'heading-six=True' /tmp/html-prepaint-smoke.txt
+          grep -Fx 'digest-mismatch-refused=True' /tmp/html-prepaint-smoke.txt
+          /tmp/idric/bin/idris2 HtmlPrepaintCommand.idric -o ib-html-prepaint
+          test -x build/exec/ib-html-prepaint
+
+      - name: Check out independently accepted AI-CI Prepaint consumer
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: isomorphisms/ai-ci
+          ref: 0fb20839a2da68be0aafc10511e13c634bfa02b9
+          path: .tools/ai-ci-prepaint
+          persist-credentials: false
+
+      - name: Independently verify actual Idriç output and source-bound mutations
+        env:
+          IB_AICI_PREPAINT_VERIFIER: ${{ github.workspace }}/.tools/ai-ci-prepaint/ib-prepaint/verify.sh
+          IB_HTML_PREPAINT_RECEIPT_ROOT: ${{ runner.temp }}/ib-html-prepaint-receipts
+        run: |
+          test "$(git -C .tools/ai-ci-prepaint rev-parse HEAD)" = 0fb20839a2da68be0aafc10511e13c634bfa02b9
+          sh -n bin/ib_emit_html_prepaint.grease
+          sh -n bin/ib_arena_to_html_prepaint.grease
+          sh -n tests/test_arena_html_refusals.sh
+          sh tests/test_arena_html_refusals.sh
+          sh -n tests/test_html_prepaint.sh
+          sh .tools/ai-ci-prepaint/ib-prepaint/self-test.sh
+          sh tests/test_html_prepaint.sh
+          {
+            printf 'repository\tisomorphisms/ib\n'
+            printf 'source_commit\t%s\n' "$(git rev-parse HEAD)"
+            printf 'idric_commit\t%s\n' "$IDRIC_REF"
+            printf 'independent_ai_ci_commit\t0fb20839a2da68be0aafc10511e13c634bfa02b9\n'
+            printf 'compiler_version\t%s\n' "$(/tmp/idric/bin/idris2 --version)"
+            printf 'platform\t%s\n' "$(uname -sm)"
+          } > "$IB_HTML_PREPAINT_RECEIPT_ROOT/inputs.tsv"
+          sha256sum src/build/exec/ib-html-prepaint src/build/exec/ib-html-prepaint-smoke \
+            tests/prepaint_v1_oracle.c src/IB/HtmlPrepaint.idric src/IB/HtmlLinks.idric \
+            > "$IB_HTML_PREPAINT_RECEIPT_ROOT/artifact-inputs.sha256"
+          (cd "$IB_HTML_PREPAINT_RECEIPT_ROOT" && sha256sum *.prepaint > wire.sha256)
+
+      - name: Retain independently checked fixture receipts
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: ib-html-prepaint-idric-and-aici
+          path: ${{ runner.temp }}/ib-html-prepaint-receipts/
+          if-no-files-found: error
+
+      - name: Check out verified Arena v2 acquisition and reader implementation
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: isomorphisms/ib
+          ref: e2a2a17a4378b7c3845ec43f42d1d3360b12f051
+          path: .deps/ib-arena
+          persist-credentials: false
+
+      - name: Check out canonical append-fat userspace Arena
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: isomorphisms/sd-card-append-fat
+          ref: 05a0cb7246c5a9f46abfbe92925812e7b607f454
+          path: .deps/appendfat
+          persist-credentials: false
+
+      - name: Resolve qualified host ICK compiler
+        uses: isomorphisms/ai-ci/ick-host@015cc7901ae0b3ad262b476f24e129b53c56db95
+        id: ick
+
+      - name: Reopen real canonical Arena bytes and compile with actual Idriç converter
+        env:
+          ICK: ${{ steps.ick.outputs.compiler }}
+          IB_AICI_PREPAINT_VERIFIER: ${{ github.workspace }}/.tools/ai-ci-prepaint/ib-prepaint/verify.sh
+          IB_HTML_PREPAINT_RECEIPT_ROOT: ${{ runner.temp }}/ib-html-prepaint-receipts
+        run: |
+          test "$(git -C .deps/ib-arena rev-parse HEAD)" = e2a2a17a4378b7c3845ec43f42d1d3360b12f051
+          test "$(git -C .deps/appendfat rev-parse HEAD)" = 05a0cb7246c5a9f46abfbe92925812e7b607f454
+          mkdir -p build/ib-html-arena
+          "$ICK" -fno-link-libatomic -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror \
+            .deps/appendfat/lib/appendfat_arena.c \
+            .deps/appendfat/tools/appendfat_arena.c \
+            -o build/ib-html-arena/appendfat_arena
+          cc -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror \
+            .deps/ib-arena/native/android/ib_arena_slice.c \
+            -o build/ib-html-arena/ib-arena-slice
+          cc -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror \
+            tests/prepaint_v1_oracle.c -o build/ib-html-arena/prepaint-oracle
+          export IB_APPEND_ARENA="$GITHUB_WORKSPACE/build/ib-html-arena/appendfat_arena"
+          export IB_ARENA_SLICE="$GITHUB_WORKSPACE/build/ib-html-arena/ib-arena-slice"
+          export IB_HTML_PREPAINT_EXEC="$GITHUB_WORKSPACE/src/build/exec/ib-html-prepaint"
+          export IB_PREPAINT_ORACLE="$GITHUB_WORKSPACE/build/ib-html-arena/prepaint-oracle"
+          sh -n tests/test_arena_v2_to_html_prepaint.sh
+          sh tests/test_arena_v2_to_html_prepaint.sh
+          sha256sum build/ib-html-arena/appendfat_arena build/ib-html-arena/ib-arena-slice \
+            build/ib-html-arena/prepaint-oracle \
+            > "$IB_HTML_PREPAINT_RECEIPT_ROOT/arena-host-executables.sha256"
+          (cd "$IB_HTML_PREPAINT_RECEIPT_ROOT" && sha256sum *.prepaint > wire.sha256)
+
+      - name: Retain qualified Arena-v2 mocked-origin integration evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: ib-html-prepaint-arena-v2-mock
+          path: ${{ runner.temp }}/ib-html-prepaint-receipts/
+          if-no-files-found: error
+
       - name: Exercise browser-owned Idriç core
         run: sh bin/ci_browser_foundation.grease exercise-core
 

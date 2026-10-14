@@ -1,0 +1,81 @@
+#!/bin/sh
+# Adapter ONLY for independently reopened committed PR #152 Arena ranges.
+# It requires future admitted ICU metadata; legacy UNOBSERVED v1 refuses.
+# The transport + store remain owned by #152; this imports no replacement.
+set -eu
+umask 077
+fail() { printf 'ib Arena → HTML prepaint: %s\n' "$1" >&2; exit 1; }
+test "$#" -eq 4 || fail 'usage: ib_arena_to_html_prepaint.grease REQUEST_ID PRIVATE_ARENA_ROOT EXPECTED_GENERATION OUTPUT'
+request=$1
+root=$2
+generation=$3
+output=$4
+case "$request" in
+  ''|.|..|*[!abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._-]*) fail 'bad request identity' ;;
+esac
+case "$root" in /*) ;; *) fail 'Arena root must be absolute' ;; esac
+test -d "$root" && test ! -L "$root" || fail 'Arena root unavailable or linked'
+root=$(CDPATH='' cd -P -- "$root" && pwd -P)
+manifest="$root/receipts/$request.tsv"
+test -f "$manifest" && test ! -L "$manifest" || fail 'no committed receipt'
+test "$(wc -c < "$manifest" | tr -d '[:space:]')" -le 8192 || fail 'oversized producer receipt'
+awk -F '\t' '
+  NF != 2 || $1 !~ /^[a-z_][a-z_0-9]*$/ || $2 == "" || /\r/ { bad=1 }
+  { if (seen[$1]++) bad=1 }
+  END { if (bad || NR < 14) exit 1 }
+' "$manifest" || fail 'invalid or duplicate producer receipt keys'
+field() { awk -F '\t' -v key="$1" '$1 == key { print $2 }' "$manifest"; }
+test "$(field request_id)" = "$request" || fail 'request mismatch'
+test "$(field reopen_check)" = MATCH || fail 'source not independently reopened'
+test "$(field navigation_admitted)" = YES || fail 'navigation not admitted'
+test "$(field source_generation)" = "$generation" || fail 'out-of-order or missing generation'
+test "$(field acquisition_complete)" = YES || fail 'incomplete ICU acquisition'
+test "$(field mime_type)" = text/html || fail 'unadmitted content type'
+case "$(field charset)" in utf-8|UTF-8) ;; *) fail 'unobserved/unsupported charset' ;; esac
+test "$(field http_status)" = 200 || fail 'unadmitted status'
+requested=$(field requested_url)
+resolved=$(field resolved_url)
+test -n "$requested" && test -n "$resolved" && test "$resolved" != UNOBSERVED ||
+  fail 'actual ICU final URL missing'
+digest=$(field sha256)
+length=$(field byte_count)
+test -n "$digest" && test -n "$length" || fail 'source digest/length missing'
+case "$digest" in ''|*[!0123456789abcdef]*) fail 'source digest invalid' ;; esac
+test "$(printf %s "$digest" | wc -c | tr -d '[:space:]')" -eq 64 || fail 'source digest length invalid'
+case "$length" in ''|*[!0123456789]*) fail 'source length invalid' ;; esac
+test "$length" -gt 0 && test "$length" -le 4194304 || fail 'source length outside bound'
+expected_key="arena:$request"
+test "$(field source_key)" = "$expected_key" || fail 'untrusted source key'
+reader=$(printenv IB_ARENA_READ_EXEC 2>/dev/null || :)
+test -n "$reader" && test -x "$reader" || fail 'PR #152 verified Arena reader executable required'
+parent=$(dirname -- "$output")
+test -d "$parent" && test ! -L "$parent" || fail 'disposable output directory unavailable'
+work=$(mktemp -d "$parent/.ib-html-arena.XXXXXXXX") || fail 'cannot stage retained source'
+cleanup() { rm -rf "$work"; }
+trap cleanup EXIT HUP INT TERM
+# This MUST be PR #152's verified range-reading implementation. It performs
+# the canonical offset, used pointer, length and SHA check before any emission.
+"$reader" "$request" "$root" > "$work/body" ||
+  fail 'canonical committed readback refused'
+test "$(wc -c < "$work/body" | tr -d '[:space:]')" = "$length" ||
+  fail 'reopened committed source length changed'
+test "$(sha256sum "$work/body" | cut -d ' ' -f 1)" = "$digest" ||
+  fail 'reopened committed source digest changed'
+{
+  printf 'schema\tib-html-admission-v1\n'
+  printf 'source_kind\tarena\n'
+  printf 'source_key\t%s\n' "$expected_key"
+  printf 'source_generation\t%s\n' "$generation"
+  printf 'requested_url\t%s\n' "$requested"
+  printf 'resolved_url\t%s\n' "$resolved"
+  printf 'http_status\t200\n'
+  printf 'mime_type\ttext/html\n'
+  printf 'charset\t%s\n' "$(field charset)"
+  printf 'sha256\t%s\n' "$digest"
+  printf 'byte_count\t%s\n' "$length"
+  printf 'acquisition_complete\tYES\n'
+  printf 'arena_reopen\tMATCH\n'
+} > "$work/admitted.tsv"
+IB_EXPECTED_SOURCE_GENERATION="$generation" \
+  sh "$(dirname -- "$0")/ib_emit_html_prepaint.grease" \
+  "$work/admitted.tsv" "$work/body" "$expected_key" "$output"

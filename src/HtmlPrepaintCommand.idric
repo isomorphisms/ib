@@ -1,0 +1,34 @@
+module HtmlPrepaintCommand
+
+import IB.HtmlPrepaint
+import System
+import System.File
+
+-- Only Grease may invoke this command for a separately reopened and
+-- source-admitted body. This program never acquires or stores HTML sources.
+program_arguments : List String → List String
+program_arguments [] = []
+program_arguments (_ :: args) = args
+
+emit_prepaint : HtmlEvidence → String → IO ()
+emit_prepaint evidence html =
+  case convert_admitted_html evidence html of
+    Left reason ⇒ die ("html-prepaint: " ++ reason)
+    Right prepaint ⇒ putStr prepaint.wire
+
+covering
+main : IO ()
+main = do
+  arguments <- getArgs
+  case program_arguments arguments of
+    [source_id, generation, claimed_sha, reopened_sha,
+     claimed_bytes, reopened_bytes, requested, resolved,
+     mime, charset, status, body_path] ⇒ do
+      body_result <- readFile body_path
+      case body_result of
+        Left _ ⇒ die "html-prepaint: admitted body unreadable"
+        Right html ⇒ emit_prepaint
+          (HtmlSourceEvidence source_id generation claimed_sha reopened_sha
+           (cast claimed_bytes) (cast reopened_bytes)
+           requested resolved mime charset status True True) html
+    _ ⇒ die "usage: ib-html-prepaint SOURCE GENERATION CLAIM_SHA REOPEN_SHA CLAIM_COUNT REOPEN_COUNT REQUESTED FINAL MIME CHARSET STATUS ADMITTED_BODY_PATH"
