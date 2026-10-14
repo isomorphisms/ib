@@ -2,7 +2,7 @@ module IB.HtmlLinks
 
 import IB.Information
 
-%default total
+-- Bounded by caller/admission; explicit conversion failures are returned.
 
 -- This is a deliberately bounded address resolver for admitted HTML links.
 -- It does not decode percent escapes or extend ICU's supported URL schemes.
