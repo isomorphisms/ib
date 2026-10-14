@@ -20,7 +20,7 @@ manifest="$root/receipts/$request.tsv"
 test -f "$manifest" && test ! -L "$manifest" || fail 'no committed receipt'
 test "$(wc -c < "$manifest" | tr -d '[:space:]')" -le 8192 || fail 'oversized producer receipt'
 awk -F '\t' '
-  NF != 2 || $1 !~ /^[a-z_]+$/ || $2 == "" || /\r/ { bad=1 }
+  NF != 2 || $1 !~ /^[a-z_][a-z_0-9]*$/ || $2 == "" || /\r/ { bad=1 }
   { if (seen[$1]++) bad=1 }
   END { if (bad || NR < 14) exit 1 }
 ' "$manifest" || fail 'invalid or duplicate producer receipt keys'
