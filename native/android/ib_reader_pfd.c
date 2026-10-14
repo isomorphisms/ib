@@ -2,6 +2,8 @@
 #include "ib_reader_pfd.h"
 
 #include <errno.h>
+#include <fcntl.h>
+#include <sys/stat.h>
 #include <limits.h>
 #include <poll.h>
 #include <stdlib.h>
@@ -217,6 +219,12 @@ int ib_reader_source_accept_fd(ib_reader_source *source,
     if (ticket->navigation_generation !=
         atomic_load(&source->wanted_navigation_generation))
         return IB_READER_PFD_STALE;
+    /* A bounded source pipe, never the backing Arena file or a writable FD. */
+    struct stat info;
+    int flags = fcntl(fd, F_GETFL);
+    if (flags < 0 || fstat(fd, &info) != 0 ||
+        !S_ISFIFO(info.st_mode) || (flags & O_ACCMODE) != O_RDONLY)
+        return IB_READER_PFD_BAD_TICKET;
 
     unsigned char *candidate = malloc((size_t)ticket->byte_count + 1U);
     if (!candidate) return IB_READER_PFD_IO;
