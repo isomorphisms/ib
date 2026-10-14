@@ -1,0 +1,14 @@
+ib-prepaint	1
+revision	1	partial
+title	Loading…
+text	Preparing projection
+end
+revision	5	complete
+requested-url	https://example.test/requested
+resolved-url	https://example.test/resolved
+title	Mathematical notes
+heading	2	Rotations
+text	A東京🙂éB\twith\nsecond line
+link	Paper	https://example.test/paper
+row	one	two
+end

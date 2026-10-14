@@ -1,0 +1,81 @@
+#!/bin/sh
+set -eu
+
+root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+test "$(uname -s)" = Darwin || { echo 'macOS host required' >&2; exit 2; }
+case "$(uname -m)" in arm64|x86_64) ;; *) echo 'unsupported host architecture' >&2; exit 2 ;; esac
+
+work=$(mktemp -d "${TMPDIR:-/tmp}/ib-macos.XXXXXX")
+trap 'rm -rf "$work"' EXIT HUP INT TERM
+compiler=$(xcrun --sdk macosx --find clang)
+"$compiler" --version
+xcrun --sdk macosx --show-sdk-version
+sdk=$(xcrun --sdk macosx --show-sdk-path)
+echo "host=$(uname -s)-$(uname -m)"
+
+"$compiler" -isysroot "$sdk" -std=c11 -Wall -Wextra -Werror -fPIC -dynamiclib \
+  -install_name '@rpath/libib_macos.dylib' \
+  -o "$work/libib_macos.dylib" "$root/native/macos/ib_platform.c"
+"$compiler" -isysroot "$sdk" -std=c11 -Wall -Wextra -Werror \
+  -o "$work/platform-test" \
+  "$root/native/macos/tests/platform_test.c" "$root/native/macos/ib_platform.c"
+"$work/platform-test"
+
+"$compiler" -isysroot "$sdk" -fobjc-arc -Wall -Wextra -Werror \
+  -mmacosx-version-min=12.0 -framework AppKit \
+  -o "$work/IBPrepaint" "$root/native/macos/IBPrepaint.m"
+
+"$work/IBPrepaint" --check "$root/native/macos/tests/valid.prepaint" |
+  diff - "$root/native/macos/tests/valid.check"
+"$work/IBPrepaint" --dump "$root/native/macos/tests/valid.prepaint" |
+  diff - "$root/native/macos/tests/valid.expected"
+
+cat > "$work/bad-escape.prepaint" <<'EOF'
+ib-prepaint	1
+revision	1	complete
+text	bad\q
+end
+EOF
+cat > "$work/bad-revision.prepaint" <<'EOF'
+ib-prepaint	1
+revision	5	partial
+text	before
+end
+revision	1	complete
+text	after
+end
+EOF
+cat > "$work/unsupported-image.prepaint" <<'EOF'
+ib-prepaint	1
+revision	1	complete
+image	file:///tmp/nowhere.png	alt	caption
+end
+EOF
+for wrong in bad-escape bad-revision unsupported-image; do
+  if "$work/IBPrepaint" --check "$work/$wrong.prepaint" >"$work/$wrong.log" 2>&1; then
+    echo "invalid fixture unexpectedly accepted: $wrong" >&2
+    exit 1
+  fi
+done
+head -c 4194305 /dev/zero > "$work/oversize.prepaint"
+if "$work/IBPrepaint" --check "$work/oversize.prepaint" >/dev/null 2>&1; then
+  echo 'oversized input unexpectedly accepted' >&2
+  exit 1
+fi
+
+file "$work/libib_macos.dylib" "$work/IBPrepaint"
+otool -L "$work/libib_macos.dylib"
+echo 'PASS: native ABI, prepaint contract, refused mutations, headless smoke'
+echo 'NOT_RUN: Idriç/Chez FFI, GUI interaction, real network, durable browser recovery'
+
+if [ -n "${IB_MACOS_OUTPUT:-}" ]; then
+  mkdir -p "$IB_MACOS_OUTPUT/IB Prepaint.app/Contents/MacOS"
+  mkdir -p "$IB_MACOS_OUTPUT/native"
+  cp "$work/IBPrepaint" "$IB_MACOS_OUTPUT/IB Prepaint.app/Contents/MacOS/IBPrepaint"
+  cp "$root/native/macos/Info.plist" "$IB_MACOS_OUTPUT/IB Prepaint.app/Contents/Info.plist"
+  cp "$work/libib_macos.dylib" "$IB_MACOS_OUTPUT/native/libib_macos.dylib"
+  cp "$root/native/macos/tests/valid.prepaint" "$IB_MACOS_OUTPUT/sample.prepaint"
+  (cd "$IB_MACOS_OUTPUT" && shasum -a 256 "IB Prepaint.app/Contents/MacOS/IBPrepaint" \
+      native/libib_macos.dylib > SHA256SUMS)
+  echo 'Unsigned experimental build artifacts written; not a browser release.'
+fi

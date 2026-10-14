@@ -1,0 +1,47 @@
+name: IB macOS native foundation
+
+on:
+  pull_request:
+    paths:
+      - 'native/macos/**'
+      - 'src/IB/MacOS/**'
+      - 'bin/check_macos_target.grease'
+      - 'docs/macos-target.md'
+      - '.github/workflows/macos-target.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  macos-native:
+    name: macOS ${{ matrix.arch }} (ABI + prepaint only)
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            arch: arm64
+          - runner: macos-15-intel
+            arch: x86_64
+    steps:
+      - name: Check out exact IB source revision
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Verify exact IB source
+        env:
+          EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+      - name: Build and test bounded native macOS surface
+        env:
+          IB_MACOS_OUTPUT: ${{ runner.temp }}/ib-macos
+        run: sh bin/check_macos_target.grease
+      - name: Retain unsigned experimental foundation build
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: ib-macos-native-${{ matrix.arch }}
+          path: ${{ runner.temp }}/ib-macos
+          if-no-files-found: error
