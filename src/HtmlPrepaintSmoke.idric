@@ -1,0 +1,91 @@
+module HtmlPrepaintSmoke
+
+import IB.HtmlPrepaint
+import IB.HtmlLinks
+import IB.Strand
+import System
+
+source_sha : String
+source_sha = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+
+example : String
+example =
+  "<html><head><title>A &amp; B</title></head><body>" ++
+  "<h1>First &lt; example</h1><h6>Sixth</h6>" ++
+  "<p>before<strong>bold</strong>after</p>" ++
+  "<p>prefix <a href='../other?q=1'>link</a> suffix</p>" ++
+  "<p>smile: &#x1F642; RTL: שלום e&#x301;</p>" ++
+  "<table><tr><td>A</td><td>B</td></tr></table>" ++
+  "<a href='javascript:alert(1)'>Unsafe</a>" ++
+  "<img src='/unfetched.png' alt='diagram' title='caption'>" ++
+  "<script>hidden</script></body></html>"
+
+evidence : HtmlEvidence
+evidence =
+  HtmlSourceEvidence "arena:fixture-example" "generation-1"
+    source_sha source_sha 500 500
+    "https://example.com/docs/page" "https://example.com/docs/page"
+    "text/html" "utf-8" "200" True True
+
+bad_evidence : HtmlEvidence
+bad_evidence =
+  HtmlSourceEvidence "arena:fixture-example" "generation-1"
+    source_sha "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    500 500 "https://example.com/" "https://example.com/"
+    "text/html" "utf-8" "200" True True
+
+contains : List Char → List Char → Bool
+contains needle [] = needle == []
+contains needle value@(_ :: rest) =
+  starts_with needle value || contains needle rest
+  where
+    starts_with : List Char → List Char → Bool
+    starts_with [] _ = True
+    starts_with (_ :: _) [] = False
+    starts_with (x :: xs) (y :: ys) =
+      x == y && starts_with xs ys
+
+has : String → String → Bool
+has sub value = contains (unpack sub) (unpack value)
+
+refused : Either String HtmlPrepaintResult → Bool
+refused (Left _) = True
+refused (Right _) = False
+
+check : List (String, Bool) → IO Bool
+check [] = pure True
+check ((name, passed) :: rest) = do
+  putStrLn (name ++ "=" ++ show passed)
+  more <- check rest
+  pure (passed && more)
+
+main : IO ()
+main =
+  case convert_admitted_html evidence example of
+    Left reason ⇒ die ("html-prepaint=" ++ reason)
+    Right output ⇒ do
+      let wire = output.wire
+      let tests =
+        [ ("version1", has "ib-prepaint\t1\nrevision\t0\tcomplete\n" wire)
+        , ("heading-one", has "heading\t1\tFirst < example\n" wire)
+        , ("heading-six", has "heading\t6\tSixth\n" wire)
+        , ("nested-inline", has "text\tbeforeboldafter\n" wire)
+        , ("relative-link", has "link\tlink\thttps://example.com/other?q=1\n" wire)
+        , ("paragraph-before-link", has "text\tprefix\n" wire)
+        , ("paragraph-after-link", has "text\tsuffix\n" wire)
+        , ("non-bmp", has "🙂" wire)
+        , ("numeric-combining", has "é" wire)
+        , ("table-row", has "row\tA\tB\n" wire)
+        , ("unsafe-no-link", not (has "link\tUnsafe" wire))
+        , ("image-unretrieved", has "Image pending acquisition: diagram — caption" wire)
+        , ("script-excluded", not (has "hidden" wire))
+        , ("digest-mismatch-refused", refused (convert_admitted_html bad_evidence example))
+        , ("fragment", resolve_html_reference "https://example.com/a?q=1#old" "#new" ==
+            Just "https://example.com/a?q=1#new")
+        , ("query", resolve_html_reference "https://example.com/a?q=1" "?q=2" ==
+            Just "https://example.com/a?q=2")
+        , ("unsafe-scheme", resolve_html_reference "https://example.com/" "javascript:bad" ==
+            Nothing)
+        ]
+      okay <- check tests
+      if okay then pure () else exitFailure
