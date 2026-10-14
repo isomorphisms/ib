@@ -47,10 +47,15 @@ jobs:
           grep -F 'NOT_RUN: Android Binder service' build/c67-pfd/host/receipt.txt
           sha256sum build/c67-pfd/host/test-reader-pfd \
             > build/c67-pfd/host/sha256.txt
+      - id: ick
+        uses: isomorphisms/ai-ci/ick-host@015cc7901ae0b3ad262b476f24e129b53c56db95
       - name: Read and serve actual canonical Arena bytes as a scoped pipe
+        env:
+          ICK: ${{ steps.ick.outputs.compiler }}
         run: |
           set -eu
-          cc -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror \
+          test -x "$ICK"
+          "$ICK" -fno-link-libatomic -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror \
             .deps/appendfat/lib/appendfat_arena.c \
             .deps/appendfat/tools/appendfat_arena.c -o build/c67-pfd/host/appendfat_arena
           cc -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror \
