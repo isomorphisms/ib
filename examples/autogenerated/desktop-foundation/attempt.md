@@ -37,6 +37,22 @@ new consumer C stage records ICK and the native dependency hashes separately.
 
 ## Result
 
-PENDING native compiler qualification, generated executable and FFI execution.
-Window, input, HTTP(S), disk restoration, worker termination and Android runtime
-acceptance are not performed by this executable.
+Linux generated-program / native FFI PASS on the declared build container. The
+actual 38-case shared oracle plus eight independent ABI/UTF-8 cases executed;
+compiled C mutation and missing-library controls were rejected, and clean
+restoration passed. ICK's pinned producer qualified at -O0/-O2 and rejected its
+division mutant. The native library is ELF 64-bit x86-64 with resolved libc.
+
+FP runs retain exact exits and input/executable hashes. The existing Idriç/Chez
+route succeeded without RefC. Native Grease source-file quoting was repaired
+after an actual apostrophe-path failure. A separate compiler failure with 東京
+in the build root exposed decimal escapes in compileChez and a zero compiler
+exit after Error:. See https://github.com/isomorphisms/Idric/issues/138. The
+recipe explicitly restricts build roots to ASCII and rejects compiler error
+output; the compiled program separately passed Unicode-path relocation/launch.
+
+The generated Scheme source, launcher and C library matched across two fresh
+output builds; the compiled Chez .so hashes differed. This is not yet byte
+reproducibility acceptance. Source/runtime/producer qualification remains bounded
+and compiler/support archive debt is not retired. Window, input, HTTP(S), disk
+restoration, worker termination and Android runtime remain NOT_RUN.

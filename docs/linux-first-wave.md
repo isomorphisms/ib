@@ -44,12 +44,16 @@ The initial 38-case Linux checker/evaluator run passed, rejected disposable-tab,
 UTF-16-width and source-binding mutations, and restored the clean control. A
 producer that printed True then exited 7 was refused before evaluation. The
 public Idriç vocabulary guard passed. Native generation/FFI qualification and
-exact published-source replays are recorded separately in FP receipts.
+exact published-source replays are recorded separately in FP receipts. The
+generated Chez program actually executed all 46 shared/native cases, rejected
+the C byte-count mutant and missing library, restored the clean library, and
+launched from a relocated Unicode/apostrophe path. This is build-container
+runtime evidence; it is not graphical desktop acceptance.
 
 | Evidence lane | Meaning | First-wave obligation |
 | --- | --- | --- |
 | Semantic | Actual shared Idriç modules plus independent goldens | Linux check/evaluator result is available |
-| Linux generated program | Maintained Chez program, declared native runtime, ICK C ABI | Requires executable receipt; no direct-ELF claim |
+| Linux generated program | Maintained Chez program, declared native runtime, ICK C ABI | 46 cases and native failure/recovery passed; no direct-ELF claim |
 | Android ARM32 / ARM64 | Same shared semantic changes on maintained targets | Required unresolved followers; do not accept the shared change yet |
 | Native graphical | Real ib-desktop in qualified Wayland/X11 session | Not run by this slice |
 | Real network | Actual HTTP(S), redirects and clicked-link content | Not run by this slice |
@@ -72,11 +76,20 @@ separate. Until both Android followers pass, the integration PR remains draft.
 
 ## Outstanding work
 
-First-wave qualification still needs two fresh-cache builds and reproducibility
-and relocation results for a delivered executable bundle. The compiler/support
+First-wave qualification still needs fresh-host/compiler qualification and
+delivered-bundle reproducibility. Two fresh consumer output builds produced
+identical generated Scheme, launcher and C library but different compiled Chez
+program hashes; byte reproducibility is unresolved. The compiler/support
 archive has legacy producer toolchain debt; the new consumer C stage uses ICK
 and records its borrowed host runtime hashes. A direct x86 backend without
 general Text, allocation and FFI remains insufficient for the browser.
+
+Maintained compiler 94dfd99bd also misquotes non-ASCII Chez build paths and
+returns zero after that compilation failure. The checking recipe refuses those
+build roots explicitly and rejects Error: output. Unicode source text/FFI and
+runtime relocation are separately successful. The upstream repair is tracked
+in [Idriç issue 138](https://github.com/isomorphisms/Idric/issues/138); a proposed
+repair is not counted as executed work.
 
 SUN IB-X64-02/03/04/05 must deliver the first integrated milestone: native
 window/input, existing source-backed prepaint/reflow, real ICU acquisition and
