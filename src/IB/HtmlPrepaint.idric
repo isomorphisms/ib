@@ -156,8 +156,9 @@ map_item e base (IB.Information.Image url alt caption destination) =
       Nothing ⇒ []
       Just source ⇒ [NeedImageAcquisition source alt caption e.source_key] in
   let image_notes =
-    if pending == [] then ["unsupported-image-reference:" ++ url]
-    else ["image-requires-separate-admission:" ++ url] in
+    case pending of
+      [] ⇒ ["unsupported-image-reference:" ++ url]
+      _ ⇒ ["image-requires-separate-admission:" ++ url] in
   let (linked, link_notes) =
     if destination == "" then ([], [])
     else checked_link base label destination in
