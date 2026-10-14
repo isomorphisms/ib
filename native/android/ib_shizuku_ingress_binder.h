@@ -11,7 +11,7 @@
  * authorized Shizuku/rish bridge. The caller never gets an Arena pathname. */
 AIBinder *ib_shizuku_ingress_binder_new(ib_shizuku_arena_ingress *session);
 
-/* Transaction 2: BEGIN(request_id, generation) -> (status, WRITE PFD).
+/* Transaction 2: BEGIN(request_id, generation) -> (status, URL, WRITE PFD).
  * Transaction 3: FINISH(request_id, generation, ICU process exit status)
  *                -> (status).
  * Status zero is permitted only after the app independently committed and
@@ -27,6 +27,7 @@ enum {
 int ib_shizuku_ingress_begin_remote(AIBinder *binder,
                                     const char *request_id,
                                     uint64_t navigation_generation,
+                                    char app_authorized_url[IB_INGRESS_URL_CAP + 1U],
                                     int *write_fd);
 int ib_shizuku_ingress_finish_remote(AIBinder *binder,
                                      const char *request_id,
