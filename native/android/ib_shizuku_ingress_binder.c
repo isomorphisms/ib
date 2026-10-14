@@ -42,6 +42,20 @@ static int valid_name(const request_name *name) {
     return 1;
 }
 
+typedef struct {
+    char url[IB_INGRESS_URL_CAP + 1U];
+    int32_t capacity;
+} authorized_url_reply;
+
+static bool allocate_url(void *opaque, int32_t length, char **out) {
+    authorized_url_reply *reply = opaque;
+    if (!reply || !out || length < 10 ||
+        length > (int32_t)sizeof(reply->url)) return false;
+    reply->capacity = length;
+    *out = reply->url;
+    return true;
+}
+
 static void *created(void *user_data) { return user_data; }
 static void destroyed(void *user_data) { (void)user_data; }
 
@@ -72,6 +86,10 @@ static binder_status_t serve(AIBinder *binder, transaction_code_t code,
             return AParcel_writeInt32(out, -1);
         }
         status = AParcel_writeInt32(out, 0);
+        if (status == STATUS_OK)
+            status = AParcel_writeString(
+                out, session->requested_url,
+                (int32_t)strlen(session->requested_url));
         if (status == STATUS_OK)
             status = AParcel_writeParcelFileDescriptor(out, fd);
         close(fd);
@@ -131,9 +149,12 @@ static int prepare(AIBinder *binder, const char *id, uint64_t generation,
 }
 
 int ib_shizuku_ingress_begin_remote(AIBinder *binder, const char *id,
-                                    uint64_t generation, int *write_fd) {
+                                    uint64_t generation,
+                                    char app_authorized_url[IB_INGRESS_URL_CAP + 1U],
+                                    int *write_fd) {
     if (write_fd) *write_fd = -1;
-    if (!write_fd) return -1;
+    if (app_authorized_url) app_authorized_url[0] = '\0';
+    if (!write_fd || !app_authorized_url) return -1;
     AParcel *request = NULL, *reply = NULL;
     if (prepare(binder, id, generation, &request) != 0) return -1;
     binder_status_t status = AIBinder_transact(
@@ -144,7 +165,16 @@ int ib_shizuku_ingress_begin_remote(AIBinder *binder, const char *id,
     }
     int32_t remote_status = -1;
     int descriptor = -1;
+    authorized_url_reply authorized_url = {{0}, 0};
     status = AParcel_readInt32(reply, &remote_status);
+    if (status == STATUS_OK && remote_status == 0)
+        status = AParcel_readString(reply, &authorized_url, allocate_url);
+    if (status == STATUS_OK && remote_status == 0) {
+        if (authorized_url.capacity < 10 ||
+            strnlen(authorized_url.url, sizeof(authorized_url.url)) + 1U !=
+                (size_t)authorized_url.capacity)
+            status = STATUS_BAD_VALUE;
+    }
     if (status == STATUS_OK && remote_status == 0)
         status = AParcel_readParcelFileDescriptor(reply, &descriptor);
     AParcel_delete(reply);
@@ -152,6 +182,8 @@ int ib_shizuku_ingress_begin_remote(AIBinder *binder, const char *id,
         if (descriptor >= 0) close(descriptor);
         return -1;
     }
+    memcpy(app_authorized_url, authorized_url.url,
+           (size_t)authorized_url.capacity);
     *write_fd = descriptor;
     return 0;
 }
