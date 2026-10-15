@@ -97,12 +97,9 @@ main = do
   let balanced_selected = is_balanced (select_reflow (Requirements 8 evenly))
   let greedy_correct = matches_lines ["aa bb cc", "dd", "eeeeee"] promptly_lines
   let balanced_correct = matches_lines ["aa bb", "cc dd", "eeeeee"] evenly_lines
-  let long_word_intact = matches_lines ["abcdefghij", "x"]
-    (reflow (Requirements 8 promptly) character_width ["abcdefghij", "x"])
-  let empty_intact = matches_lines []
-    (reflow (Requirements 8 evenly) character_width [])
-  let zero_refused = has_error
-    (reflow (Requirements 0 promptly) character_width ["x"])
+  let long_word_intact = matches_lines ["abcdefghij", "x"] (reflow (Requirements 8 promptly) character_width ["abcdefghij", "x"])
+  let empty_intact = matches_lines [] (reflow (Requirements 8 evenly) character_width [])
+  let zero_refused = has_error (reflow (Requirements 0 promptly) character_width ["x"])
   putStrLn ("reflow-selected-greedy=" ++ show greedy_selected)
   putStrLn ("reflow-selected-balanced=" ++ show balanced_selected)
   putStrLn ("reflow-greedy-lines=" ++ show promptly_lines)
