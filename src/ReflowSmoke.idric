@@ -85,8 +85,7 @@ has_adjustment (_ :: _) = True
 
 knuth_plan_case : Bool
 knuth_plan_case =
-  case reflow_knuth_plass (default_knuth_settings 8)
-    character_width 8 ["aa", "bb", "cc", "dd", "eeeeee"] of
+  case reflow_knuth_plass (default_knuth_settings 8) character_width 8 ["aa", "bb", "cc", "dd", "eeeeee"] of
     Left _ ⇒ False
     Right lines ⇒
       has_adjustment lines &&
@@ -99,20 +98,16 @@ incremental_case =
   case reflow_incrementally request "font-1" character_width words Nothing of
     Left _ ⇒ False
     Right built ⇒
-      case reflow_incrementally request "font-1" character_width
-        words (Just built.resulting_cache) of
+      case reflow_incrementally request "font-1" character_width words (Just built.resulting_cache) of
         Left _ ⇒ False
         Right reused ⇒
-          case reflow_incrementally request "font-1" character_width
-            ["aa", "bb", "changed"] (Just built.resulting_cache) of
+          case reflow_incrementally request "font-1" character_width ["aa", "bb", "changed"] (Just built.resulting_cache) of
             Left _ ⇒ False
             Right edited ⇒
-              case reflow_incrementally (Requirements 7 evenly)
-                "font-1" character_width words (Just built.resulting_cache) of
+              case reflow_incrementally (Requirements 7 evenly) "font-1" character_width words (Just built.resulting_cache) of
                 Left _ ⇒ False
                 Right resized ⇒
-                  case reflow_incrementally request
-                    "font-2" character_width words (Just built.resulting_cache) of
+                  case reflow_incrementally request "font-2" character_width words (Just built.resulting_cache) of
                     Left _ ⇒ False
                     Right new_metric ⇒
                       not built.reused_previous &&
@@ -126,25 +121,17 @@ main = do
   let words = ["aa", "bb", "cc", "dd", "eeeeee"]
   let greedy_lines = ["aa bb cc", "dd", "eeeeee"]
   let evenly_lines = ["aa bb", "cc dd", "eeeeee"]
-  let greedy_ok = matches greedy_lines
-    (reflow (Requirements 8 promptly) character_width words)
-  let streaming_ok = matches greedy_lines
-    (reflow (Requirements 8 streamingly) character_width words)
-  let balanced_ok = matches evenly_lines
-    (reflow (Requirements 8 evenly) character_width words)
-  let threshold_ok = matches evenly_lines
-    (reflow (Requirements 8 without_extra_lines) character_width words)
+  let greedy_ok = matches greedy_lines (reflow (Requirements 8 promptly) character_width words)
+  let streaming_ok = matches greedy_lines (reflow (Requirements 8 streamingly) character_width words)
+  let balanced_ok = matches evenly_lines (reflow (Requirements 8 evenly) character_width words)
+  let threshold_ok = matches evenly_lines (reflow (Requirements 8 without_extra_lines) character_width words)
 
   -- This paragraph discriminates different dynamic-programming objectives.
   let odd = ["xxxx", "xxxxx", "xx", "xx", "xxxxxx", "x", "xx"]
-  let cubic_ok = matches ["xxxx xxxxx", "xx xx", "xxxxxx", "x xx"]
-    (reflow (Requirements 10 minimizing_raggedness) character_width odd)
-  let final_free_ok = matches ["xxxx xxxxx", "xx xx", "xxxxxx x", "xx"]
-    (reflow (Requirements 10 ignoring_final_line) character_width odd)
-  let minimax_ok = matches ["xxxx", "xxxxx", "xx xx", "xxxxxx", "x xx"]
-    (reflow (Requirements 10 minimizing_worst_gap) character_width odd)
-  let squared_ok = matches ["xxxx", "xxxxx xx", "xx xxxxxx", "x xx"]
-    (reflow (Requirements 10 evenly) character_width odd)
+  let cubic_ok = matches ["xxxx xxxxx", "xx xx", "xxxxxx", "x xx"] (reflow (Requirements 10 minimizing_raggedness) character_width odd)
+  let final_free_ok = matches ["xxxx xxxxx", "xx xx", "xxxxxx x", "xx"] (reflow (Requirements 10 ignoring_final_line) character_width odd)
+  let minimax_ok = matches ["xxxx", "xxxxx", "xx xx", "xxxxxx", "x xx"] (reflow (Requirements 10 minimizing_worst_gap) character_width odd)
+  let squared_ok = matches ["xxxx", "xxxxx xx", "xx xxxxxx", "x xx"] (reflow (Requirements 10 evenly) character_width odd)
 
   let modes = [promptly, streamingly, evenly, minimizing_raggedness,
     ignoring_final_line, minimizing_worst_gap, without_extra_lines,
