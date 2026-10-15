@@ -1,0 +1,237 @@
+module IB.Reflow.KnuthPlass
+
+import Data.Text
+import IB.Reflow.Arithmetic
+
+-- A real (deliberately restricted) Knuth–Plass box/glue line breaker:
+-- ordered word boxes; break opportunities at interword spaces; optional
+-- stretching/shrinking of those spaces; cubic adjustment badness; and an
+-- adjacent-line fitness demerit. There is NO dictionary hyphenation or
+-- discretionary penalty-node input yet. This is not TeX's complete engine.
+--
+-- In contrast with quadratic raggedness, candidates carry the amount of
+-- space adjustment required. Consumers wanting justification must use the
+-- annotated line plan, not merely its plain-text projection.
+public export
+record KnuthSettings where
+  constructor KnuthOptions
+  stretch_per_gap : Number
+  shrink_per_gap : Number
+  emergency_stretch : Number
+  badness_tolerance : Number
+  fixed_line_penalty : Number
+  abrupt_fitness_penalty : Number
+
+public export
+data SpaceAdjustment
+  = NoAdjustment
+  | SpreadSpaces Number Number
+  | CompressSpaces Number Number
+
+public export
+data Fitness
+  = VeryTight
+  | Tight
+  | Neutral
+  | Loose
+  | VeryLoose
+
+public export
+record JustifiedLine where
+  constructor Justified
+  line_text : Text
+  spacing : SpaceAdjustment
+  line_fitness : Fitness
+
+record KnuthPlan where
+  constructor PlannedKnuth
+  total_demerits : Number
+  justified_lines : List JustifiedLine
+
+-- Suffix plans are keyed by the fitness of the line immediately preceding
+-- the suffix. This retains all five states needed for the transition cost;
+-- keeping only one best suffix plan would give an incorrect optimum.
+record PlansForSuffix where
+  constructor SuffixPlans
+  from_very_tight : Maybe KnuthPlan
+  from_tight : Maybe KnuthPlan
+  from_neutral : Maybe KnuthPlan
+  from_loose : Maybe KnuthPlan
+  from_very_loose : Maybe KnuthPlan
+
+next_plan : Fitness → PlansForSuffix → Maybe KnuthPlan
+next_plan VeryTight plans = plans.from_very_tight
+next_plan Tight plans = plans.from_tight
+next_plan Neutral plans = plans.from_neutral
+next_plan Loose plans = plans.from_loose
+next_plan VeryLoose plans = plans.from_very_loose
+
+fitness_number : Fitness → Number
+fitness_number VeryTight = 0
+fitness_number Tight = 1
+fitness_number Neutral = 2
+fitness_number Loose = 3
+fitness_number VeryLoose = 4
+
+fitness_distance : Fitness → Fitness → Number
+fitness_distance first later =
+  let a = fitness_number first in
+  let b = fitness_number later in
+  if a >= b then nonnegative_difference a b else nonnegative_difference b a
+
+is_last : List Text → Bool
+is_last [] = True
+is_last (_ :: _) = False
+
+-- TeX-style cubic badness with an integer numerator and denominator. The
+-- exact ratio is also recorded, avoiding floating-point rounding in the plan.
+adjustment_badness : Number → Number → Number
+adjustment_badness amount capacity =
+  capped_badness_quotient
+    (100 * amount * amount * amount)
+    (capacity * capacity * capacity)
+
+within_tolerance : KnuthSettings → Number → Bool
+within_tolerance settings badness =
+  badness <= settings.badness_tolerance
+
+spread_fitness : Number → Number → Fitness
+spread_fitness amount capacity =
+  if amount ≟ 0 then Neutral
+  else if 2 * amount <= capacity then Neutral
+  else if amount <= capacity then Loose
+  else VeryLoose
+
+shrink_fitness : Number → Number → Fitness
+shrink_fitness amount capacity =
+  if 2 * amount <= capacity then Tight else VeryTight
+
+-- A sole overwide word remains intact and is charged an explicit emergency
+-- penalty. A multiword line cannot exceed the width unless its spaces have
+-- enough declared shrink capacity. A final line is left unjustified.
+shape_line : KnuthSettings → (Text → Number) → Number →
+  Text → Number → Bool → Maybe (JustifiedLine, Number)
+shape_line settings measure width line gaps last =
+  let natural = measure line in
+  if natural > width && gaps ≟ 0
+    then Just (Justified line NoAdjustment VeryTight, 10000)
+    else if last
+      then if natural <= width
+        then Just (Justified line NoAdjustment Neutral, 0)
+        else Nothing
+      else if natural <= width
+        then let unused = nonnegative_difference width natural in
+             if unused ≟ 0
+               then Just (Justified line NoAdjustment Neutral, 0)
+               else let capacity =
+                      gaps * settings.stretch_per_gap +
+                      settings.emergency_stretch in
+                    let badness = adjustment_badness unused capacity in
+                    if capacity ≟ 0 || not (within_tolerance settings badness)
+                      then Nothing
+                      else Just
+                        (Justified line (SpreadSpaces unused capacity)
+                          (spread_fitness unused capacity), badness)
+        else let excess = nonnegative_difference natural width in
+             let capacity = gaps * settings.shrink_per_gap in
+             let badness = adjustment_badness excess capacity in
+             if capacity ≟ 0 || excess > capacity ||
+                not (within_tolerance settings badness)
+               then Nothing
+               else Just
+                 (Justified line (CompressSpaces excess capacity)
+                   (shrink_fitness excess capacity), badness)
+
+consider : KnuthSettings → (Text → Number) → Number → Fitness →
+  Text → Number → Bool → PlansForSuffix → Maybe KnuthPlan
+consider settings measure width previous line gap_count last tail_plans =
+  case shape_line settings measure width line gap_count last of
+    Nothing ⇒ Nothing
+    Just (geometry, badness) ⇒
+      case next_plan geometry.line_fitness tail_plans of
+        Nothing ⇒ Nothing
+        Just (PlannedKnuth tail_cost tail_lines) ⇒
+          let line_cost = settings.fixed_line_penalty + badness in
+          let fitness_jump = fitness_distance previous geometry.line_fitness in
+          let change_penalty =
+            if fitness_jump > 1 then settings.abrupt_fitness_penalty else 0 in
+          Just (PlannedKnuth
+            (line_cost * line_cost + change_penalty + tail_cost)
+            (geometry :: tail_lines))
+
+prefer : Maybe KnuthPlan → Maybe KnuthPlan → Maybe KnuthPlan
+prefer Nothing second = second
+prefer first Nothing = first
+prefer (Just first) (Just second) =
+  if first.total_demerits <= second.total_demerits
+    then Just first else Just second
+
+explore : KnuthSettings → (Text → Number) → Number → Fitness →
+  Text → Number → List Text → List PlansForSuffix →
+  Maybe KnuthPlan → Maybe KnuthPlan
+explore settings measure width previous current gaps [] plans best = best
+explore settings measure width previous current gaps words [] best = best
+explore settings measure width previous current gaps
+  (word :: rest) (tail :: later) best =
+  let extended = current ++ " " ++ word in
+  let new_gaps = S gaps in
+  let proposal = consider settings measure width previous extended new_gaps (is_last rest) tail in
+  explore settings measure width previous extended new_gaps
+    rest later (prefer best proposal)
+
+best_from : KnuthSettings → (Text → Number) → Number → Fitness →
+  List Text → List PlansForSuffix → Maybe KnuthPlan
+best_from settings measure width previous [] plans = Nothing
+best_from settings measure width previous words [] = Nothing
+best_from settings measure width previous (word :: rest) (tail :: later) =
+  let initial = consider settings measure width previous word Z (is_last rest) tail in
+  explore settings measure width previous word Z rest later initial
+
+terminal_plans : PlansForSuffix
+terminal_plans =
+  let empty = Just (PlannedKnuth 0 []) in
+  SuffixPlans empty empty empty empty empty
+
+make_suffix_plan : KnuthSettings → (Text → Number) → Number →
+  List Text → List PlansForSuffix → PlansForSuffix
+make_suffix_plan settings measure width words tails =
+  let a = best_from settings measure width VeryTight words tails in
+  let b = best_from settings measure width Tight words tails in
+  let c = best_from settings measure width Neutral words tails in
+  let d = best_from settings measure width Loose words tails in
+  let e = best_from settings measure width VeryLoose words tails in
+  SuffixPlans a b c d e
+
+all_suffix_plans : KnuthSettings → (Text → Number) → Number →
+  List Text → List PlansForSuffix
+all_suffix_plans settings measure width [] = [terminal_plans]
+all_suffix_plans settings measure width words@(_ :: rest) =
+  let tails = all_suffix_plans settings measure width rest in
+  make_suffix_plan settings measure width words tails :: tails
+
+public export
+reflow_knuth_plass : KnuthSettings → (Text → Number) → Number →
+  List Text → Either Text (List JustifiedLine)
+reflow_knuth_plass settings measure width [] = Right []
+reflow_knuth_plass settings measure width words =
+  case all_suffix_plans settings measure width words of
+    [] ⇒ Left "Knuth-Plass could not construct suffix plans"
+    plans :: _ ⇒
+      case next_plan Neutral plans of
+        Nothing ⇒ Left "No admissible Knuth-Plass line-break plan"
+        Just (PlannedKnuth _ lines) ⇒ Right lines
+
+-- The defaults are a *policy*, not a benchmark finding: temporary stretch
+-- scales with the viewport so readable ragged text is still feasible.
+-- Shrink is disabled for the plain-text IB projection. A future native
+-- renderer that actually consumes SpaceAdjustment can enable it explicitly.
+public export
+default_knuth_settings : Number → KnuthSettings
+default_knuth_settings width =
+  KnuthOptions 2 0 width 10000 10 2000
+
+public export
+plain_lines : List JustifiedLine → List Text
+plain_lines [] = []
+plain_lines ((Justified text adjustment fitness) :: rest) =
+  text :: plain_lines rest
