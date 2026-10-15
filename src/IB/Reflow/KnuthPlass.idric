@@ -192,18 +192,22 @@ terminal_plans =
   let empty = Just (PlannedKnuth 0 []) in
   SuffixPlans empty empty empty empty empty
 
+make_suffix_plan : KnuthSettings → (Text → Number) → Number →
+  List Text → List PlansForSuffix → PlansForSuffix
+make_suffix_plan settings measure width words tails =
+  let a = best_from settings measure width VeryTight words tails in
+  let b = best_from settings measure width Tight words tails in
+  let c = best_from settings measure width Neutral words tails in
+  let d = best_from settings measure width Loose words tails in
+  let e = best_from settings measure width VeryLoose words tails in
+  SuffixPlans a b c d e
+
 all_suffix_plans : KnuthSettings → (Text → Number) → Number →
   List Text → List PlansForSuffix
 all_suffix_plans settings measure width [] = [terminal_plans]
 all_suffix_plans settings measure width words@(_ :: rest) =
   let tails = all_suffix_plans settings measure width rest in
-  let current = (SuffixPlans
-    (best_from settings measure width VeryTight words tails)
-    (best_from settings measure width Tight words tails)
-    (best_from settings measure width Neutral words tails)
-    (best_from settings measure width Loose words tails)
-    (best_from settings measure width VeryLoose words tails)) in
-  current :: tails
+  make_suffix_plan settings measure width words tails :: tails
 
 public export
 reflow_knuth_plass : KnuthSettings → (Text → Number) → Number →
