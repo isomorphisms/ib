@@ -168,6 +168,13 @@ exercise_information() {
   grep -Fx 'phone-api-row=True' /tmp/ib-information-smoke.txt
   grep -Fx 'phone-lines=8' /tmp/ib-information-smoke.txt
   grep -Fx 'phone-width-bounded=True' /tmp/ib-information-smoke.txt
+  grep -Fx 'reflow-selected-greedy=True' /tmp/ib-information-smoke.txt
+  grep -Fx 'reflow-selected-balanced=True' /tmp/ib-information-smoke.txt
+  grep -Fx 'reflow-greedy-correct=True' /tmp/ib-information-smoke.txt
+  grep -Fx 'reflow-balanced-correct=True' /tmp/ib-information-smoke.txt
+  grep -Fx 'reflow-overwide-word-intact=True' /tmp/ib-information-smoke.txt
+  grep -Fx 'reflow-empty-intact=True' /tmp/ib-information-smoke.txt
+  grep -Fx 'reflow-zero-width-refused=True' /tmp/ib-information-smoke.txt
   sh -n bin/prepaint_arxiv_progressively.grease
   sh -n tests/test_arxiv_progressive_prepaint.grease
   sh tests/test_arxiv_progressive_prepaint.grease
