@@ -50,6 +50,31 @@ paragraph_case =
       let Emitted last _ = feed_chunk character_width after "cc dd" in
       first_paragraph ≟ ["aa bb"] && finish_stream character_width last ≟ ["cc dd"]
 
+preserves_in_every_mode : List reflow_adverb → List Text → Bool
+preserves_in_every_mode [] words = True
+preserves_in_every_mode (mode :: more) words =
+  keeps_words words (reflow (Requirements 10 mode) character_width words) &&
+  preserves_in_every_mode more words
+
+overwide_in_every_mode : List reflow_adverb → Bool
+overwide_in_every_mode [] = True
+overwide_in_every_mode (mode :: more) =
+  matches ["abcdefghij", "x"]
+    (reflow (Requirements 8 mode) character_width ["abcdefghij", "x"]) &&
+  overwide_in_every_mode more
+
+empty_in_every_mode : List reflow_adverb → Bool
+empty_in_every_mode [] = True
+empty_in_every_mode (mode :: more) =
+  matches [] (reflow (Requirements 8 mode) character_width []) &&
+  empty_in_every_mode more
+
+zero_refused_in_every_mode : List reflow_adverb → Bool
+zero_refused_in_every_mode [] = True
+zero_refused_in_every_mode (mode :: more) =
+  has_error (reflow (Requirements 0 mode) character_width ["x"]) &&
+  zero_refused_in_every_mode more
+
 main : IO ()
 main = do
   let words = ["aa", "bb", "cc", "dd", "eeeeee"]
@@ -77,14 +102,10 @@ main = do
 
   let modes = [promptly, streamingly, evenly, minimizing_raggedness,
     ignoring_final_line, minimizing_worst_gap, without_extra_lines]
-  let content_preserved = all (\mode ⇒ keeps_words odd
-    (reflow (Requirements 10 mode) character_width odd)) modes
-  let long_word_intact = all (\mode ⇒ matches ["abcdefghij", "x"]
-    (reflow (Requirements 8 mode) character_width ["abcdefghij", "x"])) modes
-  let empty_intact = all (\mode ⇒ matches []
-    (reflow (Requirements 8 mode) character_width [])) modes
-  let zero_refused = all (\mode ⇒ has_error
-    (reflow (Requirements 0 mode) character_width ["x"])) modes
+  let content_preserved = preserves_in_every_mode modes odd
+  let long_word_intact = overwide_in_every_mode modes
+  let empty_intact = empty_in_every_mode modes
+  let zero_refused = zero_refused_in_every_mode modes
   let (emits_early, chunk_invariant) = streaming_case
   let paragraphs_ok = paragraph_case
   let zero_stream_refused =
