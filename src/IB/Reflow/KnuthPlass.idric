@@ -1,6 +1,7 @@
 module IB.Reflow.KnuthPlass
 
 import Data.Text
+import IB.Reflow.Arithmetic
 
 -- A real (deliberately restricted) Knuth–Plass box/glue line breaker:
 -- ordered word boxes; break opportunities at interword spaces; optional
@@ -76,7 +77,7 @@ fitness_distance : Fitness → Fitness → Number
 fitness_distance first later =
   let a = fitness_number first in
   let b = fitness_number later in
-  if a >= b then a - b else b - a
+  if a >= b then nonnegative_difference a b else nonnegative_difference b a
 
 is_last : List Text → Bool
 is_last [] = True
@@ -119,7 +120,7 @@ shape_line settings measure width line gaps last =
         then Just (Justified line NoAdjustment Neutral, 0)
         else Nothing
       else if natural <= width
-        then let unused = width - natural in
+        then let unused = nonnegative_difference width natural in
              if unused ≟ 0
                then Just (Justified line NoAdjustment Neutral, 0)
                else let capacity =
@@ -131,7 +132,7 @@ shape_line settings measure width line gaps last =
                       else Just
                         (Justified line (SpreadSpaces unused capacity)
                           (spread_fitness unused capacity), badness)
-        else let excess = natural - width in
+        else let excess = nonnegative_difference natural width in
              let capacity = gaps * settings.shrink_per_gap in
              let badness = adjustment_badness excess capacity in
              if capacity ≟ 0 || excess > capacity ||
