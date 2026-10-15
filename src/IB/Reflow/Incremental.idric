@@ -1,0 +1,60 @@
+module IB.Reflow.Incremental
+
+import Data.Text
+import IB.Reflow
+
+-- Incremental reflow is a cache strategy across revisions, not a competing
+-- line-break objective. Reuse a paragraph only when its source segments, width,
+-- chosen manner, and shaping/measurement identity all match.
+-- An editor or view owns paragraph IDs and separate cache entries; this module
+-- never becomes the canonical source and must not override source revisions.
+public export
+record ParagraphCache where
+  constructor CachedParagraph
+  cached_width : Number
+  cached_how : reflow_adverb
+  cached_metric_key : Text
+  cached_segments : List Text
+  cached_output : List Text
+
+public export
+record CacheResult where
+  constructor ParagraphResult
+  resulting_cache : ParagraphCache
+  reused_previous : Bool
+
+same_manner : reflow_adverb → reflow_adverb → Bool
+same_manner promptly promptly = True
+same_manner streamingly streamingly = True
+same_manner evenly evenly = True
+same_manner minimizing_raggedness minimizing_raggedness = True
+same_manner ignoring_final_line ignoring_final_line = True
+same_manner minimizing_worst_gap minimizing_worst_gap = True
+same_manner without_extra_lines without_extra_lines = True
+same_manner _ _ = False
+
+cache_matches : ReflowRequirements → Text → List Text →
+  ParagraphCache → Bool
+cache_matches (Requirements width manner) metric_key segments
+  (CachedParagraph old_width old_manner old_metric old_segments _) =
+  width ≟ old_width && same_manner manner old_manner &&
+  metric_key ≟ old_metric && segments ≟ old_segments
+
+public export
+reflow_incrementally : ReflowRequirements → Text → (Text → Number) →
+  List Text → Maybe ParagraphCache → Either Text CacheResult
+reflow_incrementally requirements@(Requirements width manner)
+  metric_key measure segments previous =
+  case previous of
+    Just cache ⇒
+      if width > 0 && cache_matches requirements metric_key segments cache
+        then Right (ParagraphResult cache True)
+        else rebuild
+    Nothing ⇒ rebuild
+  where
+    rebuild : Either Text CacheResult
+    rebuild =
+      case reflow requirements measure segments of
+        Left problem ⇒ Left problem
+        Right lines ⇒ Right (ParagraphResult
+          (CachedParagraph width manner metric_key segments lines) False)
