@@ -37,11 +37,11 @@ consider_longer measure width current [] plans best = best
 consider_longer measure width current words [] best = best
 consider_longer measure width current (next :: rest) (tail :: tails) best =
   let extended = current ++ " " ++ next in
-  let updated = if measure extended <= width
-    then prefer best (candidate measure width extended tail)
-    else best in
-  -- An arbitrary shaped width metric might not be monotone. Keep checking.
-  consider_longer measure width extended rest tails updated
+  -- Check every candidate even after a non-fitting prefix.
+  if measure extended <= width
+    then consider_longer measure width extended rest tails
+      (prefer best (candidate measure width extended tail))
+    else consider_longer measure width extended rest tails best
 
 -- This is an executable suffix dynamic program, not an exponential search.
 -- The first plan in the returned list is for the full supplied suffix.
