@@ -54,11 +54,10 @@ check_longer objective measure width current [] plans best = best
 check_longer objective measure width current values [] best = best
 check_longer objective measure width current (word :: rest) (tail :: tails) best =
   let extended = current ++ " " ++ word in
-  let candidate_best =
-    if measure extended <= width
-      then prefer best (candidate objective measure width extended tail)
-      else best in
-  check_longer objective measure width extended rest tails candidate_best
+  if measure extended <= width
+    then check_longer objective measure width extended rest tails
+      (prefer best (candidate objective measure width extended tail))
+    else check_longer objective measure width extended rest tails best
 
 suffix_plans : line_objective → (Text → Number) → Number →
   List Text → List ObjectivePlan
