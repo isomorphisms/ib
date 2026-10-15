@@ -170,12 +170,25 @@ test "$(field secure navigation_admitted)" = YES
 printf '<p>ICU 35 host</p>\n' > "$work/expected.html"
 readback secure > "$work/secure.body"
 cmp -s "$work/expected.html" "$work/secure.body"
+# A separate AI-CI program validates the *actual* persisted ICU response,
+# with its own byte-offset read rather than IB's native slice/checking logic.
+aici_verify=${IB_AICI_SOURCE_VERIFY:-}
+test -n "$aici_verify" && test -f "$aici_verify" || {
+    printf 'independent AI-CI source verifier must be pinned\n' >&2
+    exit 1
+}
+sh "$aici_verify" "$work/private" secure 17 "https://localhost:$tls_port/start" \
+  > "$work/aici-secure.tsv"
+grep -F "$(printf 'PASS\tib-source-v2-admitted\tsecure\t17\t')" "$work/aici-secure.tsv"
 
 run plain "http://127.0.0.1:$http_port/start" 18 > "$work/out-plain"
 test "$(field plain resolved_url)" = "http://127.0.0.1:$http_port/final"
 test "$(field plain navigation_admitted)" = YES
 readback plain > "$work/plain.body"
 cmp -s "$work/expected.html" "$work/plain.body"
+sh "$aici_verify" "$work/private" plain 18 "http://127.0.0.1:$http_port/start" \
+  > "$work/aici-plain.tsv"
+grep -F "$(printf 'PASS\tib-source-v2-admitted\tplain\t18\t')" "$work/aici-plain.tsv"
 
 run binary "http://127.0.0.1:$http_port/binary" 19 > "$work/out-binary"
 test "$(field binary utf8)" = invalid
@@ -183,6 +196,12 @@ test "$(field binary navigation_admitted)" = NO
 printf '\000\377\n' > "$work/expected-binary"
 readback binary > "$work/binary.body"
 cmp -s "$work/expected-binary" "$work/binary.body"
+if sh "$aici_verify" "$work/private" binary 19 \
+    "http://127.0.0.1:$http_port/binary" > "$work/aici-binary.tsv" 2>/dev/null; then
+    echo 'independent oracle wrongly admitted binary resource' >&2
+    exit 1
+fi
+test ! -s "$work/aici-binary.tsv"
 
 # ICU refuses incomplete and 404 acquisitions before any Arena publication.
 used=$(cat "$work/private/responses.arena.used")
@@ -208,5 +227,6 @@ IB_C67_ICU_SO_SHA256=$good_digest
 export IB_C67_ICU_SO_SHA256
 printf '%s\n' \
   'PASS: real compiled pinned ICU #35 native HTTP and HTTPS+redirect captured by IB Shizuku frame into canonical appendfat and verified v2 reader' \
+  'PASS: independent AI-CI verified two actual persisted HTML sources and rejected binary resource' \
   'PASS: binary fidelity, HTTP 404, truncated length, native hash mismatch, denied publication' \
   'NOT_RUN: actual Android app_process Idric DEX, physical Shizuku/rish, Binder/PFD and C67 UI'
