@@ -1,6 +1,7 @@
 module IB.Reflow.Balanced
 
 import Data.Text
+import IB.Reflow.Arithmetic
 
 -- Optimize the entire paragraph rather than deciding each break immediately.
 -- Each suffix keeps its best known layout; candidate breaks are tested against
@@ -18,7 +19,7 @@ record LinePlan where
 
 unused_width : Number → Number → Number
 unused_width available used =
-  if used <= available then available - used else 0
+  if used <= available then nonnegative_difference available used else 0
 
 candidate : (Text → Number) → Number → Text → LinePlan → LinePlan
 candidate measure width line (Planned tail_penalty tail_lines) =
