@@ -10,3 +10,22 @@ nonnegative_difference amount Z = amount
 nonnegative_difference Z (S taken) = Z
 nonnegative_difference (S amount) (S taken) =
   nonnegative_difference amount taken
+
+-- Saturated division for TeX badness. The pinned Number/Nat surface lacks
+-- Integral, so div is not available. Compute the largest representable
+-- quotient <= 10000 using 14 descending binary weights; this is exact
+-- until the TeX badness saturation limit. No repeated-subtraction loop.
+quotient_bits : Number → Number → Number → List Number → Number
+quotient_bits numerator denominator accumulated [] = accumulated
+quotient_bits numerator denominator accumulated (weight :: rest) =
+  let proposal = accumulated + weight in
+  if proposal <= 10000 && proposal * denominator <= numerator
+    then quotient_bits numerator denominator proposal rest
+    else quotient_bits numerator denominator accumulated rest
+
+public export
+capped_badness_quotient : Number → Number → Number
+capped_badness_quotient numerator denominator =
+  if denominator ≟ 0 then 10000
+  else quotient_bits numerator denominator 0
+    [8192, 4096, 2048, 1024, 512, 256, 128, 64, 32, 16, 8, 4, 2, 1]
