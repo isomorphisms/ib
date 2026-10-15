@@ -27,9 +27,20 @@ jobs:
     steps:
       - name: Checkout candidate source
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Check out pinned independent AI-CI admitted-source verifier
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: isomorphisms/ai-ci
+          ref: 634626a14834e14b776616440e0a9071708f81b7
+          path: .deps/ai-ci
+          persist-credentials: false
       - name: Compile native receiver and fake-boundary source owner
         run: |
           set -eu
+          test "$(git -C .deps/ai-ci rev-parse HEAD)" = 634626a14834e14b776616440e0a9071708f81b7
+          sh .deps/ai-ci/ib-source/self-test.sh > build-source-self-test.txt
+          grep -F 'PASS: independent IB v2 oracle' build-source-self-test.txt
+          export IB_AICI_SOURCE_VERIFY="$GITHUB_WORKSPACE/.deps/ai-ci/ib-source/verify.sh"
           mkdir -p build/c67-pfd/fast
           cc -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror -pthread \
             native/android/ib_reader_pfd.c native/android/ib_arena_source_owner.c \
@@ -46,6 +57,13 @@ jobs:
     steps:
       - name: Checkout pinned PR source
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Check out pinned independent AI-CI admitted-source verifier
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: isomorphisms/ai-ci
+          ref: 634626a14834e14b776616440e0a9071708f81b7
+          path: .deps/ai-ci
+          persist-credentials: false
       - name: Checkout immutable canonical appendfat Arena
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
@@ -75,6 +93,8 @@ jobs:
         run: |
           set -eu
           test -x "$ICK"
+          test "$(git -C .deps/ai-ci rev-parse HEAD)" = 634626a14834e14b776616440e0a9071708f81b7
+          export IB_AICI_SOURCE_VERIFY="$GITHUB_WORKSPACE/.deps/ai-ci/ib-source/verify.sh"
           "$ICK" -fno-link-libatomic -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror \
             .deps/appendfat/lib/appendfat_arena.c \
             .deps/appendfat/tools/appendfat_arena.c -o build/c67-pfd/host/appendfat_arena
