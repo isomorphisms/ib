@@ -7,6 +7,8 @@ import Data.Text
 -- those suffixes. The quadratic number of candidate breaks and retained plans
 -- cost more time/memory than greedy reflow, especially with Text concatenation.
 -- The metric is total squared unused width, INCLUDING the final line.
+-- Use the pinned compiler's executable ASCII arithmetic operators here;
+-- Unicode minus/multiply remain an Idriç frontend compatibility gap.
 -- Unbreakable overwide segments are kept intact and incur zero slack penalty;
 -- their overrun must be dealt with by the rendering boundary, not clipped here.
 record LinePlan where
@@ -16,12 +18,12 @@ record LinePlan where
 
 unused_width : Number → Number → Number
 unused_width available used =
-  if used <= available then available − used else 0
+  if used <= available then available - used else 0
 
 candidate : (Text → Number) → Number → Text → LinePlan → LinePlan
 candidate measure width line (Planned tail_penalty tail_lines) =
   let slack = unused_width width (measure line) in
-  Planned (slack × slack + tail_penalty) (line :: tail_lines)
+  Planned (slack * slack + tail_penalty) (line :: tail_lines)
 
 prefer : LinePlan → LinePlan → LinePlan
 prefer first second =
