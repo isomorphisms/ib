@@ -116,6 +116,12 @@ incremental_case =
                       not resized.reused_previous &&
                       not new_metric.reused_previous
 
+begin_zero_refused : Bool
+begin_zero_refused =
+  case begin_stream 0 of
+    Left _ ⇒ True
+    Right _ ⇒ False
+
 main : IO ()
 main = do
   let words = ["aa", "bb", "cc", "dd", "eeeeee"]
@@ -150,10 +156,7 @@ main = do
     nonnegative_difference 3 10 ≟ 0
   let knuth_ok = knuth_plan_case
   let incremental_ok = incremental_case
-  let zero_stream_refused =
-    case begin_stream 0 of
-      Left _ ⇒ True
-      Right _ ⇒ False
+  let zero_stream_refused = begin_zero_refused
 
   putStrLn ("reflow-greedy=" ++ show greedy_ok)
   putStrLn ("reflow-streaming-batch=" ++ show streaming_ok)
