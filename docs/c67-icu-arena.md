@@ -1,38 +1,112 @@
-# C67 ICU → Shizuku → Arena experimental slice
+# C67 ICU #35 → Shizuku → Arena integration candidate
 
-Status: **host-checked staging only; not a URL-capable IB APK**.
+Status: **host-contract implementation; physical ICU/Shizuku/reader acceptance NOT_RUN**.
+This is not a C67 URL-capable release or a claim that ICU #35 is merged.
 
-The physical MIRO C67 launches the checked native Material reader in IB PR #129, but that reader only paints a fixed README. This branch adds a separate source-byte path:
+## Acquisition and provenance
 
-    browser-owned request [future Android Binder command]
-      → Binder authority / Shizuku provider (rish -c today)
-      → ICU's checked Android app_process DEX + native TLS library
-      → bounded temporary response; require producer exit 0
-      → preinitialized canonical appendfat userspace Arena
-      → verify independently reopened committed offset + length
-      → immutable private receipt (requested URL, SHA256, range)
-      → Idriç extraction → prepaint → native reader [NOT WIRED]
+The pinned candidate API is [dilapidated-shed/icu PR #35](https://github.com/dilapidated-shed/icu/pull/35),
+head commit 0da041fbe906657f4f705da45a842d96832e5ee1 at integration.
+Do **not** substitute older ICU DEX/native objects: old versions write only
+body stdout, not the paired ICU_CAPTURE_BODY_PATH and
+ICU_CAPTURE_METADATA_PATH files required here.
 
-The storage backend is the **userspace** arena in isomorphisms/sd-card-append-fat, not an assertion that kernel appendfat exists. The native reader's CLI has no socket operations or separate source store. No direct app-side HTTP, WebView fetch, or Java application is introduced.
+    browser-owned request (future scoped Binder/PFD handoff)
+      → IB Binder-shaped ICU capability (current Shizuku rish lowering)
+      → verify deployed ICU DEX + native TLS .so against explicit SHA-256 pins
+      → one Idric.Generated get via Android app_process
+      → ICU #35 creates private paired body + metadata under the shell UID
+      → single bounded, length-framed rish stdout transfer
+      → independently validate metadata shape and captured byte count
+      → canonical preinitialized appendfat userspace Arena commit
+      → native C reopen + compare exact range with staged captured body
+      → immutable v2 Arena receipt; admit only qualified HTML
+      → Idriç HTML extraction/prepaint in IB PR #154 [NOT WIRED]
+      → native Android reader [NOT WIRED]
 
-## How the bounded stage works
+This stays in the existing userspace sd-card-append-fat Arena, not a new
+browser store, app-side HTTP fetch, WebView transport, or Java service.
 
-The owning process must select an existing **0700** private Arena directory and create the canonical arena first, for example:
+### Setup and development invocation
+
+The owner supplies a non-symlink private root (mode 0700), creates the
+canonical responses.arena and selects checked executable paths:
 
     appendfat_arena create PRIVATE_DIR/responses.arena 16777216
 
-The runtime requires the real pinned Android ICU DEX and ARM32 native library visible to Shizuku's shell as /data/local/tmp/ib-icu/classes.dex and libicu_transport.so. Set IB_C67_ICU_DEX, IB_C67_ICU_SO, IB_C67_ICU_DEX_SHA256, IB_C67_ICU_SO_SHA256; set IB_APPEND_ARENA and IB_ARENA_SLICE to exact qualified executables. Shizuku must be started and authorized. These artifacts and permissions are NOT YET bundled into a C67 app.
+Set IB_APPEND_ARENA and IB_ARENA_SLICE to the pinned compiled executables.
+Set IB_C67_ICU_DEX, IB_C67_ICU_SO, IB_C67_ICU_DEX_SHA256,
+IB_C67_ICU_SO_SHA256 to **actual qualified** Android app_process DEX and
+ARM native ICU #35 artifacts in /data/local/tmp/ib-icu/. This PR does not
+produce these artifacts or invent their SHA-256 values. Shizuku must be
+started, and the caller must be authorized as shell/root.
 
-    sh bin/ib_android_icu_arena.grease REQUEST_ID https://example.com/ PRIVATE_DIR
+    sh bin/ib_android_icu_arena.grease REQUEST_ID https://example.com/ PRIVATE_DIR SOURCE_GENERATION
 
-This is a standalone development invocation, **not a suggested usable phone command yet**: the command's owning process must have access to the private Arena, and cross-UID publication must eventually use scoped Binder/PFD or a qualified provider rather than a shared pathname. The shell provider is invoked through a Binder-named capability, not directly by the display reader.
+SOURCE_GENERATION is a nonzero canonical decimal integer (max 18 digits)
+allocated by the browser/source owner, **not inferred from HTTP**. The
+caller remains responsible for ordering generations and binding user intent;
+this development command is not an app IPC contract.
 
-A request ID is single-use. A failed request retains its lock for investigation, requiring a fresh ID to retry; it does not publish a receipt. The cap is 4 MiB. Failure after append but before receipt publication leaves an unreferenced committed tail, which cannot be mistaken for accepted browser history. An admitted source must require the receipt plus a byte-range hash check; it must never trust merely observing a large .arena file.
+The Shizuku UID cannot write directly into the application's private Arena.
+Its one trusted shell invocation makes a random mode-0700 staging directory
+inside the pinned /data/local/tmp/ib-icu/, passes both ICU capture paths
+through environment variables, then transports a single byte-counted packet:
 
-ICU presently emits the body without reliable final resolved URL, HTTP status or MIME/charset observations. Accordingly the receipt marks these UNOBSERVED and navigation_admitted=NO. Untrusted body bytes cannot update source identity, history or tab state. Private receipt text contains the requested URL; no authenticated URLs should be used until credential redaction policy is qualified.
+    IBICU01 METADATA_BYTES BODY_BYTES\n
+    [exact eight-field ICU metadata]
+    [exact binary response body]
 
-## Evidence and remaining work
+The packet header contains two eight-digit decimal byte lengths and a
+newline. Metadata is limited to 8192 bytes; the body to 4 MiB, stricter
+than ICU's 8 MiB native limit. The untrusted packet and staging files are
+discarded on failures. The reader never sees a partial packet.
 
-The host test uses an explicitly **fake** Shizuku provider with real canonical appendfat_arena bytes and real C read/sync helper. It checks binary fidelity, duplicate IDs, denial, partial exit, overrun, unsafe URL, corrupt .used pointer and replay. The GitHub Actions lane additionally cross-builds the read helper for Android ARM32 and ARM64; these are not Android network or GUI tests.
+## Receipt versions and navigation policy
 
-Not done: producing/distributing exact Idriç ICU Android DEX plus ARM native runtime; real C67 Shizuku/ICU HTTPS; private Binder/PFD source delivery to the app; ICU metadata extension; source-linked HTML extraction and link handling; C67 APK with URL entry. Track IB #151, #142, #141, #97 and native reader PRs #129 and #147.
+ib-icu-arena-v1 is still safely readable as verified **body-only** data
+with UNOBSERVED status, MIME and final URL. It **cannot** be upgraded into
+navigation by guessing those fields.
+
+ib-icu-arena-v2 records exactly 23 named fields including:
+
+- Request identity, source_key=arena:REQUEST_ID, source_generation.
+- Requested URL and **ICU-observed** final resolved_url plus redirect_count.
+- HTTP status, MIME type, explicit charset, content_encoding, ICU-reported
+  utf8, declared_length and received_length.
+- Canonical arena_offset, arena_end, byte_count and sha256.
+- reopen_check=MATCH, acquisition_complete=YES, navigation_admitted.
+
+The producer checks the exact eight-field upstream ICU metadata schema,
+received byte count, declared Content-Length (if present), redirect limit,
+URL syntax, nonzero 2xx status, and independently reopened Arena range.
+
+navigation_admitted=YES currently requires **all** of: HTTP 200,
+text/html, explicitly declared charset=utf-8, identity content
+encoding, valid ICU UTF-8 observation, complete acquisition, intact
+reopened bytes, source key/generation and correct SHA-256. Unsupported
+text encodings, unknown MIME, missing charset, compressed undecoded bodies
+and non-HTML responses remain NO; they are not converted to prepaint.
+The reader independently rechecks the v2 admission predicate before
+emitting even a byte. The external IB #154 adapter should still check
+the receipt and call the verified reader, not bypass it.
+
+The receipt is published only after append, native reopen and body compare.
+Failure after append but before receipt leaves only an unreferenced tail;
+no browser history is updated. Each request ID is single-use with a retained
+per-request lock even on failure.
+
+## Evidence and unfinished qualification
+
+The workflow uses the **real pinned canonical appendfat_arena** and native
+range reader. It mocks exactly the Shizuku command's framed stdout,
+including redirect metadata, verifies v1/v2 reading, original binary bytes,
+and deliberate missing/duplicate/forged metadata, corrupt digest and
+commit-pointer refusals. ICU #35 has its own **separate** real native
+redirect integration tests; passing IB host mocks is not passing that test.
+
+Still **NOT_RUN** here: pinned ICU #35 Android DEX/ARM32 build and installed
+artifact digests, actual TLS HTTPS and Shizuku invocation on C67, cross-UID
+scoped Binder/PFD into the app, end-to-end #154 Idriç conversion, Material
+reader URL entry and clicked links, C67 durable history/restart.
+Coordinate IB #151, #142, #153, #154, #129 and ICU #35 before merge/release.

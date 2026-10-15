@@ -9,6 +9,8 @@ on:
       - 'lib/android_shizuku_icu_provider.grease'
       - 'native/android/ib_arena_slice.c'
       - 'tests/test_android_icu_arena.sh'
+      - 'tests/test_android_icu_native_bridge.sh'
+      - 'tests/icu_native_transport_probe.c'
       - '.github/workflows/ib-c67-icu-arena.yml'
   workflow_dispatch:
 
@@ -27,6 +29,13 @@ jobs:
           repository: isomorphisms/sd-card-append-fat
           ref: 05a0cb7246c5a9f46abfbe92925812e7b607f454
           path: .deps/appendfat
+          persist-credentials: false
+      - name: Check out exact ICU #35 capture source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: dilapidated-shed/icu
+          ref: 0da041fbe906657f4f705da45a842d96832e5ee1
+          path: .deps/icu
           persist-credentials: false
       - id: ick
         uses: isomorphisms/ai-ci/ick-host@015cc7901ae0b3ad262b476f24e129b53c56db95
@@ -55,6 +64,31 @@ jobs:
           export IB_ARENA_SLICE="$GITHUB_WORKSPACE/build/c67-icu-arena/ib-arena-slice"
           sh tests/test_android_icu_arena.sh
           echo 'real_ICU_HTTPS=NOT_RUN physical_C67=NOT_RUN browser_UI=NOT_RUN'
+      - name: Compile and test actual pinned ICU #35 HTTP/TLS against IB Arena host contract
+        env:
+          ICK: ${{ steps.ick.outputs.compiler }}
+        run: |
+          set -eu
+          test "$(git -C .deps/icu rev-parse HEAD)" = 0da041fbe906657f4f705da45a842d96832e5ee1
+          sh -n tests/test_android_icu_native_bridge.sh
+          test -x "$ICK"
+          "$ICK" -fno-link-libatomic -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror \
+            -fPIC -shared .deps/icu/native/transport.c \
+            -lssl -lcrypto -o build/c67-icu-arena/libicu_transport.so
+          "$ICK" -fno-link-libatomic -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror \
+            tests/icu_native_transport_probe.c .deps/icu/native/transport.c \
+            -lssl -lcrypto -o build/c67-icu-arena/icu-native-probe
+          export IB_APPEND_ARENA="$GITHUB_WORKSPACE/build/c67-icu-arena/appendfat_arena"
+          export IB_ARENA_SLICE="$GITHUB_WORKSPACE/build/c67-icu-arena/ib-arena-slice"
+          export IB_ICU_NATIVE_PROBE="$GITHUB_WORKSPACE/build/c67-icu-arena/icu-native-probe"
+          export IB_ICU_NATIVE_SO="$GITHUB_WORKSPACE/build/c67-icu-arena/libicu_transport.so"
+          sh tests/test_android_icu_native_bridge.sh | tee build/c67-icu-arena/native-icu-bridge-receipt.txt
+          grep -F 'real compiled pinned ICU #35 native HTTP and HTTPS' \
+            build/c67-icu-arena/native-icu-bridge-receipt.txt
+          sha256sum .deps/icu/native/transport.c \
+            build/c67-icu-arena/icu-native-probe \
+            build/c67-icu-arena/libicu_transport.so \
+            > build/c67-icu-arena/native-icu-sha256.txt
       - name: Cross-build ARM32 and ARM64 native range readers
         run: |
           ndk_version=27.3.13750724
@@ -81,4 +115,6 @@ jobs:
           path: |
             build/c67-icu-arena/armeabi-v7a/
             build/c67-icu-arena/arm64-v8a/
+            build/c67-icu-arena/native-icu-bridge-receipt.txt
+            build/c67-icu-arena/native-icu-sha256.txt
           if-no-files-found: error
