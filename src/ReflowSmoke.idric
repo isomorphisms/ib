@@ -1,0 +1,117 @@
+module ReflowSmoke
+
+import Data.Text
+import IB.Reflow
+import IB.Reflow.Streaming
+import System
+
+character_width : Text → Number
+character_width value = length (unpack value)
+
+matches : List Text → Either Text (List Text) → Bool
+matches wanted (Right actual) = wanted ≟ actual
+matches wanted _ = False
+
+join_lines : List Text → Text
+join_lines [] = ""
+join_lines [line] = line
+join_lines (line :: rest) = line ++ " " ++ join_lines rest
+
+keeps_words : List Text → Either Text (List Text) → Bool
+keeps_words original (Right wrapped) =
+  join_lines original ≟ join_lines wrapped
+keeps_words original _ = False
+
+has_error : Either Text (List Text) → Bool
+has_error (Left _) = True
+has_error _ = False
+
+-- Transport chunks are not tokens. In particular "eee" + "eee" must
+-- remain one six-character word. We also assert early line emission.
+streaming_case : (Bool, Bool)
+streaming_case =
+  case begin_stream 8 of
+    Left _ ⇒ (False, False)
+    Right start ⇒
+      let Emitted next1 published1 = feed_chunk character_width start "aa bb cc dd " in
+      let Emitted next2 published2 = feed_chunk character_width next1 "eee" in
+      let Emitted next3 published3 = feed_chunk character_width next2 "eee" in
+      let all_lines =
+        published1 ++ published2 ++ published3 ++ finish_stream character_width next3 in
+      (published1 ≟ ["aa bb cc"], all_lines ≟ ["aa bb cc", "dd", "eeeeee"])
+
+paragraph_case : Bool
+paragraph_case =
+  case begin_stream 8 of
+    Left _ ⇒ False
+    Right initial ⇒
+      let Emitted before _ = feed_chunk character_width initial "aa bb" in
+      let (after, first_paragraph) = end_paragraph character_width before in
+      let Emitted last _ = feed_chunk character_width after "cc dd" in
+      first_paragraph ≟ ["aa bb"] && finish_stream character_width last ≟ ["cc dd"]
+
+main : IO ()
+main = do
+  let words = ["aa", "bb", "cc", "dd", "eeeeee"]
+  let greedy_lines = ["aa bb cc", "dd", "eeeeee"]
+  let evenly_lines = ["aa bb", "cc dd", "eeeeee"]
+  let greedy_ok = matches greedy_lines
+    (reflow (Requirements 8 promptly) character_width words)
+  let streaming_ok = matches greedy_lines
+    (reflow (Requirements 8 streamingly) character_width words)
+  let balanced_ok = matches evenly_lines
+    (reflow (Requirements 8 evenly) character_width words)
+  let threshold_ok = matches evenly_lines
+    (reflow (Requirements 8 without_extra_lines) character_width words)
+
+  -- This paragraph discriminates different dynamic-programming objectives.
+  let odd = ["xxxx", "xxxxx", "xx", "xx", "xxxxxx", "x", "xx"]
+  let cubic_ok = matches ["xxxx xxxxx", "xx xx", "xxxxxx", "x xx"]
+    (reflow (Requirements 10 minimizing_raggedness) character_width odd)
+  let final_free_ok = matches ["xxxx xxxxx", "xx xx", "xxxxxx x", "xx"]
+    (reflow (Requirements 10 ignoring_final_line) character_width odd)
+  let minimax_ok = matches ["xxxx", "xxxxx", "xx xx", "xxxxxx", "x xx"]
+    (reflow (Requirements 10 minimizing_worst_gap) character_width odd)
+  let squared_ok = matches ["xxxx", "xxxxx xx", "xx xxxxxx", "x xx"]
+    (reflow (Requirements 10 evenly) character_width odd)
+
+  let modes = [promptly, streamingly, evenly, minimizing_raggedness,
+    ignoring_final_line, minimizing_worst_gap, without_extra_lines]
+  let content_preserved = all (\mode ⇒ keeps_words odd
+    (reflow (Requirements 10 mode) character_width odd)) modes
+  let long_word_intact = all (\mode ⇒ matches ["abcdefghij", "x"]
+    (reflow (Requirements 8 mode) character_width ["abcdefghij", "x"])) modes
+  let empty_intact = all (\mode ⇒ matches []
+    (reflow (Requirements 8 mode) character_width [])) modes
+  let zero_refused = all (\mode ⇒ has_error
+    (reflow (Requirements 0 mode) character_width ["x"])) modes
+  let (emits_early, chunk_invariant) = streaming_case
+  let paragraphs_ok = paragraph_case
+  let zero_stream_refused =
+    case begin_stream 0 of
+      Left _ ⇒ True
+      Right _ ⇒ False
+
+  putStrLn ("reflow-greedy=" ++ show greedy_ok)
+  putStrLn ("reflow-streaming-batch=" ++ show streaming_ok)
+  putStrLn ("reflow-streaming-early=" ++ show emits_early)
+  putStrLn ("reflow-streaming-chunks=" ++ show chunk_invariant)
+  putStrLn ("reflow-streaming-paragraphs=" ++ show paragraphs_ok)
+  putStrLn ("reflow-balanced=" ++ show balanced_ok)
+  putStrLn ("reflow-cubic=" ++ show cubic_ok)
+  putStrLn ("reflow-final-line-free=" ++ show final_free_ok)
+  putStrLn ("reflow-minimax=" ++ show minimax_ok)
+  putStrLn ("reflow-threshold=" ++ show threshold_ok)
+  putStrLn ("reflow-squared-discriminates=" ++ show squared_ok)
+  putStrLn ("reflow-preserves-content=" ++ show content_preserved)
+  putStrLn ("reflow-overwide-intact=" ++ show long_word_intact)
+  putStrLn ("reflow-empty=" ++ show empty_intact)
+  putStrLn ("reflow-zero-refused=" ++ show zero_refused)
+  putStrLn ("reflow-stream-zero-refused=" ++ show zero_stream_refused)
+
+  if greedy_ok && streaming_ok && emits_early && chunk_invariant &&
+     paragraphs_ok && balanced_ok && cubic_ok && final_free_ok &&
+     minimax_ok && threshold_ok && squared_ok && content_preserved &&
+     long_word_intact && empty_intact && zero_refused && zero_stream_refused
+    then pure ()
+    else exitFailure
