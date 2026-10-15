@@ -1,6 +1,7 @@
 module InformationSmoke
 
 import IB.Information
+import IB.Reflow
 import Data.Text
 import System
 
@@ -61,6 +62,25 @@ has_line : Text → List Text → Bool
 has_line wanted [] = False
 has_line wanted (line :: rest) = line ≟ wanted || has_line wanted rest
 
+character_width : Text → Number
+character_width value = length (unpack value)
+
+matches_lines : List Text → Either Text (List Text) → Bool
+matches_lines wanted (Right actual) = actual ≟ wanted
+matches_lines wanted _ = False
+
+has_error : Either Text (List Text) → Bool
+has_error (Left _) = True
+has_error _ = False
+
+is_greedy : reflow_way → Bool
+is_greedy greedy = True
+is_greedy _ = False
+
+is_balanced : reflow_way → Bool
+is_balanced balanced = True
+is_balanced _ = False
+
 main : IO ()
 main = do
   let early = extract_html "https://console.test/deployments" "https://console.test/deployments" heavy_prefix
@@ -69,6 +89,29 @@ main = do
   let article = prepaint_full_text "https://example.test/notes" "https://example.test/notes" article_body
   let plain = prepaint_text "URL list" plain_url_list
   let phone = phone_lines 6 48 full
+  -- Source segments are identical. Only the selected break positions differ.
+  let segments = ["aa", "bb", "cc", "dd", "eeeeee"]
+  let promptly_lines = reflow (Requirements 8 promptly) character_width segments
+  let evenly_lines = reflow (Requirements 8 evenly) character_width segments
+  let greedy_selected = is_greedy (select_reflow (Requirements 8 promptly))
+  let balanced_selected = is_balanced (select_reflow (Requirements 8 evenly))
+  let greedy_correct = matches_lines ["aa bb cc", "dd", "eeeeee"] promptly_lines
+  let balanced_correct = matches_lines ["aa bb", "cc dd", "eeeeee"] evenly_lines
+  let long_word_intact = matches_lines ["abcdefghij", "x"]
+    (reflow (Requirements 8 promptly) character_width ["abcdefghij", "x"])
+  let empty_intact = matches_lines []
+    (reflow (Requirements 8 evenly) character_width [])
+  let zero_refused = has_error
+    (reflow (Requirements 0 promptly) character_width ["x"])
+  putStrLn ("reflow-selected-greedy=" ++ show greedy_selected)
+  putStrLn ("reflow-selected-balanced=" ++ show balanced_selected)
+  putStrLn ("reflow-greedy-lines=" ++ show promptly_lines)
+  putStrLn ("reflow-balanced-lines=" ++ show evenly_lines)
+  putStrLn ("reflow-greedy-correct=" ++ show greedy_correct)
+  putStrLn ("reflow-balanced-correct=" ++ show balanced_correct)
+  putStrLn ("reflow-overwide-word-intact=" ++ show long_word_intact)
+  putStrLn ("reflow-empty-intact=" ++ show empty_intact)
+  putStrLn ("reflow-zero-width-refused=" ++ show zero_refused)
   putStrLn ("information-title=" ++ view_title full)
   putStrLn ("early-table-header=" ++ show (has_table_row ["Service", "Status"] early))
   putStrLn ("early-table-data=" ++ show (has_table_row ["api", "healthy"] early))
@@ -107,6 +150,9 @@ main = do
         has_link "http://example.test/two?q=three" "http://example.test/two?q=three" plain &&
         not (cheap_http_url "/relative") &&
         not (cheap_http_url "https://example.test/a b")
-  if article_retains_content && plain_links_are_candidates
+  if article_retains_content && plain_links_are_candidates &&
+     greedy_selected && balanced_selected &&
+     greedy_correct && balanced_correct &&
+     long_word_intact && empty_intact && zero_refused
     then pure ()
     else exitFailure
