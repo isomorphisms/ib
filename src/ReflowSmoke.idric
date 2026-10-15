@@ -79,7 +79,7 @@ zero_refused_in_every_mode (mode :: more) =
 
 has_adjustment : List JustifiedLine → Bool
 has_adjustment [] = False
-has_adjustment (Justified _ NoAdjustment _ :: rest) = has_adjustment rest
+has_adjustment ((Justified _ NoAdjustment _) :: rest) = has_adjustment rest
 has_adjustment (_ :: _) = True
 
 knuth_plan_case : Bool
