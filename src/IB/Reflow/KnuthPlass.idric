@@ -175,8 +175,7 @@ explore settings measure width previous current gaps
   (word :: rest) (tail :: later) best =
   let extended = current ++ " " ++ word in
   let new_gaps = S gaps in
-  let proposal = consider settings measure width previous
-    extended new_gaps (is_last rest) tail in
+  let proposal = consider settings measure width previous extended new_gaps (is_last rest) tail in
   explore settings measure width previous extended new_gaps
     rest later (prefer best proposal)
 
@@ -185,8 +184,7 @@ best_from : KnuthSettings → (Text → Number) → Number → Fitness →
 best_from settings measure width previous [] plans = Nothing
 best_from settings measure width previous words [] = Nothing
 best_from settings measure width previous (word :: rest) (tail :: later) =
-  let initial = consider settings measure width previous
-    word Z (is_last rest) tail in
+  let initial = consider settings measure width previous word Z (is_last rest) tail in
   explore settings measure width previous word Z rest later initial
 
 terminal_plans : PlansForSuffix
@@ -199,12 +197,12 @@ all_suffix_plans : KnuthSettings → (Text → Number) → Number →
 all_suffix_plans settings measure width [] = [terminal_plans]
 all_suffix_plans settings measure width words@(_ :: rest) =
   let tails = all_suffix_plans settings measure width rest in
-  let current = SuffixPlans
+  let current = (SuffixPlans
     (best_from settings measure width VeryTight words tails)
     (best_from settings measure width Tight words tails)
     (best_from settings measure width Neutral words tails)
     (best_from settings measure width Loose words tails)
-    (best_from settings measure width VeryLoose words tails) in
+    (best_from settings measure width VeryLoose words tails)) in
   current :: tails
 
 public export
