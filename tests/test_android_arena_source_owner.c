@@ -12,7 +12,7 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-static unsigned char expected_source[] = {'I','B',0,'C','6','7',255,'\n'};
+static unsigned char expected_source[] = {'<','p','>','I','B',' ','C','6','7','<','/','p','>','\n'};
 static const char *request_id = "verified";
 static const char *name = "receipts/verified.tsv";
 
@@ -49,22 +49,22 @@ static void preserved(const ib_reader_source *reader,
 }
 
 static void accept(ib_arena_source_owner *owner, ib_reader_source *reader,
-                   uint64_t generation) {
+                   const char *id, uint64_t generation) {
     ib_reader_source_ticket ticket = {0};
     int fd = -1;
-    assert(ib_arena_source_owner_open(owner, request_id, generation,
+    assert(ib_arena_source_owner_open(owner, id, generation,
                                      &ticket, &fd) == 0);
     assert(fd >= 0);
     assert(ticket.byte_count == sizeof(expected_source));
     assert(ticket.navigation_generation == generation);
-    assert(strcmp(ticket.request_id, request_id) == 0);
+    assert(strcmp(ticket.request_id, id) == 0);
     char local_digest[65];
     ib_reader_sha256_hex(expected_source, sizeof(expected_source), local_digest);
     assert(strcmp(ticket.sha256_hex, local_digest) == 0);
     assert(ib_reader_source_accept_fd(reader, &ticket, fd)
            == IB_READER_PFD_ACCEPTED);
     close(fd);
-    preserved(reader, request_id, generation);
+    preserved(reader, id, generation);
 }
 
 int main(int argc, char **argv) {
@@ -85,9 +85,12 @@ int main(int argc, char **argv) {
     ib_reader_source_init(&reader);
     ib_arena_source_owner_want(&owner, 1);
     ib_reader_source_want(&reader, 1);
-    accept(&owner, &reader, 1);
-
+    accept(&owner, &reader, request_id, 1);
     int fd = -1;
+    /* A legacy v1 receipt has matching bytes but no observed admission. */
+    assert(ib_arena_source_owner_open(&owner, "legacy", 1, NULL, &fd) != 0);
+    assert(fd == -1);
+
     ib_reader_source_ticket binder_ticket = {0};
     assert(ib_arena_source_owner_open_binder(&owner, request_id, 2, &binder_ticket, &fd) != 0);
     assert(fd == -1);
@@ -108,6 +111,36 @@ int main(int argc, char **argv) {
     assert(ib_arena_source_owner_open(&owner, request_id, 1, NULL, &fd) != 0);
     assert(fd == -1);
     preserved(&reader, request_id, 1);
+    overwrite(receipt, original, count);
+
+    /* Every observed source/admission field participates in PFD authority:
+     * the byte hash alone is insufficient for an admitted navigation. */
+    const char *mutations[][2] = {
+        {"source_generation\t1", "source_generation\t2"},
+        {"source_key\tarena:verified", "source_key\tarena:verifieX"},
+        {"http_status\t200", "http_status\t404"},
+        {"mime_type\ttext/html", "mime_type\ttext/junk"},
+        {"charset\tutf-8", "charset\tutf-7"},
+        {"content_encoding\tidentity", "content_encoding\tidentitx"},
+        {"utf8\tvalid", "utf8\twrong"},
+        {"received_length\t14", "received_length\t13"},
+        {"declared_length\t14", "declared_length\t13"},
+        {"acquisition_complete\tYES", "acquisition_complete\tNAY"},
+        {"navigation_admitted\tYES", "navigation_admitted\tNAY"}
+    };
+    for (size_t i = 0; i < sizeof(mutations) / sizeof(mutations[0]); ++i) {
+        const char *before = mutations[i][0], *after = mutations[i][1];
+        assert(strlen(before) == strlen(after));
+        memcpy(damaged, original, count + 1U);
+        char *location = strstr((char *)damaged, before);
+        assert(location != NULL);
+        memcpy(location, after, strlen(after));
+        overwrite(receipt, damaged, count);
+        assert(ib_arena_source_owner_open(&owner, request_id, 1,
+                                          NULL, &fd) != 0);
+        assert(fd == -1);
+        preserved(&reader, request_id, 1);
+    }
     overwrite(receipt, original, count);
 
     /* Last-good retained when Arena source bytes no longer match receipt. */
@@ -148,12 +181,16 @@ int main(int argc, char **argv) {
 
     ib_arena_source_owner_want(&owner, 2);
     ib_reader_source_want(&reader, 2);
-    accept(&owner, &reader, 2);
-    preserved(&reader, request_id, 2);
+    /* Replaying the same admitted generation as a newer navigation refuses. */
+    assert(ib_arena_source_owner_open(&owner, request_id, 2, NULL, &fd) != 0);
+    assert(fd == -1);
+    preserved(&reader, request_id, 1);
+    accept(&owner, &reader, "verified2", 2);
+    preserved(&reader, "verified2", 2);
     ib_reader_source_clear(&reader);
     free(original);
     free(damaged);
-    puts("PASS: canonical appendfat receipt + commit pointer, binary PFD, end-to-end double SHA, stale/URL/digest/byte/permission/symlink/corrupt-pointer refusal and recovery");
+    puts("PASS: canonical appendfat v2 HTML admission, matching navigation generation, pipe/double SHA, v1/stale/forged-metadata/byte/permission/symlink/corrupt-pointer refusal and recovery");
     puts("NOT_RUN: Android private Binder transaction, actual Shizuku/ICU network, Idric reader screen or physical C67");
     return 0;
 }
