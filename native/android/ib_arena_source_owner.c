@@ -19,18 +19,25 @@
 #include <time.h>
 #include <unistd.h>
 
-/* Source-only receipts from PR #152. No parsing or storage authority here:
- * the canonical appendfat .used pointer is the authoritative commit boundary.
- * The receipt supplies the exact source offset, size and digest. */
+/* ICU #35/IB #152 v2 receipts carry both committed byte provenance and
+ * explicit HTML admission. No v1 UNOBSERVED receipt can be delivered to
+ * a visible reader. Source generation must match the requested navigation. */
 enum receipt_key {
-    RK_SCHEMA, RK_REQUEST, RK_REQUESTED_URL, RK_RESOLVED_URL, RK_STATUS,
-    RK_MIME, RK_TRANSPORT, RK_ARENA, RK_OFFSET, RK_END, RK_LENGTH,
-    RK_SHA256, RK_REOPEN, RK_NAVIGATION, RK_COUNT
+    RK_SCHEMA, RK_REQUEST, RK_SOURCE_KEY, RK_SOURCE_GENERATION,
+    RK_REQUESTED_URL, RK_RESOLVED_URL, RK_STATUS, RK_MIME, RK_CHARSET,
+    RK_CONTENT_ENCODING, RK_UTF8, RK_REDIRECT_COUNT,
+    RK_DECLARED_LENGTH, RK_RECEIVED_LENGTH, RK_TRANSPORT,
+    RK_ARENA, RK_OFFSET, RK_END, RK_LENGTH, RK_SHA256,
+    RK_REOPEN, RK_ACQUISITION, RK_NAVIGATION, RK_COUNT
 };
 static const char *const receipt_names[RK_COUNT] = {
-    "schema", "request_id", "requested_url", "resolved_url", "http_status",
-    "mime_type", "transport", "arena_name", "arena_offset", "arena_end",
-    "byte_count", "sha256", "reopen_check", "navigation_admitted"
+    "schema", "request_id", "source_key", "source_generation",
+    "requested_url", "resolved_url", "http_status", "mime_type",
+    "charset", "content_encoding", "utf8", "redirect_count",
+    "declared_length", "received_length", "transport",
+    "arena_name", "arena_offset", "arena_end", "byte_count",
+    "sha256", "reopen_check", "acquisition_complete",
+    "navigation_admitted"
 };
 #define RECEIPT_MAX_BYTES 8192U
 #define SOURCE_WRITER_DEADLINE_MS 5000
@@ -77,9 +84,22 @@ static int parse_uint(const char *value, uint64_t *out) {
     return 0;
 }
 
+static int allowed_url(const char *value) {
+    if (!value) return 0;
+    size_t length = strnlen(value, 2049U);
+    if (length < 9U || length > 2048U) return 0;
+    if (strncmp(value, "https://", 8) != 0 &&
+        strncmp(value, "http://", 7) != 0) return 0;
+    for (size_t i = 0; i < length; ++i) {
+        const unsigned char octet = (unsigned char)value[i];
+        if (octet <= 32U || octet >= 127U || octet == '\'') return 0;
+    }
+    return 1;
+}
+
 static int parse_receipt(char *text, size_t size, const char *request_id,
-                         uint64_t *offset, uint32_t *length,
-                         char sha256[65]) {
+                         uint64_t wanted_generation, uint64_t *offset,
+                         uint32_t *length, char sha256[65]) {
     char *fields[RK_COUNT] = {0};
     size_t found = 0;
     char *position = text, *end = text + size;
@@ -110,30 +130,55 @@ static int parse_receipt(char *text, size_t size, const char *request_id,
         if (!matched || ++found > RK_COUNT) return -1;
         position = newline + 1;
     }
+
+    /* A body-only v1 receipt is not a proof of response identity/charset,
+     * and cannot authorize reader publication even with a valid byte hash. */
     if (found != RK_COUNT ||
-        strcmp(fields[RK_SCHEMA], "ib-icu-arena-v1") != 0 ||
+        strcmp(fields[RK_SCHEMA], "ib-icu-arena-v2") != 0 ||
         strcmp(fields[RK_REQUEST], request_id) != 0 ||
-        strcmp(fields[RK_TRANSPORT],
-               "icu-app-process-via-binder-shizuku") != 0 ||
+        strcmp(fields[RK_TRANSPORT], "icu-app-process-via-binder-shizuku") != 0 ||
         strcmp(fields[RK_ARENA], "responses.arena") != 0 ||
         strcmp(fields[RK_REOPEN], "MATCH") != 0 ||
-        strcmp(fields[RK_NAVIGATION], "NO") != 0)
+        strcmp(fields[RK_ACQUISITION], "YES") != 0 ||
+        strcmp(fields[RK_NAVIGATION], "YES") != 0 ||
+        strcmp(fields[RK_STATUS], "200") != 0 ||
+        strcmp(fields[RK_MIME], "text/html") != 0 ||
+        strcmp(fields[RK_CHARSET], "utf-8") != 0 ||
+        strcmp(fields[RK_CONTENT_ENCODING], "identity") != 0 ||
+        strcmp(fields[RK_UTF8], "valid") != 0 ||
+        !allowed_url(fields[RK_REQUESTED_URL]) ||
+        !allowed_url(fields[RK_RESOLVED_URL]))
         return -1;
 
-    /* v1 knows only that ICU emitted body bytes, not that HTML/navigation
-     * may be displayed as a verified HTTP response. */
-    if (strcmp(fields[RK_RESOLVED_URL], "UNOBSERVED") != 0 ||
-        strcmp(fields[RK_STATUS], "UNOBSERVED") != 0 ||
-        strcmp(fields[RK_MIME], "UNOBSERVED") != 0)
+    char expected_key[IB_READER_REQUEST_ID_CAP + 7U];
+    int printed = snprintf(expected_key, sizeof(expected_key),
+                           "arena:%s", request_id);
+    if (printed < 0 || (size_t)printed >= sizeof(expected_key) ||
+        strcmp(fields[RK_SOURCE_KEY], expected_key) != 0)
         return -1;
 
-    uint64_t begin, finish, amount;
+    uint64_t generation = 0, redirects = 0;
+    if (parse_uint(fields[RK_SOURCE_GENERATION], &generation) != 0 ||
+        generation == 0 || generation != wanted_generation ||
+        parse_uint(fields[RK_REDIRECT_COUNT], &redirects) != 0 ||
+        redirects > 8U)
+        return -1;
+
+    uint64_t begin = 0, finish = 0, amount = 0, received = 0;
     if (parse_uint(fields[RK_OFFSET], &begin) != 0 ||
         parse_uint(fields[RK_END], &finish) != 0 ||
         parse_uint(fields[RK_LENGTH], &amount) != 0 ||
+        parse_uint(fields[RK_RECEIVED_LENGTH], &received) != 0 ||
         amount == 0 || amount > IB_READER_SOURCE_MAX_BYTES ||
-        begin > finish || finish - begin != amount)
+        received != amount || begin > finish ||
+        finish - begin != amount)
         return -1;
+
+    if (strcmp(fields[RK_DECLARED_LENGTH], "-1") != 0) {
+        uint64_t declared = 0;
+        if (parse_uint(fields[RK_DECLARED_LENGTH], &declared) != 0 ||
+            declared != amount) return -1;
+    }
 
     const char *hash = fields[RK_SHA256];
     if (strlen(hash) != 64U) return -1;
@@ -148,7 +193,8 @@ static int parse_receipt(char *text, size_t size, const char *request_id,
 }
 
 static int read_manifest(int root_fd, const char *request_id,
-                         uint64_t *offset, uint32_t *length, char sha256[65]) {
+                         uint64_t navigation_generation, uint64_t *offset,
+                         uint32_t *length, char sha256[65]) {
     int dir = -1, manifest = -1, result = -1;
     char filename[IB_READER_REQUEST_ID_CAP + 5U];
     struct stat info;
@@ -173,7 +219,8 @@ static int read_manifest(int root_fd, const char *request_id,
         got += (size_t)amount;
     }
     content[size] = '\0';
-    result = parse_receipt(content, size, request_id, offset, length, sha256);
+    result = parse_receipt(content, size, request_id, navigation_generation,
+                           offset, length, sha256);
 done:
     if (manifest >= 0) close(manifest);
     if (dir >= 0) close(dir);
@@ -305,7 +352,8 @@ int ib_arena_source_owner_open(ib_arena_source_owner *owner,
     if (root < 0 || fstat(root, &info) != 0 ||
         !S_ISDIR(info.st_mode) || info.st_uid != geteuid() ||
         (info.st_mode & 077U) != 0) goto done;
-    if (read_manifest(root, request_id, &offset, &length, expected) != 0)
+    if (read_manifest(root, request_id, navigation_generation,
+                      &offset, &length, expected) != 0)
         goto done;
     bytes = malloc(length);
     if (!bytes || read_committed_bytes(root, offset, length, bytes) != 0)
