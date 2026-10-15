@@ -5,6 +5,7 @@ import IB.Reflow
 import IB.Reflow.Streaming
 import IB.Reflow.KnuthPlass
 import IB.Reflow.Incremental
+import IB.Reflow.Arithmetic
 import System
 
 character_width : Text → Number
@@ -154,6 +155,12 @@ main = do
   let zero_refused = zero_refused_in_every_mode modes
   let (emits_early, chunk_invariant) = streaming_case
   let paragraphs_ok = paragraph_case
+  let arithmetic_ok =
+    capped_badness_quotient 18 3 ≟ 6 &&
+    capped_badness_quotient 11000 1 ≟ 10000 &&
+    capped_badness_quotient 0 100 ≟ 0 &&
+    nonnegative_difference 10 3 ≟ 7 &&
+    nonnegative_difference 3 10 ≟ 0
   let knuth_ok = knuth_plan_case
   let incremental_ok = incremental_case
   let zero_stream_refused =
@@ -179,11 +186,12 @@ main = do
   putStrLn ("reflow-stream-zero-refused=" ++ show zero_stream_refused)
   putStrLn ("reflow-knuth-spacings=" ++ show knuth_ok)
   putStrLn ("reflow-incremental-revisions=" ++ show incremental_ok)
+  putStrLn ("reflow-arithmetic=" ++ show arithmetic_ok)
 
   if greedy_ok && streaming_ok && emits_early && chunk_invariant &&
      paragraphs_ok && balanced_ok && cubic_ok && final_free_ok &&
      minimax_ok && threshold_ok && squared_ok && content_preserved &&
      long_word_intact && empty_intact && zero_refused && zero_stream_refused &&
-     knuth_ok && incremental_ok
+     knuth_ok && incremental_ok && arithmetic_ok
     then pure ()
     else exitFailure
