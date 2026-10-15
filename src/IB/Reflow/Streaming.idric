@@ -73,10 +73,9 @@ public export
 finish_stream : (Text → Number) → ReflowStream → List Text
 finish_stream measure state =
   let (Streaming _ _ line, emitted) = complete_word measure state in
-  let last_line = case line of
-    Nothing ⇒ []
-    Just value ⇒ [value] in
-  emitted ++ last_line
+  case line of
+    Nothing ⇒ emitted
+    Just value ⇒ emitted ++ [value]
 
 -- Paragraph boundaries are semantic input, not inferred from arbitrary
 -- transport chunking. The returned state can receive the next paragraph.
