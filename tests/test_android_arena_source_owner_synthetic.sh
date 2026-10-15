@@ -5,7 +5,7 @@ helper=${IB_TEST_VERIFIED_ARENA_PIPE:-}
 test -n "$helper" && test -x "$helper" || exit 2
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT HUP INT TERM
-mkdir -m 700 "$work/private" "$work/private/receipts"
+mkdir -m 700 "$work/private" "$work/private/receipts" "$work/private/staging"
 printf '<p>IB C67</p>\n' > "$work/fixture.html"
 test "$(wc -c < "$work/fixture.html" | tr -d '[:space:]')" -eq 14
 truncate -s 16777216 "$work/private/responses.arena"
@@ -59,5 +59,19 @@ receipt_v2 verified2 2
     printf 'reopen_check\tMATCH\n'
     printf 'navigation_admitted\tNO\n'
 } > "$work/private/receipts/legacy.tsv"
+# A separate AI-CI consumer independently checks this fixture's observed
+# admission and committed bytes before the native PFD source owner runs.
+aici=${IB_AICI_SOURCE_VERIFY:-}
+test -n "$aici" && test -f "$aici" || {
+    printf 'source admission requires pinned independent AI-CI verifier\n' >&2
+    exit 1
+}
+sh "$aici" "$work/private" verified 1 https://example.com/start
+sh "$aici" "$work/private" verified2 2 https://example.com/start
+if sh "$aici" "$work/private" legacy 1 https://example.com/ > "$work/legacy.aici" 2>/dev/null; then
+    printf 'independent verifier admitted a v1 receipt\n' >&2
+    exit 1
+fi
+test ! -s "$work/legacy.aici"
 "$helper" "$work/private"
 printf 'fixture\tsynthetic-pointer-not-canonical-appendfat\n'
