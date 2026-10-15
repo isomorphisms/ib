@@ -230,5 +230,5 @@ default_knuth_settings width =
 public export
 plain_lines : List JustifiedLine → List Text
 plain_lines [] = []
-plain_lines (Justified text adjustment fitness :: rest) =
+plain_lines ((Justified text adjustment fitness) :: rest) =
   text :: plain_lines rest
