@@ -6,6 +6,7 @@ import IB.Reflow.Streaming
 import IB.Reflow.Balanced
 import IB.Reflow.Objectives
 import IB.Reflow.Threshold
+import IB.Reflow.KnuthPlass
 
 -- One verb; adverbs constrain its manner. The algorithm names occur only
 -- below this selector. Each choice makes a documented tradeoff.
@@ -20,6 +21,7 @@ choice reflow_adverb one_of
   ignoring_final_line
   minimizing_worst_gap
   without_extra_lines
+  typographically
 
 public export
 choice reflow_way one_of
@@ -30,6 +32,7 @@ choice reflow_way one_of
   final_line_free
   minimax
   threshold_balanced
+  knuth_plass
 
 public export
 record ReflowRequirements where
@@ -46,6 +49,7 @@ select_reflow (Requirements _ minimizing_raggedness) = cubic
 select_reflow (Requirements _ ignoring_final_line) = final_line_free
 select_reflow (Requirements _ minimizing_worst_gap) = minimax
 select_reflow (Requirements _ without_extra_lines) = threshold_balanced
+select_reflow (Requirements _ typographically) = knuth_plass
 
 -- A caller can alternatively use IB.Reflow.Streaming.feed_chunk, beginning
 -- with begin_stream and ending with finish_stream or end_paragraph, to consume
@@ -75,3 +79,7 @@ reflow request@(Requirements width _) measure segments =
     final_line_free ⇒ Right (reflow_for_objective free_final_line measure width segments)
     minimax ⇒ Right (reflow_for_objective minimax_raggedness measure width segments)
     threshold_balanced ⇒ Right (reflow_threshold_balanced measure width segments)
+    knuth_plass ⇒
+      case reflow_knuth_plass (default_knuth_settings width) measure width segments of
+        Left reason ⇒ Left reason
+        Right plan ⇒ Right (plain_lines plan)
