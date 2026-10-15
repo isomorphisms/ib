@@ -2,20 +2,34 @@ module IB.Reflow
 
 import Data.Text
 import IB.Reflow.Greedy
+import IB.Reflow.Streaming
 import IB.Reflow.Balanced
+import IB.Reflow.Objectives
+import IB.Reflow.Threshold
 
--- The verb is always reflow. Adverbs request a manner, not an algorithm name.
--- A later ComputerScience planner can replace this deliberately simple
--- selector with target/workload measurements without changing the public verb.
+-- One verb; adverbs constrain its manner. The algorithm names occur only
+-- below this selector. Each choice makes a documented tradeoff.
+-- This initial selector makes an explicit *request* decision, not an unproven
+-- ARM32/ARM64/x86-64 benchmark-based choice.
 public export
 choice reflow_adverb one_of
   promptly
+  streamingly
   evenly
+  minimizing_raggedness
+  ignoring_final_line
+  minimizing_worst_gap
+  without_extra_lines
 
 public export
 choice reflow_way one_of
   greedy
+  streaming_greedy
   balanced
+  cubic
+  final_line_free
+  minimax
+  threshold_balanced
 
 public export
 record ReflowRequirements where
@@ -26,18 +40,27 @@ record ReflowRequirements where
 public export
 select_reflow : ReflowRequirements → reflow_way
 select_reflow (Requirements _ promptly) = greedy
+select_reflow (Requirements _ streamingly) = streaming_greedy
 select_reflow (Requirements _ evenly) = balanced
+select_reflow (Requirements _ minimizing_raggedness) = cubic
+select_reflow (Requirements _ ignoring_final_line) = final_line_free
+select_reflow (Requirements _ minimizing_worst_gap) = minimax
+select_reflow (Requirements _ without_extra_lines) = threshold_balanced
 
--- Each segment is atomic; joining segments inserts one ordinary space.
--- The caller supplies the *actual* width metric: character counts in tests,
--- pixel advances in a native reader. The same metric and content are used by
--- both algorithms. Neither algorithm changes token order or clips text.
--- A word wider than the viewport is emitted whole on its own line.
+-- A caller can alternatively use IB.Reflow.Streaming.feed_chunk, beginning
+-- with begin_stream and ending with finish_stream or end_paragraph, to consume
+-- raw decoded text chunks without constructing an entire paragraph.
 --
--- Promptly: greedy, smaller working set, suitable for incremental prepaint.
--- Evenly: paragraph-wide minimum-squared-slack layout, more work and memory.
--- No claim is made that either is faster on a given ARM32/ARM64/x86-64 target:
--- measurements and admissibility checks must precede architecture autoselect.
+-- Contract for this shared batch surface:
+-- * segments are atomic and in source order;
+-- * neighboring segments on a line are joined with one display space;
+-- * never change, drop, clip, or split a segment;
+-- * an individually overwide segment remains overwide on its own line;
+-- * the supplied width function determines whether a candidate line fits.
+--
+-- All methods share that contract, not necessarily their break positions.
+-- Complex-script shaping, Unicode line-break opportunities, source offsets,
+-- hyphenation, and CSS-like justification remain separate from this contract.
 public export
 reflow : ReflowRequirements → (Text → Number) → List Text →
   Either Text (List Text)
@@ -46,4 +69,9 @@ reflow (Requirements Z _) measure segments =
 reflow request@(Requirements width _) measure segments =
   case select_reflow request of
     greedy ⇒ Right (reflow_greedily measure width segments)
+    streaming_greedy ⇒ Right (reflow_streaming_segments measure width segments)
     balanced ⇒ Right (reflow_balanced measure width segments)
+    cubic ⇒ Right (reflow_for_objective cubic_raggedness measure width segments)
+    final_line_free ⇒ Right (reflow_for_objective free_final_line measure width segments)
+    minimax ⇒ Right (reflow_for_objective minimax_raggedness measure width segments)
+    threshold_balanced ⇒ Right (reflow_threshold_balanced measure width segments)
