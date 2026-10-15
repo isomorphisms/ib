@@ -1,0 +1,76 @@
+module IB.Reflow.Objectives
+
+import Data.Text
+
+-- These three ways share the same suffix dynamic-programming engine, but ask
+-- different mathematical questions. They cannot be interchanged blindly:
+-- choosing a different objective may change observable line breaks.
+public export
+choice line_objective one_of
+  cubic_raggedness
+  free_final_line
+  minimax_raggedness
+
+record ObjectivePlan where
+  constructor PlannedObjective
+  objective_score : Number
+  objective_lines : List Text
+
+slack : Number → Number → Number
+slack width used =
+  if used <= width then width - used else 0
+
+line_penalty : line_objective → Number → Bool → Number
+line_penalty cubic_raggedness unused is_last = unused * unused * unused
+line_penalty free_final_line unused True = 0
+line_penalty free_final_line unused False = unused * unused
+line_penalty minimax_raggedness unused is_last = unused
+
+combine_score : line_objective → Number → Number → Number
+combine_score minimax_raggedness first later =
+  if first >= later then first else later
+combine_score _ first later = first + later
+
+candidate : line_objective → (Text → Number) → Number →
+  Text → ObjectivePlan → ObjectivePlan
+candidate objective measure width line (PlannedObjective previous following) =
+  let unused = slack width (measure line) in
+  let penalty = line_penalty objective unused (null following) in
+  PlannedObjective (combine_score objective penalty previous) (line :: following)
+
+prefer : ObjectivePlan → ObjectivePlan → ObjectivePlan
+prefer left right =
+  if left.objective_score <= right.objective_score then left else right
+
+-- Do not prune later breakpoints after one line fails to fit: an arbitrary
+-- supplied shaped-text width metric is not guaranteed to be monotonic.
+check_longer : line_objective → (Text → Number) → Number → Text →
+  List Text → List ObjectivePlan → ObjectivePlan → ObjectivePlan
+check_longer objective measure width current [] plans best = best
+check_longer objective measure width current values [] best = best
+check_longer objective measure width current (word :: rest) (tail :: tails) best =
+  let extended = current ++ " " ++ word in
+  let candidate_best =
+    if measure extended <= width
+      then prefer best (candidate objective measure width extended tail)
+      else best in
+  check_longer objective measure width extended rest tails candidate_best
+
+suffix_plans : line_objective → (Text → Number) → Number →
+  List Text → List ObjectivePlan
+suffix_plans objective measure width [] = [PlannedObjective 0 []]
+suffix_plans objective measure width (word :: rest) =
+  case suffix_plans objective measure width rest of
+    [] ⇒ []
+    tail :: later ⇒
+      let initial = candidate objective measure width word tail in
+      let best = check_longer objective measure width word rest later initial in
+      best :: tail :: later
+
+public export
+reflow_for_objective : line_objective → (Text → Number) → Number →
+  List Text → List Text
+reflow_for_objective objective measure width words =
+  case suffix_plans objective measure width words of
+    [] ⇒ []
+    PlannedObjective _ lines :: _ ⇒ lines
