@@ -1,6 +1,7 @@
 module IB.Reflow.Objectives
 
 import Data.Text
+import IB.Reflow.Arithmetic
 
 -- These three ways share the same suffix dynamic-programming engine, but ask
 -- different mathematical questions. They cannot be interchanged blindly:
@@ -18,7 +19,7 @@ record ObjectivePlan where
 
 slack : Number → Number → Number
 slack width used =
-  if used <= width then width - used else 0
+  if used <= width then nonnegative_difference width used else 0
 
 last_line : List Text → Bool
 last_line [] = True
