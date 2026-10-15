@@ -87,9 +87,9 @@ is_last (_ :: _) = False
 -- exact ratio is also recorded, avoiding floating-point rounding in the plan.
 adjustment_badness : Number → Number → Number
 adjustment_badness amount capacity =
-  if capacity ≟ 0 then 10000
-  else (100 * amount * amount * amount) `div`
-       (capacity * capacity * capacity)
+  capped_badness_quotient
+    (100 * amount * amount * amount)
+    (capacity * capacity * capacity)
 
 within_tolerance : KnuthSettings → Number → Bool
 within_tolerance settings badness =
