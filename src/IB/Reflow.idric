@@ -1,0 +1,49 @@
+module IB.Reflow
+
+import Data.Text
+import IB.Reflow.Greedy
+import IB.Reflow.Balanced
+
+-- The verb is always reflow. Adverbs request a manner, not an algorithm name.
+-- A later ComputerScience planner can replace this deliberately simple
+-- selector with target/workload measurements without changing the public verb.
+public export
+choice reflow_adverb one_of
+  promptly
+  evenly
+
+public export
+choice reflow_way one_of
+  greedy
+  balanced
+
+public export
+record ReflowRequirements where
+  constructor Requirements
+  available_width : Number
+  how : reflow_adverb
+
+public export
+select_reflow : ReflowRequirements → reflow_way
+select_reflow (Requirements _ promptly) = greedy
+select_reflow (Requirements _ evenly) = balanced
+
+-- Each segment is atomic; joining segments inserts one ordinary space.
+-- The caller supplies the *actual* width metric: character counts in tests,
+-- pixel advances in a native reader. The same metric and content are used by
+-- both algorithms. Neither algorithm changes token order or clips text.
+-- A word wider than the viewport is emitted whole on its own line.
+--
+-- Promptly: greedy, smaller working set, suitable for incremental prepaint.
+-- Evenly: paragraph-wide minimum-squared-slack layout, more work and memory.
+-- No claim is made that either is faster on a given ARM32/ARM64/x86-64 target:
+-- measurements and admissibility checks must precede architecture autoselect.
+public export
+reflow : ReflowRequirements → (Text → Number) → List Text →
+  Either Text (List Text)
+reflow (Requirements Z _) measure segments =
+  Left "Reflow width must be positive"
+reflow request@(Requirements width _) measure segments =
+  case select_reflow request of
+    greedy ⇒ Right (reflow_greedily measure width segments)
+    balanced ⇒ Right (reflow_balanced measure width segments)
