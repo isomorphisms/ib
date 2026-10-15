@@ -31,6 +31,7 @@ same_manner minimizing_raggedness minimizing_raggedness = True
 same_manner ignoring_final_line ignoring_final_line = True
 same_manner minimizing_worst_gap minimizing_worst_gap = True
 same_manner without_extra_lines without_extra_lines = True
+same_manner typographically typographically = True
 same_manner _ _ = False
 
 cache_matches : ReflowRequirements → Text → List Text →
