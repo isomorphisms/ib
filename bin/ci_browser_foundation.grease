@@ -198,6 +198,7 @@ exercise_information() {
   grep -Fx 'reflow-stream-zero-refused=True' /tmp/ib-reflow-smoke.txt
   grep -Fx 'reflow-knuth-spacings=True' /tmp/ib-reflow-smoke.txt
   grep -Fx 'reflow-incremental-revisions=True' /tmp/ib-reflow-smoke.txt
+  grep -Fx 'reflow-arithmetic=True' /tmp/ib-reflow-smoke.txt
   sh -n bin/prepaint_arxiv_progressively.grease
   sh -n tests/test_arxiv_progressive_prepaint.grease
   sh tests/test_arxiv_progressive_prepaint.grease
