@@ -3,6 +3,8 @@ module ReflowSmoke
 import Data.Text
 import IB.Reflow
 import IB.Reflow.Streaming
+import IB.Reflow.KnuthPlass
+import IB.Reflow.Incremental
 import System
 
 character_width : Text → Number
@@ -75,6 +77,49 @@ zero_refused_in_every_mode (mode :: more) =
   has_error (reflow (Requirements 0 mode) character_width ["x"]) &&
   zero_refused_in_every_mode more
 
+has_adjustment : List JustifiedLine → Bool
+has_adjustment [] = False
+has_adjustment (Justified _ NoAdjustment _ :: rest) = has_adjustment rest
+has_adjustment (_ :: _) = True
+
+knuth_plan_case : Bool
+knuth_plan_case =
+  case reflow_knuth_plass (default_knuth_settings 8)
+    character_width 8 ["aa", "bb", "cc", "dd", "eeeeee"] of
+    Left _ ⇒ False
+    Right lines ⇒
+      has_adjustment lines &&
+      join_lines (plain_lines lines) ≟ "aa bb cc dd eeeeee"
+
+incremental_case : Bool
+incremental_case =
+  let request = Requirements 8 evenly in
+  let words = ["aa", "bb", "cc", "dd", "eeeeee"] in
+  case reflow_incrementally request "font-1" character_width words Nothing of
+    Left _ ⇒ False
+    Right built ⇒
+      case reflow_incrementally request "font-1" character_width
+        words (Just built.resulting_cache) of
+        Left _ ⇒ False
+        Right reused ⇒
+          case reflow_incrementally request "font-1" character_width
+            ["aa", "bb", "changed"] (Just built.resulting_cache) of
+            Left _ ⇒ False
+            Right edited ⇒
+              case reflow_incrementally (Requirements 7 evenly)
+                "font-1" character_width words (Just built.resulting_cache) of
+                Left _ ⇒ False
+                Right resized ⇒
+                  case reflow_incrementally request
+                    "font-2" character_width words (Just built.resulting_cache) of
+                    Left _ ⇒ False
+                    Right new_metric ⇒
+                      not built.reused_previous &&
+                      reused.reused_previous &&
+                      not edited.reused_previous &&
+                      not resized.reused_previous &&
+                      not new_metric.reused_previous
+
 main : IO ()
 main = do
   let words = ["aa", "bb", "cc", "dd", "eeeeee"]
@@ -101,13 +146,16 @@ main = do
     (reflow (Requirements 10 evenly) character_width odd)
 
   let modes = [promptly, streamingly, evenly, minimizing_raggedness,
-    ignoring_final_line, minimizing_worst_gap, without_extra_lines]
+    ignoring_final_line, minimizing_worst_gap, without_extra_lines,
+    typographically]
   let content_preserved = preserves_in_every_mode modes odd
   let long_word_intact = overwide_in_every_mode modes
   let empty_intact = empty_in_every_mode modes
   let zero_refused = zero_refused_in_every_mode modes
   let (emits_early, chunk_invariant) = streaming_case
   let paragraphs_ok = paragraph_case
+  let knuth_ok = knuth_plan_case
+  let incremental_ok = incremental_case
   let zero_stream_refused =
     case begin_stream 0 of
       Left _ ⇒ True
@@ -129,10 +177,13 @@ main = do
   putStrLn ("reflow-empty=" ++ show empty_intact)
   putStrLn ("reflow-zero-refused=" ++ show zero_refused)
   putStrLn ("reflow-stream-zero-refused=" ++ show zero_stream_refused)
+  putStrLn ("reflow-knuth-spacings=" ++ show knuth_ok)
+  putStrLn ("reflow-incremental-revisions=" ++ show incremental_ok)
 
   if greedy_ok && streaming_ok && emits_early && chunk_invariant &&
      paragraphs_ok && balanced_ok && cubic_ok && final_free_ok &&
      minimax_ok && threshold_ok && squared_ok && content_preserved &&
-     long_word_intact && empty_intact && zero_refused && zero_stream_refused
+     long_word_intact && empty_intact && zero_refused && zero_stream_refused &&
+     knuth_ok && incremental_ok
     then pure ()
     else exitFailure
