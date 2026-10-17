@@ -1,0 +1,215 @@
+module IB.Reflow.Source
+
+import Data.Text
+import IB.Reflow
+import IB.Reflow.Arithmetic
+import IB.Reflow.SourceBreaks
+
+-- Unlike the earlier atomic-word reflow, this preserves source character
+-- offsets and never normalizes or edits canonical source. The visible text is
+-- a derived projection: paragraph controls are hidden, trailing display
+-- spaces are suppressed, and a chosen soft-hyphen cut adds a visible "-".
+-- This simple hyphen glyph is a policy, NOT locale-specific shaping.
+hidden_character : Char → Bool
+hidden_character char =
+  let point = ord char in
+  point ≟ 173 || point ≟ 8203 ||
+  point ≟ 10 || point ≟ 13 ||
+  point ≟ 133 || point ≟ 8232 || point ≟ 8233
+
+without_controls : List Char → List Char
+without_controls [] = []
+without_controls (char :: rest) =
+  if hidden_character char
+    then without_controls rest
+    else char :: without_controls rest
+
+strip_trailing_space : List Char → List Char
+strip_trailing_space [] = []
+strip_trailing_space (' ' :: rest) = strip_trailing_space rest
+strip_trailing_space (char :: rest) = char :: rest
+
+display_break_mark : BreakKind → Text → Text
+display_break_mark DiscretionaryHyphen painted = painted ++ "-"
+display_break_mark _ painted = painted
+
+source_line : Text → Number → SourceBreak → SourceLine
+source_line source start (At finish kind) =
+  let span = FromSource start finish "" kind in
+  let raw = unpack (source_for_line source span) in
+  let painted = pack (reverse (strip_trailing_space (reverse (without_controls raw)))) in
+  FromSource start finish (display_break_mark kind painted) kind
+
+line_fits : (Text → Number) → Number → SourceLine → Bool
+line_fits measure width line =
+  measure line.visible_text <= width
+
+terminal : BreakKind → Bool
+terminal MandatoryBreak = True
+terminal SourceEnd = True
+terminal _ = False
+
+-- A greedy line chooses the farthest candidate that fits, stopping at the
+-- first mandatory boundary. If not even the earliest candidate fits, emit
+-- that atomic source run intact and report the overrun through line geometry.
+-- It never invents an illegal break to stay inside the width.
+last_fitting : Text → (Text → Number) → Number → Number →
+  SourceBreak → List SourceBreak → Maybe SourceBreak → SourceBreak
+last_fitting source measure width start first [] chosen =
+  case chosen of
+    Nothing ⇒ first
+    Just answer ⇒ answer
+last_fitting source measure width start first (candidate :: more) chosen =
+  let fits = line_fits measure width (source_line source start candidate) in
+  let best = if fits then Just candidate else chosen in
+  if terminal candidate.break_kind
+    then case best of
+      Nothing ⇒ first
+      Just answer ⇒ answer
+    else last_fitting source measure width start first more best
+
+select_greedy : Text → (Text → Number) → Number → Number →
+  List SourceBreak → SourceBreak
+select_greedy source measure width start [] = At start SourceEnd
+select_greedy source measure width start (first :: later) =
+  if terminal first.break_kind
+    then first
+    else let first_fit = line_fits measure width
+               (source_line source start first) in
+         last_fitting source measure width start first later
+           (if first_fit then Just first else Nothing)
+
+after_cut : Number → List SourceBreak → List SourceBreak
+after_cut offset [] = []
+after_cut offset (cut :: rest) =
+  if cut.source_offset <= offset then after_cut offset rest
+  else cut :: rest
+
+greedy_lines : Text → (Text → Number) → Number → Number →
+  List SourceBreak → List SourceLine
+greedy_lines source measure width start [] = []
+greedy_lines source measure width start cuts =
+  let chosen = select_greedy source measure width start cuts in
+  source_line source start chosen ::
+    greedy_lines source measure width chosen.source_offset
+      (after_cut chosen.source_offset cuts)
+
+record SourcePlan where
+  constructor PlannedSource
+  total_cost : Number
+  number_of_lines : Number
+  lines : List SourceLine
+
+badness : reflow_adverb → Number → Number → Bool → Number
+badness mode width used last =
+  let unused = nonnegative_difference width used in
+  if used > width
+    then let excess = nonnegative_difference used width in
+         1000000000 + excess * excess
+  else case mode of
+    ignoring_final_line ⇒ if last then 0 else unused * unused
+    minimizing_raggedness ⇒ unused * unused * unused
+    _ ⇒ unused * unused
+
+combined_cost : reflow_adverb → Number → Number → Number
+combined_cost minimizing_worst_gap first later =
+  if first >= later then first else later
+combined_cost _ first later = first + later
+
+soft_hyphen_cost : BreakKind → Number
+soft_hyphen_cost DiscretionaryHyphen = 50
+soft_hyphen_cost _ = 0
+
+candidate_plan : Text → reflow_adverb → (Text → Number) → Number →
+  Number → SourceBreak → SourcePlan → SourcePlan
+candidate_plan source mode measure width start cut (PlannedSource tail_cost count tail) =
+  let line = source_line source start cut in
+  let last = cut.source_offset ≟ length (unpack source) in
+  let cost = badness mode width (measure line.visible_text) last in
+  let adjusted = cost + soft_hyphen_cost cut.break_kind in
+  PlannedSource (combined_cost mode adjusted tail_cost)
+    (S count) (line :: tail)
+
+prefer_plan : reflow_adverb → SourcePlan → SourcePlan → SourcePlan
+prefer_plan without_extra_lines first second =
+  if first.number_of_lines < second.number_of_lines then first
+  else if first.number_of_lines > second.number_of_lines then second
+  else if first.total_cost <= second.total_cost then first else second
+prefer_plan mode first second =
+  if first.total_cost <= second.total_cost then first else second
+
+update_best : reflow_adverb → Maybe SourcePlan → SourcePlan → Maybe SourcePlan
+update_best mode Nothing candidate = Just candidate
+update_best mode (Just current) candidate =
+  Just (prefer_plan mode current candidate)
+
+-- Candidate plans are aligned with the source offsets of cuts. The first
+-- candidate is always admissible, even if it exceeds the width; later ones
+-- must fit. Required boundaries cap the search, so a plan cannot cross them.
+consider_cuts : Text → reflow_adverb → (Text → Number) → Number →
+  Number → Bool → List SourceBreak → List SourcePlan →
+  Maybe SourcePlan → Maybe SourcePlan
+consider_cuts source mode measure width start first [] plans best = best
+consider_cuts source mode measure width start first cuts [] best = best
+consider_cuts source mode measure width start first
+  (cut :: rest) (tail :: tails) best =
+  let line = source_line source start cut in
+  let admissible = first || line_fits measure width line in
+  if terminal cut.break_kind
+    then if admissible
+      then update_best mode best (candidate_plan source mode measure width start cut tail)
+      else best
+    else if admissible
+      then consider_cuts source mode measure width start False rest tails
+        (update_best mode best (candidate_plan source mode measure width start cut tail))
+      else consider_cuts source mode measure width start False rest tails best
+
+plan_from : Text → reflow_adverb → (Text → Number) → Number →
+  Number → List SourceBreak → List SourcePlan → SourcePlan
+plan_from source mode measure width start cuts tails =
+  case consider_cuts source mode measure width start True cuts tails Nothing of
+    Just answer ⇒ answer
+    Nothing ⇒ PlannedSource 0 0 []
+
+suffix_plans : Text → reflow_adverb → (Text → Number) → Number →
+  List SourceBreak → List SourcePlan
+suffix_plans source mode measure width [] = [PlannedSource 0 0 []]
+suffix_plans source mode measure width (At offset kind :: later) =
+  let tails = suffix_plans source mode measure width later in
+  let plan = plan_from source mode measure width offset later tails in
+  plan :: tails
+
+optimal_lines : Text → reflow_adverb → (Text → Number) → Number →
+  List SourceBreak → List SourceLine
+optimal_lines source mode measure width cuts =
+  let tails = suffix_plans source mode measure width cuts in
+  let (PlannedSource _ _ lines) = plan_from source mode measure width 0 cuts tails in
+  lines
+
+-- On the source-bound representation the following requests are genuinely
+-- implemented: greedy, minimum squared/cubic/maximum slack, final-line-free
+-- and *exact* minimum-line-count/secondarily minimum-square-slack.
+-- The last differs from the atomic-word threshold heuristic, by design.
+-- Streaming requires a lifetime-aware source-offset accumulator, and TeX
+-- needs actual variable-width glue/penalty nodes, so those fail explicitly.
+public export
+reflow_at_breaks : ReflowRequirements → (Text → Number) → Text →
+  List SourceBreak → Either Text (List SourceLine)
+reflow_at_breaks (Requirements Z _) measure source cuts =
+  Left "Reflow width must be positive"
+reflow_at_breaks (Requirements width mode) measure source cuts =
+  if not (valid_source_breaks source cuts)
+    then Left "Invalid, unsafe or incomplete source break opportunities"
+    else case unpack source of
+      [] ⇒ Right []
+      _ ⇒ case mode of
+        promptly ⇒ Right (greedy_lines source measure width 0 cuts)
+        streamingly ⇒ Left "Source-offset streaming has not been qualified"
+        typographically ⇒ Left "Source-backed adjustable glue is not qualified"
+        _ ⇒ Right (optimal_lines source mode measure width cuts)
+
+public export
+reflow_source : ReflowRequirements → (Text → Number) → Text →
+  Either Text (List SourceLine)
+reflow_source requirements measure source =
+  reflow_at_breaks requirements measure source (source_breaks source)

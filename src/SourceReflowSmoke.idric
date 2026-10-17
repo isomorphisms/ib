@@ -1,0 +1,118 @@
+module SourceReflowSmoke
+
+import Data.Text
+import IB.Reflow
+import IB.Reflow.Source
+import IB.Reflow.SourceBreaks
+import System
+
+codepoint_width : Text → Number
+codepoint_width value = length (unpack value)
+
+display_lines : List SourceLine → List Text
+display_lines [] = []
+display_lines (line :: rest) =
+  line.visible_text :: display_lines rest
+
+matches : List Text → Either Text (List SourceLine) → Bool
+matches wanted (Right lines) = wanted ≟ display_lines lines
+matches wanted _ = False
+
+refused : Either Text (List SourceLine) → Bool
+refused (Left _) = True
+refused _ = False
+
+join_raw : Text → List SourceLine → Text
+join_raw source [] = ""
+join_raw source (line :: rest) =
+  source_for_line source line ++ join_raw source rest
+
+contiguous : Text → Number → List SourceLine → Bool
+contiguous source offset [] = offset ≟ length (unpack source)
+contiguous source offset (line :: rest) =
+  line.first_codepoint ≟ offset &&
+  line.after_last_codepoint > offset &&
+  line.after_last_codepoint <= length (unpack source) &&
+  contiguous source line.after_last_codepoint rest
+
+source_unchanged : Text → Either Text (List SourceLine) → Bool
+source_unchanged source (Right lines) =
+  join_raw source lines ≟ source &&
+  contiguous source 0 lines
+source_unchanged source _ = False
+
+kind_is : BreakKind → BreakKind → Bool
+kind_is PossibleBreak PossibleBreak = True
+kind_is MandatoryBreak MandatoryBreak = True
+kind_is DiscretionaryHyphen DiscretionaryHyphen = True
+kind_is ZeroWidthBreak ZeroWidthBreak = True
+kind_is SourceEnd SourceEnd = True
+kind_is _ _ = False
+
+has_cut : Number → BreakKind → List SourceBreak → Bool
+has_cut offset wanted [] = False
+has_cut offset wanted (cut :: rest) =
+  (offset ≟ cut.source_offset && kind_is wanted cut.break_kind) ||
+  has_cut offset wanted rest
+
+some_breaks_are_refused : Bool
+some_breaks_are_refused =
+  let source = "a\r\nb" in
+  let no_mandatory = [At 4 SourceEnd] in
+  let inside_crlf = [At 2 PossibleBreak, At 3 MandatoryBreak, At 4 SourceEnd] in
+  let duplicate = [At 2 PossibleBreak, At 2 PossibleBreak, At 3 SourceEnd] in
+  not (valid_source_breaks source no_mandatory) &&
+  not (valid_source_breaks source inside_crlf) &&
+  not (valid_source_breaks "a b" duplicate) &&
+  not (valid_source_breaks "éx" [At 1 PossibleBreak, At 3 SourceEnd]) &&
+  not (valid_source_breaks "👩‍💻x" [At 2 PossibleBreak, At 4 SourceEnd])
+
+all_modes_preserve : Text → List reflow_adverb → Bool
+all_modes_preserve source [] = True
+all_modes_preserve source (mode :: rest) =
+  source_unchanged source
+    (reflow_source (Requirements 2 mode) codepoint_width source) &&
+  all_modes_preserve source rest
+
+run_cases : Bool
+run_cases =
+  let basic = matches ["red", "blue"] (reflow_source (Requirements 4 promptly) codepoint_width "red blue") in
+  let soft = "ab­cd" in
+  let soft_short = matches ["ab-", "cd"] (reflow_source (Requirements 3 promptly) codepoint_width soft) in
+  let soft_long = matches ["abcd"] (reflow_source (Requirements 4 evenly) codepoint_width soft) in
+  let soft_source = source_unchanged soft (reflow_source (Requirements 3 promptly) codepoint_width soft) in
+  let zero_width_space = matches ["ab", "cd"] (reflow_source (Requirements 2 promptly) codepoint_width "ab​cd") in
+  let han = matches ["漢字", "漢字"] (reflow_source (Requirements 2 evenly) codepoint_width "漢字漢字") in
+  let crlf = matches ["a", "b"] (reflow_source (Requirements 1 promptly) codepoint_width "a\r\nb") in
+  let crlf_source = source_unchanged "a\r\nb" (reflow_source (Requirements 1 promptly) codepoint_width "a\r\nb") in
+  let blank_line = matches ["a", "", "b"] (reflow_source (Requirements 1 promptly) codepoint_width "a\n\nb") in
+  let nbspace = matches ["a b", "c"] (reflow_source (Requirements 3 promptly) codepoint_width "a b c") in
+  let right_to_left = matches ["שלום", "hello"] (reflow_source (Requirements 5 promptly) codepoint_width "שלום hello") in
+  let final_newline = matches ["end"] (reflow_source (Requirements 5 promptly) codepoint_width "end\n") in
+  let no_break_before_joiner = not (has_cut 2 PossibleBreak (source_breaks "a ⁠b")) in
+  let correct_kinds =
+    has_cut 3 MandatoryBreak (source_breaks "a\r\nb") &&
+    has_cut 3 DiscretionaryHyphen (source_breaks "ab­cd") &&
+    has_cut 3 ZeroWidthBreak (source_breaks "ab​cd") in
+  let preserves_every_mode = all_modes_preserve "a\r\n漢字 ab­cd"
+    [promptly, evenly, minimizing_raggedness, ignoring_final_line,
+      minimizing_worst_gap, without_extra_lines] in
+  let unsupported_modes =
+    refused (reflow_source (Requirements 5 typographically)
+      codepoint_width "aa bb") &&
+    refused (reflow_source (Requirements 5 streamingly)
+      codepoint_width "aa bb") in
+  let bad_width = refused (reflow_source (Requirements 0 promptly) codepoint_width "abc") in
+  let bad_breaks = refused (reflow_at_breaks (Requirements 5 promptly) codepoint_width "a\r\nb" [At 4 SourceEnd]) in
+  let empty_input = matches [] (reflow_source (Requirements 5 promptly) codepoint_width "") in
+  basic && soft_short && soft_long && soft_source && zero_width_space &&
+  han && crlf && crlf_source && blank_line && nbspace && right_to_left &&
+  final_newline && no_break_before_joiner && correct_kinds &&
+  preserves_every_mode && unsupported_modes && bad_width && bad_breaks &&
+  empty_input && some_breaks_are_refused
+
+main : IO ()
+main = do
+  let passed = run_cases
+  putStrLn ("source-reflow-unicode-offset-cases=" ++ show passed)
+  if passed then pure () else exitFailure
