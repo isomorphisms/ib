@@ -153,6 +153,10 @@ build_information_programs() {
     2>&1 | tee /tmp/idric-reflow-compile.txt
   test -x ./build/exec/ib-reflow-smoke
   ! grep -q '^Error:' /tmp/idric-reflow-compile.txt
+  "$idric_prefix/bin/idris2" SourceReflowSmoke.idric -o ib-source-reflow-smoke \
+    2>&1 | tee /tmp/idric-source-reflow-compile.txt
+  test -x ./build/exec/ib-source-reflow-smoke
+  ! grep -q '^Error:' /tmp/idric-source-reflow-compile.txt
 }
 
 exercise_information() {
@@ -199,6 +203,8 @@ exercise_information() {
   grep -Fx 'reflow-knuth-spacings=True' /tmp/ib-reflow-smoke.txt
   grep -Fx 'reflow-incremental-revisions=True' /tmp/ib-reflow-smoke.txt
   grep -Fx 'reflow-arithmetic=True' /tmp/ib-reflow-smoke.txt
+  src/build/exec/ib-source-reflow-smoke | tee /tmp/ib-source-reflow-smoke.txt
+  grep -Fx 'source-reflow-unicode-offset-cases=True' /tmp/ib-source-reflow-smoke.txt
   sh -n bin/prepaint_arxiv_progressively.grease
   sh -n tests/test_arxiv_progressive_prepaint.grease
   sh tests/test_arxiv_progressive_prepaint.grease
