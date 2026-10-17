@@ -1,6 +1,7 @@
 module IB.Reflow.SourceBreaks
 
 import Data.Text
+import IB.Reflow.Arithmetic
 
 -- A source-bound list of possible line breaks. Offsets count decoded Unicode
 -- code points (elements of unpack), NOT UTF-8 bytes, UTF-16 units or glyphs.
@@ -52,7 +53,12 @@ classify value rest =
   if hard_line_end value rest then Just MandatoryBreak
   else if ord value ≟ 173 then Just DiscretionaryHyphen
   else if ord value ≟ 8203 then Just ZeroWidthBreak
-  else if value ≟ ' ' then Just PossibleBreak
+  else if value ≟ ' ' then
+    case rest of
+      next :: _ ⇒
+        if hard_line_end next [] || ord next ≟ 8205 || ord next ≟ 8288
+          then Nothing else Just PossibleBreak
+      [] ⇒ Nothing
   else if is_han value then
     case rest of
       next :: _ ⇒ if is_han next then Just PossibleBreak else Nothing
@@ -103,15 +109,19 @@ is_combining_mark value =
   (number >= 8400 && number <= 8447) ||
   (number >= 65056 && number <= 65071)
 
-safe_cut : List Char → Number → Bool
-safe_cut chars offset =
+safe_cut : List Char → Number → BreakKind → Bool
+safe_cut chars offset kind =
   case (before offset chars, at_position offset chars) of
     (Just previous, Just next) ⇒
       not (previous ≟ '\r' && next ≟ '\n') &&
       not (ord previous ≟ 8205 || ord previous ≟ 8288) &&
       not (ord next ≟ 8205 || ord next ≟ 8288) &&
-      not (is_combining_mark next) &&
-      not (next ≟ '\r' || next ≟ '\n')
+      (case kind of
+        MandatoryBreak ⇒ True
+        _ ⇒ not (is_combining_mark next)) &&
+      (case kind of
+        MandatoryBreak ⇒ True
+        _ ⇒ not (hard_line_end next []))
     _ ⇒ True
 
 requires_break : List Char → Number → Bool
@@ -152,7 +162,7 @@ well_ordered : List Char → Number → List SourceBreak → Bool
 well_ordered chars previous [] = previous ≟ length chars
 well_ordered chars previous (At offset kind :: rest) =
   offset > previous && offset <= length chars &&
-  safe_cut chars offset &&
+  safe_cut chars offset kind &&
   kind_is_sound chars offset kind &&
   well_ordered chars offset rest
 
@@ -175,8 +185,11 @@ public export
 valid_source_breaks : Text → List SourceBreak → Bool
 valid_source_breaks text breaks =
   let chars = unpack text in
-  case breaks of
-    [] ⇒ is_empty chars
+  case chars of
+    [] ⇒ case breaks of
+      [] ⇒ True
+      [At Z SourceEnd] ⇒ True
+      _ ⇒ False
     _ ⇒ well_ordered chars 0 breaks && all_hard_breaks 0 chars breaks
 
 -- Reconstruct EXACT decoded source from offsets, regardless of paint spelling.
@@ -184,5 +197,5 @@ valid_source_breaks text breaks =
 public export
 source_for_line : Text → SourceLine → Text
 source_for_line source line =
-  pack (take (line.after_last_codepoint - line.first_codepoint)
-             (drop line.first_codepoint (unpack source)))
+  pack (take (nonnegative_difference line.after_last_codepoint line.first_codepoint)
+    (drop line.first_codepoint (unpack source)))
