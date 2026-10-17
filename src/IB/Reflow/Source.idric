@@ -29,16 +29,16 @@ strip_trailing_space [] = []
 strip_trailing_space (' ' :: rest) = strip_trailing_space rest
 strip_trailing_space (char :: rest) = char :: rest
 
+display_break_mark : BreakKind → Text → Text
+display_break_mark DiscretionaryHyphen painted = painted ++ "-"
+display_break_mark _ painted = painted
+
 source_line : Text → Number → SourceBreak → SourceLine
 source_line source start (At finish kind) =
   let span = FromSource start finish "" kind in
   let raw = unpack (source_for_line source span) in
-  let painted = pack (reverse (strip_trailing_space
-    (reverse (without_controls raw)))) in
-  let shown = case kind of
-    DiscretionaryHyphen ⇒ painted ++ "-"
-    _ ⇒ painted in
-  FromSource start finish shown kind
+  let painted = pack (reverse (strip_trailing_space (reverse (without_controls raw)))) in
+  FromSource start finish (display_break_mark kind painted) kind
 
 line_fits : (Text → Number) → Number → SourceLine → Bool
 line_fits measure width line =
@@ -155,15 +155,14 @@ consider_cuts source mode measure width start first
   (cut :: rest) (tail :: tails) best =
   let line = source_line source start cut in
   let admissible = first || line_fits measure width line in
-  let next_best =
-    if admissible
-      then update_best mode best
-        (candidate_plan source mode measure width start cut tail)
-      else best in
   if terminal cut.break_kind
-    then next_best
-    else consider_cuts source mode measure width start False
-      rest tails next_best
+    then if admissible
+      then update_best mode best (candidate_plan source mode measure width start cut tail)
+      else best
+    else if admissible
+      then consider_cuts source mode measure width start False rest tails
+        (update_best mode best (candidate_plan source mode measure width start cut tail))
+      else consider_cuts source mode measure width start False rest tails best
 
 plan_from : Text → reflow_adverb → (Text → Number) → Number →
   Number → List SourceBreak → List SourcePlan → SourcePlan
