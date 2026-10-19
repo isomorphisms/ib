@@ -1,0 +1,20 @@
+{
+  "format": "ib-pensieve-hyperplane-proposal-policy-v2",
+  "name": "development-calibrated-unanimous-70pct-fit-floor",
+  "concept": "piecewise-linear-network-geometry",
+  "score_floor_fraction_of_fit_positive_floor": 0.7,
+  "minimum_zero_surface_vote_fraction": 1.0,
+  "development_evidence": {
+    "row_ids": [
+      "arxiv:2305.00241"
+    ],
+    "workflow_run": 35120749002,
+    "head_sha": "1bf95ed0a948809957159d17aab6b18f5854c72b",
+    "fit_positive_floor": 0.964166453,
+    "development_score": 0.692401277,
+    "development_score_fraction_of_fit_positive_floor": 0.7181345864561002,
+    "development_zero_surface_vote_fraction": 1.0
+  },
+  "selection_note": "Frozen after inspecting the single development positive and before adding fresh held-out rows. The 0.70 ratio is deliberately coarser than the observed 0.718 ratio; future held-out results must not change this policy before being reported.",
+  "proposal_rule": "aggregate_score >= 0.70 * fit_positive_floor AND zero_surface_vote_fraction >= 1.0"
+}

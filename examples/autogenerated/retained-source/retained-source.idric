@@ -1,0 +1,18 @@
+module RetainedSource
+
+choice source_privacy one_of
+  ordinary
+  private
+
+choice model_permission one_of
+  allow
+  deny
+
+data source_policy = Policy source_privacy model_permission
+
+permitted_for_model : source_policy → Bool
+permitted_for_model (Policy _ allow) = True
+permitted_for_model (Policy _ deny) = False
+
+retention_preserves_privacy : source_policy → source_privacy
+retention_preserves_privacy (Policy privacy _) = privacy

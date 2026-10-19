@@ -1,0 +1,45 @@
+#!/usr/bin/env grease
+set -eu
+root=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)
+runner=${GREASE:?GREASE must name the verified runtime}
+work=$(mktemp -d)
+trap 'rm -rf "$work"' EXIT HUP INT TERM
+export IB_HOME=$work/state
+source=$work/urls
+printf '# synthetic raw-URL occurrences\nhttps://example.invalid/one\nhttps://example.invalid/one\nhttps://example.invalid/two\n' > "$source"
+digest=$(sha256sum "$source" | awk '{print $1}')
+count=$(wc -c < "$source" | tr -d '[:space:]')
+manifest=$work/source.tsv
+printf 'source_kind\traw_urls\nsource_identity\tfixture-history\nsource_generation\t1\nacquired_at\t2026-10-06T00:00:00Z\nprivacy\tordinary\nexposure\tlocal-only\nsha256\t%s\nbyte_count\t%s\n' "$digest" "$count" > "$manifest"
+id=$("$runner" "$root/bin/ib" retain-source "$source" "$manifest")
+test "$id" = "$("$runner" "$root/bin/ib" retain-source "$source" "$manifest")"
+cmp "$source" "$IB_HOME/cauldron/sources/$id/raw"
+"$runner" "$root/bin/ib" project-raw-urls "$id" >/dev/null
+view=$IB_HOME/pensieve/sources/ordinary/$id
+test "$(wc -l < "$view/text/urls.txt" | tr -d '[:space:]')" = 3
+grep -F '0	2	unknown' "$view/coordinates.tsv" >/dev/null
+"$runner" "$root/bin/ib" search example.invalid > "$work/search"
+test "$(wc -l < "$work/search" | tr -d '[:space:]')" = 3
+rm -rf "$IB_HOME/pensieve"
+"$runner" "$root/bin/ib" project-raw-urls "$id" >/dev/null
+cmp "$source" "$IB_HOME/cauldron/sources/$id/raw"
+sed 's/privacy	ordinary/privacy	private/' "$manifest" > "$work/private.tsv"
+private_id=$("$runner" "$root/bin/ib" retain-source "$source" "$work/private.tsv")
+"$runner" "$root/bin/ib" project-raw-urls "$private_id" >/dev/null
+if grep -F "$private_id" "$IB_HOME/pensieve/indexes/exact-text.files"; then exit 1; fi
+private_manifest=$IB_HOME/cauldron/sources/$private_id/provenance.tsv
+cp "$private_manifest" "$work/original-private.tsv"
+sed 's/privacy\tprivate/privacy\tordinary/' "$work/original-private.tsv" > "$private_manifest"
+if "$runner" "$root/bin/ib" project-raw-urls "$private_id" >/dev/null 2> "$work/error"; then exit 1; fi
+grep -F 'provenance identity mismatch' "$work/error" >/dev/null
+cp "$work/original-private.tsv" "$private_manifest"
+sed 's/source_generation	1/source_generation	2/' "$manifest" > "$work/generation.tsv"
+new_id=$("$runner" "$root/bin/ib" retain-source "$source" "$work/generation.tsv")
+test "$new_id" != "$id"
+printf 'changed\n' >> "$source"
+if "$runner" "$root/bin/ib" retain-source "$source" "$manifest" > /dev/null 2> "$work/error"; then exit 1; fi
+grep -F 'SHA-256 mismatch' "$work/error" >/dev/null
+printf 'privacy	ordinary\n' >> "$manifest"
+if "$runner" "$root/bin/ib" retain-source "$source" "$manifest" >/dev/null 2> "$work/error"; then exit 1; fi
+grep -F 'unique nonempty TSV' "$work/error" >/dev/null
+printf '%s\n' 'PASS: retained bytes, provenance, occurrence order, rebuild and per-source search policy; synthetic data only'

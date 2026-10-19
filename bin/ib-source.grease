@@ -1,0 +1,127 @@
+#!/usr/bin/env grease
+set -eu
+umask 077
+LC_ALL=C
+export LC_ALL
+root=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)
+. "$root/lib/ib/pensieve.grease"
+runner=${GREASE:?verified Grease runtime required}
+fail() { printf 'ib source: %s\n' "$*" >&2; exit 2; }
+digest() { sha256sum -- "$1" | cut -d ' ' -f 1; }
+field() { awk -F '\t' -v key="$1" '$1 == key { print $2 }' "$descriptor"; }
+safe_id() {
+  case $1 in ''|*[!0-9a-f]*) fail 'invalid retained source identity' ;; esac
+  test "${#1}" = 64 || fail 'invalid retained source identity length'
+}
+safe_root() {
+  case $1 in /*) ;; *) fail 'IB_HOME must resolve to an absolute path' ;; esac
+  current=$1
+  while test "$current" != /; do
+    test ! -L "$current" || fail 'state path crosses a symlink'
+    current=$(dirname -- "$current")
+  done
+  mkdir -p -- "$1"
+}
+verify_retained() {
+  test ! -L "$item" && test -d "$item" || fail 'source is incomplete'
+  for name in raw provenance.tsv; do
+    test -f "$item/$name" && test ! -L "$item/$name" || fail 'source record is missing or linked'
+  done
+  descriptor=$item/provenance.tsv
+  source_digest=$(digest "$item/raw")
+  test "$source_digest" = "$(field sha256)" || fail 'retained source bytes changed'
+  test "$(wc -c < "$item/raw" | tr -d '[:space:]')" = "$(field byte_count)" || fail 'retained source length changed'
+  identity=$({ cat "$descriptor"; printf '\n%s\n' "$source_digest"; } | sha256sum | cut -d ' ' -f 1)
+  test "$identity" = "$identifier" || fail 'retained provenance changed'
+}
+incoming=
+lock=
+cleanup() {
+  test -z "$incoming" || rm -rf -- "$incoming"
+  test -z "$lock" || rmdir -- "$lock"
+}
+trap cleanup EXIT HUP INT TERM
+home=$(ib_home)
+safe_root "$home"
+source_root=$home/cauldron/sources
+safe_root "$source_root"
+case ${1:-} in
+  retain)
+    test "$#" = 4 || fail 'retain needs FORMAT BYTES PROVENANCE.tsv'
+    case $2 in chatgpt-export) kind=chatgpt_export ;; raw-urls) kind=raw_urls ;; opaque) kind=opaque ;; *) fail 'unsupported source format' ;; esac
+    payload=$3
+    descriptor=$4
+    test -f "$payload" && test ! -L "$payload" || fail 'source bytes must be a regular unlinked file'
+    test -f "$descriptor" && test ! -L "$descriptor" || fail 'provenance must be a regular unlinked file'
+    awk -F '\t' '
+      BEGIN { split("source corpus provider object version member acquired_at privacy model", names, " "); for (i in names) required[names[i]]=1 }
+      NF != 2 || !($1 in required) || $2 == "" || /\r/ || seen[$1]++ { bad=1 }
+      END { for (key in required) if (!seen[key]) bad=1; exit bad }
+    ' "$descriptor" || fail 'provenance needs exactly nine distinct nonempty TSV fields'
+    case $(field provider) in drive|local) ;; *) fail 'unsupported provenance provider' ;; esac
+    case $(field privacy) in ordinary|private) ;; *) fail 'source privacy must be ordinary or private' ;; esac
+    case $(field model) in allow|deny) ;; *) fail 'source model policy must be allow or deny' ;; esac
+    count=$(wc -c < "$payload" | tr -d '[:space:]')
+    test "$count" -le 16777216 || fail 'selected source exceeds canonical 16 MiB intake bound'
+    source_digest=$(digest "$payload")
+    incoming=$(mktemp "$source_root/.provenance.XXXXXX")
+    {
+      cat "$descriptor"
+      printf 'source_kind\t%s\nsource_identity\t%s:%s:%s\nsource_generation\t%s\n' "$kind" "$(field provider)" "$(field object)" "$(field member)" "$(field version)"
+      printf 'exposure\tlocal-only\nsha256\t%s\nbyte_count\t%s\n' "$source_digest" "$count"
+    } > "$incoming"
+    # Reuse the canonical bounded Cauldron intake and source identity.
+    "$runner" "$root/bin/retain-source.grease" "$payload" "$incoming"
+    ;;
+  distill)
+    test "$#" = 2 || fail 'distill needs SOURCE_ID'
+    identifier=$2
+    safe_id "$identifier"
+    item=$source_root/$identifier
+    verify_retained
+    kind=$(field source_kind)
+    if test "$kind" = raw_urls; then
+      # Reuse the existing history decoder, coordinates and policy separation.
+      "$runner" "$root/bin/project-raw-urls.grease" "$identifier"
+      exit 0
+    fi
+    test "$kind" = chatgpt_export || fail 'opaque/unsupported source retained; no decoder selected'
+    privacy=$(field privacy)
+    case $privacy in ordinary|private) ;; *) fail 'invalid source privacy policy' ;; esac
+    view_root=$home/pensieve/sources/$privacy
+    safe_root "$view_root"
+    mkdir -- "$source_root/.lock" || fail 'source store is busy'
+    lock=$source_root/.lock
+    incoming=$(mktemp -d "$view_root/.incoming.XXXXXX")
+    mkdir -- "$incoming/text"
+    printf '%s\n' "$item" > "$incoming/source"
+    cp -- "$item/provenance.tsv" "$incoming/provenance.tsv"
+    printf '%s\n' "$identifier" > "$incoming/source-id"
+    digest "$root/bin/ib-source.grease" > "$incoming/command.sha256"
+    digest "$root/lib/ib/chatgpt-source.jq" > "$incoming/decoder.sha256"
+    jq --version > "$incoming/decoder-runtime"
+    jq -c --arg source "$identifier" -f "$root/lib/ib/chatgpt-source.jq" "$item/raw" > "$incoming/records.ndjson"
+    jq -r 'select(.kind == "message-node") | . as $node |
+      select(.value.message.content.content_type == "text") |
+      .value.message.content.parts[]? | select(type == "string") |
+      ($node.locator + "\t" + (. | tojson))' "$incoming/records.ndjson" > "$incoming/text/messages.txt"
+    verify_retained
+    printf 'derived-source-v1\n' > "$incoming/complete"
+    view=$view_root/$identifier
+    test ! -L "$view" || fail 'derived view path is a symlink'
+    rm -rf -- "$view"
+    mv -T -- "$incoming" "$view"
+    incoming=
+    ib_reindex_exact_text >/dev/null
+    printf '%s\n' "$view"
+    ;;
+  verify)
+    test "$#" = 2 || fail 'verify needs SOURCE_ID'
+    identifier=$2
+    safe_id "$identifier"
+    item=$source_root/$identifier
+    verify_retained
+    printf 'PASS retained source %s\n' "$identifier"
+    ;;
+  *) fail 'usage: ib-source {retain FORMAT BYTES PROVENANCE.tsv|distill ID|verify ID}' ;;
+esac
