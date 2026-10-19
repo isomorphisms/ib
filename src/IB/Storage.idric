@@ -1,5 +1,7 @@
 module IB.Storage
 
+import Data.Text
+
 %default total
 
 public export
@@ -116,3 +118,66 @@ public export
 readable_path : String → Bool
 readable_path path =
   safe_relative_path path && transparent_path path && not (is_secret (classify_path path))
+
+-- Path classification supports inspection. It never authorizes clearance.
+-- Temperature, placement and removable-media availability are separate facts
+-- and cannot substitute for retained input and rebuild evidence.
+public export
+choice retention_kind one_of
+  canonical_information
+  acquired_information
+  accepted_decisions
+  last_complete_result
+  derived_information
+  unknown_retention
+
+public export
+choice clearance_request one_of
+  no_clearance_requested
+  explicit_clearance_requested
+
+public export
+choice clearance_result one_of
+  preserve_information
+  clear_qualified_projection
+
+public export
+record RebuildEvidence where
+  constructor OfflineRebuildEvidence
+  input_references : List Text
+  retained_input_references : List Text
+  decision_revision : Text
+  retained_decision_revision : Text
+  generator_revision : Text
+  original_digest : Text
+  rebuilt_digest : Text
+  complete : Bool
+  offline_rebuild_observed : Bool
+  prerequisites_available : Bool
+
+all_retained : List Text → List Text → Bool
+all_retained [] retained = True
+all_retained (reference :: rest) retained =
+  not (reference ≟ "") && elem reference retained && all_retained rest retained
+
+rebuild_is_complete : RebuildEvidence → Bool
+rebuild_is_complete evidence =
+  not (null evidence.input_references) &&
+  all_retained evidence.input_references evidence.retained_input_references &&
+  not (evidence.decision_revision ≟ "") &&
+  evidence.decision_revision ≟ evidence.retained_decision_revision &&
+  not (evidence.generator_revision ≟ "") &&
+  not (evidence.original_digest ≟ "") &&
+  evidence.original_digest ≟ evidence.rebuilt_digest &&
+  evidence.complete && evidence.offline_rebuild_observed &&
+  evidence.prerequisites_available
+
+-- RebuildEvidence records already-observed facts. The future store consumer
+-- must verify their exact identities and hashes against retained bytes; this
+-- pure policy function is not a verifier for arbitrary caller claims.
+
+export
+clearance_decision : retention_kind → clearance_request → RebuildEvidence → clearance_result
+clearance_decision derived_information explicit_clearance_requested evidence =
+  if rebuild_is_complete evidence then clear_qualified_projection else preserve_information
+clearance_decision _ _ _ = preserve_information

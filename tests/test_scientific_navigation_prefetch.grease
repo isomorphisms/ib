@@ -97,9 +97,13 @@ test -s "$cache_directory/images/activation_space_folding.svg"
 awk -F '\t' 'NR == 1 && $1 == "html" { found = 1 } END { exit !found }' "$cache_directory/source.tsv"
 test "$(awk -F '\t' 'NR == 1 { print $4 }' "$cache_directory/source.tsv")" = "$cache_directory/document.html"
 grep -F 'Linear regions along a one dimensional input' "$cache_directory/images.tsv" >/dev/null
-grep -Fx "navigation_committed${tab}transient_cache${tab}$navigation_url" "$cache_directory/trigger.tsv" >/dev/null
+grep -Fx "navigation_committed${tab}acquired_information${tab}$navigation_url" "$cache_directory/trigger.tsv" >/dev/null
+grep -Fx "artifact_origin${tab}acquisition" "$cache_directory/retention.tsv" >/dev/null
+grep -Fx "rebuild_evidence${tab}unavailable" "$cache_directory/retention.tsv" >/dev/null
 test ! -e "$IB_READING_DIR"
 
+# Tear down this isolated test fixture. This is not a product cache-clear
+# operation or evidence that acquired bytes are disposable.
 rm -rf "$IB_PREFETCH_DIR"
 test ! -e "$cache_directory"
 test ! -e "$IB_READING_DIR"

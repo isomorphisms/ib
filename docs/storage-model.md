@@ -140,7 +140,17 @@ The core defines a separate secret/session boundary. Persistent browser records 
 
 ## Cache deletion
 
-Clearing cache may remove response bytes retained only for prefetch, extracted information-view presentations, thumbnails, embeddings, rankings, transient summaries, and renderer recovery blobs.
+Cache pathname, cold temperature and unavailable removable media never
+authorize deletion. Response bytes acquired by prefetch are acquired
+information until their source has been retained separately; they cannot be
+silently reacquired as the recovery plan. `IB.Storage.clearance_decision`
+preserves canonical data, acquired information, accepted decisions,
+last-complete results and unknown retention. It permits only an explicitly
+requested derived-projection clearance with complete observed offline-rebuild
+evidence tied to retained inputs, decision and generator revisions and matching
+output digests. The evidence consumer remains separate from the actual
+filesystem operation; the new source policy does not implement an eviction
+service or authorize deletion of real user data.
 
 It must not remove tabs, stable history events, task roots and frontiers, explicit assertions and corrections, proposal decisions, accepted category definitions, material deliberately promoted to the reading corpus, or the accepted or last-complete summary record required to resume a retained task. Missing presentation artifacts may be rebuilt without rerunning a model in a way that loses human decisions.
 

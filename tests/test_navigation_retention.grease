@@ -1,0 +1,68 @@
+#!/usr/bin/env grease
+# Run with the real Grease implementation and +O ysh:all for the inherited
+# shell-subset library. The harvest stub isolates producer transport; it does
+# not establish source decoding, Idriç execution or physical storage behavior.
+set -eu
+
+case $0 in
+  */*) script_directory=${0%/*} ;;
+  *) script_directory=. ;;
+esac
+repository_root=$(CDPATH= cd -- "$script_directory/.." && pwd)
+. "$repository_root/lib/scientific_navigation_prefetch.grease"
+test -x "${IB_GREASE_RUNTIME:-}"
+if test "${1:-}" = --failure; then
+  fixture_root=$2
+else
+  fixture_root=$(mktemp -d)
+  trap 'rm -rf "$fixture_root"' EXIT
+fi
+export IB_NAVIGATION_RETENTION_FIXTURE="$fixture_root"
+
+arxiv_identifier_from_input() {
+  printf '%s\n' "$1"
+}
+ib_prefetch_cache_root() {
+  printf '%s/placement\n' "$IB_NAVIGATION_RETENTION_FIXTURE"
+}
+ib_prefetch_url_key() {
+  printf '%s\n' "${1#arxiv:}"
+}
+harvest_arxiv_images() {
+  if test "$1" = failed; then
+    return 37
+  fi
+  mkdir -p "$2"
+  printf 'retained source bytes\n' > "$2/document.html"
+  printf 'html\tfixture\thttps://source.example/paper\t%s/document.html\n' "$2" > "$2/source.tsv"
+}
+
+if test "${1:-}" = --failure; then
+  prefetch_arxiv_navigation_cache failed
+  exit 0
+fi
+
+committed=$(prefetch_arxiv_navigation_cache accepted)
+test -f "$committed/.complete"
+tab=$(printf '\t')
+grep -Fx "navigation_committed${tab}acquired_information${tab}accepted" "$committed/trigger.tsv" >/dev/null
+grep -Fx "artifact_origin${tab}acquisition" "$committed/retention.tsv" >/dev/null
+grep -Fx "rebuild_evidence${tab}unavailable" "$committed/retention.tsv" >/dev/null
+before=$(sha256sum "$committed/document.html")
+again=$(prefetch_arxiv_navigation_cache accepted)
+test "$again" = "$committed"
+test "$before" = "$(sha256sum "$committed/document.html")"
+
+if "$IB_GREASE_RUNTIME" +O ysh:all "$0" --failure "$fixture_root" > "$fixture_root/failure.out"; then
+  failed_status=0
+else
+  failed_status=$?
+fi
+test "$failed_status" -eq 37
+test ! -s "$fixture_root/failure.out"
+test ! -e "$fixture_root/placement/scientific/arxiv/failed/.complete"
+test "$before" = "$(sha256sum "$committed/document.html")"
+recovered=$(prefetch_arxiv_navigation_cache recovered)
+test -f "$recovered/.complete"
+test "$before" = "$(sha256sum "$committed/document.html")"
+printf 'navigation-retention producer control: PASS\n'
