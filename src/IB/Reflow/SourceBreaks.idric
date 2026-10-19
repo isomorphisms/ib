@@ -1,0 +1,201 @@
+module IB.Reflow.SourceBreaks
+
+import Data.Text
+import IB.Reflow.Arithmetic
+
+-- A source-bound list of possible line breaks. Offsets count decoded Unicode
+-- code points (elements of unpack), NOT UTF-8 bytes, UTF-16 units or glyphs.
+-- A break is the position immediately AFTER source_offset characters.
+-- The source text itself remains canonical. No renderer output is reparsed.
+public export
+data BreakKind
+  = PossibleBreak
+  | MandatoryBreak
+  | DiscretionaryHyphen
+  | ZeroWidthBreak
+  | SourceEnd
+
+public export
+record SourceBreak where
+  constructor At
+  source_offset : Number
+  break_kind : BreakKind
+
+public export
+record SourceLine where
+  constructor FromSource
+  first_codepoint : Number
+  after_last_codepoint : Number
+  visible_text : Text
+  ending : BreakKind
+
+is_han : Char → Bool
+is_han value =
+  let number = ord value in
+  (number >= 19968 && number <= 40959) ||
+  (number >= 13312 && number <= 19903)
+
+-- Deliberately bounded Unicode tailoring, NOT the complete UAX #14.
+-- ASCII SPACE, ZERO WIDTH SPACE, SOFT HYPHEN, hard line endings and selected
+-- Han–Han boundaries produce candidates. NBSP/WORD JOINER and emoji ZWJ do
+-- not generate breaks. Complete Unicode/locale break data can supply an
+-- independently qualified list of SourceBreak values to the same solver.
+hard_line_end : Char → List Char → Bool
+hard_line_end '\r' ('\n' :: _) = False
+hard_line_end '\r' _ = True
+hard_line_end '\n' _ = True
+hard_line_end value _ =
+  let number = ord value in
+  number ≟ 133 || number ≟ 8232 || number ≟ 8233
+
+classify : Char → List Char → Maybe BreakKind
+classify value rest =
+  if hard_line_end value rest then Just MandatoryBreak
+  else if ord value ≟ 173 then Just DiscretionaryHyphen
+  else if ord value ≟ 8203 then Just ZeroWidthBreak
+  else if value ≟ ' ' then
+    case rest of
+      next :: _ ⇒
+        if hard_line_end next [] || ord next ≟ 8205 || ord next ≟ 8288
+          then Nothing else Just PossibleBreak
+      [] ⇒ Nothing
+  else if is_han value then
+    case rest of
+      next :: _ ⇒ if is_han next then Just PossibleBreak else Nothing
+      [] ⇒ Nothing
+  else Nothing
+
+is_empty : List Char → Bool
+is_empty [] = True
+is_empty (_ :: _) = False
+
+scan_breaks : Number → List Char → List SourceBreak
+scan_breaks offset [] = [At offset SourceEnd]
+scan_breaks offset (value :: rest) =
+  let later = scan_breaks (S offset) rest in
+  case classify value rest of
+    Nothing ⇒ later
+    Just kind ⇒
+      if is_empty rest
+        then case kind of
+          MandatoryBreak ⇒ [At (S offset) MandatoryBreak]
+          _ ⇒ later
+        else At (S offset) kind :: later
+
+public export
+source_breaks : Text → List SourceBreak
+source_breaks text = scan_breaks 0 (unpack text)
+
+-- Checks do not establish all of UAX #14/#29. They *do* fail closed on
+-- malformed ranges, duplicate/reordered cuts, missing mandatory breaks, cuts
+-- inside CRLF or after ZWJ/word joiner, and cuts before common combining marks.
+-- Full segmentation is a separate, versioned provider qualification.
+at_position : Number → List Char → Maybe Char
+at_position Z [] = Nothing
+at_position Z (value :: _) = Just value
+at_position (S position) [] = Nothing
+at_position (S position) (_ :: rest) = at_position position rest
+
+before : Number → List Char → Maybe Char
+before Z chars = Nothing
+before (S previous) chars = at_position previous chars
+
+is_combining_mark : Char → Bool
+is_combining_mark value =
+  let number = ord value in
+  (number >= 768 && number <= 879) ||
+  (number >= 6832 && number <= 6911) ||
+  (number >= 7616 && number <= 7679) ||
+  (number >= 8400 && number <= 8447) ||
+  (number >= 65056 && number <= 65071)
+
+safe_cut : List Char → Number → BreakKind → Bool
+safe_cut chars offset kind =
+  case (before offset chars, at_position offset chars) of
+    (Just previous, Just next) ⇒
+      not (previous ≟ '\r' && next ≟ '\n') &&
+      not (ord previous ≟ 8205 || ord previous ≟ 8288) &&
+      not (ord next ≟ 8205 || ord next ≟ 8288) &&
+      (case kind of
+        MandatoryBreak ⇒ True
+        _ ⇒ not (is_combining_mark next)) &&
+      (case kind of
+        MandatoryBreak ⇒ True
+        _ ⇒ not (hard_line_end next []))
+    _ ⇒ True
+
+requires_break : List Char → Number → Bool
+requires_break chars offset =
+  case before offset chars of
+    Nothing ⇒ False
+    Just previous ⇒
+      let remaining = drop offset chars in
+      hard_line_end previous remaining
+
+same_kind : BreakKind → BreakKind → Bool
+same_kind PossibleBreak PossibleBreak = True
+same_kind MandatoryBreak MandatoryBreak = True
+same_kind DiscretionaryHyphen DiscretionaryHyphen = True
+same_kind ZeroWidthBreak ZeroWidthBreak = True
+same_kind SourceEnd SourceEnd = True
+same_kind _ _ = False
+
+-- For a declared mandatory cut, check that the source actually forces it.
+-- The end marker is allowed only at the exact end, except that a hard final
+-- newline is represented by MandatoryBreak instead.
+kind_is_sound : List Char → Number → BreakKind → Bool
+kind_is_sound chars offset MandatoryBreak = requires_break chars offset
+kind_is_sound chars offset DiscretionaryHyphen =
+  case before offset chars of
+    Just previous ⇒ ord previous ≟ 173
+    Nothing ⇒ False
+kind_is_sound chars offset ZeroWidthBreak =
+  case before offset chars of
+    Just previous ⇒ ord previous ≟ 8203
+    Nothing ⇒ False
+kind_is_sound chars offset PossibleBreak =
+  not (requires_break chars offset)
+kind_is_sound chars offset SourceEnd =
+  offset ≟ length chars && not (requires_break chars offset)
+
+well_ordered : List Char → Number → List SourceBreak → Bool
+well_ordered chars previous [] = previous ≟ length chars
+well_ordered chars previous (At offset kind :: rest) =
+  offset > previous && offset <= length chars &&
+  safe_cut chars offset kind &&
+  kind_is_sound chars offset kind &&
+  well_ordered chars offset rest
+
+has_mandatory : Number → List SourceBreak → Bool
+has_mandatory offset [] = False
+has_mandatory offset (At position kind :: rest) =
+  if offset ≟ position
+    then same_kind kind MandatoryBreak
+    else has_mandatory offset rest
+
+all_hard_breaks : Number → List Char → List SourceBreak → Bool
+all_hard_breaks offset [] breaks = True
+all_hard_breaks offset (value :: rest) breaks =
+  let next = S offset in
+  if hard_line_end value rest
+    then has_mandatory next breaks && all_hard_breaks next rest breaks
+    else all_hard_breaks next rest breaks
+
+public export
+valid_source_breaks : Text → List SourceBreak → Bool
+valid_source_breaks text breaks =
+  let chars = unpack text in
+  case chars of
+    [] ⇒ case breaks of
+      [] ⇒ True
+      [At Z SourceEnd] ⇒ True
+      _ ⇒ False
+    _ ⇒ well_ordered chars 0 breaks && all_hard_breaks 0 chars breaks
+
+-- Reconstruct EXACT decoded source from offsets, regardless of paint spelling.
+-- This is an independent identity oracle for layouts with discretionary marks.
+public export
+source_for_line : Text → SourceLine → Text
+source_for_line source line =
+  pack (take (nonnegative_difference line.after_last_codepoint line.first_codepoint)
+    (drop line.first_codepoint (unpack source)))
