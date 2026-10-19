@@ -3,6 +3,29 @@
 **Status:** implemented native stream/commit boundaries, host tests and ABI build;
 **not a usable phone URL flow**. Stacked on IB #153 → #152 → #112.
 
+## Reconciliation with admitted v2 source owner
+
+The paired ICU metadata/body capture from the v2 source branch and the
+body-only stdout ingress remain distinct capabilities. Reconciliation retains
+the metadata-aware three-argument `ib_shizuku_icu_get`; the stdout helper does
+not overwrite it. The canonical ingress publisher still emits v1 with
+`navigation_admitted=NO`. Tests independently reopen its retained bytes with
+the canonical store and require the newer v2 HTML source owner to refuse
+those receipts. They do not weaken the source owner or claim that this
+body-only publisher can feed an admitted page.
+
+The host object is compiled with `-fPIE` for its PIE test executable. Stream
+tests count actual invocations separately from lines in the remote command.
+The inherited shell CI boundary remains compatibility debt; local stream
+execution uses Grease implementation `5651cf97a1b5042f24f14112a7ade9a1518eb0bc`
+with inherited-shell compatibility enabled. Leak checking is disabled only
+for that sanitized runtime in the disposable container, whose process
+namespace prevents LeakSanitizer inspection.
+
+The next product dependency is observed HTTP metadata over the authorized
+private ingress, followed by Android app-handle lifecycle and the checked
+Idriç reader. None is established by compiling the Binder adapter.
+
 ## One owner per operation
 
 The *browser/Idriç host* owns the requested URL, request identity and

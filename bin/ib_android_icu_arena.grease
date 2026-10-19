@@ -1,8 +1,10 @@
 #!/usr/bin/env grease
-# Checked slice: fetch under Binder/Shizuku with ICU, then retain exact body
-# bytes in the already-existing appendfat userspace arena. No renderer fetch.
+# ICU #35 observed response metadata and exact body -> canonical userspace
+# appendfat Arena. A receipt is published only after ICU exits successfully,
+# metadata passes structural checks, and committed bytes are reopened.
 set -eu
 umask 077
+export LC_ALL=C
 
 case "$0" in */*) script_directory=${0%/*} ;; *) script_directory=. ;; esac
 repository_root=$(CDPATH='' cd -- "$script_directory/.." && pwd)
@@ -11,21 +13,21 @@ repository_root=$(CDPATH='' cd -- "$script_directory/.." && pwd)
 . "$repository_root/lib/android_binder_icu.grease"
 
 fail() { printf 'ib ICU/Arena: %s\n' "$1" >&2; exit 1; }
-usage() { printf 'usage: %s REQUEST_ID HTTP_URL PRIVATE_ARENA_DIRECTORY\n' "$0" >&2; exit 2; }
+usage() { printf 'usage: %s REQUEST_ID HTTP_URL PRIVATE_ARENA_DIRECTORY SOURCE_GENERATION\n' "$0" >&2; exit 2; }
 
-test "$#" -eq 3 || usage
+test "$#" -eq 4 || usage
 request_id=$1
 url=$2
 root=$3
+source_generation=$4
 case "$request_id" in ''|.|..|*[!abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._-]*) usage ;; esac
 ib_shizuku_icu_url "$url" || usage
 case "$root" in /*) ;; *) usage ;; esac
-# The storage owner, not Shizuku, selects this directory. No fixed global arena
-# path, no world-readable fetched response, no other canonical browser store.
+case "$source_generation" in ''|0|0*|*[!0123456789]*) usage ;; esac
+test "${#source_generation}" -le 18 || usage
 test -d "$root" && test ! -L "$root" || fail 'private Arena directory absent or a symlink'
 root=$(CDPATH='' cd -P -- "$root" && pwd -P)
-root_mode=$(stat -c '%a' "$root") || fail 'cannot inspect Arena directory permissions'
-case "$root_mode" in 700|0700) ;; *) fail 'Arena root must be owner-only mode 0700' ;; esac
+case "$(stat -c '%a' "$root")" in 700|0700) ;; *) fail 'Arena root must be owner-only mode 0700' ;; esac
 for directory in "$root/staging" "$root/receipts" "$root/locks"; do
   test ! -L "$directory" || fail 'symlink below Arena root'
   mkdir -p "$directory"
@@ -44,47 +46,121 @@ receipt=$root/receipts/$request_id.tsv
 test ! -e "$receipt" && test ! -L "$receipt" || fail 'request identity already published'
 lock=$root/locks/$request_id
 mkdir "$lock" || fail 'request identity is already running'
-# Lock survives failure for inspection. A new request ID is required for retry.
+# Lock survives failure; a failed request ID may not be silently replayed.
 work=$(mktemp -d "$root/staging/$request_id.XXXXXXXX") || fail 'cannot create private staging'
 cleanup() { rm -rf "$work"; }
 trap cleanup EXIT HUP INT TERM
 capture=$work/icu.body
+metadata=$work/icu.metadata
 
-# Authorization is checked before the network operation and must identify
-# Shizuku shell or root, not an arbitrary app-process UID.
 authority=$(ib_shizuku_authority) || fail 'Shizuku unavailable or unauthorized'
 case "$authority" in shell|root) ;; *) fail 'Shizuku lacks authorized shell/root authority' ;; esac
-if ! ib_binder_icu_get "$url" "$capture"; then
-  fail 'ICU or Shizuku failed; no Arena bytes were committed'
+if ! ib_binder_icu_get "$url" "$capture" "$metadata"; then
+  fail 'ICU capture or Shizuku failed; no Arena bytes were committed'
 fi
-test -f "$capture" && test ! -L "$capture" || fail 'ICU returned no regular capture'
+for file in "$capture" "$metadata"; do
+  test -f "$file" && test ! -L "$file" || fail 'missing or linked ICU capture'
+done
 bytes=$(wc -c < "$capture" | tr -d '[:space:]')
 case "$bytes" in ''|*[!0123456789]*) fail 'bad ICU body size' ;; esac
 test "$bytes" -gt 0 && test "$bytes" -le 4194304 || fail 'ICU body empty or exceeds 4 MiB'
+metadata_bytes=$(wc -c < "$metadata" | tr -d '[:space:]')
+test "$metadata_bytes" -gt 0 && test "$metadata_bytes" -le 8192 || fail 'bad ICU metadata length'
+
+# PR #35's metadata has exactly eight named fields. Reject injected lines,
+# duplicate/missing keys, control bytes, CR and arbitrary extension fields.
+tr -cd '\011\012\040-\176' < "$metadata" | cmp -s - "$metadata" ||
+  fail 'ICU metadata includes non-printable bytes'
+awk -F '\t' '
+  BEGIN {
+    count=split("http_status content_type content_encoding declared_length received_length utf8 resolved_url redirect_count", names, " ")
+    for (i=1;i<=count;i++) allowed[names[i]]=1
+  }
+  NF!=2 || !allowed[$1] || $2=="" { bad=1 }
+  { seen[$1]++ }
+  END {
+    for (key in allowed) if (seen[key]!=1) bad=1
+    if (bad || NR!=8) exit 1
+  }
+' "$metadata" || fail 'invalid ICU metadata structure'
+field() { awk -F '\t' -v name="$1" '$1==name {print $2}' "$metadata"; }
+
+http_status=$(field http_status)
+content_type=$(field content_type)
+content_encoding=$(field content_encoding)
+declared_length=$(field declared_length)
+received_length=$(field received_length)
+utf8=$(field utf8)
+resolved_url=$(field resolved_url)
+redirect_count=$(field redirect_count)
+
+# ICU #35 returns success only for complete 2xx responses; check its observed
+# fields independently before making any body bytes reader-eligible.
+case "$http_status" in 2[0-9][0-9]) ;; *) fail 'unobserved or unsuccessful HTTP status' ;; esac
+ib_shizuku_icu_url "$resolved_url" || fail 'unsupported or unsafe resolved URL'
+case "$received_length" in ''|*[!0123456789]*) fail 'bad observed received length' ;; esac
+test "$received_length" -eq "$bytes" || fail 'ICU byte count disagrees with capture'
+case "$declared_length" in
+  -1) ;;
+  ''|*[!0123456789]*) fail 'invalid declared HTTP length' ;;
+  *) test "$declared_length" -eq "$bytes" || fail 'incomplete HTTP body' ;;
+esac
+case "$redirect_count" in ''|*[!0123456789]*) fail 'invalid redirect count' ;; esac
+test "${#redirect_count}" -le 2 && test "$redirect_count" -le 8 ||
+  fail 'redirect count exceeds ICU bound'
+case "$utf8" in valid|invalid) ;; *) fail 'invalid ICU UTF-8 observation' ;; esac
+
+# Preserve MIME and explicit charset separately. Byte-level UTF-8 validity is
+# not a substitute for an observed/declared charset.
+lower_type=$(printf '%s' "$content_type" | tr 'ABCDEFGHIJKLMNOPQRSTUVWXYZ' 'abcdefghijklmnopqrstuvwxyz')
+mime_type=$(printf '%s' "${lower_type%%;*}" | tr -d ' ')
+case "$mime_type" in
+  unknown) ;;
+  */*) case "$mime_type" in *[!abcdefghijklmnopqrstuvwxyz0123456789.+/_-]*) fail 'invalid MIME token' ;; esac ;;
+  *) fail 'invalid MIME type' ;;
+esac
+charset=UNOBSERVED
+case "$lower_type" in
+  *';'*)
+    parameters=$(printf '%s' "${lower_type#*;}" | tr -d ' ')
+    case "$parameters" in charset=utf-8|charset=\"utf-8\") charset=utf-8 ;; esac
+    ;;
+esac
+navigation_admitted=NO
+if test "$http_status" = 200 && test "$mime_type" = text/html &&
+   test "$charset" = utf-8 && test "$content_encoding" = identity &&
+   test "$utf8" = valid; then
+  navigation_admitted=YES
+fi
 digest=$(sha256sum "$capture" | cut -d ' ' -f 1)
 
-# Canonical appendfat_arena owns the prezeroed data file, locking, fsync,
-# and commit-pointer protocol. It returns exact offsets for this one append.
+# Canonical appendfat_arena owns locking, fsync and the commit pointer. Never
+# publish metadata based only on an append acknowledgment.
 append_result=$("$arena_tool" append "$arena" "$capture") || fail 'Arena append failed'
 old=$(printf '%s\n' "$append_result" | sed -n 's/^APPENDED old_used=\([0-9][0-9]*\) new_used=[0-9][0-9]* capacity_bytes=[0-9][0-9]*$/\1/p')
 new=$(printf '%s\n' "$append_result" | sed -n 's/^APPENDED old_used=[0-9][0-9]* new_used=\([0-9][0-9]*\) capacity_bytes=[0-9][0-9]*$/\1/p')
 test -n "$old" && test -n "$new" || fail 'unrecognized Arena commit receipt'
-test "$new" -ge "$old" && test "$((new - old))" -eq "$bytes" || fail 'Arena appended different byte count'
-
-# Reopen the committed range through the same bounded native read primitive
-# that a later Binder/PFD reader will use, and compare the exact response.
-"$slice_tool" slice "$arena" "$old" "$bytes" > "$work/reopened" || fail 'Arena committed range is not readable'
+test "$new" -ge "$old" && test "$((new - old))" -eq "$bytes" ||
+  fail 'Arena appended different byte count'
+"$slice_tool" slice "$arena" "$old" "$bytes" > "$work/reopened" ||
+  fail 'Arena committed range unreadable'
 cmp -s "$capture" "$work/reopened" || fail 'Arena reopened bytes mismatch'
 
-# ICU currently emits body only: status, final resolved URL, charset and MIME
-# are UNOBSERVED. Do not invent their values or grant navigation authority.
 {
-  printf 'schema\tib-icu-arena-v1\n'
+  printf 'schema\tib-icu-arena-v2\n'
   printf 'request_id\t%s\n' "$request_id"
+  printf 'source_key\tarena:%s\n' "$request_id"
+  printf 'source_generation\t%s\n' "$source_generation"
   printf 'requested_url\t%s\n' "$url"
-  printf 'resolved_url\tUNOBSERVED\n'
-  printf 'http_status\tUNOBSERVED\n'
-  printf 'mime_type\tUNOBSERVED\n'
+  printf 'resolved_url\t%s\n' "$resolved_url"
+  printf 'http_status\t%s\n' "$http_status"
+  printf 'mime_type\t%s\n' "$mime_type"
+  printf 'charset\t%s\n' "$charset"
+  printf 'content_encoding\t%s\n' "$content_encoding"
+  printf 'utf8\t%s\n' "$utf8"
+  printf 'redirect_count\t%s\n' "$redirect_count"
+  printf 'declared_length\t%s\n' "$declared_length"
+  printf 'received_length\t%s\n' "$received_length"
   printf 'transport\ticu-app-process-via-binder-shizuku\n'
   printf 'arena_name\tresponses.arena\n'
   printf 'arena_offset\t%s\n' "$old"
@@ -92,12 +168,11 @@ cmp -s "$capture" "$work/reopened" || fail 'Arena reopened bytes mismatch'
   printf 'byte_count\t%s\n' "$bytes"
   printf 'sha256\t%s\n' "$digest"
   printf 'reopen_check\tMATCH\n'
-  printf 'navigation_admitted\tNO\n'
+  printf 'acquisition_complete\tYES\n'
+  printf 'navigation_admitted\t%s\n' "$navigation_admitted"
 } > "$work/receipt.tsv"
 "$slice_tool" sync "$work/receipt.tsv" || fail 'could not sync staged receipt'
-# No clobbering: the per-request mkdir lock prevents cooperating writers.
 test ! -e "$receipt" || fail 'receipt already exists before publication'
 mv "$work/receipt.tsv" "$receipt" || fail 'cannot publish immutable receipt'
 "$slice_tool" sync "$receipt" || fail 'could not sync published receipt'
-# Only a receipt with this independently checked range is reader-eligible.
-printf 'committed\t%s\t%s\t%s\n' "$request_id" "$old" "$bytes"
+printf 'committed\t%s\t%s\t%s\t%s\n' "$request_id" "$old" "$bytes" "$navigation_admitted"

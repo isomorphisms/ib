@@ -1,7 +1,9 @@
 #!/usr/bin/env grease
-# Read only independently verified, committed ICU responses. No networking.
+# Reopen the exact committed canonical Arena range, verify before output, and
+# check admission semantics of the versioned ICU receipt. No networking.
 set -eu
 umask 077
+export LC_ALL=C
 fail() { printf 'ib Arena read: %s\n' "$1" >&2; exit 1; }
 usage() { printf 'usage: %s REQUEST_ID PRIVATE_ARENA_DIRECTORY\n' "$0" >&2; exit 2; }
 test "$#" -eq 2 || usage
@@ -21,18 +23,85 @@ for entry in "$arena" "$arena.used" "$arena.lock"; do
   test -f "$entry" && test ! -L "$entry" || fail 'invalid canonical Arena file'
 done
 test "$(wc -c < "$manifest" | tr -d '[:space:]')" -le 8192 || fail 'oversized receipt'
-awk -F '\t' '
-  NF != 2 || $1 !~ /^[a-z_][a-z_0-9]*$/ || $2 == "" || /\r/ {bad=1}
-  { if (seen[$1]++) bad=1 }
-  END { if (bad || NR != 14) exit 1 }
-' "$manifest" || fail 'invalid receipt structure'
+tr -cd '\011\012\040-\176' < "$manifest" | cmp -s - "$manifest" ||
+  fail 'receipt contains nonprintable bytes'
 field() { awk -F '\t' -v key="$1" '$1==key {print $2}' "$manifest"; }
-test "$(field schema)" = ib-icu-arena-v1 || fail 'unsupported receipt'
+schema=$(field schema)
+case "$schema" in
+  ib-icu-arena-v1) count=14
+    names='schema request_id requested_url resolved_url http_status mime_type transport arena_name arena_offset arena_end byte_count sha256 reopen_check navigation_admitted' ;;
+  ib-icu-arena-v2) count=23
+    names='schema request_id source_key source_generation requested_url resolved_url http_status mime_type charset content_encoding utf8 redirect_count declared_length received_length transport arena_name arena_offset arena_end byte_count sha256 reopen_check acquisition_complete navigation_admitted' ;;
+  *) fail 'unsupported receipt schema' ;;
+esac
+awk -F '\t' -v expected="$count" -v names="$names" '
+  BEGIN {
+    count=split(names, elements, " ")
+    for (i=1; i<=count; i++) allowed[elements[i]]=1
+  }
+  NF!=2 || !allowed[$1] || $2=="" { bad=1 }
+  { seen[$1]++ }
+  END {
+    for (key in allowed) if (seen[key]!=1) bad=1
+    if (bad || NR!=expected) exit 1
+  }
+' "$manifest" || fail 'invalid receipt structure'
 test "$(field request_id)" = "$request_id" || fail 'receipt identity mismatch'
 test "$(field arena_name)" = responses.arena || fail 'wrong Arena'
 test "$(field reopen_check)" = MATCH || fail 'producer readback absent'
-test "$(field navigation_admitted)" = NO || fail 'invalid receipt state'
 test "$(field transport)" = icu-app-process-via-binder-shizuku || fail 'wrong producer'
+
+# Legacy receipts can be read as verified bytes but never authorize navigation.
+# No upgrade may infer missing HTTP observations from a v1 body.
+if test "$schema" = ib-icu-arena-v1; then
+  test "$(field navigation_admitted)" = NO || fail 'legacy navigation must be refused'
+  test "$(field resolved_url)" = UNOBSERVED || fail 'legacy resolved URL must be unobserved'
+  test "$(field http_status)" = UNOBSERVED || fail 'legacy status must be unobserved'
+  test "$(field mime_type)" = UNOBSERVED || fail 'legacy MIME must be unobserved'
+else
+  test "$(field source_key)" = "arena:$request_id" || fail 'untrusted source key'
+  source_generation=$(field source_generation)
+  case "$source_generation" in ''|0|0*|*[!0123456789]*) fail 'invalid source generation' ;; esac
+  test "${#source_generation}" -le 18 || fail 'source generation exceeds bound'
+  test "$(field acquisition_complete)" = YES || fail 'incomplete ICU acquisition'
+  status=$(field http_status)
+  case "$status" in 2[0-9][0-9]) ;; *) fail 'invalid observed HTTP status' ;; esac
+  mime=$(field mime_type)
+  case "$mime" in
+    unknown) ;;
+    */*) case "$mime" in *[!abcdefghijklmnopqrstuvwxyz0123456789.+/_-]*) fail 'invalid MIME token' ;; esac ;;
+    *) fail 'invalid MIME type' ;;
+  esac
+  charset=$(field charset)
+  case "$charset" in utf-8|UNOBSERVED) ;; *) fail 'invalid observed charset' ;; esac
+  encoding=$(field content_encoding)
+  utf8=$(field utf8)
+  case "$utf8" in valid|invalid) ;; *) fail 'invalid UTF-8 observation' ;; esac
+  requested=$(field requested_url)
+  resolved=$(field resolved_url)
+  for link in "$requested" "$resolved"; do
+    test "${#link}" -gt 8 && test "${#link}" -le 2048 || fail 'invalid URL length'
+    case "$link" in http://*|https://*) ;; *) fail 'invalid URL scheme' ;; esac
+    case "$link" in *"'"*) fail 'unsafe URL delimiter' ;; esac
+    printf '%s' "$link" | grep -Eq '^[!-&(-~]+$' || fail 'unsafe URL byte'
+  done
+  redirects=$(field redirect_count)
+  case "$redirects" in ''|*[!0123456789]*) fail 'invalid redirect count' ;; esac
+  test "${#redirects}" -le 2 && test "$redirects" -le 8 ||
+    fail 'invalid redirect observation'
+  reported=$(field received_length)
+  declared=$(field declared_length)
+  case "$reported" in ''|*[!0123456789]*) fail 'invalid received length' ;; esac
+  case "$declared" in -1) ;; ''|*[!0123456789]*) fail 'invalid declared length' ;; esac
+  admission=$(field navigation_admitted)
+  case "$admission" in YES|NO) ;; *) fail 'invalid admission state' ;; esac
+  if test "$admission" = YES; then
+    test "$status" = 200 && test "$mime" = text/html &&
+      test "$charset" = utf-8 && test "$encoding" = identity &&
+      test "$utf8" = valid || fail 'forged navigation admission'
+  fi
+fi
+
 begin=$(field arena_offset)
 end=$(field arena_end)
 length=$(field byte_count)
@@ -45,6 +114,13 @@ test "$length" -gt 0 && test "$length" -le 4194304 || fail 'invalid source lengt
 test "$((begin + length))" -eq "$end" || fail 'receipt range mismatch'
 test "${#expected}" -eq 64 || fail 'bad digest length'
 case "$expected" in *[!0123456789abcdef]*) fail 'bad digest characters' ;; esac
+if test "$schema" = ib-icu-arena-v2; then
+  test "$reported" -eq "$length" || fail 'observed received length mismatch'
+  if test "$declared" != -1; then
+    test "$declared" -eq "$length" || fail 'declared length mismatch'
+  fi
+fi
+
 test -d "$root/staging" && test ! -L "$root/staging" || fail 'staging absent'
 work=$(mktemp -d "$root/staging/reader.$request_id.XXXXXXXX") || fail 'private read stage failed'
 cleanup() { rm -rf "$work"; }
@@ -53,5 +129,5 @@ trap cleanup EXIT HUP INT TERM
 test "$(wc -c < "$work/body" | tr -d '[:space:]')" -eq "$length" || fail 'short source range'
 observed=$(sha256sum "$work/body" | cut -d ' ' -f 1)
 test "$observed" = "$expected" || fail 'source digest mismatch'
-# Emit no data before all checks succeed.
+# Never emit even a prefix before the entire committed range is validated.
 cat "$work/body"

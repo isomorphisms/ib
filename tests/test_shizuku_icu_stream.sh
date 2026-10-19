@@ -21,6 +21,7 @@ ib_shizuku_authority() {
 ib_shizuku_run_bounded() {
     test "$1" = 30 || return 61
     printf '%s\n' "$2" >> "$work/commands"
+    printf 'call\n' >> "$work/invocations"
     case "$2" in
         *"app_process -Dicu.library="*" Idric.Generated get "*) ;;
         *) return 62 ;;
@@ -35,7 +36,7 @@ ib_binder_icu_stream https://example.com/ > "$work/body"
 printf 'IB\000C67\377\n' > "$work/expected"
 cmp "$work/expected" "$work/body"
 grep -F "sha256sum '/data/local/tmp/ib-icu/classes.dex'" "$work/commands" >/dev/null
-test "$(wc -l < "$work/commands")" -eq 1
+test "$(wc -l < "$work/invocations")" -eq 1
 
 TEST_RESPONSE=partial
 if ib_binder_icu_stream https://example.com/ > "$work/partial"; then
@@ -46,13 +47,13 @@ test -s "$work/partial"
 # The byte stream is discarded by the app when FINISH gets nonzero 29.
 TEST_RESPONSE=success
 TEST_DENIED=1
-before=$(wc -l < "$work/commands")
+before=$(wc -l < "$work/invocations")
 if ib_binder_icu_stream https://example.com/ > "$work/denied"; then
     echo 'unauthorized Shizuku erroneously succeeded' >&2
     exit 1
 fi
 test ! -s "$work/denied"
-test "$(wc -l < "$work/commands")" -eq "$before"
+test "$(wc -l < "$work/invocations")" -eq "$before"
 TEST_DENIED=0
 if ib_binder_icu_stream "https://example.com/a'" \
         > "$work/injected"; then
@@ -60,6 +61,6 @@ if ib_binder_icu_stream "https://example.com/a'" \
     exit 1
 fi
 test ! -e "$work/INJECTED"
-test "$(wc -l < "$work/commands")" -eq "$before"
+test "$(wc -l < "$work/invocations")" -eq "$before"
 printf 'PASS: pinned ICU binary stdout, nonzero producer propagation, denial and quoting refusal\n'
 printf 'NOT_RUN: actual Shizuku/rish, Android Binder, ICU HTTPS, physical C67\n'

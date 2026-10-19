@@ -10,7 +10,8 @@ Idriç screen connection, or physical C67 Binder execution is claimed.**
     Idriç browser-owned navigation epoch + source identity
        → Shizuku-authorized ICU worker (no Android-reader HTTP)
        → exact captured bytes → checked appendfat Arena source
-       → source-owner verifies immutable receipt + reopened bytes
+       → source-owner checks admitted v2 receipt + matching navigation epoch
+       → independently reopens and hashes committed bytes
        → private app-scoped Binder provider: OPEN_COMMITTED_SOURCE(request,epoch)
        → one read-only, per-open ParcelFileDescriptor (not Arena file FD)
        → native reader verifies exact stream length + SHA-256 + epoch
@@ -32,8 +33,8 @@ Private Binder implementation contract, transaction code **1**:
 - Reply parcel: int32 status **0**, source byte_count (int32), 64-character
   lowercase source SHA-256, then a ParcelFileDescriptor with **only**
   the already checked committed source's bytes. Provider closes its write
-  side after the declared byte count. A successful receipt alone does not
-  admit browser navigation.
+  side after the declared byte count. A matching, admitted v2 receipt is necessary but does not
+  replace the browser's navigation authorization.
 - Browser-held admission ticket: request ID, generation, byte count
   (1–4194304) and lowercase SHA-256 copied from the previously checked
   immutable source receipt, **never from untrusted page content**. The
@@ -86,8 +87,8 @@ host stand-in for descriptor ownership, not a claim of tested Android
 Binder delivery or tested cross-UID Android authority.**
 
 The second host test constructs a real pinned sd-card-append-fat Arena,
-appends binary bytes using its canonical append command, publishes the
-existing IB v1 receipt, then drives the actual C source owner and reader
+appends an admitted UTF-8 HTML fixture using its canonical append command,
+publishes a complete v2 receipt and a legacy v1 refusal fixture, then drives the actual C source owner and reader
 verifiers end-to-end. It mutates receipts, source bytes, commit pointer,
 generation, root permissions and path identity, requiring refusal and
 last-good preservation. This is still Linux-hosted source admission.
@@ -108,9 +109,10 @@ or that an Android Binder transaction has happened.
 2. Bind the native C receiver to the **existing checked Idriç Material
    reader** (#129/#147), with qualified DEX/native FFI and lifecycle.
    Do not introduce Java/Kotlin application logic or a replacement UI.
-3. Admit a page only when ICU's resolved URL, status, encoding and
-   redirect evidence are available; retain the source and link events
-   through Idriç. At present PR #152 says navigation_admitted=NO.
+3. The native source owner now requires v2 admission, observed HTTP status,
+   resolved URL, MIME, charset and a source-generation/epoch match.
+   IB #152 host tests passed, but real C67 ICU/TLS remains NOT_RUN.
+   Navigation ordering and link events remain owned by Idriç.
 4. Device-check denied/missing Shizuku, private reader UID, real ICU
    HTTPS, committed Arena and readback digest, actual Binder PFD
    transaction, page presentation, copying text, replacement/restart
@@ -120,3 +122,18 @@ or that an Android Binder transaction has happened.
 Existing source owners: IB #151, #142, #141, #97; IB PR #112
 (Binder-first host), #129/#147 (checked Android reader), #152
 (ICU/Arena). ICU PR #35 owns real resolved-URL/redirect metadata.
+
+## ICU #35 / IB #152 v2 admission invariant
+
+Native PFD publication requires exactly 23 receipt fields, schema
+`ib-icu-arena-v2`, `source_key=arena:REQUEST_ID`, source_generation
+matching the requested epoch, observed HTTP 200, `text/html`, explicit
+`utf-8` charset, identity content encoding, ICU UTF-8 validity,
+`acquisition_complete=YES`, `reopen_check=MATCH` and
+`navigation_admitted=YES`. Reopened canonical Arena body length and SHA-256
+must match. v1 UNOBSERVED receipts are always refused by this native source
+owner, including when their body digests are correct.
+
+These changes are host candidates until exact-head CI and independent AI-CI
+acceptance. The host fixture is not live ICU on C67; physical Shizuku,
+cross-UID worker ingress, Binder/Idriç DEX registration and UI remain NOT_RUN.

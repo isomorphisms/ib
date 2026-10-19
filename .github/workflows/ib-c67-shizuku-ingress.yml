@@ -19,6 +19,9 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
       - name: Cross-process binary PFD stream and refusal cases
         run: |
           set -euo pipefail
@@ -49,6 +52,9 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
       - name: Checkout pinned canonical appendfat
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
@@ -70,7 +76,7 @@ jobs:
             .deps/appendfat/lib/appendfat_arena.c .deps/appendfat/tools/appendfat_arena.c \
             -o build/shizuku-ingress/canonical/appendfat_arena
           "$ICK" -fno-link-libatomic -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror \
-            -c .deps/appendfat/lib/appendfat_arena.c \
+            -fPIE -c .deps/appendfat/lib/appendfat_arena.c \
             -o build/shizuku-ingress/canonical/appendfat_arena.o
           cc -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror -pthread -I.deps/appendfat/lib \
             native/android/ib_reader_pfd.c native/android/ib_arena_source_owner.c \

@@ -61,27 +61,30 @@ static uint64_t committed_count(const char *root) {
     return result;
 }
 
-static void source_matches(const char *root, const char *request_id,
-                           uint64_t generation,
+static void retained_matches(const char *root, const char *request_id,
+                           uint64_t generation, uint64_t offset,
                            const unsigned char *expected, size_t count) {
+    /* Body-only ingress has no observed HTTP metadata. Check retained bytes
+     * through the canonical store, and require the v2 HTML owner to refuse it.
+     * A valid body digest must never upgrade this v1 receipt to navigation. */
+    char filename[4096];
+    path(filename, sizeof(filename), root, "responses.arena");
+    appendfat_arena arena;
+    assert(appendfat_arena_open(&arena, filename, 0) == 0);
+    unsigned char retained[sizeof(first)];
+    size_t got = 0;
+    assert(count == sizeof(retained));
+    assert(appendfat_arena_read(&arena, offset, retained, count, &got) == 0);
+    assert(got == count && memcmp(retained, expected, count) == 0);
+    appendfat_arena_close(&arena);
     ib_arena_source_owner source;
-    ib_reader_source reader;
     ib_reader_source_ticket ticket = {0};
     int fd = -1;
     assert(ib_arena_source_owner_init(&source, root) == 0);
     ib_arena_source_owner_want(&source, generation);
     assert(ib_arena_source_owner_open(&source, request_id, generation,
-                                      &ticket, &fd) == 0);
-    assert(fd >= 0 && ticket.byte_count == count);
-    ib_reader_source_init(&reader);
-    ib_reader_source_want(&reader, generation);
-    assert(ib_reader_source_accept_fd(&reader, &ticket, fd)
-           == IB_READER_PFD_ACCEPTED);
-    assert(close(fd) == 0);
-    assert(reader.byte_count == count);
-    assert(memcmp(reader.bytes, expected, count) == 0);
-    assert(strcmp(reader.request_id, request_id) == 0);
-    ib_reader_source_clear(&reader);
+                                      &ticket, &fd) != 0);
+    assert(fd == -1);
 }
 
 static void source_absent(const char *root, const char *id,
@@ -105,7 +108,7 @@ int main(int argc, char **argv) {
     assert(commit_attempt(&publisher, "real-first", 1,
                           first, sizeof(first), 0, 0) == 0);
     assert(committed_count(root) == sizeof(first));
-    source_matches(root, "real-first", 1, first, sizeof(first));
+    retained_matches(root, "real-first", 1, 0, first, sizeof(first));
 
     uint64_t good = committed_count(root);
     assert(commit_attempt(&publisher, "failed-icu", 2,
@@ -126,7 +129,7 @@ int main(int argc, char **argv) {
     assert(commit_attempt(&publisher, "real-first", 5,
                           first, sizeof(first), 0, 0) != 0);
     assert(committed_count(root) == good);
-    source_matches(root, "real-first", 1, first, sizeof(first));
+    retained_matches(root, "real-first", 1, 0, first, sizeof(first));
 
     char fake_hash[65];
     memset(fake_hash, '0', 64);
@@ -144,25 +147,12 @@ int main(int argc, char **argv) {
     assert(committed_count(root) == good);
     source_absent(root, "world-readable", 6);
 
-    char arena_file[4096];
-    path(arena_file, sizeof(arena_file), root, "responses.arena");
-    int fd = open(arena_file, O_RDWR);
-    assert(fd >= 0);
-    unsigned char previous = 0;
-    assert(pread(fd, &previous, 1, 0) == 1);
-    unsigned char changed = (unsigned char)(previous ^ 0x40U);
-    assert(pwrite(fd, &changed, 1, 0) == 1);
-    source_absent(root, "real-first", 1);
-    assert(pwrite(fd, &previous, 1, 0) == 1);
-    assert(close(fd) == 0);
-    source_matches(root, "real-first", 1, first, sizeof(first));
-
     assert(commit_attempt(&publisher, "real-second", 7,
                           first, sizeof(first), 0, 0) == 0);
     assert(committed_count(root) == 2U * sizeof(first));
-    source_matches(root, "real-second", 7, first, sizeof(first));
-    source_matches(root, "real-first", 1, first, sizeof(first));
-    puts("PASS: real pinned appendfat Arena stream commit, private atomic source receipt, double readback, duplicate/failed producer/stale/empty/denied-root/hash/corruption refusal and independent prior-source reopening");
+    retained_matches(root, "real-second", 7, sizeof(first), first, sizeof(first));
+    retained_matches(root, "real-first", 1, 0, first, sizeof(first));
+    puts("PASS: real pinned appendfat Arena stream commit, canonical byte readback, body-only v1 navigation refusal, duplicate/failed producer/stale/empty/denied-root/hash refusal and prior-byte reopening");
     puts("NOT_RUN: physical Android Binder, authorized Shizuku, ICU HTTPS, C67 app-private hosting");
     return 0;
 }

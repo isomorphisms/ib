@@ -20,11 +20,14 @@ int ib_arena_source_owner_init(ib_arena_source_owner *owner,
 void ib_arena_source_owner_want(ib_arena_source_owner *owner,
                                 uint64_t navigation_generation);
 
-/* All-or-nothing source-open. The already committed canonical appendfat
- * range and private receipt are re-read and SHA-256 checked before returning
- * an independent, read-only anonymous pipe. The returned receipt-derived
- * ticket is the sole expected metadata for the reader; navigation itself is
- * NOT admitted by this byte-transfer function. Caller owns *read_fd. */
+/* All-or-nothing admitted-source open. Requires IB ICU/Arena v2 with
+ * observed HTTP 200, HTML/UTF-8, completed acquisition, positive admission
+ * and a receipt source_generation matching navigation_generation. Legacy
+ * body-only v1 receipts never reach the reader. Independently reopen the
+ * canonical committed byte range and check SHA-256 before returning a
+ * read-only anonymous pipe. The browser still controls navigation ordering
+ * and the reader checks the ticket, stream and digest again.
+ * Caller owns *read_fd. */
 int ib_arena_source_owner_open(ib_arena_source_owner *owner,
                                const char *request_id,
                                uint64_t navigation_generation,
