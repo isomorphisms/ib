@@ -61,7 +61,7 @@ last_fitting source measure width start first [] chosen =
     Just answer ⇒ answer
 last_fitting source measure width start first (candidate :: more) chosen =
   let fits = line_fits measure width (source_line source start candidate) in
-  let best = if fits then Just candidate else chosen in
+  let best : Maybe SourceBreak = if fits then Just candidate else chosen in
   if terminal candidate.break_kind
     then case best of
       Nothing ⇒ first
@@ -85,14 +85,20 @@ after_cut offset (cut :: rest) =
   if cut.source_offset <= offset then after_cut offset rest
   else cut :: rest
 
-greedy_lines : Text → (Text → Number) → Number → Number →
-  List SourceBreak → List SourceLine
-greedy_lines source measure width start [] = []
-greedy_lines source measure width start cuts =
+-- A valid selection consumes at least one candidate. Bound recursive descent
+-- by the original candidate count; an exhausted budget refuses the projection
+-- rather than silently dropping source or asserting an unchecked termination.
+greedy_lines : Number → Text → (Text → Number) → Number → Number →
+  List SourceBreak → Either Text (List SourceLine)
+greedy_lines remaining_choices source measure width start [] = Right []
+greedy_lines Z source measure width start cuts =
+  Left "Reflow candidate budget exhausted"
+greedy_lines (S remaining_choices) source measure width start cuts =
   let chosen = select_greedy source measure width start cuts in
-  source_line source start chosen ::
-    greedy_lines source measure width chosen.source_offset
-      (after_cut chosen.source_offset cuts)
+  case greedy_lines remaining_choices source measure width chosen.source_offset
+         (after_cut chosen.source_offset cuts) of
+    Left message ⇒ Left message
+    Right later_lines ⇒ Right (source_line source start chosen :: later_lines)
 
 record SourcePlan where
   constructor PlannedSource
@@ -203,7 +209,7 @@ reflow_at_breaks (Requirements width mode) measure source cuts =
     else case unpack source of
       [] ⇒ Right []
       _ ⇒ case mode of
-        promptly ⇒ Right (greedy_lines source measure width 0 cuts)
+        promptly ⇒ greedy_lines (length cuts) source measure width 0 cuts
         streamingly ⇒ Left "Source-offset streaming has not been qualified"
         typographically ⇒ Left "Source-backed adjustable glue is not qualified"
         _ ⇒ Right (optimal_lines source mode measure width cuts)

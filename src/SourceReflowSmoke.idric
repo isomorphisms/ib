@@ -94,14 +94,10 @@ run_cases =
     has_cut 3 MandatoryBreak (source_breaks "a\r\nb") &&
     has_cut 3 DiscretionaryHyphen (source_breaks "ab­cd") &&
     has_cut 3 ZeroWidthBreak (source_breaks "ab​cd") in
-  let preserves_every_mode = all_modes_preserve "a\r\n漢字 ab­cd"
-    [promptly, evenly, minimizing_raggedness, ignoring_final_line,
-      minimizing_worst_gap, without_extra_lines] in
+  let preserves_every_mode = all_modes_preserve "a\r\n漢字 ab­cd" [promptly, evenly, minimizing_raggedness, ignoring_final_line, minimizing_worst_gap, without_extra_lines] in
   let unsupported_modes =
-    refused (reflow_source (Requirements 5 typographically)
-      codepoint_width "aa bb") &&
-    refused (reflow_source (Requirements 5 streamingly)
-      codepoint_width "aa bb") in
+    refused (reflow_source (Requirements 5 typographically) codepoint_width "aa bb") &&
+    refused (reflow_source (Requirements 5 streamingly) codepoint_width "aa bb") in
   let bad_width = refused (reflow_source (Requirements 0 promptly) codepoint_width "abc") in
   let bad_breaks = refused (reflow_at_breaks (Requirements 5 promptly) codepoint_width "a\r\nb" [At 4 SourceEnd]) in
   let empty_input = matches [] (reflow_source (Requirements 5 promptly) codepoint_width "") in
