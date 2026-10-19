@@ -101,6 +101,16 @@ jobs:
           grep -Fx 'nonincreasing-revision-refused=True' /tmp/ib-canonical-information.txt
           grep -Fx 'version1=serialized' /tmp/ib-canonical-information.txt
 
+      - name: Preserve canonical compiler and runtime diagnostics
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: canonical-information-diagnostics-${{ github.run_id }}
+          path: |
+            /tmp/idric-canonical-information-compile.txt
+            /tmp/ib-canonical-information.txt
+          if-no-files-found: ignore
+
       - name: Exercise browser-owned Idriç core
         run: sh bin/ci_browser_foundation.grease exercise-core
 

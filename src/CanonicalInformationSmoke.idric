@@ -1,5 +1,6 @@
 module CanonicalInformationSmoke
 
+import Data.Text
 import IB.Strand
 import IB.Prepaint
 import IB.Prepaint.Version1
@@ -23,7 +24,7 @@ fixture_strand = do
       resolved
       (Just "Example")
       [ Heading Heading2 "Section"
-      , Text "Visible paragraph"
+      , TextBlock "Visible paragraph"
       , Link "Next" next_link
       , TableRow (table_row "first" ["second"])
       , Form "Search" search_form

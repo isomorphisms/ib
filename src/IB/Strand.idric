@@ -135,7 +135,7 @@ table_row_cells (TableCells first remaining) = first :: remaining
 public export
 data InformationBlock
   = Heading HeadingLevel String
-  | Text String
+  | TextBlock String
   | Link String LinkReference
   | TableRow NonemptyTableRow
   | Form String FormReference
