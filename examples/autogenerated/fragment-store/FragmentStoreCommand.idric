@@ -1,0 +1,35 @@
+module FragmentStoreCommand
+
+import Data.Text
+import IB.FragmentStore
+import IB.Occurrence
+import IB.Strand
+import System
+import System.File
+
+-- The Grease byte adapter verifies the immutable decoded file's SHA-256 before
+-- invoking this semantic boundary. Failure emits no plausible normalized graph.
+covering
+normalize : Text → Text → Text → Text → Text → Text → IO ()
+normalize source_identity representation_identity digest decoder source_path graph_path = do
+  source_input ← readFile source_path
+  graph_input ← readFile graph_path
+  case (nonempty_text representation_identity, source_input, graph_input) of
+    (Just reference, Right text, Right wire) ⇒
+      case revisioned_source (Source reference OtherSource CompleteSource)
+             (SourceText source_identity text) digest decoder of
+        Nothing ⇒ exitFailure
+        Just source ⇒ case decode_graph source wire of
+          Nothing ⇒ exitFailure
+          Just graph ⇒ putStr (serialize_graph graph)
+    _ ⇒ exitFailure
+
+covering
+main : IO ()
+main = do
+  arguments ← getArgs
+  case arguments of
+    _ :: source_identity :: representation_identity :: digest :: decoder ::
+      source_path :: graph_path :: [] ⇒
+        normalize source_identity representation_identity digest decoder source_path graph_path
+    _ ⇒ exitFailure

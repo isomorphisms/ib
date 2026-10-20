@@ -1,0 +1,68 @@
+#!/usr/bin/env grease
+set -eu
+
+# This tests the OS consumer with a controlled producer. It does not substitute
+# that producer for Idriç semantic acceptance. The normalizer itself is checked
+# and evaluated separately in FragmentStoreAcceptance.idric.
+test "$#" -eq 2 || exit 71
+repository_root=$1
+store_library=$2
+. "$store_library"
+. "$repository_root/lib/fragment_store.grease"
+work=$(mktemp -d)
+trap --add EXIT { rm -rf "$work" }
+mkdir "$work/card"
+ib_store_init "$work/card" fixture-media
+printf '東京🙂ababa' >"$work/source"
+source_digest=$(sha256sum "$work/source")
+source_digest=${source_digest%% *}
+printf 'ib-fragments\t1\nsource\tsource-1\tretained:representation-1\t%s\tutf8-text-v1\tunicode-codepoint\ntraversal\treading-1\nfragment\tintro\t0\t3\nfragment\trepeat\t3\t8\nvisit\trepeat\nvisit\tintro\nlink\tintro\trepeat\ncommit\n' "$source_digest" >"$work/graph"
+
+# This test executable is the explicitly provided current Grease runtime.
+# Its exact source is recorded in the receipt, never called an Idriç backend.
+cat >"$work/producer" <<'FIXTURE'
+#!/usr/bin/env grease
+cat "$6"
+FIXTURE
+chmod 700 "$work/producer"
+ib_fragment_publish "$work/card" fixture-media graph-1 "$work/producer" \
+  source-1 retained:representation-1 "$source_digest" utf8-text-v1 "$work/source" "$work/graph"
+ib_store_read_bounded "$work/card" fixture-media graph-1 1048576 >"$work/reopened"
+cmp "$work/graph" "$work/reopened"
+
+cat >"$work/failing-producer" <<'FIXTURE'
+#!/usr/bin/env grease
+cat "$6"
+exit 7
+FIXTURE
+chmod 700 "$work/failing-producer"
+if ib_fragment_publish "$work/card" fixture-media failed-graph "$work/failing-producer" \
+  source-1 retained:representation-1 "$source_digest" utf8-text-v1 "$work/source" "$work/graph"; then
+  exit 1
+else
+  test "$?" -eq 7
+fi
+test ! -e "$work/card/objects/failed-graph"
+ib_store_read_bounded "$work/card" fixture-media graph-1 1048576 >"$work/after-failure"
+cmp "$work/graph" "$work/after-failure"
+
+printf 'changed body' >"$work/source"
+if ib_fragment_publish "$work/card" fixture-media stale-graph "$work/producer" \
+  source-1 retained:representation-1 "$source_digest" utf8-text-v1 "$work/source" "$work/graph"; then
+  exit 1
+else
+  test "$?" -eq 73
+fi
+test ! -e "$work/card/objects/stale-graph"
+
+# Uncommitted staging bytes are never reopened as a graph, and an independent
+# late reader can still reopen the earlier complete object after these failures.
+printf 'partial graph' >"$work/card/.ib-staging/uncommitted"
+if ib_store_read "$work/card" fixture-media uncommitted >"$work/absent"; then
+  exit 1
+else
+  test "$?" -eq 68
+fi
+ib_store_read_bounded "$work/card" fixture-media graph-1 1048576 >"$work/late-read"
+cmp "$work/graph" "$work/late-read"
+printf '%s\n' 'fragment-store-os-boundary=PASS'
