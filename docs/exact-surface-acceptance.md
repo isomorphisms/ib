@@ -4,9 +4,9 @@ The first supported equation is the local HTML/MathML source
 
 `x^4 - x*y^3 - z^4 + z = 0`
 
-in real coordinates \`x, y, z\` in the explicitly declared affine chart
-\`W=1\`. As a projective equation one can homogenize it to
-\`X^4 - X*Y^3 - Z^4 + Z*W^3 = 0\`, but **this check does not visualize the
+in real coordinates `x, y, z` in the explicitly declared affine chart
+`W=1`. As a projective equation one can homogenize it to
+`X^4 - X*Y^3 - Z^4 + Z*W^3 = 0`, but **this check does not visualize the
 whole projective quartic**. It selects a bounded real affine surface, cut by
 SURFER's unit-sphere clipping and a fixed orthographic camera.
 
@@ -19,23 +19,23 @@ SURFER's unit-sphere clipping and a fixed orthographic camera.
    HTML and records MathML nodes with their raw alttext or TeX annotation,
    arXiv ID, effective source URL, HTML SHA-256, source-manifest SHA-256,
    and MathML ordinal. It rejects conflicting MathML sources. Text appearing
-   in an HTML \`<img alt=...>\` is not accepted mathematical source.
+   in an HTML `<img alt=...>` is not accepted mathematical source.
 3. A host-built C bridge compiles against the **real pinned** SURFER PR #33
-   \`native/android/formula.c\` and ray tracer. It checks the four collected
+   `native/android/formula.c` and ray tracer. It checks the four collected
    monomials exactly:
 
-   \`\`\`text
+   ```text
    +1:4,0,0    -1:1,3,0    -1:0,0,4    +1:0,0,1
-   \`\`\`
+   ```
 
    It executes a 32×32 orthographic host ray-trace (height 2.4; yaw 0.25,
    pitch 0.25; zoom 1; clipped to the unit sphere), reports foreground
    pixel count and FNV-64 of ARGB pixels, and **does not label them a
    qualified still/movie**.
-4. \`IB.ExactSurface\` Idriç types determine whether the verified terms,
-   real domain, and explicit W=1 affine chart select \`surfer-real-implicit\`.
+4. `IB.ExactSurface` Idriç types determine whether the verified terms,
+   real domain, and explicit W=1 affine chart select `surfer-real-implicit`.
    Unknown chart, complex domain, or changed signed monomials select
-   \`unsupported\`.
+   `unsupported`.
 5. The `equations.tsv` record is append-only in intent for this one
    harvest: rerunning identical inputs compares bytes; changed interpretation
    or evidence cannot overwrite it. Original paper and original downloaded
