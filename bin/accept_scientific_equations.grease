@@ -39,7 +39,7 @@ manifest="$output/equations.tsv"
 candidate="$output/.equations.tsv.$$"
 rows="$output/.math_sources.$$"
 trap 'rm -f "$candidate" "$rows"' EXIT HUP INT TERM
-printf 'ordinal\tarxiv_id\tsource_url\tdocument_sha256\tsource_manifest_sha256\tmath_location\tformula_origin\traw_formula\tdomain\tchart\tparse\tengine_probe\trenderer\tmedia\tinteractive\tsettings\n' > "$candidate"
+printf 'ordinal\tarxiv_id\tsource_url\tdocument_sha256\tsource_manifest_sha256\tmath_location\tformula_origin\traw_formula\tdomain\tchart\tparse\tengine_probe\trenderer\tmedia\tinteractive\tsettings\tnormalized_sparse\n' > "$candidate"
 
 if test "$source_kind" = html; then
   # MathML only: img alt text is never interpreted as mathematical source.
@@ -108,16 +108,16 @@ if test "$source_kind" = html; then
     test "$interactive" = BLOCKED_NO_EXACT_RESTORE ||
       ib_media_fail "unsafe interactive promotion"
 
-    printf '%s\t%s\t%s\t%s\t%s\tmath[%s]\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+    printf '%s\t%s\t%s\t%s\t%s\tmath[%s]\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
       "$ordinal" "$source_id" "$source_url" "$document_sha" "$source_sha" \
       "$ordinal" "$origin" "$raw" "$domain" "$chart" "$parse" "$engine" \
       "$renderer" "$media" "$interactive" \
-      'real-affine-W=1;unit-sphere-clip;orthographic-32x32;height=2.4;yaw=0.25;pitch=0.25;zoom=1;probe-only' \
+      'real-affine-W=1;unit-sphere-clip;orthographic-32x32;height=2.4;yaw=0.25;pitch=0.25;zoom=1;probe-only' "$signature" \
       >> "$candidate"
   done < "$rows"
 else
   # PDF image extraction is not positional mathematical extraction.
-  printf '0\t%s\t%s\t%s\t%s\tpdf\tno-verified-formula\t\t%s\t%s\tPDF_MATH_NOT_SUPPORTED\tNOT_RUN\tunsupported\tNOT_VERIFIED\tBLOCKED_NO_EXACT_RESTORE\tnone\n' \
+  printf '0\t%s\t%s\t%s\t%s\tpdf\tno-verified-formula\t\t%s\t%s\tPDF_MATH_NOT_SUPPORTED\tNOT_RUN\tunsupported\tNOT_VERIFIED\tBLOCKED_NO_EXACT_RESTORE\tnone\t\n' \
     "$source_id" "$source_url" "$document_sha" "$source_sha" "$domain" "$chart" >> "$candidate"
 fi
 
