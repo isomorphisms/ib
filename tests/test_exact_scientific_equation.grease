@@ -1,0 +1,104 @@
+#!/bin/sh
+set -eu
+root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+. "$root/lib/scientific_media.grease"
+
+test -x "${IB_SURFER_PROBE:-}" || ib_media_fail "IB_SURFER_PROBE missing"
+test -x "${IB_EXACT_SURFACE_POLICY:-}" || ib_media_fail "IB_EXACT_SURFACE_POLICY missing"
+ib_media_require_command busybox
+ib_media_require_command curl
+ib_media_require_command xmlstarlet
+
+tmp=$(mktemp -d)
+server_pid=''
+cleanup() {
+  if test -n "$server_pid"; then
+    kill "$server_pid" >/dev/null 2>&1 || true
+  fi
+  rm -rf "$tmp"
+}
+trap cleanup EXIT HUP INT TERM
+port=$((18000 + ($$ % 20000)))
+busybox httpd -f -p "127.0.0.1:$port" -h "$root/tests/fixtures/arxiv_site" &
+server_pid=$!
+sleep 1
+export IB_ARXIV_HTML_BASE="http://127.0.0.1:$port/html"
+export IB_ARXIV_PDF_BASE="http://127.0.0.1:$port/pdf"
+
+# Host smoke: match exactly the four signed monomials in SURFER's own parser.
+"$IB_SURFER_PROBE" 'x^4-x*y^3-z^4+z=0' > "$tmp/probe.positive"
+grep -E '^EXACT[[:space:]].*ENGINE_HOST_PROBE_ONLY;pixels=1024;foreground=[1-9][0-9]*;' \
+  "$tmp/probe.positive" >/dev/null
+for wrong in \
+  'x^4-x*y^3+z^4+z=0' \
+  'x^5-x*y^3-z^4+z=0' \
+  'sin(x)=0' \
+  'x^4-x*y^3-z^4-z=0' \
+  'x^4-x*y^2-z^4+z=0'; do
+  "$IB_SURFER_PROBE" "$wrong" | grep '^UNSUPPORTED' >/dev/null
+done
+
+# Download through the ACTUAL IB scientific-media entry point.
+output="$tmp/positive"
+sh "$root/bin/harvest_arxiv_images.grease" 2401.00001 "$output"
+test -s "$output/document.html"
+test -s "$output/images.tsv"
+before=$(sha256sum "$output/document.html" | awk '{print $1}')
+sh "$root/bin/accept_scientific_equations.grease" "$output" real 'W=1'
+test -s "$output/equations.tsv"
+after=$(sha256sum "$output/document.html" | awk '{print $1}')
+test "$before" = "$after"
+test "$(wc -l < "$output/equations.tsv" | tr -d ' ')" = 6
+
+# Columns: ordinal, paper, URL, document hash, source hash, MathML index,
+# source format, literal source, domain, chart, parse, probe, renderer,
+# media, deep-link, camera/clip metadata.
+awk -F '\t' '
+  NR == 2 {
+    if ($1 != 1 || $2 != "2401.00001" || $4 == "" ||
+        $6 != "math[1]" || $7 != "math-alttext" ||
+        $8 != "x^4 - x*y^3 - z^4 + z = 0" ||
+        $9 != "real" || $10 != "W=1" || $11 != "EXACT" ||
+        $12 !~ /^ENGINE_HOST_PROBE_ONLY;pixels=1024;foreground=[1-9]/ ||
+        $13 != "surfer-real-implicit" || $14 != "NOT_VERIFIED" ||
+        $15 != "BLOCKED_NO_EXACT_RESTORE" ||
+        $16 !~ /unit-sphere-clip/) exit 1
+  }
+  NR == 3 { if ($11 != "changed_polynomial" || $13 != "unsupported") exit 1 }
+  NR == 4 { if ($11 != "changed_polynomial" || $13 != "unsupported") exit 1 }
+  NR == 5 { if ($11 != "parse_error" || $13 != "unsupported") exit 1 }
+  NR == 6 { if ($11 != "conflicting_math_sources" || $13 != "unsupported") exit 1 }
+' "$output/equations.tsv"
+
+# An unrelated graphic's alt text cannot impersonate a SURFER illustration.
+test "$(wc -l < "$output/images.tsv" | tr -d ' ')" = 1
+grep -F 'x^4 - x*y^3 - z^4 + z = 0' "$output/images.tsv" >/dev/null
+test "$(grep -c 'surfer-real-implicit' "$output/equations.tsv")" = 1
+! grep -Eq 'https?://.*surfer|\.png|\.mp4' "$output/equations.tsv"
+
+# Replays must not overwrite old evidence with changed interpretation.
+sh "$root/bin/accept_scientific_equations.grease" "$output" real 'W=1'
+if sh "$root/bin/accept_scientific_equations.grease" "$output" complex 'W=1'; then
+  echo 'ERROR: changed interpretation overwrote original equation receipt' >&2
+  exit 1
+fi
+sh "$root/bin/harvest_arxiv_images.grease" 2401.00001 "$tmp/complex"
+sh "$root/bin/accept_scientific_equations.grease" "$tmp/complex" complex 'W=1'
+test "$(grep -c 'surfer-real-implicit' "$tmp/complex/equations.tsv" || true)" = 0
+sh "$root/bin/harvest_arxiv_images.grease" 2401.00001 "$tmp/no-chart"
+sh "$root/bin/accept_scientific_equations.grease" "$tmp/no-chart" real unknown
+test "$(grep -c 'surfer-real-implicit' "$tmp/no-chart/equations.tsv" || true)" = 0
+
+# Existing unmodified papers and PDF fallbacks remain readable.
+empty="$tmp/no-math"
+sh "$root/bin/harvest_arxiv_images.grease" 2203.11355 "$empty"
+sh "$root/bin/accept_scientific_equations.grease" "$empty" real 'W=1'
+test "$(wc -l < "$empty/equations.tsv" | tr -d ' ')" = 1
+pdf="$tmp/pdf"
+sh "$root/bin/harvest_arxiv_images.grease" 1901.09021 "$pdf"
+sh "$root/bin/accept_scientific_equations.grease" "$pdf" real 'W=1'
+grep -F 'PDF_MATH_NOT_SUPPORTED' "$pdf/equations.tsv" >/dev/null
+test -s "$pdf/document.pdf"
+
+echo 'IB exact MathML extraction, SURFER real parser/host probe, selection/refusal: PASS'
+echo 'NOT_VERIFIED: still, movie, Android open-with-equation, physical device'

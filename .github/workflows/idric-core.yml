@@ -149,6 +149,28 @@ jobs:
       - name: Exercise deterministic scientific image harvesting
         run: sh bin/ci_browser_foundation.grease exercise-scientific-media
 
+      - name: Check out exact SURFER PR #33 host parser and renderer
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: isomorphismes/algebraic-variety-explorer-mobile
+          ref: 9113596d732f1c44db7d6e11ad8a12df3dc8d369
+          path: .tools/surfer
+          persist-credentials: false
+
+      - name: Exercise exact equation extraction, semantics, and safe refusal
+        run: sh bin/ci_browser_foundation.grease exercise-exact-math
+
+      - name: Preserve IB exact equation host evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: ib160-exact-equation-${{ github.event.pull_request.head.sha || github.sha }}
+          path: |
+            /tmp/ib-exact-math-idric-compile.txt
+            /tmp/ib-exact-math-acceptance.txt
+            /tmp/ib-exact-math-input-hashes.txt
+          if-no-files-found: warn
+
       - name: Exercise live arXiv HTML-first harvesting
         run: sh bin/ci_browser_foundation.grease exercise-live-arxiv
 

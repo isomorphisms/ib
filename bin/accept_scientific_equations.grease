@@ -1,0 +1,134 @@
+#!/bin/sh
+# Grease stage over the existing scientific-image-harvester output.
+# The source document and images remain unchanged on unsupported enhancement.
+set -eu
+
+root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+. "$root/lib/scientific_media.grease"
+
+if test "$#" -ne 3; then
+  echo "usage: $0 HARVEST_DIRECTORY DOMAIN CHART" >&2
+  echo "Required: IB_SURFER_PROBE and IB_EXACT_SURFACE_POLICY executable paths" >&2
+  exit 2
+fi
+output=$1
+domain=$2
+chart=$3
+probe=${IB_SURFER_PROBE:-}
+policy=${IB_EXACT_SURFACE_POLICY:-}
+
+test -s "$output/source.tsv" || ib_media_fail "missing harvested source.tsv"
+test -n "$probe" && test -x "$probe" || ib_media_fail "missing executable IB_SURFER_PROBE"
+test -n "$policy" && test -x "$policy" || ib_media_fail "missing executable IB_EXACT_SURFACE_POLICY"
+ib_media_require_command sha256sum
+ib_media_require_command xmlstarlet
+
+source_kind=$(source_kind_from_harvest_directory "$output")
+source_id=$(source_identifier_from_harvest_directory "$output")
+source_url=$(source_url_from_harvest_directory "$output")
+document=$(source_document_from_harvest_directory "$output")
+test -s "$document" || ib_media_fail "missing harvested document"
+document_sha=$(sha256sum "$document" | awk '{print $1}')
+source_sha=$(sha256sum "$output/source.tsv" | awk '{print $1}')
+tab=$(printf '\t')
+unit_separator=$(printf '\037')
+carriage_return=$(printf '\r')
+
+# The derived manifest is immutable for a given harvest directory.
+manifest="$output/equations.tsv"
+candidate="$output/.equations.tsv.$$"
+rows="$output/.math_sources.$$"
+trap 'rm -f "$candidate" "$rows"' EXIT HUP INT TERM
+printf 'ordinal\tarxiv_id\tsource_url\tdocument_sha256\tsource_manifest_sha256\tmath_location\tformula_origin\traw_formula\tdomain\tchart\tparse\tengine_probe\trenderer\tmedia\tinteractive\tsettings\tnormalized_sparse\n' > "$candidate"
+
+if test "$source_kind" = html; then
+  # MathML only: img alt text is never interpreted as mathematical source.
+  xmlstarlet fo --html --recover --dropdtd "$document" 2>/dev/null |
+    xmlstarlet sel -t \
+      -m '//*[local-name()="math"]' \
+      -v 'string(@alttext)' -o "$unit_separator" \
+      -v 'string((.//*[local-name()="annotation"][@encoding="application/x-tex"])[1])' -n - \
+      > "$rows" || ib_media_fail "math source extraction failed"
+  # A formula containing a newline would masquerade as another equation.
+  count=$(xmlstarlet fo --html --recover --dropdtd "$document" 2>/dev/null |
+    xmlstarlet sel -t -v 'count(//*[local-name()="math"])' -n -) ||
+    ib_media_fail "math element count failed"
+  lines=$(wc -l < "$rows" | tr -d ' ')
+  test "$count" = "$lines" || ib_media_fail "unsafe multiline math source"
+
+  ordinal=0
+  while IFS="$unit_separator" read -r alttext annotation; do
+    ordinal=$((ordinal + 1))
+    raw=$alttext
+    origin=math-alttext
+    decision_reason=''
+    if test -z "$raw"; then
+      raw=$annotation
+      origin=math-annotation-tex
+    elif test -n "$annotation" && test "$annotation" != "$raw"; then
+      decision_reason=conflicting_math_sources
+    fi
+    if test -z "$raw"; then decision_reason=missing_math_source; fi
+    # Keep unsafe source bytes in the paper, not a broken TSV receipt.
+    case "$raw" in
+      *"$tab"*|*"$carriage_return"*|*"$unit_separator"*)
+        raw='[unsafe-control-byte; consult original document]'
+        decision_reason=unsafe_control_byte
+        ;;
+    esac
+    parse=UNSUPPORTED
+    signature=''
+    engine=NOT_RUN
+    if test -z "$decision_reason"; then
+      result=$("$probe" "$raw") || ib_media_fail "SURFER parser invocation failed"
+      case "$result" in
+        EXACT"$tab"*)
+          parse=EXACT
+          rest=${result#*"$tab"}
+          signature=${rest%%"$tab"*}
+          engine=${rest#*"$tab"}
+          ;;
+        UNSUPPORTED"$tab"*)
+          parse=${result#*"$tab"}
+          ;;
+        *)
+          ib_media_fail "invalid SURFER parser result"
+          ;;
+      esac
+    else
+      parse=$decision_reason
+    fi
+
+    policy_result=$("$policy" "$domain" "$chart" "$signature") ||
+      ib_media_fail "Idriç policy invocation failed"
+    renderer=$(printf '%s\n' "$policy_result" | sed -n '1p')
+    media=$(printf '%s\n' "$policy_result" | sed -n '2p')
+    interactive=$(printf '%s\n' "$policy_result" | sed -n '3p')
+    test "$media" = NOT_VERIFIED || ib_media_fail "unsafe media promotion"
+    test "$interactive" = BLOCKED_NO_EXACT_RESTORE ||
+      ib_media_fail "unsafe interactive promotion"
+
+    printf '%s\t%s\t%s\t%s\t%s\tmath[%s]\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+      "$ordinal" "$source_id" "$source_url" "$document_sha" "$source_sha" \
+      "$ordinal" "$origin" "$raw" "$domain" "$chart" "$parse" "$engine" \
+      "$renderer" "$media" "$interactive" \
+      'real-affine-W=1;unit-sphere-clip;orthographic-32x32;height=2.4;yaw=0.25;pitch=0.25;zoom=1;probe-only' "$signature" \
+      >> "$candidate"
+  done < "$rows"
+else
+  # PDF image extraction is not positional mathematical extraction.
+  printf '0\t%s\t%s\t%s\t%s\tpdf\tno-verified-formula\t\t%s\t%s\tPDF_MATH_NOT_SUPPORTED\tNOT_RUN\tunsupported\tNOT_VERIFIED\tBLOCKED_NO_EXACT_RESTORE\tnone\t\n' \
+    "$source_id" "$source_url" "$document_sha" "$source_sha" "$domain" "$chart" >> "$candidate"
+fi
+
+if test -e "$manifest"; then
+  if ! cmp -s "$manifest" "$candidate"; then
+    ib_media_fail "equation replay differs: refusing to overwrite receipt"
+    exit 1
+  fi
+  rm -f "$candidate"
+else
+  mv "$candidate" "$manifest"
+fi
+printf 'equation-acceptance=recorded;document-sha256=%s;source-manifest-sha256=%s\n' \
+  "$document_sha" "$source_sha"

@@ -239,6 +239,39 @@ exercise_scientific_media() {
   timeout 30 sh tests/test_scientific_navigation_prefetch.grease
 }
 
+
+exercise_exact_math() {
+  cd "$repository_root"
+  surfer="$repository_root/.tools/surfer"
+  test -d "$surfer/.git"
+  test "$(git -C "$surfer" rev-parse HEAD)" = 9113596d732f1c44db7d6e11ad8a12df3dc8d369
+
+  test -x "$idric_prefix/bin/idris2" || build_idric
+  cd "$repository_root/src"
+  "$idric_prefix/bin/idris2" ExactSurfaceReceipt.idric -o ib-exact-surface \
+    2>&1 | tee /tmp/ib-exact-math-idric-compile.txt
+  test -x build/exec/ib-exact-surface
+  ! grep -q '^Error:' /tmp/ib-exact-math-idric-compile.txt
+  cd "$repository_root"
+  cc -std=c17 -Wall -Wextra -Werror -pedantic -O2 -fno-fast-math \
+    -ffp-contract=off -I "$surfer/native" -I "$surfer/native/android" \
+    native/surfer_equation_probe.c \
+    "$surfer/native/android/formula.c" "$surfer/native/surfer_raytracer.c" \
+    -lm -o /tmp/ib-surfer-equation-probe
+  export IB_SURFER_PROBE=/tmp/ib-surfer-equation-probe
+  export IB_EXACT_SURFACE_POLICY="$repository_root/src/build/exec/ib-exact-surface"
+  sh -n bin/accept_scientific_equations.grease
+  sh -n tests/test_exact_scientific_equation.grease
+  sh tests/test_exact_scientific_equation.grease \
+    | tee /tmp/ib-exact-math-acceptance.txt
+  grep -Fx 'IB exact MathML extraction, SURFER real parser/host probe, selection/refusal: PASS' \
+    /tmp/ib-exact-math-acceptance.txt
+  sha256sum native/surfer_equation_probe.c \
+    "$surfer/native/android/formula.c" "$surfer/native/surfer_raytracer.c" \
+    "$IB_SURFER_PROBE" "$IB_EXACT_SURFACE_POLICY" \
+    > /tmp/ib-exact-math-input-hashes.txt
+}
+
 exercise_live_arxiv() {
   cd "$repository_root"
   sh -n tests/live_arxiv_image_harvest.grease
@@ -261,10 +294,11 @@ case "${1:-}" in
   exercise-core) exercise_core ;;
   exercise-workbench) exercise_workbench ;;
   exercise-scientific-media) exercise_scientific_media ;;
+  exercise-exact-math) exercise_exact_math ;;
   exercise-live-arxiv) exercise_live_arxiv ;;
   exercise-live-arxiv-prepaint) exercise_live_arxiv_prepaint ;;
   *)
-    printf 'usage: %s {install-dependencies|build-idric|verify-pdf-harvester|exercise-information|exercise-hostile-ingestion|exercise-core|exercise-workbench|exercise-scientific-media|exercise-live-arxiv|exercise-live-arxiv-prepaint}\n' "$0" >&2
+    printf 'usage: %s {install-dependencies|build-idric|verify-pdf-harvester|exercise-information|exercise-hostile-ingestion|exercise-core|exercise-workbench|exercise-scientific-media|exercise-exact-math|exercise-live-arxiv|exercise-live-arxiv-prepaint}\n' "$0" >&2
     exit 2
     ;;
 esac
