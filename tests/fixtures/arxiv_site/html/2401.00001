@@ -1,0 +1,16 @@
+<!doctype html>
+<html><head><title>Exact quartic fixture, not an arXiv paper</title></head>
+<body><main><article>
+  <h1>Exact quartic equation controls</h1>
+  <p>This local fixture supplies an explicitly interpreted real affine W=1 chart.</p>
+  <math alttext="x^4 - x*y^3 - z^4 + z = 0"><mrow><mi>x</mi></mrow></math>
+  <math alttext="x^4 - x*y^3 + z^4 + z = 0"><mrow><mi>x</mi></mrow></math>
+  <math alttext="x^5 - x*y^3 - z^4 + z = 0"><mrow><mi>x</mi></mrow></math>
+  <math alttext="sin(x)=0"><mrow><mi>x</mi></mrow></math>
+  <math alttext="x^4 - x*y^3 - z^4 + z = 0"><semantics>
+     <annotation encoding="application/x-tex">x^4 - x*y^3 + z^4 + z = 0</annotation>
+  </semantics></math>
+  <!-- A correct string on an unrelated image is NOT mathematical evidence. -->
+  <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
+       alt="x^4 - x*y^3 - z^4 + z = 0">
+</article></main></body></html>
