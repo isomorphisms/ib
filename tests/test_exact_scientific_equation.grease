@@ -82,12 +82,10 @@ if sh "$root/bin/accept_scientific_equations.grease" "$output" complex 'W=1'; th
   echo 'ERROR: changed interpretation overwrote original equation receipt' >&2
   exit 1
 fi
-cp -R "$output" "$tmp/complex"
-rm "$tmp/complex/equations.tsv"
+sh "$root/bin/harvest_arxiv_images.grease" 2401.00001 "$tmp/complex"
 sh "$root/bin/accept_scientific_equations.grease" "$tmp/complex" complex 'W=1'
 test "$(grep -c 'surfer-real-implicit' "$tmp/complex/equations.tsv" || true)" = 0
-cp -R "$output" "$tmp/no-chart"
-rm "$tmp/no-chart/equations.tsv"
+sh "$root/bin/harvest_arxiv_images.grease" 2401.00001 "$tmp/no-chart"
 sh "$root/bin/accept_scientific_equations.grease" "$tmp/no-chart" real unknown
 test "$(grep -c 'surfer-real-implicit' "$tmp/no-chart/equations.tsv" || true)" = 0
 
