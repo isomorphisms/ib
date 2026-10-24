@@ -138,6 +138,11 @@ long_view_report =
       "sensitive-url-refused=" ++ show evidence.sensitive_url_refused ++ "\n" ++
       "long-view-record-contract=" ++ show evidence.record_contract_matches
 
+-- Construct the long fixture without relying on an unavailable replicate name.
+repeat_search_a : Number → List Char
+repeat_search_a Z = []
+repeat_search_a (S remaining) = 'a' :: repeat_search_a remaining
+
 main : IO ()
 main = do
   let raw = ingest_raw_lines ["# ignored", " https://example.test/a ", "https://example.test/a", "https://other.test/b"]
@@ -183,7 +188,7 @@ main = do
   putStrLn ("google-query-trailing-control-refused=" ++ show
     (google_icu_url "piano\n" == Nothing))
   putStrLn ("google-query-length-refused=" ++ show
-    (google_icu_url (pack (replicate 2100 'a')) == Nothing))
+    (google_icu_url (pack (repeat_search_a 2100)) == Nothing))
   putStrLn long_view_report
   case long_view_evidence of
     Just evidence ⇒ if evidence_passes evidence then pure () else exitFailure
