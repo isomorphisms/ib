@@ -100,6 +100,12 @@ exercise_core() {
   grep -Fx 'temporary-needs-language-model=True' /tmp/ib-smoke.txt
   grep -Fx 'prefetch-bounded=2' /tmp/ib-smoke.txt
   grep -Fx 'prefetch-reading=1' /tmp/ib-smoke.txt
+  grep -Fx 'google-query-spaces=True' /tmp/ib-smoke.txt
+  grep -Fx 'google-query-unicode=True' /tmp/ib-smoke.txt
+  grep -Fx 'google-query-reserved=True' /tmp/ib-smoke.txt
+  grep -Fx 'google-query-empty-refused=True' /tmp/ib-smoke.txt
+  grep -Fx 'google-query-control-refused=True' /tmp/ib-smoke.txt
+  grep -Fx 'google-query-length-refused=True' /tmp/ib-smoke.txt
 
   "$idric_prefix/bin/idris2" OccurrenceSmoke.idric -o ib-occurrence-smoke \
     2>&1 | tee /tmp/idric-occurrence-compile.txt
