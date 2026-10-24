@@ -13,7 +13,7 @@
 #include <unistd.h>
 
 #define INGEST_POLL_SLICE_MS 250
-#define INGEST_BUFFER_CAP (IB_READER_SOURCE_MAX_BYTES + 1U)
+#define INGEST_BUFFER_CAP (IB_INGRESS_STREAM_MAX_BYTES + 1U)
 
 static int64_t monotonic_milliseconds(void) {
     struct timespec now;
@@ -109,12 +109,12 @@ static void *consume_pipe(void *opaque) {
         if (amount < 0 && (errno == EINTR || errno == EAGAIN)) continue;
         if (amount < 0) goto done;
         if (amount == 0) {
-            if (count == 0 || count > IB_READER_SOURCE_MAX_BYTES) goto done;
+            if (count == 0 || count > IB_INGRESS_STREAM_MAX_BYTES) goto done;
             complete = 1;
             break;
         }
         count += (size_t)amount;
-        if (count > IB_READER_SOURCE_MAX_BYTES) goto done;
+        if (count > IB_INGRESS_STREAM_MAX_BYTES) goto done;
     }
 
 done:
@@ -235,7 +235,7 @@ int ib_ingress_finish(ib_shizuku_arena_ingress *session,
     if (producer_exit_status == 0 &&
         session->stream_complete && session->bytes &&
         session->byte_count != 0 &&
-        session->byte_count <= IB_READER_SOURCE_MAX_BYTES &&
+        session->byte_count <= IB_INGRESS_STREAM_MAX_BYTES &&
         !atomic_load(&session->cancelled) &&
         generation == atomic_load(&session->wanted_navigation_generation)) {
         char digest[65];
@@ -243,6 +243,7 @@ int ib_ingress_finish(ib_shizuku_arena_ingress *session,
         /* The source owner independently read-back verifies the exact
          * canonical append before any receipt becomes visible. */
         result = session->publish(session->source_owner, session->request_id,
+                                  session->request_generation,
                                   session->requested_url, session->bytes,
                                   session->byte_count, digest);
     }

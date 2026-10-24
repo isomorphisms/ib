@@ -134,7 +134,7 @@ int main(int argc, char **argv) {
     char fake_hash[65];
     memset(fake_hash, '0', 64);
     fake_hash[64] = '\0';
-    assert(ib_ingress_arena_publish(&publisher, "invalid-hash",
+    assert(ib_ingress_arena_publish(&publisher, "invalid-hash", 6,
                                     url, first, sizeof(first),
                                     fake_hash) != 0);
     assert(committed_count(root) == good);

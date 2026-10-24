@@ -11,6 +11,13 @@
 
 #define IB_INGRESS_URL_CAP 2048U
 #define IB_INGRESS_TIMEOUT_MILLISECONDS 35000
+/* The paired ICU frame carries a 26-byte header and bounded metadata in
+ * addition to the body. The publisher validates the body limit separately. */
+#define IB_INGRESS_FRAME_HEADER_BYTES 26U
+#define IB_INGRESS_METADATA_MAX_BYTES 8192U
+#define IB_INGRESS_STREAM_MAX_BYTES \
+    (IB_READER_SOURCE_MAX_BYTES + IB_INGRESS_METADATA_MAX_BYTES + \
+     IB_INGRESS_FRAME_HEADER_BYTES)
 
 /* Storage owner is the only component permitted to append the source.
  * Exactly one call follows a fully received stream, a confirmed worker exit
@@ -19,6 +26,7 @@
  * the canonical userspace appendfat Arena before publishing a receipt. */
 typedef int (*ib_ingress_publish)(void *source_owner,
                                   const char *request_id,
+                                  uint64_t navigation_generation,
                                   const char *requested_url,
                                   const unsigned char *exact_bytes,
                                   size_t byte_count,

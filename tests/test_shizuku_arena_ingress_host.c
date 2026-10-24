@@ -25,10 +25,12 @@ typedef struct {
     char digest[65];
 } fake_arena;
 
-static int publish(void *opaque, const char *id, const char *url,
+static int publish(void *opaque, const char *id, uint64_t generation,
+                   const char *url,
                    const unsigned char *bytes, size_t n,
                    const char sha[65]) {
     fake_arena *store = opaque;
+    assert(generation != 0);
     assert(strcmp(url, example_url) == 0);
     if (store->deny_publication) return -1;
     if (n != sizeof(body) || memcmp(body, bytes, n) != 0) return -1;
