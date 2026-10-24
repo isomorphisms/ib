@@ -1,0 +1,67 @@
+module IB.WebSearch
+
+import Data.Text
+
+%default total
+
+-- This is a browser-owned *request address*, not a browser intent or an
+-- acquired page. The consumer sends only this complete HTTPS URL to ICU;
+-- ICU and the Arena owner retain their own acquisition/admission checks.
+-- Spaces are form-encoded as '+', as with IFS=+ over search words.
+private
+hex_digit : Int → Char
+hex_digit nibble =
+  if nibble < 10
+    then chr (ord '0' + nibble)
+    else chr (ord 'A' + nibble - 10)
+
+private
+encoded_byte : Int → Text
+encoded_byte value =
+  pack ['%', hex_digit (value `div` 16), hex_digit (value `mod` 16)]
+
+private
+utf8_octets : Int → List Int
+utf8_octets scalar =
+  if scalar < 128 then [scalar]
+  else if scalar < 2048 then
+    [192 + scalar `div` 64, 128 + scalar `mod` 64]
+  else if scalar < 65536 then
+    [224 + scalar `div` 4096,
+     128 + (scalar `div` 64) `mod` 64,
+     128 + scalar `mod` 64]
+  else
+    [240 + scalar `div` 262144,
+     128 + (scalar `div` 4096) `mod` 64,
+     128 + (scalar `div` 64) `mod` 64,
+     128 + scalar `mod` 64]
+
+private
+unreserved_ascii : Int → Bool
+unreserved_ascii value =
+  (value >= 65 && value <= 90) ||
+  (value >= 97 && value <= 122) ||
+  (value >= 48 && value <= 57) ||
+  elem value [45, 46, 95, 126]
+
+private
+encoded_character : Char → Text
+encoded_character character =
+  let scalar = ord character in
+    if character == ' ' then "+"
+    else if unreserved_ascii scalar then pack [character]
+    else concat (map encoded_byte (utf8_octets scalar))
+
+private
+unsafe_control : Char → Bool
+unsafe_control character =
+  let scalar = ord character in scalar < 32 || scalar == 127
+
+public export
+google_icu_url : Text → Maybe Text
+google_icu_url supplied =
+  let terms = trim supplied in
+    if terms == "" || any unsafe_control (unpack terms) then Nothing
+    else let url = "https://google.com/search?q=" ++
+                   concat (map encoded_character (unpack terms))
+         in if length (unpack url) > 2048 then Nothing else Just url
