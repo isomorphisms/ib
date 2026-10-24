@@ -61,7 +61,7 @@ public export
 google_icu_url : Text → Maybe Text
 google_icu_url supplied =
   let terms = trim supplied in
-    if terms == "" || any unsafe_control (unpack terms) then Nothing
+    if any unsafe_control (unpack supplied) || terms == "" then Nothing
     else let url = "https://google.com/search?q=" ++
                    concat (map encoded_character (unpack terms))
          in if length (unpack url) > 2048 then Nothing else Just url
