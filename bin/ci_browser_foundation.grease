@@ -105,6 +105,7 @@ exercise_core() {
   grep -Fx 'google-query-reserved=True' /tmp/ib-smoke.txt
   grep -Fx 'google-query-empty-refused=True' /tmp/ib-smoke.txt
   grep -Fx 'google-query-control-refused=True' /tmp/ib-smoke.txt
+  grep -Fx 'google-query-trailing-control-refused=True' /tmp/ib-smoke.txt
   grep -Fx 'google-query-length-refused=True' /tmp/ib-smoke.txt
 
   "$idric_prefix/bin/idris2" OccurrenceSmoke.idric -o ib-occurrence-smoke \
