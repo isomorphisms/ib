@@ -7,6 +7,7 @@ import IB.Inspect
 import IB.DisplayRepair
 import IB.ScientificMedia
 import IB.Prefetch
+import IB.WebSearch
 import IB.LongViewTask
 import System
 
@@ -168,6 +169,19 @@ main = do
   putStrLn ("temporary-needs-language-model=" ++ show (needs_language_model_image_name temporary_image_name))
   putStrLn ("prefetch-bounded=" ++ show (length prefetch))
   putStrLn ("prefetch-reading=" ++ show (reading_target_count prefetch))
+  putStrLn ("google-query-spaces=" ++ show
+    (google_icu_url "piano voicings" == Just "https://google.com/search?q=piano+voicings"))
+  putStrLn ("google-query-unicode=" ++ show
+    (google_icu_url "Björk & C# chords" ==
+      Just "https://google.com/search?q=Bj%C3%B6rk+%26+C%23+chords"))
+  putStrLn ("google-query-reserved=" ++ show
+    (google_icu_url "a+b/𝄞" ==
+      Just "https://google.com/search?q=a%2Bb%2F%F0%9D%84%9E"))
+  putStrLn ("google-query-empty-refused=" ++ show (google_icu_url "   " == Nothing))
+  putStrLn ("google-query-control-refused=" ++ show
+    (google_icu_url "piano\nchords" == Nothing))
+  putStrLn ("google-query-length-refused=" ++ show
+    (google_icu_url (pack (replicate 2100 'a')) == Nothing))
   putStrLn long_view_report
   case long_view_evidence of
     Just evidence ⇒ if evidence_passes evidence then pure () else exitFailure
