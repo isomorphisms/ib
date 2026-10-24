@@ -1,0 +1,147 @@
+name: IB C67 Shizuku-to-private-Arena ingress
+on:
+  pull_request:
+    paths:
+      - 'native/android/ib_shizuku_arena_ingress.*'
+      - 'native/android/ib_shizuku_arena_publish.*'
+      - 'native/android/ib_shizuku_ingress_binder.*'
+      - 'native/android/ib_shizuku_ingress_runner.*'
+      - 'lib/android_shizuku_icu_provider.grease'
+      - 'lib/android_binder_icu.grease'
+      - 'bin/ib_android_icu_stdout.grease'
+      - 'bin/ib_android_icu_frame.grease'
+      - 'tests/test_shizuku*'
+      - '.github/workflows/ib-c67-shizuku-ingress.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  fast-host:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - id: ick
+        uses: isomorphisms/ai-ci/ick-host@015cc7901ae0b3ad262b476f24e129b53c56db95
+      - name: Cross-process binary PFD stream and refusal cases
+        env:
+          ICK: ${{ steps.ick.outputs.compiler }}
+        run: |
+          set -euo pipefail
+          mkdir -p build/shizuku-ingress/fast
+          "$ICK" -fno-link-libatomic -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror -pthread \
+            native/android/ib_reader_pfd.c \
+            native/android/ib_shizuku_arena_ingress.c \
+            tests/test_shizuku_arena_ingress_host.c \
+            -o build/shizuku-ingress/fast/test-ingress
+          build/shizuku-ingress/fast/test-ingress | tee build/shizuku-ingress/fast/receipt.txt
+          grep -F 'PASS: cross-process anonymous FD delivery' build/shizuku-ingress/fast/receipt.txt
+          sha256sum build/shizuku-ingress/fast/test-ingress > build/shizuku-ingress/fast/sha256.txt
+      - name: Pinned ICU stdout and Shizuku denial controls
+        run: |
+          set -euo pipefail
+          sh -n lib/android_shizuku_icu_provider.grease
+          sh -n lib/android_binder_icu.grease
+          sh -n bin/ib_android_icu_stdout.grease
+          sh -n bin/ib_android_icu_frame.grease
+          sh tests/test_shizuku_icu_stream.sh | tee build/shizuku-ingress/fast/icu-stream-receipt.txt
+          grep -F 'PASS: pinned ICU binary stdout' build/shizuku-ingress/fast/icu-stream-receipt.txt
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: ib-shizuku-ingress-fast
+          path: build/shizuku-ingress/fast/
+          if-no-files-found: error
+
+  pinned-canonical-and-arm:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Checkout pinned canonical appendfat
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: isomorphisms/sd-card-append-fat
+          ref: 05a0cb7246c5a9f46abfbe92925812e7b607f454
+          path: .deps/appendfat
+          persist-credentials: false
+      - id: ick
+        uses: isomorphisms/ai-ci/ick-host@015cc7901ae0b3ad262b476f24e129b53c56db95
+      - name: Actual canonical Arena publication and reopen
+        env:
+          ICK: ${{ steps.ick.outputs.compiler }}
+        run: |
+          set -euo pipefail
+          test "$(git -C .deps/appendfat rev-parse HEAD)" = 05a0cb7246c5a9f46abfbe92925812e7b607f454
+          test -x "$ICK"
+          mkdir -p build/shizuku-ingress/canonical
+          "$ICK" -fno-link-libatomic -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror \
+            .deps/appendfat/lib/appendfat_arena.c .deps/appendfat/tools/appendfat_arena.c \
+            -o build/shizuku-ingress/canonical/appendfat_arena
+          "$ICK" -fno-link-libatomic -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror \
+            -fPIE -c .deps/appendfat/lib/appendfat_arena.c \
+            -o build/shizuku-ingress/canonical/appendfat_arena.o
+          "$ICK" -fno-link-libatomic -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror -pthread -I.deps/appendfat/lib \
+            native/android/ib_reader_pfd.c native/android/ib_arena_source_owner.c \
+            native/android/ib_shizuku_arena_ingress.c native/android/ib_shizuku_arena_publish.c \
+            tests/test_shizuku_ingress_canonical.c \
+            build/shizuku-ingress/canonical/appendfat_arena.o \
+            -o build/shizuku-ingress/canonical/test-ingress
+          env IB_APPEND_ARENA="$GITHUB_WORKSPACE/build/shizuku-ingress/canonical/appendfat_arena" \
+            IB_INGRESS_CANONICAL_TEST="$GITHUB_WORKSPACE/build/shizuku-ingress/canonical/test-ingress" \
+            sh tests/test_shizuku_ingress_canonical.sh | tee build/shizuku-ingress/canonical/receipt.txt
+          grep -F 'PASS: real pinned appendfat Arena stream commit' build/shizuku-ingress/canonical/receipt.txt
+          "$ICK" -fno-link-libatomic -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror -pthread -I.deps/appendfat/lib \
+            native/android/ib_reader_pfd.c native/android/ib_arena_source_owner.c \
+            native/android/ib_shizuku_arena_ingress.c native/android/ib_shizuku_arena_publish.c \
+            tests/test_shizuku_frame_canonical.c \
+            build/shizuku-ingress/canonical/appendfat_arena.o \
+            -o build/shizuku-ingress/canonical/test-frame
+          env IB_APPEND_ARENA="$GITHUB_WORKSPACE/build/shizuku-ingress/canonical/appendfat_arena" \
+            IB_INGRESS_CANONICAL_TEST="$GITHUB_WORKSPACE/build/shizuku-ingress/canonical/test-frame" \
+            sh tests/test_shizuku_ingress_canonical.sh > build/shizuku-ingress/canonical/frame-receipt.txt
+          cat build/shizuku-ingress/canonical/frame-receipt.txt
+          grep -F 'PASS: paired ICU frame through private ingress' build/shizuku-ingress/canonical/frame-receipt.txt
+          sha256sum build/shizuku-ingress/canonical/test-ingress \
+            build/shizuku-ingress/canonical/test-frame \
+            build/shizuku-ingress/canonical/appendfat_arena \
+            build/shizuku-ingress/canonical/appendfat_arena.o \
+            > build/shizuku-ingress/canonical/sha256.txt
+      - name: Cross-compile Binder/PFD ingress and canonical publisher adapter
+        run: |
+          set -eu
+          ndk_version=27.3.13750724
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "ndk;$ndk_version" >/dev/null
+          toolchain="$ANDROID_HOME/ndk/$ndk_version/toolchains/llvm/prebuilt/linux-x86_64/bin"
+          for entry in 'armeabi-v7a armv7a-linux-androideabi29 ARM' 'arm64-v8a aarch64-linux-android29 AArch64'; do
+            set -- $entry
+            abi=$1; target=$2; machine=$3
+            mkdir -p "build/shizuku-ingress/$abi"
+            "$toolchain/$target-clang" -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror \
+              -fPIC -shared -pthread native/android/ib_reader_pfd.c \
+              native/android/ib_arena_pfd_provider.c \
+              native/android/ib_shizuku_arena_ingress.c \
+              native/android/ib_shizuku_ingress_binder.c \
+              native/android/ib_shizuku_ingress_runner.c -lbinder_ndk \
+              -o "build/shizuku-ingress/$abi/libib_shizuku_ingress.so"
+            "$toolchain/$target-clang" -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror \
+              -fPIC -I.deps/appendfat/lib -c native/android/ib_shizuku_arena_publish.c \
+              -o "build/shizuku-ingress/$abi/ib_arena_publisher.o"
+            "$toolchain/llvm-readelf" -h "build/shizuku-ingress/$abi/libib_shizuku_ingress.so" > "build/shizuku-ingress/$abi/elf.txt"
+            grep -F "Machine:" "build/shizuku-ingress/$abi/elf.txt" | grep -F "$machine"
+            sha256sum "build/shizuku-ingress/$abi/libib_shizuku_ingress.so" \
+              "build/shizuku-ingress/$abi/ib_arena_publisher.o" > "build/shizuku-ingress/$abi/sha256.txt"
+            printf 'abi\t%s\nbinder_ndk\tCOMPILED\ncanonical_appendfat_android_link\tNOT_RUN\nshizuku_runtime\tNOT_RUN\nphysical_C67\tNOT_RUN\n' "$abi" \
+              > "build/shizuku-ingress/$abi/receipt.tsv"
+          done
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: ib-shizuku-ingress-canonical-abi
+          path: |
+            build/shizuku-ingress/canonical/
+            build/shizuku-ingress/armeabi-v7a/
+            build/shizuku-ingress/arm64-v8a/
+          if-no-files-found: error
