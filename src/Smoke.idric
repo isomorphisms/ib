@@ -180,6 +180,8 @@ main = do
   putStrLn ("google-query-empty-refused=" ++ show (google_icu_url "   " == Nothing))
   putStrLn ("google-query-control-refused=" ++ show
     (google_icu_url "piano\nchords" == Nothing))
+  putStrLn ("google-query-trailing-control-refused=" ++ show
+    (google_icu_url "piano\n" == Nothing))
   putStrLn ("google-query-length-refused=" ++ show
     (google_icu_url (pack (replicate 2100 'a')) == Nothing))
   putStrLn long_view_report
