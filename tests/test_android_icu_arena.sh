@@ -18,7 +18,7 @@ cp "$root/bin/ib_android_arena_read.grease" "$work/bin/"
 
 # Simulate the *framed* output of a single successful PR #35 ICU invocation.
 # The expected remote command must contain both paired capture env variables,
-# signed artifact checks and the actual Idric.Generated get path. These tests
+# signed artifact checks and the explicit HTTP/1.1 Idriç command. These tests
 # say nothing about a deployed ICU binary, TLS or real rish.
 cat > "$work/lib/android_shizuku_host.grease" <<'SHIZUKU'
 ib_shizuku_authority() {
@@ -29,7 +29,7 @@ ib_shizuku_run_bounded() {
   test "$1" = 30 || return 99
   printf '%s\n' "$2" >> "$IB_TEST_REMOTE_COMMANDS"
   case "$2" in
-    *ICU_CAPTURE_BODY_PATH*ICU_CAPTURE_METADATA_PATH*Idric.Generated\ get*) ;;
+    *ICU_CAPTURE_BODY_PATH*ICU_CAPTURE_METADATA_PATH*Idric.Generated\ --http1.1\ get*) ;;
     *) return 91 ;;
   esac
   case "$2" in *sha256sum*'IBICU01 %08d %08d'*) ;; *) return 92 ;; esac

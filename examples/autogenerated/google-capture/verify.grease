@@ -1,0 +1,69 @@
+#!/usr/bin/env grease
+if (len(ARGV) !== 7 and len(ARGV) !== 8) {
+  echo 'usage: grease verify.grease IB APPENDFAT ICK ICK_TOOLS HOST_SUPPORT LIVE_CAPTURE NEW_OUTPUT [QUALIFIED_CANONICAL_DIRECTORY]' >&2
+  exit 2
+}
+var repository = ARGV[0]
+var appendfat = ARGV[1]
+var compiler = ARGV[2]
+var tools = ARGV[3]
+var host_support = ARGV[4]
+var observation = ARGV[5]
+var output = ARGV[6]
+for path in "$repository" "$appendfat" "$compiler" "$tools" "$host_support" "$observation" "$output" {
+  if (path[0] !== '/') { echo 'FAIL absolute path required' >&2; exit 2 }
+}
+test "$(git -C "$appendfat" rev-parse HEAD)" = 05a0cb7246c5a9f46abfbe92925812e7b607f454
+git -C "$appendfat" diff --quiet HEAD -- lib tools
+if test -e "$output" { echo 'FAIL output already exists' >&2; exit 2 }
+mkdir -p "$output"
+printf 'toolchain\tick\ncanonical_store\t05a0cb7246c5a9f46abfbe92925812e7b607f454\nAndroid_Binder\tNOT_RUN\n' > "$output/build.tsv"
+git -C "$repository" diff --binary HEAD > "$output/implementation.patch"
+sha256sum "$compiler" "$tools/cc1" "$host_support/include/stddef.h" \
+  "$repository/native/android/ib_shizuku_arena_publish.c" \
+  "$repository/tests/test_shizuku_frame_canonical.c" > "$output/input.sha256"
+if (len(ARGV) === 8) {
+  var canonical = ARGV[7]
+  if (canonical[0] !== '/') { echo 'FAIL canonical absolute path required' >&2; exit 2 }
+  # Unchanged ICK products from IB's qualified pinned canonical source run.
+  # These are explicit prebuilt inputs, never a substitute Arena implementation.
+  printf '%s  %s\n' a573f5093f512630159b54af0ea029a8dbf7c9baccfac81ac4ca6c0b2a9f71f4 "$canonical/appendfat_arena" \
+    da6f5ac730526505dc838937d7c057858d76b0e8243c256e0195a79bb7611c0f "$canonical/appendfat_arena.o" | sha256sum -c -
+  cp "$canonical/appendfat_arena" "$canonical/appendfat_arena.o" "$output/"
+  printf 'canonical_build\tREUSED_EXACT_QUALIFIED_ICK_PRODUCTS\n' >> "$output/build.tsv"
+} else {
+  "$compiler" -B "$tools/" -B "$host_support/" -isystem "$host_support/include" \
+    -fno-link-libatomic -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror \
+    "$appendfat/lib/appendfat_arena.c" "$appendfat/tools/appendfat_arena.c" \
+    -o "$output/appendfat_arena" > "$output/arena-build.txt" 2>&1
+  "$compiler" -B "$tools/" -B "$host_support/" -isystem "$host_support/include" \
+    -fno-link-libatomic -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror \
+    -fPIE -c "$appendfat/lib/appendfat_arena.c" -o "$output/appendfat_arena.o" \
+    > "$output/arena-object-build.txt" 2>&1
+}
+"$compiler" -B "$tools/" -B "$host_support/" -isystem "$host_support/include" \
+  -fno-link-libatomic -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror -pthread \
+  -I "$appendfat/lib" "$output/appendfat_arena.o" \
+  "$repository/native/android/ib_reader_pfd.c" "$repository/native/android/ib_arena_source_owner.c" \
+  "$repository/native/android/ib_shizuku_arena_ingress.c" "$repository/native/android/ib_shizuku_arena_publish.c" \
+  "$repository/tests/test_shizuku_frame_canonical.c" \
+  -o "$output/test-frame" > "$output/frame-build.txt" 2>&1
+for fixture in synthetic actual-google {
+  var root = "$output/$fixture"
+  mkdir -m 700 "$root"
+  mkdir -m 700 "$root/receipts" "$root/locks" "$root/staging"
+  "$output/appendfat_arena" create "$root/responses.arena" 16777216 > "$output/$fixture-create.txt"
+  if (fixture === 'synthetic') {
+    "$output/test-frame" "$root" > "$output/$fixture.txt" 2>&1
+  } else {
+    var url = $(cat "$observation/requested-url.txt")
+    "$output/test-frame" "$root" "$url" "$observation/capture/metadata" "$observation/capture/body" \
+      > "$output/$fixture.txt" 2>&1
+    rg -x -F "$(printf 'charset\tiso-8859-1')" "$root/receipts/live-google.tsv"
+    rg -x -F "$(printf 'navigation_admitted\tNO')" "$root/receipts/live-google.tsv"
+  }
+  cat "$output/$fixture.txt"
+}
+sha256sum "$output/test-frame" "$output/appendfat_arena" \
+  "$observation/capture/body" "$observation/capture/metadata" > "$output/artifacts.sha256"
+printf '\033[32mPASS\033[0m strict current metadata, canonical source retention and live Google admission refusal\n'

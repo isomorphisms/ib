@@ -45,7 +45,7 @@ ib_shizuku_authority() { printf 'shell\n'; }
 ib_shizuku_run_bounded() {
     test "$1" = 30 || return 90
     case "$2" in
-        *ICU_CAPTURE_BODY_PATH*ICU_CAPTURE_METADATA_PATH*Idric.Generated\ get*) ;;
+        *ICU_CAPTURE_BODY_PATH*ICU_CAPTURE_METADATA_PATH*Idric.Generated\ --http1.1\ get*) ;;
         *) return 91 ;;
     esac
     printf '%s\n' "$2" >> "$IB_TEST_REMOTE_COMMANDS"
@@ -61,12 +61,13 @@ cat > "$work/fake-bin/app_process" <<'WRAPPER'
 # This wrapper invokes ICU #35's *actual compiled native transport*, but is
 # deliberately not a claim of running a real Android Idriç app_process DEX.
 set -eu
-test "$#" = 5
+test "$#" = 6
 case "$1" in -Dicu.library=*) ;; *) exit 80 ;; esac
 test "$2" = /system/bin
 test "$3" = Idric.Generated
-test "$4" = get
-exec "$IB_ICU_NATIVE_PROBE" "$5"
+test "$4" = --http1.1
+test "$5" = get
+exec "$IB_ICU_NATIVE_PROBE" "$6"
 WRAPPER
 chmod 700 "$work/fake-bin/app_process"
 PATH="$work/fake-bin:$PATH"
