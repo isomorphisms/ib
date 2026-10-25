@@ -262,20 +262,24 @@ proc import_bundle(root, home, runner, bundle) {
       }
     }
   } else {
-    mkdir -- "$work/receipt"
-    mkdir -- "$work/receipt/references"
-    cp -- "$work/bundle/sources.tsv" "$work/receipt/sources.tsv"
-    cp -- "$work/bundle/complete" "$work/receipt/complete"
+    # Keep publication on the verified destination filesystem. Moving a
+    # directory from default temporary scratch can fall back to a visible
+    # cross-filesystem copy rather than publishing the complete receipt.
+    var receipt_stage = $(mktemp -d "$receipts/.ib-import.XXXXXX")
+    call owned_temporaries->append(receipt_stage)
+    mkdir -- "$receipt_stage/references"
+    cp -- "$work/bundle/sources.tsv" "$receipt_stage/sources.tsv"
+    cp -- "$work/bundle/complete" "$receipt_stage/complete"
     for missing_row in (rows) {
       var missing_columns = split(missing_row, b'\t')
       if (missing_columns[3] === 'unavailable') {
         var missing_id = missing_columns[0]
-        mkdir -- "$work/receipt/references/$missing_id"
-        cp -- "$work/bundle/sources/$missing_id/provenance.tsv" "$work/receipt/references/$missing_id/provenance.tsv"
+        mkdir -- "$receipt_stage/references/$missing_id"
+        cp -- "$work/bundle/sources/$missing_id/provenance.tsv" "$receipt_stage/references/$missing_id/provenance.tsv"
       }
     }
-    mv -T --no-clobber -- "$work/receipt" "$receipts/$bundle_id"
-    if test -d "$work/receipt" { fail 'import receipt publication conflicted; retry safely' }
+    mv -T --no-clobber -- $receipt_stage "$receipts/$bundle_id"
+    if test -d $receipt_stage { fail 'import receipt publication conflicted; retry safely' }
   }
   rm -rf -- $work
   write -- $bundle_id
