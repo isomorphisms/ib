@@ -1,0 +1,18 @@
+module PortableEvidenceAcceptance
+
+import PortableEvidence
+
+export
+acceptance_results : List Bool
+acceptance_results =
+  [ admit_selection SelectedOrdinary OrdinarySource
+  , admit_selection SelectedPrivate OrdinarySource
+  , admit_selection SelectedPrivate PrivateSource
+  , not (admit_selection SelectedOrdinary PrivateSource)
+  , not (admit_selection SelectedOrdinary SecretSource)
+  , not (admit_selection SelectedPrivate SecretSource)
+  , not (admit_selection SelectedOrdinary RendererProfile)
+  , not (admit_selection SelectedPrivate RendererProfile)
+  , assistant_may_receive AssistantAllowed
+  , not (assistant_may_receive AssistantDenied)
+  ]

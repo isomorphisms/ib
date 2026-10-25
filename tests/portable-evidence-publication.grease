@@ -1,0 +1,107 @@
+#!/usr/bin/env grease
+# Linux host publication acceptance; requires two observed filesystems.
+umask 077
+var root = $(realpath -- "$(dirname -- $0)/..")
+var runner = ENV.GREASE
+var temporary = $(mktemp -d /tmp/ib-import-publication.XXXXXX)
+var destination_root = $(mktemp -d /dev/shm/ib-import-publication.XXXXXX)
+trap --add EXIT { rm -rf -- $temporary $destination_root }
+var scratch_device = $(stat -c '%d' -- $temporary)
+var home_device = $(stat -c '%d' -- $destination_root)
+if (scratch_device === home_device) {
+  write -- 'FAIL publication test requires distinct filesystems' >&2
+  exit 1
+}
+test -x /usr/bin/mv
+mkdir -- "$temporary/source" "$temporary/bin"
+cp -- "$root/tests/fixtures/observe-import-mv.grease" "$temporary/bin/mv"
+chmod +x -- "$temporary/bin/mv"
+var observed_path = "$temporary/bin:$(dirname -- $runner):$[ENV.PATH]"
+
+proc retain(root, runner, home, raw, descriptor) {
+  env IB_HOME=$home $runner +O ysh:all "$root/bin/retain-source.grease" $raw $descriptor
+}
+
+proc import_observed(root, runner, temporary, observed_path, home, bundle, mode) {
+  env TMPDIR=$temporary IB_HOME=$home GREASE=$runner PATH=$observed_path \
+    IB_PUBLICATION_BUNDLE=$bundle IB_PUBLICATION_MODE=$mode \
+    IB_PUBLICATION_OBSERVATION="$temporary/observed" \
+    $runner "$root/bin/ib-evidence.grease" import $bundle
+}
+
+proc no_stage(home) {
+  var stages = $(find "$home/cauldron/imports" -maxdepth 1 -name '.ib-import.*' -print)
+  if (stages !== '') { write -- 'FAIL private publication stage leaked' >&2; exit 1 }
+}
+
+printf 'synthetic portable source\n' > "$temporary/raw"
+var hash = $(sha256sum "$temporary/raw" | cut -d ' ' -f 1)
+var count = $(wc -c < "$temporary/raw" | tr -d '[:space:]')
+printf 'source_kind\traw_urls\nsource_identity\tpublication-A\nsource_generation\t1\nacquired_at\t2026-10-24T00:00:00Z\nprivacy\tordinary\nmodel\tdeny\nexposure\tlocal-only\nsha256\t%s\nbyte_count\t%s\n' $hash $count > "$temporary/A.tsv"
+sed 's/publication-A/publication-B/' "$temporary/A.tsv" > "$temporary/B.tsv"
+var first = $(retain $root $runner "$temporary/source" "$temporary/raw" "$temporary/A.tsv")
+var second = $(retain $root $runner "$temporary/source" "$temporary/raw" "$temporary/B.tsv")
+printf '%s\traw\tordinary\n%s\treference\tordinary\n' $first $second > "$temporary/selection.tsv"
+var bundle = $(env IB_HOME="$temporary/source" GREASE=$runner $runner "$root/bin/ib-evidence.grease" export "$temporary/selection.tsv" "$temporary/bundle")
+var bundle_id = $(cat -- "$bundle/complete")
+
+var home = "$destination_root/accepted"
+var accepted = $(import_observed $root $runner $temporary $observed_path $home $bundle publish)
+if (accepted !== bundle_id) { exit 1 }
+cmp -- "$bundle/sources.tsv" "$home/cauldron/imports/$bundle_id/sources.tsv"
+cmp -- "$bundle/complete" "$home/cauldron/imports/$bundle_id/complete"
+cmp -- "$temporary/B.tsv" "$home/cauldron/imports/$bundle_id/references/$second/provenance.tsv"
+cmp -- "$temporary/raw" "$home/cauldron/sources/$first/raw"
+test ! -e "$home/cauldron/sources/$second"
+grep -Fx b'same-filesystem\tcomplete-before-publication' "$temporary/observed" > /dev/null
+no_stage $home
+var repeated = $(import_observed $root $runner $temporary $observed_path $home $bundle publish)
+if (repeated !== accepted) { exit 1 }
+write -- 'PASS distinct-filesystem input, complete receipt rename and idempotent retry'
+
+var interrupted_home = "$destination_root/interrupted"
+try { import_observed $root $runner $temporary $observed_path $interrupted_home $bundle interrupt > /dev/null 2> "$temporary/error" }
+if (not _error.code) { write -- 'FAIL injected interruption succeeded' >&2; exit 1 }
+grep -F 'injected interruption before receipt rename' "$temporary/error" > /dev/null
+test ! -e "$interrupted_home/cauldron/imports/$bundle_id"
+cmp -- "$temporary/raw" "$interrupted_home/cauldron/sources/$first/raw"
+no_stage $interrupted_home
+import_observed $root $runner $temporary $observed_path $interrupted_home $bundle publish > /dev/null
+cmp -- "$temporary/B.tsv" "$interrupted_home/cauldron/imports/$bundle_id/references/$second/provenance.tsv"
+no_stage $interrupted_home
+write -- 'PASS interruption preserves committed source, hides receipt and cleans private stage'
+
+var conflicting_home = "$destination_root/conflict"
+try { import_observed $root $runner $temporary $observed_path $conflicting_home $bundle conflict > /dev/null 2> "$temporary/error" }
+if (not _error.code) { write -- 'FAIL concurrent receipt conflict succeeded' >&2; exit 1 }
+# Coreutils versions differ: some fail mv itself; others return success and
+# the adapter detects the still-present stage. Both must preserve the winner.
+if ! grep -E 'import receipt publication conflicted|not replacing' "$temporary/error" > /dev/null {
+  cat -- "$temporary/error" >&2
+  exit 1
+}
+cmp -- "$temporary/raw" "$conflicting_home/cauldron/sources/$first/raw"
+cmp -- "$temporary/B.tsv" "$conflicting_home/cauldron/imports/$bundle_id/references/$second/provenance.tsv"
+no_stage $conflicting_home
+import_observed $root $runner $temporary $observed_path $conflicting_home $bundle publish > /dev/null
+write -- 'PASS no-clobber conflict keeps complete winner and retry verifies it'
+
+# Restore the old placement on a disposable source copy. The actual device
+# oracle must reject it, rather than accepting eventual copied contents.
+mkdir -p -- "$temporary/mutant/bin" "$temporary/mutant/lib/ib"
+cp -- "$root/bin/retain-source.grease" "$temporary/mutant/bin/retain-source.grease"
+cp -- "$root/lib/ib/pensieve.grease" "$temporary/mutant/lib/ib/pensieve.grease"
+sed 's|mktemp -d "$receipts/.ib-import.XXXXXX"|mktemp -d|' "$root/bin/ib-evidence.grease" > "$temporary/mutant/bin/ib-evidence.grease"
+grep -Fx '    var receipt_stage = $(mktemp -d)' "$temporary/mutant/bin/ib-evidence.grease" > /dev/null
+var mutant_home = "$destination_root/mutant"
+try { import_observed "$temporary/mutant" $runner $temporary $observed_path $mutant_home $bundle publish > /dev/null 2> "$temporary/error" }
+if (not _error.code) { write -- 'FAIL cross-filesystem placement mutant survived' >&2; exit 1 }
+if ! grep -F 'publication crosses filesystems' "$temporary/error" > /dev/null {
+  cat -- "$temporary/error" >&2
+  exit 1
+}
+test ! -e "$mutant_home/cauldron/imports/$bundle_id"
+cmp -- "$temporary/raw" "$mutant_home/cauldron/sources/$first/raw"
+no_stage $mutant_home
+write -- 'PASS old cross-filesystem placement mutant rejected before publication'
+write -- 'PASS host filesystem publication; fsync, power-loss and physical devices NOT_RUN'

@@ -1,0 +1,32 @@
+#!/usr/bin/env grease
+# Observe the real publication boundary, then use the actual host mv.
+if (len(ARGV) < 2) { exit 2 }
+var source = ARGV[-2]
+var destination = ARGV[-1]
+var parent = $(dirname -- $destination)
+if ($(basename -- $parent) === 'imports') {
+  var source_device = $(stat -c '%d' -- $source)
+  var destination_device = $(stat -c '%d' -- $parent)
+  if (source_device !== destination_device) {
+    write -- 'publication crosses filesystems' >&2
+    exit 42
+  }
+  var bundle = ENV.IB_PUBLICATION_BUNDLE
+  cmp -- "$bundle/sources.tsv" "$source/sources.tsv"
+  cmp -- "$bundle/complete" "$source/complete"
+  var references = split($(awk -F b'\t' '$4 == "unavailable" { print $1 }' "$bundle/sources.tsv"), b'\n')
+  for reference in (references) {
+    cmp -- "$bundle/sources/$reference/provenance.tsv" "$source/references/$reference/provenance.tsv"
+  }
+  if test -e $destination { exit 2 }
+  printf 'same-filesystem\tcomplete-before-publication\n' >> $[ENV.IB_PUBLICATION_OBSERVATION]
+  if (ENV.IB_PUBLICATION_MODE === 'interrupt') {
+    write -- 'injected interruption before receipt rename' >&2
+    exit 43
+  }
+  if (ENV.IB_PUBLICATION_MODE === 'conflict') {
+    # A competing complete winner appears after admission, before rename.
+    cp -R -- $source $destination
+  }
+}
+exec /usr/bin/mv @ARGV
