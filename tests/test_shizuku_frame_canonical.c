@@ -102,8 +102,87 @@ static void reject(ib_ingress_arena *publisher, const char *root,
     assert(reopen(root, "observed", 19) == 0);
 }
 
+static void current_metadata_cases(ib_ingress_arena *publisher, const char *root) {
+    unsigned char packet[16384];
+    char base[4096], fields[8193];
+    metadata(base, sizeof(base), "text/html; charset=utf-8", url, 0,
+             "valid", sizeof(html)-1U);
+    const char *valid[] = {"identity", "chunked"};
+    const char *identities[] = {"current-identity", "current-chunked"};
+    for (size_t i = 0; i < 2U; ++i) {
+        int n = snprintf(fields, sizeof(fields),
+                          "%scontent_range\tabsent\ntransfer_decoding\t%s\n", base, valid[i]);
+        assert(n > 0 && (size_t)n < sizeof(fields));
+        size_t count = frame(packet, sizeof(packet), fields, html, sizeof(html)-1U);
+        assert(send_frame(publisher, identities[i], packet, count, 0, 0) == 0);
+        assert(reopen(root, identities[i], 19) == 0);
+    }
+    const char *invalid[] = {
+        "content_range\tabsent\n",
+        "transfer_decoding\tidentity\n",
+        "content_range\tbytes 0-1/2\ntransfer_decoding\tidentity\n",
+        "content_range\tabsent\ntransfer_decoding\tgzip\n",
+        "content_range\tabsent\ntransfer_decoding\tchunked\ncontent_range\tabsent\n"
+    };
+    for (size_t i = 0; i < sizeof(invalid)/sizeof(invalid[0]); ++i) {
+        char identity[64];
+        int n = snprintf(identity, sizeof(identity), "current-refusal-%zu", i);
+        assert(n > 0 && (size_t)n < sizeof(identity));
+        n = snprintf(fields, sizeof(fields), "%s%s", base, invalid[i]);
+        assert(n > 0 && (size_t)n < sizeof(fields));
+        size_t count = frame(packet, sizeof(packet), fields, html, sizeof(html)-1U);
+        reject(publisher, root, identity, packet, count);
+    }
+    puts("PASS: current ICU ten-field identity/chunked captures and paired-field/range/decoder/duplicate refusals");
+}
+
+static unsigned char *read_observation(const char *filename, size_t bound, size_t *length) {
+    FILE *stream = fopen(filename, "rb");
+    assert(stream != NULL);
+    unsigned char *bytes = malloc(bound + 1U);
+    assert(bytes != NULL);
+    *length = fread(bytes, 1, bound + 1U, stream);
+    assert(!ferror(stream) && *length > 0 && *length <= bound);
+    assert(fclose(stream) == 0);
+    bytes[*length] = 0;
+    return bytes;
+}
+
+static void retain_live_observation(ib_ingress_arena *publisher, const char *root,
+                                    const char *requested, const char *metadata_file,
+                                    const char *body_file) {
+    size_t metadata_length, body_length;
+    unsigned char *fields = read_observation(metadata_file, 8192U, &metadata_length);
+    unsigned char *body = read_observation(body_file, IB_READER_SOURCE_MAX_BYTES, &body_length);
+    assert(strlen((const char *)fields) == metadata_length);
+    assert(strstr((const char *)fields, "charset=ISO-8859-1\n") != NULL);
+    unsigned char *packet = malloc(27U + metadata_length + body_length);
+    assert(packet != NULL);
+    size_t count = frame(packet, 27U + metadata_length + body_length,
+                         (const char *)fields, body, body_length);
+    uint64_t before = committed(root);
+    url = requested;
+    assert(send_frame(publisher, "live-google", packet, count, 0, 0) == 0);
+    assert(committed(root) == before + body_length);
+    assert(reopen(root, "live-google", 19) != 0);
+    char arena_path[4096];
+    int n = snprintf(arena_path, sizeof(arena_path), "%s/responses.arena", root);
+    assert(n > 0 && (size_t)n < sizeof(arena_path));
+    appendfat_arena arena;
+    assert(appendfat_arena_open(&arena, arena_path, 0) == 0);
+    unsigned char *reopened = malloc(body_length);
+    assert(reopened != NULL);
+    size_t got = 0;
+    assert(appendfat_arena_read(&arena, before, reopened, body_length, &got) == 0);
+    assert(got == body_length && memcmp(reopened, body, body_length) == 0);
+    appendfat_arena_close(&arena);
+    assert(reopen(root, "observed", 19) == 0);
+    free(reopened); free(packet); free(body); free(fields);
+    puts("PASS: actual ICU Google body retained in canonical Arena and byte-verified; unsupported charset/redirect remains reader-ineligible");
+}
+
 int main(int argc, char **argv) {
-    assert(argc == 2);
+    assert(argc == 2 || argc == 5);
     const char *root = argv[1];
     ib_ingress_arena publisher;
     assert(ib_ingress_arena_init(&publisher, root) == 0);
@@ -164,9 +243,12 @@ int main(int argc, char **argv) {
     assert(send_frame(&publisher, "unknown-charset", bad, bad_count, 0, 0) == 0);
     assert(reopen(root, "unknown-charset", 19) != 0);
     assert(reopen(root, "observed", 19) == 0);
+    current_metadata_cases(&publisher, root);
+    if (argc == 5) retain_live_observation(&publisher, root, argv[2], argv[3], argv[4]);
     puts("PASS: paired ICU frame through private ingress into real canonical Arena v2 and exact reopened reader bytes");
     puts("PASS: body-only, partial, trailing, header, size, metadata, UTF-8, credentials, digest, worker and stale refusals preserve prior content");
     puts("PASS: incomplete redirect provenance and unobserved charset cannot admit navigation");
-    puts("NOT_RUN: real Shizuku/Binder/ICU HTTPS, checked Idric view, Android ART and physical C67");
+    puts("NOT_RUN: real Shizuku/Binder, checked Idric view, Android ART and physical C67");
+    if (argc == 2) puts("NOT_RUN: ICU HTTPS; this invocation used synthetic captures only");
     return 0;
 }

@@ -80,7 +80,7 @@ ib_shizuku_icu_prepare_capture() {
   export ICU_CAPTURE_BODY_PATH=\"\$icu_work/body\"
   export ICU_CAPTURE_METADATA_PATH=\"\$icu_work/metadata\"
   export CLASSPATH='$icu_dex'
-  app_process -Dicu.library='$icu_so' /system/bin Idric.Generated get '$icu_url' >/dev/null
+  app_process -Dicu.library='$icu_so' /system/bin Idric.Generated --http1.1 get '$icu_url' >/dev/null
   test -f \"\$ICU_CAPTURE_BODY_PATH\" && test ! -L \"\$ICU_CAPTURE_BODY_PATH\" || exit 80
   test -f \"\$ICU_CAPTURE_METADATA_PATH\" && test ! -L \"\$ICU_CAPTURE_METADATA_PATH\" || exit 80
   metadata_bytes=\$(wc -c < \"\$ICU_CAPTURE_METADATA_PATH\" | tr -d '[:space:]')
@@ -167,7 +167,7 @@ ib_shizuku_icu_prepare() {
   test \"\$(sha256sum '$icu_dex' | cut -d ' ' -f 1)\" = '$icu_dex_sha' || exit 78
   test \"\$(sha256sum '$icu_so' | cut -d ' ' -f 1)\" = '$icu_so_sha' || exit 78
   export CLASSPATH='$icu_dex'
-  exec app_process -Dicu.library='$icu_so' /system/bin Idric.Generated get '$icu_url'"
+  exec app_process -Dicu.library='$icu_so' /system/bin Idric.Generated --http1.1 get '$icu_url'"
 }
 
 ib_shizuku_icu_stream() {

@@ -109,6 +109,9 @@ static int media_type(observed_response *response, const char *value) {
     if (parameter && (strcmp(parameter, "charset=utf-8") == 0 ||
                        strcmp(parameter, "charset=\"utf-8\"") == 0))
         memcpy(response->charset, "utf-8", sizeof("utf-8"));
+    else if (parameter && (strcmp(parameter, "charset=iso-8859-1") == 0 ||
+                            strcmp(parameter, "charset=\"iso-8859-1\"") == 0))
+        memcpy(response->charset, "iso-8859-1", sizeof("iso-8859-1"));
     return 0;
 }
 
@@ -117,7 +120,8 @@ static int frame_response(const unsigned char *frame, size_t length,
                            const unsigned char **body, size_t *body_bytes) {
     static const char *const names[] = {
         "http_status", "content_type", "content_encoding", "declared_length",
-        "received_length", "utf8", "resolved_url", "redirect_count"
+        "received_length", "utf8", "resolved_url", "redirect_count",
+        "content_range", "transfer_decoding"
     };
     if (length < IB_INGRESS_FRAME_HEADER_BYTES ||
         memcmp(frame, "IBICU01 ", 8U) != 0 || frame[16] != ' ' ||
@@ -136,7 +140,7 @@ static int frame_response(const unsigned char *frame, size_t length,
     char metadata[IB_INGRESS_METADATA_MAX_BYTES + 1U];
     memcpy(metadata, frame + IB_INGRESS_FRAME_HEADER_BYTES, metadata_length);
     metadata[metadata_length] = '\0';
-    char *fields[8] = {0};
+    char *fields[10] = {0};
     char *position = metadata, *end = metadata + metadata_length;
     while (position < end) {
         char *newline = memchr(position, '\n', (size_t)(end - position));
@@ -148,12 +152,20 @@ static int frame_response(const unsigned char *frame, size_t length,
                 return -1;
         *tab = '\0'; *newline = '\0';
         size_t key = 0;
-        while (key < 8U && strcmp(position, names[key]) != 0) ++key;
-        if (key == 8U || fields[key]) return -1;
+        while (key < 10U && strcmp(position, names[key]) != 0) ++key;
+        if (key == 10U || fields[key]) return -1;
         fields[key] = tab + 1;
         position = newline + 1;
     }
     for (size_t i = 0; i < 8U; ++i) if (!fields[i]) return -1;
+    /* Accept the original eight-field capture or ICU's complete ten-field
+     * full-response capture. Extensions arrive as a pair, not arbitrary
+     * ignored metadata. Range responses cannot enter this whole-page path. */
+    if ((fields[8] == NULL) != (fields[9] == NULL)) return -1;
+    if (fields[8] &&
+        (strcmp(fields[8], "absent") != 0 ||
+         (strcmp(fields[9], "identity") != 0 &&
+          strcmp(fields[9], "chunked") != 0))) return -1;
     uint64_t status, received, redirects, declared = 0;
     if (decimal(fields[0], &status) != 0 || status < 200U || status > 299U ||
         decimal(fields[4], &received) != 0 || received != source_length ||

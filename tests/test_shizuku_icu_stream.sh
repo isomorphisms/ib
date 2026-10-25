@@ -23,7 +23,7 @@ ib_shizuku_run_bounded() {
     printf '%s\n' "$2" >> "$work/commands"
     printf 'call\n' >> "$work/invocations"
     case "$2" in
-        *"app_process -Dicu.library="*" Idric.Generated get "*) ;;
+        *"app_process -Dicu.library="*" Idric.Generated --http1.1 get "*) ;;
         *) return 62 ;;
     esac
     case "${TEST_RESPONSE:-success}" in
