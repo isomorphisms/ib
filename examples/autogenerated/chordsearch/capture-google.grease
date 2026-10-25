@@ -1,0 +1,76 @@
+#!/usr/bin/env grease
+# Execute the existing ICU command and transport; never another HTTP client.
+if (len(ARGV) !== 8 and len(ARGV) !== 9) {
+  echo 'usage: grease capture-google.grease ICU NET FRONTEND ICK ICK_TOOLS HOST_SUPPORT NEW_OUTPUT URL [--http1.0|--http1.1]' >&2
+  exit 2
+}
+var icu = ARGV[0]
+var network = ARGV[1]
+var frontend = ARGV[2]
+var compiler = ARGV[3]
+var compiler_tools = ARGV[4]
+var host_support = ARGV[5]
+var output = ARGV[6]
+var url = ARGV[7]
+var version = '--http1.0'
+if (len(ARGV) === 9) { setvar version = ARGV[8] }
+if (version !== '--http1.0' and version !== '--http1.1') { echo 'FAIL HTTP version' >&2; exit 2 }
+for path in "$icu" "$network" "$frontend" "$compiler" "$compiler_tools" "$host_support" "$output" {
+  if (path[0] !== '/') { echo 'FAIL absolute path required' >&2; exit 2 }
+}
+if test -e "$output" { echo 'FAIL output already exists' >&2; exit 2 }
+mkdir -m 700 -p "$output/capture" "$output/source"
+git -C "$icu" diff --quiet HEAD -- native/transport.c src
+git -C "$network" diff --quiet HEAD -- Network
+git -C "$icu" rev-parse HEAD > "$output/icu-ref.txt"
+git -C "$network" rev-parse HEAD > "$output/network-ref.txt"
+git -C "$frontend" rev-parse HEAD > "$output/frontend-ref.txt"
+printf '%s\n' "$url" > "$output/requested-url.txt"
+printf '%s\n' "$version" > "$output/http-version.txt"
+sha256sum "$icu/native/transport.c" "$compiler" "$compiler_tools/cc1" > "$output/native-inputs.sha256"
+printf 'stage\ticu-native-transport\ntoolchain\tick\nhost\tLinux-x86_64\n' > "$output/native-build.tsv"
+sha256sum "$host_support/include/stddef.h" "$host_support/crtbeginS.o" "$host_support/crtendS.o" >> "$output/native-inputs.sha256"
+"$compiler" -B "$compiler_tools/" -B "$host_support/" -isystem "$host_support/include" \
+  -fno-link-libatomic -O2 -std=c11 -Wall -Wextra \
+  -fPIC -shared "$icu/native/transport.c" -o "$output/libicu_transport.so" -lssl -lcrypto \
+  > "$output/native-build.txt" 2>&1
+cp -a "$network/Network" "$output/source/Network"
+cp -a "$icu/src/." "$output/source/"
+var prefix = "$frontend/_/bootstrap-build"
+var scheme = "$frontend/_/.tools/bin/scheme"
+env IDRIS2_PREFIX="$prefix" IDRIS2_PACKAGE_PATH="$prefix/idris2-0.8.0" \
+  CHEZ="$scheme" IDRIS2_CG=chez IDRIS2_DATA="$frontend/_/support" \
+  IDRIS2_LIBS="$frontend/_/build/exec/idris2_app" \
+  "$frontend/_/build/exec/idris2" --source-dir "$output/source" \
+  --build-dir "$output/build" --output-dir "$output" "$output/source/Main.idric" -o icu \
+  > "$output/idric-build.txt" 2>&1
+if rg -n '^[[:space:]]*(Error:|INTERNAL ERROR)' "$output/idric-build.txt" {
+  echo 'FAIL ICU source compiler diagnostic' >&2; exit 1
+}
+test -x "$output/icu"
+cp "$frontend/_/build/exec/idris2_app/libidris2_support.so" "$output/icu_app/"
+sha256sum "$output/icu" "$output/icu_app/icu.so" "$output/libicu_transport.so" > "$output/command.sha256"
+cd "$output"
+try {
+  env LD_LIBRARY_PATH="$output" ICU_CAPTURE_BODY_PATH="$output/capture/body" \
+    ICU_CAPTURE_METADATA_PATH="$output/capture/metadata" \
+    timeout 60 "$output/icu" "$version" get "$url" > "$output/stdout.bin" 2> "$output/stderr.txt"
+}
+var status = _error.code
+printf '%s\n' "$status" > "$output/process.exit"
+cat "$output/stderr.txt"
+if test -f "$output/capture/metadata" {
+  cat "$output/capture/metadata"
+  sha256sum "$output/capture/metadata" > "$output/capture.sha256"
+}
+if test -f "$output/capture/body" { sha256sum "$output/capture/body" >> "$output/capture.sha256" }
+if (status !== 0) {
+  printf 'ICU_command\tFAIL\nprocess_exit\t%s\nArena_admission\tNOT_RUN\nphysical_C67\tNOT_RUN\n' "$status" > "$output/result.tsv"
+  printf '\033[31mFAIL\033[0m actual ICU Google request; exit %s\n' "$status" >&2
+  exit 1
+}
+test -s "$output/capture/metadata"
+cat "$output/capture/metadata"
+sha256sum "$output/capture/body" "$output/capture/metadata" > "$output/capture.sha256"
+printf 'ICU_command\tPASS\nArena_admission\tNOT_RUN\nresults_view\tNOT_RUN\nphysical_C67\tNOT_RUN\n' > "$output/result.tsv"
+printf '\033[32mPASS\033[0m actual ICU transport completed; admission and results remain separate\n'
