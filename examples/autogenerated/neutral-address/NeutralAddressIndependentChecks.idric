@@ -1,0 +1,69 @@
+module NeutralAddressIndependentChecks
+
+import Data.Text
+import System
+import IB.LongViewTask
+
+refuses_address : Text → Bool
+refuses_address supplied = case neutral_address supplied of
+  Nothing ⇒ True
+  Just _ ⇒ False
+
+preserves_address : Text → Bool
+preserves_address supplied = case neutral_address supplied of
+  Nothing ⇒ False
+  Just accepted ⇒ neutral_address_text accepted ≟ supplied
+
+check_case : (Text, Bool) → IO Bool
+check_case (name, passed) = do
+  putStrLn ((if passed then "PASS " else "FAIL ") ++ name)
+  pure passed
+
+check_cases : List (Text, Bool) → IO Bool
+check_cases [] = pure True
+check_cases (first :: remaining) = do
+  first_passed ← check_case first
+  remaining_passed ← check_cases remaining
+  pure (first_passed && remaining_passed)
+
+cases : List (Text, Bool)
+cases =
+  [ ("mixed-case scheme and host preserved", preserves_address "hTtPs://EXAMPLE.TEST")
+  , ("Unicode host and path preserved", preserves_address "https://café.test/résumé")
+  , ("at-sign only in path preserved", preserves_address "https://example.test/a@b/c")
+  , ("encoded path delimiter preserved", preserves_address "https://example.test/a%3Fb%23c%40d")
+  , ("second URL only in path preserved", preserves_address "https://example.test/path/http://other.test")
+  , ("IPv6 exact path preserved", preserves_address "http://[2001:db8::1]/reading")
+  , ("explicit zero port preserved", preserves_address "http://localhost:0/")
+  , ("last ordinary port preserved", preserves_address "https://example.test:65535/path")
+  , ("userinfo without password refused", refuses_address "https://reader@example.test/")
+  , ("multiple userinfo delimiters refused", refuses_address "https://reader@first.test@last.test/")
+  , ("port-shaped userinfo refused", refuses_address "https://example.test:443@other.test/")
+  , ("encoded at-sign authority refused", refuses_address "https://reader%40example.test/")
+  , ("encoded slash authority refused", refuses_address "https://example.test%2Fother.test/")
+  , ("encoded colon authority refused", refuses_address "https://example.test%3A443/")
+  , ("leading whitespace refused", refuses_address " https://example.test/")
+  , ("trailing whitespace refused", refuses_address "https://example.test/ ")
+  , ("line feed before scheme refused", refuses_address "\nhttps://example.test/")
+  , ("tab within scheme refused", refuses_address "ht\ttps://example.test/")
+  , ("nonbreaking space in path refused", refuses_address ("https://example.test/" ++ pack [chr 160]))
+  , ("em space in path refused", refuses_address ("https://example.test/" ++ pack [chr 8195]))
+  , ("line separator in path refused", refuses_address ("https://example.test/" ++ pack [chr 8232]))
+  , ("em space in authority refused", refuses_address ("https://example" ++ pack [chr 8195] ++ ".test/"))
+  , ("C1 tail refused", refuses_address ("https://example.test/" ++ pack [chr 159]))
+  , ("backslash path ambiguity refused", refuses_address "https://example.test/path\\other")
+  , ("query after path refused", refuses_address "https://example.test/path?token=value")
+  , ("fragment after path refused", refuses_address "https://example.test/path#token")
+  , ("scheme-relative address refused", refuses_address "//example.test/path")
+  , ("HTTP lookalike scheme refused", refuses_address "httpsx://example.test/")
+  , ("authority after extra slash refused", refuses_address "http:////example.test/")
+  , ("userinfo before IPv6 refused", refuses_address "https://reader@[::1]/")
+  , ("bracket trailing host text refused", refuses_address "https://[::1]example.test/")
+  ]
+
+main : IO ()
+main = do
+  passed ← check_cases cases
+  if passed
+    then putStrLn "PASS independent NeutralAddress durable-record controls"
+    else die "FAIL independent NeutralAddress durable-record controls"

@@ -28,9 +28,19 @@ The continuation passes source checking and materializes the initial Boolean
 flag; the existing character/token accumulator is now the first DEX blocker.
 No Java parser or competing document model replaces that rejected attempt.
 
+A one-off replay of this unchanged pure export with canonical android-NDK
+`973c24bc0b4eab6f3c88699102f7cb0e7fd8951f` still returns compiler exit 1 and
+emits no DEX. A separate command-style IO diagnostic can now emit the same
+existing recovery/title path through that backend's managed runtime, and its
+DEX independently decodes. It has not executed under ART and does not provide
+the pure callable export or Activity bridge. See the retained-source
+`attempt.md`, `replay.grease`, and source-bound replay receipt. The native reader
+pin remains unchanged.
+
 Full source recovery needs a checked runtime representation for the existing
-source collections/records, followed by integration of the existing workers
-and storage owners. Browser features retired from the Java harness must not be
+source collections/records at its callable-export boundary, followed by
+integration of the existing workers and storage owners. Browser features
+retired from the Java harness must not be
 marked delivered by this text-view control. The Idriç/DEX diagnostic and view
 paths also retain their separately recorded compiler-bootstrap/build-policy
 debt. Keep this line draft until those gates and physical acceptance pass.
