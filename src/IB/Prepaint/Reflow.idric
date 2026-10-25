@@ -1,0 +1,79 @@
+module IB.Prepaint.Reflow
+
+import Data.Text
+import IB.Strand
+import IB.Prepaint
+import IB.HtmlPrepaint
+import IB.Reflow
+import IB.Reflow.Source
+import IB.Reflow.SourceBreaks
+
+-- This is a derived plan over an immutable revision. The position identifies
+-- a block occurrence only within that retained revision. It is not a new
+-- durable block identifier or an anchor that survives a changed revision.
+public export
+record BlockReflow where
+  constructor PreparedBlock
+  block_position : Number
+  original_block : InformationBlock
+  decoded_text : Maybe Text
+  text_lines : List SourceLine
+
+public export
+record PrepaintLayout where
+  constructor PreparedRevision
+  source_revision : PrepaintRevision
+  requirements : ReflowRequirements
+  measurement_identity : Text
+  block_plans : List BlockReflow
+
+-- Keep the admission evidence, recovered log and semantic result alongside
+-- their layout. V1 wire bytes alone do not authenticate the source range.
+public export
+record HtmlPrepaintLayout where
+  constructor PreparedHtml
+  source_result : HtmlPrepaintResult
+  revision_layout : PrepaintLayout
+
+block_text : InformationBlock → Maybe Text
+block_text (Heading _ text) = Just text
+block_text (TextBlock text) = Just text
+block_text (Link text _) = Just text
+block_text _ = Nothing
+
+prepare_blocks : ReflowRequirements → (Text → Number) → Number →
+  List InformationBlock → Either Text (List BlockReflow)
+prepare_blocks request measure position [] = Right []
+prepare_blocks request measure position (block :: rest) =
+  case block_text block of
+    Nothing ⇒ do
+      remaining ← prepare_blocks request measure (S position) rest
+      Right (PreparedBlock position block Nothing [] :: remaining)
+    Just text ⇒ do
+      lines ← reflow_source request measure text
+      remaining ← prepare_blocks request measure (S position) rest
+      Right (PreparedBlock position block (Just text) lines :: remaining)
+
+-- The width callback and its nonempty identity describe the same measurement
+-- provider. Offsets belong to decoded text in each block, never HTML bytes,
+-- glyphs or UTF-16 units. No native shaping is implied by a Number result.
+-- Unsupported manners refuse even when the revision has no textual blocks.
+public export
+reflow_prepaint : ReflowRequirements → Text → (Text → Number) →
+  PrepaintRevision → Either Text PrepaintLayout
+reflow_prepaint request@(Requirements width manner) metric measure revision =
+  if trim metric ≟ "" then Left "Missing reflow measurement identity"
+  else case manner of
+    streamingly ⇒ Left "Source-bound streaming reflow is unavailable"
+    typographically ⇒ Left "Source-bound typographic reflow is unavailable"
+    _ ⇒ if width ≟ 0 then Left "Reflow width must be positive"
+      else do
+        prepared ← prepare_blocks request measure 0 revision.blocks
+        Right (PreparedRevision revision request metric prepared)
+
+public export
+reflow_html_prepaint : ReflowRequirements → Text → (Text → Number) →
+  HtmlPrepaintResult → Either Text HtmlPrepaintLayout
+reflow_html_prepaint request metric measure result = do
+  layout ← reflow_prepaint request metric measure result.revision
+  Right (PreparedHtml result layout)
