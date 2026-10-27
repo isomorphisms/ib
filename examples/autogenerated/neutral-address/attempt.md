@@ -1,5 +1,15 @@
 # Program attempt: neutral-address
 
+## Pinned foundation compiler compatibility
+
+The foundation job at reader head `59716dabd375f0d49b8fb67a18dfd604b33a923a`
+failed to parse the `after_address_prefix` clause because its pinned Idriç
+`7050c116326c9c8e8d0a56c2db7baf2119cbae19` reserves `prefix`. The qualified
+`94dfd99b` host checks had accepted that local pattern name. Rename the local
+tail to `expected_suffix`; the validation rules and accepted addresses remain
+unchanged. The existing constructor, independent and lifecycle controls are
+the acceptance cases; this compatibility repair does not add another oracle.
+
 Status: host semantic controls PASS; DEX/ART and physical acceptance NOT_RUN.
 
 ## Purpose and type-system sketch

@@ -40,9 +40,9 @@ unsafe_address_character character =
 after_address_prefix : List Char → List Char → Maybe (List Char)
 after_address_prefix [] remaining = Just remaining
 after_address_prefix (_ :: _) [] = Nothing
-after_address_prefix (expected :: prefix) (actual :: remaining) =
+after_address_prefix (expected :: expected_suffix) (actual :: remaining) =
   if toLower expected ≟ toLower actual
-    then after_address_prefix prefix remaining
+    then after_address_prefix expected_suffix remaining
     else Nothing
 
 after_http_scheme : List Char → Maybe (List Char)
