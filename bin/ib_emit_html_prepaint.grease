@@ -1,0 +1,67 @@
+#!/bin/sh
+# Grease adapter for independently reopened and admitted HTML.
+# Does not acquire sources, network, or create a canonical store.
+set -eu
+umask 077
+fail() { printf 'ib html prepaint: %s\n' "$1" >&2; exit 1; }
+test "$#" -eq 4 || fail 'usage: ib_emit_html_prepaint.grease ADMISSION.tsv VERIFIED_BODY EXPECTED_SOURCE_KEY OUTPUT'
+manifest=$1
+body=$2
+expected_key=$3
+output=$4
+test -f "$manifest" && test ! -L "$manifest" || fail 'missing or linked admission'
+test -f "$body" && test ! -L "$body" || fail 'missing or linked admitted body'
+test ! -L "$output" || fail 'refusing output symlink'
+test "$(wc -c < "$manifest" | tr -d '[:space:]')" -le 4096 || fail 'oversized admission'
+awk -F '\t' '
+  NF != 2 || $1 !~ /^[a-z_][a-z_0-9]*$/ || $2 == "" || /\r/ { bad=1 }
+  { if (seen[$1]++) bad=1 }
+  END { if (bad || NR != 13) exit 1 }
+' "$manifest" || fail 'bad admission structure'
+field() { awk -F '\t' -v key="$1" '$1 == key { print $2 }' "$manifest"; }
+test "$(field schema)" = ib-html-admission-v1 || fail 'unsupported admission schema'
+test "$(field source_key)" = "$expected_key" || fail 'stale or modified source key'
+expected_generation=$(printenv IB_EXPECTED_SOURCE_GENERATION 2>/dev/null || :)
+test -n "$expected_generation" && test "$(field source_generation)" = "$expected_generation" || fail 'stale or unpinned generation'
+case "$(field source_kind)" in
+  arena) test "$(field arena_reopen)" = MATCH || fail 'Arena readback absent' ;;
+  fixture) test "$(printenv IB_ALLOW_FIXTURE 2>/dev/null || :)" = 1 || fail 'fixture not allowed as production source' ;;
+  *) fail 'unknown source kind' ;;
+esac
+test "$(field acquisition_complete)" = YES || fail 'source incomplete'
+test "$(field http_status)" = 200 || fail 'unadmitted HTTP status'
+test "$(field mime_type)" = text/html || fail 'not admitted HTML'
+case "$(field charset)" in utf-8|UTF-8) ;; *) fail 'unsupported charset' ;; esac
+test "$(field source_generation)" != UNOBSERVED || fail 'generation not observed'
+test "$(field resolved_url)" != UNOBSERVED || fail 'final URL not observed'
+test "$(field requested_url)" != UNOBSERVED || fail 'requested URL not observed'
+claimed=$(field sha256)
+bytes=$(field byte_count)
+case "$claimed" in *[!0123456789abcdef]*|'') fail 'invalid digest' ;; esac
+test "$(printf %s "$claimed" | wc -c | tr -d '[:space:]')" -eq 64 || fail 'invalid digest length'
+case "$bytes" in *[!0123456789]*|'') fail 'invalid byte count' ;; esac
+test "$bytes" -gt 0 && test "$bytes" -le 4194304 || fail 'body exceeds admission bound'
+observed_bytes=$(wc -c < "$body" | tr -d '[:space:]')
+test "$bytes" = "$observed_bytes" || fail 'body length differs from committed source'
+observed=$(sha256sum "$body" | cut -d ' ' -f 1)
+test "$claimed" = "$observed" || fail 'body digest differs from committed source'
+iconv -f UTF-8 -t UTF-8 "$body" >/dev/null || fail 'invalid UTF-8'
+converter=$(printenv IB_HTML_PREPAINT_EXEC 2>/dev/null || :)
+oracle=$(printenv IB_PREPAINT_ORACLE 2>/dev/null || :)
+test -n "$converter" && test -x "$converter" || fail 'compiled Idriç executable required'
+test -n "$oracle" && test -x "$oracle" || fail 'independent Version 1 consumer required'
+parent=$(dirname -- "$output")
+test -d "$parent" && test ! -L "$parent" || fail 'disposable output directory absent'
+work=$(mktemp -d "$parent/.ib-prepaint.XXXXXXXX") || fail 'cannot stage disposable output'
+cleanup() { rm -rf "$work"; }
+trap cleanup EXIT HUP INT TERM
+"$converter" "$(field source_key)" "$(field source_generation)" "$claimed" "$observed" \
+  "$bytes" "$observed_bytes" "$(field requested_url)" "$(field resolved_url)" \
+  "$(field mime_type)" "$(field charset)" "$(field http_status)" "$body" \
+  > "$work/projection" || fail 'Idriç converter refused admitted HTML'
+test "$(wc -c < "$work/projection" | tr -d '[:space:]')" -le 4194304 || fail 'prepaint exceeds display bound'
+"$oracle" "$work/projection" || fail 'independent Version 1 oracle refused output'
+test ! -L "$output" || fail 'output symlink changed'
+mv -f "$work/projection" "$output" || fail 'projection publication failed'
+printf 'conversion\tPASS\nsource_key\t%s\nsource_generation\t%s\nsource_sha256\t%s\nprepaint_sha256\t%s\n' \
+  "$expected_key" "$(field source_generation)" "$observed" "$(sha256sum "$output" | cut -d ' ' -f 1)"

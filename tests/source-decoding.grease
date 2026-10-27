@@ -1,0 +1,130 @@
+#!/usr/bin/env grease
+# Actual Idriç binary decoding and source-bound derivative publication.
+umask 077
+var tests_directory = $(dirname -- $0)
+var root = $(realpath -- "$tests_directory/..")
+var runner = ENV.GREASE
+if (len(ARGV) !== 4) {
+  write -- 'usage: source-decoding.grease SEMANTIC_CHECKS DECODER GOOGLE_BODY GOOGLE_HTTP_METADATA' >&2
+  exit 2
+}
+var checks = ARGV[0]
+var decoder = ARGV[1]
+var google = ARGV[2]
+var google_metadata = ARGV[3]
+var temporary = $(mktemp -d)
+trap --add EXIT { rm -rf -- $temporary }
+
+proc descriptor(raw, path, charset='ISO-8859-1') {
+  var hash = $(sha256sum -- $raw | cut -d ' ' -f 1)
+  var count = $(wc -c < $raw | tr -d '[:space:]')
+  printf 'source_key\tfixture:retained-byte-decoding\nsource_generation\tfixture-generation-1\nsha256\t%s\nbyte_count\t%s\ncharset\t%s\nnavigation_admitted\tNO\nredirect_count\t1\n' $hash $count $charset > $path
+}
+
+proc publish(producer, metadata, raw, destination) {
+  $runner "$root/bin/ib_decode_html_bytes.grease" $producer $metadata $raw $destination
+}
+
+proc refuse(producer, metadata, raw, destination, expected, error) {
+  try { publish $producer $metadata $raw $destination > /dev/null 2> $error }
+  if (not _error.code) { write -- 'FAIL expected derivative refusal' >&2; exit 1 }
+  grep -F -- $expected $error > /dev/null
+  test ! -e $destination
+}
+
+$checks "$root/tests/fixtures/index-windows-1252.txt" "$temporary/all.raw" "$temporary/expected.utf8"
+$decoder ' ISO-8859-1 ' "$temporary/all.raw" "$temporary/direct.utf8" > "$temporary/direct.tsv"
+cmp -- "$temporary/expected.utf8" "$temporary/direct.utf8"
+test $(wc -c < "$temporary/all.raw") -eq 256
+# Independent byte-level controls avoid relying only on the test's shared
+# UTF-8 buffer writer: 128 ASCII bytes + 81 indexed bytes + 192 Latin bytes.
+test $(wc -c < "$temporary/direct.utf8") -eq 401
+head -c 128 -- "$temporary/all.raw" > "$temporary/ascii.raw"
+head -c 128 -- "$temporary/direct.utf8" > "$temporary/ascii.utf8"
+cmp -- "$temporary/ascii.raw" "$temporary/ascii.utf8"
+test $(od -An -v -tx1 -j 128 -N 5 "$temporary/direct.utf8" | tr -d ' \n') = 'e282acc281'
+test $(od -An -v -tx1 -j 209 -N 2 "$temporary/direct.utf8" | tr -d ' \n') = 'c2a0'
+test $(od -An -v -tx1 -j 355 -N 2 "$temporary/direct.utf8" | tr -d ' \n') = 'c3a9'
+write -- 'PASS binary command preserves every indexed scalar including NUL and C1'
+try { $decoder 'ISO-8859-1' "$temporary/all.raw" "$temporary/all.raw" > /dev/null 2> "$temporary/same-path-error" }
+if (not _error.code) { write -- 'FAIL decoder overwrote its input' >&2; exit 1 }
+grep -F 'output-is-input' "$temporary/same-path-error" > /dev/null
+test $(wc -c < "$temporary/all.raw") -eq 256
+
+descriptor "$temporary/all.raw" "$temporary/source.tsv"
+publish $decoder "$temporary/source.tsv" "$temporary/all.raw" "$temporary/derived" > /dev/null
+cmp -- "$temporary/source.tsv" "$temporary/derived/source.tsv"
+cmp -- "$temporary/expected.utf8" "$temporary/derived/decoded.utf8"
+grep -Fx b'reader_admission\tNOT_GRANTED' "$temporary/derived/decode.tsv" > /dev/null
+grep -Fx b'original_navigation_admitted\tNO' "$temporary/derived/decode.tsv" > /dev/null
+grep -Fx b'declared_charset\tISO-8859-1' "$temporary/derived/decode.tsv" > /dev/null
+test ! -e "$temporary/derived/input.raw"
+test ! -e "$temporary/derived/producer.tsv"
+var complete = $(sha256sum "$temporary/derived/decode.tsv" | cut -d ' ' -f 1)
+test $(cat "$temporary/derived/complete") = $complete
+write -- 'PASS disposable derivative preserves original evidence and grants no reader admission'
+
+sed 's/^byte_count\t256$/byte_count\t255/' "$temporary/source.tsv" > "$temporary/bad-count.tsv"
+refuse $decoder "$temporary/bad-count.tsv" "$temporary/all.raw" "$temporary/bad-count" 'source byte count mismatch' "$temporary/error"
+awk -F b'\t' 'BEGIN {OFS="\t"} $1=="sha256" {$2=sprintf("%064d",0)} {print}' "$temporary/source.tsv" > "$temporary/bad-hash.tsv"
+refuse $decoder "$temporary/bad-hash.tsv" "$temporary/all.raw" "$temporary/bad-hash" 'source digest mismatch' "$temporary/error"
+descriptor "$temporary/all.raw" "$temporary/unknown.tsv" 'utf-8'
+refuse $decoder "$temporary/unknown.tsv" "$temporary/all.raw" "$temporary/unknown" 'unsupported-html-encoding-label' "$temporary/error"
+printf '\357\273\277x' > "$temporary/bom.raw"
+descriptor "$temporary/bom.raw" "$temporary/bom.tsv"
+refuse $decoder "$temporary/bom.tsv" "$temporary/bom.raw" "$temporary/bom" 'bom-selects-an-unimplemented-decoder' "$temporary/error"
+write -- 'PASS wrong source claims, unknown labels and BOMs never publish a derivative'
+truncate -s 4194305 "$temporary/too-large.raw"
+descriptor "$temporary/too-large.raw" "$temporary/too-large.tsv"
+refuse $decoder "$temporary/too-large.tsv" "$temporary/too-large.raw" "$temporary/too-large" 'file exceeds decoding bound' "$temporary/error"
+touch "$temporary/empty.raw"
+descriptor "$temporary/empty.raw" "$temporary/empty.tsv"
+publish $decoder "$temporary/empty.tsv" "$temporary/empty.raw" "$temporary/empty" > /dev/null
+test ! -s "$temporary/empty/decoded.utf8"
+grep -Fx b'decoded_codepoint_count\t0' "$temporary/empty/decode.tsv" > /dev/null
+grep -Fx b'reader_admission\tNOT_GRANTED' "$temporary/empty/decode.tsv" > /dev/null
+write -- 'PASS size bound and empty representation preserve decoding/admission separation'
+
+# These fixture producers run under the same verified Grease entrypoint.
+printf '#!%s\n' $runner > "$temporary/nonzero"
+cat >> "$temporary/nonzero" <<'EOF'
+printf 'partial' > $[ARGV[2]]
+exit 19
+EOF
+chmod +x "$temporary/nonzero"
+refuse "$temporary/nonzero" "$temporary/source.tsv" "$temporary/all.raw" "$temporary/nonzero-result" 'Idriç decoding producer refused or failed' "$temporary/error"
+printf '#!%s\n' $runner > "$temporary/change-metadata"
+cat >> "$temporary/change-metadata" <<'EOF'
+var producer = ENV.IB_REAL_SOURCE_DECODER
+$producer @ARGV
+var parent = $(dirname -- $[ARGV[2]])
+printf 'changed\tmetadata\n' >> "$parent/source.tsv"
+EOF
+chmod +x "$temporary/change-metadata"
+try {
+  env IB_REAL_SOURCE_DECODER=$decoder $runner "$root/bin/ib_decode_html_bytes.grease" "$temporary/change-metadata" "$temporary/source.tsv" "$temporary/all.raw" "$temporary/changed-metadata" > /dev/null 2> "$temporary/error"
+}
+if (not _error.code) { write -- 'FAIL changed source descriptor accepted' >&2; exit 1 }
+grep -F 'source descriptor changed during decoding' "$temporary/error" > /dev/null
+test ! -e "$temporary/changed-metadata"
+cmp -- "$temporary/source.tsv" "$temporary/derived/source.tsv"
+write -- 'PASS partial nonzero producer and source-evidence mutation preserve last valid derivative'
+
+# The observation is the exact existing capture, not another canonical source.
+var observed_hash = $(sha256sum -- $google | cut -d ' ' -f 1)
+if (observed_hash !== 'f71e991ab87271e77255fe2d2454cb4cb401fe47cdf953ea550c6e0fcd8afeb4') { exit 1 }
+test $(wc -c < $google) -eq 93166
+grep -Fx b'content_type\ttext/html; charset=ISO-8859-1' $google_metadata > /dev/null
+grep -Fx b'redirect_count\t1' $google_metadata > /dev/null
+cp -- $google_metadata "$temporary/google-before.tsv"
+descriptor $google "$temporary/google-source.tsv"
+publish $decoder "$temporary/google-source.tsv" $google "$temporary/google-derived" > /dev/null
+cmp -- $google "$temporary/google-derived/decoded.utf8"
+cmp -- $google_metadata "$temporary/google-before.tsv"
+cmp -- "$temporary/google-source.tsv" "$temporary/google-derived/source.tsv"
+grep -Fx b'charset\tISO-8859-1' "$temporary/google-derived/source.tsv" > /dev/null
+grep -Fx b'redirect_count\t1' "$temporary/google-derived/source.tsv" > /dev/null
+grep -Fx b'reader_admission\tNOT_GRANTED' "$temporary/google-derived/decode.tsv" > /dev/null
+write -- 'PASS actual retained Google bytes round-trip without relabeling or redirect admission'
+
+write -- 'PASS native Grease source-decoding process controls; Android and Arena admission remain separate'

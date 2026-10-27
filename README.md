@@ -19,6 +19,7 @@ heap, form, and reconstruction outcomes separately.  See
 ## Design notes
 
 - `docs/architecture.md` — ownership and replaceable-service boundaries
+- `docs/source-byte-decoding.md` — source-bound HTML decoding without changing admission
 - `docs/personal-workbench.md` — personal scope, task frontend, user stories, and latency targets
 - `docs/prefetch-and-reading.md` — durable investigation frontiers, disposable fetches, and `~/reading`
 - `docs/tab-categorization.md` — overlapping personal categories and adaptive refinement
