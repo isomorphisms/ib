@@ -1,6 +1,7 @@
 module IB.LongViewTask
 
 import Data.String
+import Data.List
 
 -- Long-view tasks refine the existing browser-owned task, tab, and history
 -- identities.  Renderer and Android process identities are attachments to
@@ -16,11 +17,73 @@ contains_record_separator ('\n' :: _) = True
 contains_record_separator ('\r' :: _) = True
 contains_record_separator (_ :: rest) = contains_record_separator rest
 
-contains_address_secret_delimiter : List Char → Bool
-contains_address_secret_delimiter [] = False
-contains_address_secret_delimiter ('?' :: _) = True
-contains_address_secret_delimiter ('#' :: _) = True
-contains_address_secret_delimiter (_ :: rest) = contains_address_secret_delimiter rest
+-- A neutral address is already selected by browser policy. Validate it rather
+-- than guessing a replacement origin or copying user-info into ordinary state.
+-- Backslashes and whitespace are refused because platform URL parsers can
+-- interpret them as authority delimiters or silently remove them.
+address_whitespace : Char → Bool
+address_whitespace character =
+  let scalar = ord character in
+    -- Unicode White_Space beyond the C0/C1 ranges checked below: ordinary and
+    -- no-break spaces, Ogham space, the U+2000 space family, line/paragraph
+    -- separators, narrow no-break space, medium mathematical and ideographic
+    -- spaces. The inherited isSpace does not cover this full set.
+    elem scalar [0x20, 0xA0, 0x1680, 0x2028, 0x2029, 0x202F, 0x205F, 0x3000] ||
+    (scalar >= 0x2000 && scalar <= 0x200A)
+
+unsafe_address_character : Char → Bool
+unsafe_address_character character =
+  -- C0 and C1 control ranges, including DEL, are not address text.
+  ord character < 32 || (ord character >= 127 && ord character <= 159) || address_whitespace character ||
+  elem character ['?', '#', '\\']
+
+after_address_prefix : List Char → List Char → Maybe (List Char)
+after_address_prefix [] remaining = Just remaining
+after_address_prefix (_ :: _) [] = Nothing
+after_address_prefix (expected :: expected_suffix) (actual :: remaining) =
+  if toLower expected ≟ toLower actual
+    then after_address_prefix expected_suffix remaining
+    else Nothing
+
+after_http_scheme : List Char → Maybe (List Char)
+after_http_scheme characters =
+  case after_address_prefix (unpack "https://") characters of
+    Just remaining ⇒ Just remaining
+    Nothing ⇒ after_address_prefix (unpack "http://") characters
+
+valid_address_port : List Char → Bool
+valid_address_port [] = True
+valid_address_port (':' :: first :: rest) =
+  all (\character ⇒ character >= '0' && character <= '9') (first :: rest)
+valid_address_port _ = False
+
+ordinary_host_character : Char → Bool
+ordinary_host_character character =
+  -- Registered-name punctuation is safe here; authority separators and '%' are
+  -- not. Keep international name text without pretending this is IDNA or DNS
+  -- validation. Global whitespace/control checks still apply to the whole URL.
+  isAlphaNum character || elem character (unpack "-._~!$&'()*+,;=") ||
+  (ord character >= 0xA0 && not (address_whitespace character))
+
+valid_address_authority : List Char → Bool
+valid_address_authority ('[' :: remaining) =
+  let (host, ending) = break (≟ ']') remaining in
+    case ending of
+      ']' :: port ⇒
+        not (null host) && elem ':' host &&
+        all (\character ⇒ elem character (unpack "0123456789abcdefABCDEF:.")) host &&
+        valid_address_port port
+      _ ⇒ False
+valid_address_authority authority =
+  let (host, port) = break (≟ ':') authority in
+    not (null host) && all ordinary_host_character host && valid_address_port port
+
+valid_neutral_destination : List Char → Bool
+valid_neutral_destination characters =
+  case after_http_scheme characters of
+    Nothing ⇒ False
+    Just remaining ⇒
+      valid_address_authority (takeWhile (\character ⇒ not (character ≟ '/')) remaining)
 
 export
 durable_identity : String → Maybe DurableIdentity
@@ -42,7 +105,8 @@ data NeutralAddress = NeutralWebAddress DurableIdentity
 export
 neutral_address : String → Maybe NeutralAddress
 neutral_address value =
-  if contains_address_secret_delimiter (unpack value)
+  let characters = unpack value in
+  if any unsafe_address_character characters || not (valid_neutral_destination characters)
     then Nothing
     else map NeutralWebAddress (durable_identity value)
 

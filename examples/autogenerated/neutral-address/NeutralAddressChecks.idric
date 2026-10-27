@@ -1,0 +1,59 @@
+module NeutralAddressChecks
+
+import Data.Text
+import System
+import IB.LongViewTask
+
+check : Text → Bool → IO ()
+check name True = putStrLn ("PASS " ++ name)
+check name False = die ("FAIL " ++ name)
+
+refused : Text → Bool
+refused supplied = case neutral_address supplied of
+  Nothing ⇒ True
+  Just _ ⇒ False
+
+preserved : Text → Bool
+preserved supplied = case neutral_address supplied of
+  Nothing ⇒ False
+  Just address ⇒ neutral_address_text address ≟ supplied
+
+main : IO ()
+main = do
+  check "https origin preserved" (preserved "https://example.test/")
+  check "http port and exact path preserved" (preserved "http://example.test:8080/auth/scopes")
+  check "scheme case preserved" (preserved "HTTPS://example.test/")
+  check "path at-sign is not authority user-info" (preserved "https://example.test/people/@reader")
+  check "IPv6 authority preserved" (preserved "https://[::1]:8080/path")
+  check "international authority and path preserved" (preserved "https://café.test/résumé")
+  check "registered-name underscore preserved" (preserved "https://private_host.test/path")
+  check "legitimate path percent escapes preserved" (preserved "https://example.test/r%C3%A9sum%C3%A9")
+  check "empty input refused" (refused "")
+  check "password-bearing authority refused" (refused "https://user:password@example.test/")
+  check "user-only authority refused" (refused "https://user@example.test/")
+  check "empty user-info refused" (refused "https://@example.test/")
+  check "percent-escaped authority refused" (refused "https://user%40example.test/path")
+  check "file scheme refused" (refused "file:///private/secret")
+  check "javascript scheme refused" (refused "javascript:alert(1)")
+  check "relative address refused" (refused "/private/secret")
+  check "missing authority refused" (refused "https://")
+  check "missing host before path refused" (refused "https:///private/secret")
+  check "port without host refused" (refused "https://:8080/path")
+  check "empty port refused" (refused "https://example.test:/path")
+  check "nonnumeric port refused" (refused "https://example.test:secret/path")
+  check "unclosed IPv6 authority refused" (refused "https://[::1/path")
+  check "empty bracket host refused" (refused "https://[]/path")
+  check "query refused" (refused "https://example.test/?token=secret")
+  check "fragment refused" (refused "https://example.test/#secret")
+  check "space refused" (refused "https://example.test/private secret")
+  check "tab refused" (refused "https://example.test/\tsecret")
+  check "line feed refused" (refused "https://example.test/\nsecret")
+  check "carriage return refused" (refused "https://example.test/\rsecret")
+  check "NUL refused" (refused ("https://example.test/" ++ pack [chr 0] ++ "secret"))
+  check "DEL refused" (refused ("https://example.test/" ++ pack [chr 127] ++ "secret"))
+  check "C1 control refused" (refused ("https://example.test/" ++ pack [chr 128] ++ "secret"))
+  check "EM SPACE refused" (refused ("https://example.test/" ++ pack [chr 0x2003] ++ "secret"))
+  check "LINE SEPARATOR refused" (refused ("https://example.test/" ++ pack [chr 0x2028] ++ "secret"))
+  check "nonbreaking authority space refused" (refused ("https://café" ++ pack [chr 0xA0] ++ ".test/path"))
+  check "backslash authority ambiguity refused" (refused "https://example.test\\@other.test/")
+  putStrLn "PASS NeutralAddress constructor controls"

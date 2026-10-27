@@ -126,6 +126,39 @@ main = case fixture of
     check "valid neutral address preserved" (case neutral_address "https://example.test" of
       Nothing ⇒ False
       Just value ⇒ neutral_address_text value ≟ "https://example.test")
+    check "credential-bearing authority refused" (case neutral_address "https://user:password@example.test/" of
+      Nothing ⇒ True
+      _ ⇒ False)
+    check "non-HTTP destination refused" (case neutral_address "file:///private/secret" of
+      Nothing ⇒ True
+      _ ⇒ False)
+    check "missing authority refused" (case neutral_address "https:///private/secret" of
+      Nothing ⇒ True
+      _ ⇒ False)
+    check "port without host refused" (case neutral_address "https://:8080/path" of
+      Nothing ⇒ True
+      _ ⇒ False)
+    check "whitespace in address refused" (case neutral_address "https://example.test/private secret" of
+      Nothing ⇒ True
+      _ ⇒ False)
+    check "backslash interpretation refused" (case neutral_address "https://example.test\\@other.test/" of
+      Nothing ⇒ True
+      _ ⇒ False)
+    check "safe exact path retained" (case neutral_address "https://console.cloud.google.com/auth/scopes" of
+      Nothing ⇒ False
+      Just value ⇒ neutral_address_text value ≟ "https://console.cloud.google.com/auth/scopes")
+    check "HTTP port retained" (case neutral_address "http://example.test:8080/path" of
+      Nothing ⇒ False
+      Just value ⇒ neutral_address_text value ≟ "http://example.test:8080/path")
+    check "international authority and exact path retained" (case neutral_address "https://café.test/résumé" of
+      Nothing ⇒ False
+      Just value ⇒ neutral_address_text value ≟ "https://café.test/résumé")
+    check "EM SPACE address refused" (case neutral_address ("https://example.test/" ++ pack [chr 0x2003] ++ "secret") of
+      Nothing ⇒ True
+      _ ⇒ False)
+    check "LINE SEPARATOR address refused" (case neutral_address ("https://example.test/" ++ pack [chr 0x2028] ++ "secret") of
+      Nothing ⇒ True
+      _ ⇒ False)
     check "DEX entry rejects empty runtime identity" (longview_host_generation "" "tab" "nav" "host-a" "host-b" ≟ -1)
     check "DEX entry rejects tab runtime identity" (longview_host_generation "task" "tab\tbad" "nav" "host-a" "host-b" ≟ -1)
     check "DEX entry rejects CR runtime identity" (longview_host_generation "task" "tab" "nav" "host-a\rbad" "host-b" ≟ -1)

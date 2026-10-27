@@ -1,0 +1,47 @@
+# The committed IB gitlink is the independently declared compiler input.
+# A checkout, staged pin, or historical receipt cannot replace that declaration.
+proc verified_backend_pin(repository, expected_head) {
+  if (len(repository) === 0 or repository[0] !== '/') {
+    echo 'FAIL absolute IB repository required' >&2
+    return 2
+  }
+  printf '%s\n' "$expected_head" | rg -q '^[0-9a-f]{40}$'
+  var observed_head = $(git -C "$repository" rev-parse HEAD)
+  if test "$observed_head" != "$expected_head" {
+    echo 'FAIL IB source head differs from expected head' >&2
+    return 1
+  }
+  var expected_backend = $(git -C "$repository" rev-parse "$expected_head:vendor/android-NDK")
+  var entry = $(git -C "$repository" ls-tree "$expected_head" vendor/android-NDK)
+  var expected_entry = $(printf '160000 commit %s\tvendor/android-NDK' "$expected_backend")
+  if test "$entry" != "$expected_entry" {
+    echo 'FAIL committed Android compiler input is not a gitlink' >&2
+    return 1
+  }
+  var observed_backend = $(git -C "$repository/vendor/android-NDK" rev-parse HEAD)
+  if test "$observed_backend" != "$expected_backend" {
+    echo 'FAIL Android compiler checkout differs from committed IB gitlink' >&2
+    return 1
+  }
+  try { git -C "$repository" diff --cached --quiet "$expected_head" -- .gitmodules vendor/android-NDK }
+  if (_error.code !== 0) {
+    echo 'FAIL staged Android compiler input differs from committed IB source' >&2
+    return 1
+  }
+  try { git -C "$repository/vendor/android-NDK" diff --quiet }
+  if (_error.code !== 0) {
+    echo 'FAIL Android compiler checkout has uncommitted source changes' >&2
+    return 1
+  }
+  try { git -C "$repository/vendor/android-NDK" diff --cached --quiet HEAD }
+  if (_error.code !== 0) {
+    echo 'FAIL Android compiler checkout has staged source changes' >&2
+    return 1
+  }
+  try { git -C "$repository" diff --quiet "$expected_head" -- .gitmodules vendor/android-NDK }
+  if (_error.code !== 0) {
+    echo 'FAIL Android compiler input differs from committed IB source' >&2
+    return 1
+  }
+  echo "$expected_backend"
+}
