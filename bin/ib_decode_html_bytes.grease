@@ -1,0 +1,129 @@
+#!/usr/bin/env grease
+# Source-bound diagnostic decoding, not a canonical or reader-admission path.
+umask 077
+var owned_temporaries = []
+trap --add EXIT {
+  for temporary in (owned_temporaries) { rm -rf -- $temporary }
+}
+
+proc fail(message) {
+  write -- "ib source decoding: $message" >&2
+  exit 2
+}
+
+proc checked_path(path) {
+  if (not path.startsWith('/')) { fail 'path must be absolute' }
+  var current = path
+  while (current !== '/') {
+    if test -L $current { fail 'path crosses a symlink' }
+    setvar current = $(dirname -- $current)
+  }
+}
+
+proc regular_file(path, limit) {
+  checked_path $path
+  if test ! -f $path { fail 'regular input file unavailable' }
+  var count = $(wc -c < $path)
+  if (int(count) > limit) { fail 'file exceeds decoding bound' }
+}
+
+proc digest(path) {
+  sha256sum -- $path | cut -d ' ' -f 1
+}
+
+proc field(path, key) {
+  awk -F b'\t' -v key=$key '$1 == key { print $2 }' $path
+}
+
+if (len(ARGV) !== 4) {
+  fail 'usage: ib_decode_html_bytes.grease IDRIC_DECODER SOURCE.tsv RAW_BYTES NEW_DERIVATIVE_DIRECTORY'
+}
+var decoder = ARGV[0]
+var supplied_metadata = ARGV[1]
+var supplied_raw = ARGV[2]
+var destination = ARGV[3]
+checked_path $decoder
+if test ! -x $decoder { fail 'compiled Idriç decoder required' }
+regular_file $supplied_metadata 8192
+regular_file $supplied_raw 4194304
+checked_path $destination
+if test -e $destination { fail 'derivative destination already exists' }
+var parent = $(dirname -- $destination)
+if test ! -d $parent { fail 'derivative parent unavailable' }
+var stage = $(mktemp -d "$parent/.ib-decode.XXXXXX")
+call owned_temporaries->append(stage)
+
+# Freeze bounded inputs before interpreting claims or invoking the decoder.
+# The output retains this descriptor exactly; extra source fields are opaque
+# provenance, not an extension to this command's admission authority.
+head -c 8193 -- $supplied_metadata > "$stage/source.tsv"
+head -c 4194305 -- $supplied_raw > "$stage/input.raw"
+regular_file "$stage/source.tsv" 8192
+regular_file "$stage/input.raw" 4194304
+if ! awk -F b'\t' '
+  BEGIN {
+    split("source_key source_generation sha256 byte_count charset navigation_admitted", keys, " ")
+    for (i in keys) required[keys[i]]=1
+  }
+  NF!=2 || $1 !~ /^[a-z_][a-z_0-9]*$/ || $2=="" || /\r/ || seen[$1]++ {bad=1}
+  END {for (key in required) if (!seen[key]) bad=1; exit bad}
+' "$stage/source.tsv" { fail 'malformed or incomplete source descriptor' }
+var key = $(field "$stage/source.tsv" source_key)
+var generation = $(field "$stage/source.tsv" source_generation)
+if (len(key) > 256 or len(generation) > 256) { fail 'source identity exceeds bound' }
+var expected_hash = $(field "$stage/source.tsv" sha256)
+var expected_count = $(field "$stage/source.tsv" byte_count)
+try { printf '%s\t%s\n' $expected_hash $expected_count | awk -F b'\t' '
+  $1 !~ /^[0-9a-f]+$/ || length($1)!=64 ||
+  $2 !~ /^(0|[1-9][0-9]*)$/ || length($2)>7 || $2>4194304 {exit 1}
+' }
+if failed { fail 'invalid source digest or byte count' }
+var navigation = $(field "$stage/source.tsv" navigation_admitted)
+if (navigation !== 'YES' and navigation !== 'NO') { fail 'invalid original navigation observation' }
+var actual_count = $(wc -c < "$stage/input.raw" | tr -d '[:space:]')
+var actual_hash = $(digest "$stage/input.raw")
+if (actual_count !== expected_count) { fail 'source byte count mismatch' }
+if (actual_hash !== expected_hash) { fail 'source digest mismatch' }
+var charset = $(field "$stage/source.tsv" charset)
+var source_metadata_hash = $(digest "$stage/source.tsv")
+
+try { $decoder $charset "$stage/input.raw" "$stage/decoded.utf8" > "$stage/producer.tsv" }
+if failed { fail 'Idriç decoding producer refused or failed' }
+regular_file "$stage/producer.tsv" 1024
+if ! awk -F b'\t' '
+  BEGIN {
+    split("original_byte_count decoded_codepoint_count selected_encoding decoder_identity", keys, " ")
+    for (i in keys) required[keys[i]]=1
+  }
+  NF!=2 || !($1 in required) || $2=="" || seen[$1]++ || /\r/ {bad=1}
+  END {for (key in required) if (!seen[key]) bad=1; exit bad}
+' "$stage/producer.tsv" { fail 'invalid decoder result fields' }
+if ($(field "$stage/producer.tsv" original_byte_count) !== expected_count or
+    $(field "$stage/producer.tsv" decoded_codepoint_count) !== expected_count) {
+  fail 'decoder count disagrees with frozen source'
+}
+if ($(field "$stage/producer.tsv" selected_encoding) !== 'windows-1252' or
+    $(field "$stage/producer.tsv" decoder_identity) !== 'whatwg-windows-1252-e56d49d9176e9a4-v1') {
+  fail 'unsupported decoder result identity'
+}
+regular_file "$stage/decoded.utf8" $[int(expected_count) * 3]
+if ($(digest "$stage/input.raw") !== expected_hash) { fail 'source changed during decoding' }
+if ($(digest "$stage/source.tsv") !== source_metadata_hash) { fail 'source descriptor changed during decoding' }
+var output_count = $(wc -c < "$stage/decoded.utf8" | tr -d '[:space:]')
+var output_hash = $(digest "$stage/decoded.utf8")
+{
+  printf 'schema\tib-decoded-html-v1\n'
+  printf 'source_key\t%s\nsource_generation\t%s\n' $key $generation
+  printf 'source_sha256\t%s\nsource_byte_count\t%s\n' $expected_hash $expected_count
+  printf 'source_descriptor_sha256\t%s\n' $source_metadata_hash
+  printf 'declared_charset\t%s\nselected_encoding\twindows-1252\n' $charset
+  printf 'decoder_identity\twhatwg-windows-1252-e56d49d9176e9a4-v1\n'
+  printf 'decoded_charset\tutf-8\ndecoded_byte_count\t%s\n' $output_count
+  printf 'decoded_codepoint_count\t%s\ndecoded_sha256\t%s\n' $expected_count $output_hash
+  printf 'original_navigation_admitted\t%s\nreader_admission\tNOT_GRANTED\n' $navigation
+} > "$stage/decode.tsv"
+digest "$stage/decode.tsv" > "$stage/complete"
+rm -- "$stage/input.raw" "$stage/producer.tsv"
+mv -T --no-clobber -- $stage $destination
+if test -d $stage { fail 'derivative publication conflicted' }
+write -- $destination
