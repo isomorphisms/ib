@@ -26,7 +26,9 @@ The historical `_builtin.NIL` and `Prelude.Types.fastUnpack` failures belong to
 earlier compiler pins and remain in their dated attempt records. The maintained
 gitlink builds on merged android-NDK
 `6ab4818219efa7ea5eda137ca6b76976eb2a4d42`, with the reusable Text numeric cast
-repair at `0f9b6e1b867d424ac2ba0b2036a54ac74a277d7d`. The tablet qualification compiles the
+repair at `0f9b6e1b867d424ac2ba0b2036a54ac74a277d7d` and native instance-reference
+support at the declared gitlink `6c1ebcd14c8d1d1736fdf088db7c6de2ec6a09c5`.
+The tablet qualification compiles the
 unchanged source-title consumer, HTML/Prepaint/reflow integration, search
 projection and Activity with that backend. It keeps command, pure-export and
 framework Activity contracts separate. No historical pass qualifies this new

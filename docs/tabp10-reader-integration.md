@@ -25,9 +25,10 @@ old stacked branch histories or replace the canonical information model.
 | Private ingress | `b2f4cbc1611ac34852cfb78332e1c4147307b5ca` | Existing app-private stream and canonical publisher |
 | Search constructor | `dcbd86c0f7a69c4e0b381c0ab53f7c41f9966900` | Existing checked raw-query encoding and Intent projection |
 | Merged DEX foundation | `6ab4818219efa7ea5eda137ca6b76976eb2a4d42` | Retained ancestor; no obsolete backend reconstruction |
-| Reusable Text numeric cast repair | `0f9b6e1b867d424ac2ba0b2036a54ac74a277d7d` | Declared `vendor/android-NDK` gitlink; checks the erased numeric helper result before width conversion |
+| Reusable Text numeric cast repair | `0f9b6e1b867d424ac2ba0b2036a54ac74a277d7d` | Qualified ancestor; checks the erased numeric helper result before width conversion |
+| Native instance-reference fields | `6c1ebcd14c8d1d1736fdf088db7c6de2ec6a09c5` | Declared `vendor/android-NDK` gitlink; preserves Shizuku's per-instance Binder wire container |
 | Checked frontend | `740bbf2b1d9e811fd00c719c3473eede17ceea3b` | Matching bootstrap/compiler API |
-| Independent reader observer | `3ebad8f94476c9e9a1628e464fd32f1f40c1d584` | ai-ci-owned reader/numeric expectations, diagnostics and independent redirect/readback checks |
+| Independent reader observer | `87b1129e498197d372752e117eee0c2acac82bbe` | ai-ci-owned reader/numeric, redirect/readback and native SDK wire expectations |
 | ICU transport repair | `efec28ba28c129a471b8862cb81e56eef9160a51` | Actual response-owner redirect observations and retained path/framing repairs; not yet the live app worker |
 
 `IB.Reader.Document` joins the maintained admission, HTML/Prepaint and
@@ -87,6 +88,25 @@ replay binds the official candidate archive and committed source before testing
 the same bytes on independently declared API 29/34 emulator lanes. The changed
 archive control is rejected before extraction. A later integration head needs
 its own qualification.
+
+The repaired checkpoint `513d72cb43d3097a61f6fcb821b6e4215def960f` subsequently
+passes [exact-head run 41243973437](https://github.com/isomorphisms/ib/actions/runs/41243973437):
+all maintained consumer generation/decode/determinism stages, API 29 and API 34
+ART, and the compiled numeric/selector/admission/title controls. Its official
+artifact 13059301266 is 156286742 bytes, ZIP SHA-256
+`2ce4bf5fa14cc5f39320e835fdc1a0632f111100537d94702cf5edd5495b4bac`.
+The downloaded archive, carried sources and every candidate DEX digest match;
+a deliberately changed archive refuses before extraction. These results
+qualify those source-bound consumers, not Activity events or acquisition.
+
+The subsequent Shizuku wire continuation adds only mechanical native
+Parcelable declarations and SDK JNI calls. It uses
+[isomorphisms/android-NDK PR #36, “Encode native instance references for app-owned Binder containers”](https://github.com/isomorphisms/android-NDK/pull/36).
+Local generation/decode/determinism and generic x86_64/ARM32/ARM64 NDK ELF
+builds pass. The independent SDK-to-candidate/candidate-to-SDK Parcel checks
+and a compiled Binder-loss mutant are mandatory on API 29/34. This changed
+integration head requires its own fresh qualification. A Parcelable wire check
+is not a kernel Binder transaction, provider authorization or worker launch.
 
 The [controlled host network record](host-network-2026-10-31.md) separately
 records actual native ICU HTTP/TLS acquisition, canonical publication and
