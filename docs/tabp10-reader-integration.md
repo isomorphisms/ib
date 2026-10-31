@@ -24,10 +24,11 @@ old stacked branch histories or replace the canonical information model.
 | Unicode source reflow | `4a7380c5f25409443c5e8c1ae17bd358372012fc` | Existing source-linked algorithm modules, retained through HTML branch |
 | Private ingress | `b2f4cbc1611ac34852cfb78332e1c4147307b5ca` | Existing app-private stream and canonical publisher |
 | Search constructor | `dcbd86c0f7a69c4e0b381c0ab53f7c41f9966900` | Existing checked raw-query encoding and Intent projection |
-| Merged DEX backend | `6ab4818219efa7ea5eda137ca6b76976eb2a4d42` | Declared `vendor/android-NDK` gitlink and actual compiler checkout |
+| Merged DEX foundation | `6ab4818219efa7ea5eda137ca6b76976eb2a4d42` | Retained ancestor; no obsolete backend reconstruction |
+| Reusable Text numeric cast repair | `b2720c422f957bd53f3e5e0895e38b4289735ad8` | Declared `vendor/android-NDK` gitlink; builds on the merged foundation |
 | Checked frontend | `740bbf2b1d9e811fd00c719c3473eede17ceea3b` | Matching bootstrap/compiler API |
-| Independent reader observer | `ac06d67dd82cdf82c59ea06f9378ddccb09e8bc7` | ai-ci-owned semantic expectations and compiled-mutant rejection |
-| ICU transport repair | `fd86cccb2f9f73f87fdd9ae6c685e72a7771ef35` | Host path/framing regression; not yet the live app worker |
+| Independent reader observer | `e1fff1e155951bdff49cce78cd3dbb31866d5c54` | ai-ci-owned reader/numeric expectations and compiled-mutant rejection |
+| ICU transport repair | `22730ba7e93d9fecc37f7da440cbdd086deb3d15` | Host path/framing regression and fixture diagnostics; not yet the live app worker |
 
 `IB.Reader.Document` joins the maintained admission, HTML/Prepaint and
 source-linked layout owners. The compiled projection receives every readback
@@ -43,6 +44,14 @@ fixed Unicode/link/wire expectations and distinguishes greedy from squared
 raggedness at a declared code-point metric. It requires rejection of compiled
 selector, admission and title mutants. Candidate DEX always comes from checked
 Idriç; smali assembles only external observers.
+
+The merged compiler emits and independently decodes the unchanged title,
+Intent and Activity consumers. The full document integration then reached a
+reusable checked Text-to-Integer cast refusal for its observed byte counts.
+[isomorphisms/android-NDK PR #35, “Lower checked Text numeric casts for the integrated IB reader”](https://github.com/isomorphisms/android-NDK/pull/35)
+owns that repair. The corrected integrated source now typechecks, emits DEX and
+independently decodes locally. Current pinned-head ART, numeric mutation and
+complete application behavior remain unqualified.
 
 The native source owner now has an explicit retained-source open operation.
 It checks the immutable source generation against the committed receipt while

@@ -1,6 +1,7 @@
 module ReaderProjection
 
 import Data.Text
+import Data.List1
 import IB.HtmlPrepaint
 import IB.Reader.Document
 import IB.Prepaint.Reflow
@@ -11,7 +12,7 @@ import IB.Reflow.SourceBreaks
 -- receipt-shaped Intent text nor document content may supply this boundary.
 read_evidence : Text → Either Text HtmlEvidence
 read_evidence fields =
-  case split (≟ '\t') fields of
+  case forget (split (≟ '\t') fields) of
     [source, generation, claimed, reopened, byte_count, reopened_count,
      requested, resolved, mime, charset, status, utf8, complete] ⇒
       if (utf8 ≟ "verified-utf8" || utf8 ≟ "invalid-utf8") &&

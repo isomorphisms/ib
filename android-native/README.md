@@ -24,8 +24,9 @@ Longview sessions or durable navigation.
 
 The historical `_builtin.NIL` and `Prelude.Types.fastUnpack` failures belong to
 earlier compiler pins and remain in their dated attempt records. The maintained
-gitlink now consumes merged android-NDK
-`6ab4818219efa7ea5eda137ca6b76976eb2a4d42`. The tablet qualification compiles the
+gitlink builds on merged android-NDK
+`6ab4818219efa7ea5eda137ca6b76976eb2a4d42`, with the reusable Text numeric cast
+repair at `b2720c422f957bd53f3e5e0895e38b4289735ad8`. The tablet qualification compiles the
 unchanged source-title consumer, HTML/Prepaint/reflow integration, search
 projection and Activity with that backend. It keeps command, pure-export and
 framework Activity contracts separate. No historical pass qualifies this new

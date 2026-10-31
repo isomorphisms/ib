@@ -20,7 +20,7 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           repository: isomorphisms/android-NDK
-          ref: 6ab4818219efa7ea5eda137ca6b76976eb2a4d42
+          ref: b2720c422f957bd53f3e5e0895e38b4289735ad8
           path: .tools/android-NDK
           persist-credentials: false
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
@@ -34,13 +34,13 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           repository: dilapidated-shed/icu
-          ref: fd86cccb2f9f73f87fdd9ae6c685e72a7771ef35
+          ref: 22730ba7e93d9fecc37f7da440cbdd086deb3d15
           path: .tools/icu
           persist-credentials: false
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           repository: isomorphisms/ai-ci
-          ref: ac06d67dd82cdf82c59ea06f9378ddccb09e8bc7
+          ref: e1fff1e155951bdff49cce78cd3dbb31866d5c54
           path: .tools/reader-acceptance
           persist-credentials: false
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
