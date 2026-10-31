@@ -29,7 +29,7 @@ ib_shizuku_run_bounded() {
   test "$1" = 30 || return 99
   printf '%s\n' "$2" >> "$IB_TEST_REMOTE_COMMANDS"
   case "$2" in
-    *ICU_CAPTURE_BODY_PATH*ICU_CAPTURE_METADATA_PATH*Idric.Generated\ get*) ;;
+    *ICU_CAPTURE_BODY_PATH*ICU_CAPTURE_METADATA_PATH*Idric.Generated\ --http1.1\ get*) ;;
     *) return 91 ;;
   esac
   case "$2" in *sha256sum*'IBICU01 %08d %08d'*) ;; *) return 92 ;; esac
@@ -42,9 +42,11 @@ ib_shizuku_run_bounded() {
   redirect_count=2
   content_type='text/html; charset=utf-8'
   content_encoding=identity
+  content_range=absent
+  transfer_decoding=identity
   utf8=valid
   case "$mode" in
-    ok|wrong_length|wrong_declared|duplicate|bad_status|bad_resolved|missing) printf '<html><body>C67 π ☼</body></html>\n' > "$stub_body" ;;
+    ok|legacy_eight|chunked|range|partial_extensions|unknown_transfer|duplicate_extension|wrong_length|wrong_declared|duplicate|bad_status|bad_resolved|missing) printf '<html><body>C67 π ☼</body></html>\n' > "$stub_body" ;;
     binary) printf 'bin\000ary\377\n' > "$stub_body"; content_type=application/octet-stream; utf8=invalid ;;
     utf8_invalid) printf 'bad\377' > "$stub_body"; utf8=invalid ;;
     no_charset) printf '<p>no charset</p>' > "$stub_body"; content_type=text/html ;;
@@ -57,6 +59,9 @@ ib_shizuku_run_bounded() {
   case "$mode" in
     bad_status) status=404 ;;
     bad_resolved) resolved='javascript:alert(1)' ;;
+    range) content_range='bytes 0-4/10' ;;
+    chunked) transfer_decoding=chunked ;;
+    unknown_transfer) transfer_decoding=gzip ;;
   esac
   body_bytes=$(wc -c < "$stub_body" | tr -d '[:space:]')
   declared=$body_bytes
@@ -74,6 +79,13 @@ ib_shizuku_run_bounded() {
     printf 'utf8\t%s\n' "$utf8"
     printf 'resolved_url\t%s\n' "$resolved"
     printf 'redirect_count\t%s\n' "$redirect_count"
+    if test "$mode" != legacy_eight; then
+      printf 'content_range\t%s\n' "$content_range"
+      if test "$mode" != partial_extensions; then
+        printf 'transfer_decoding\t%s\n' "$transfer_decoding"
+      fi
+    fi
+    if test "$mode" = duplicate_extension; then printf 'content_range\tabsent\n'; fi
     if test "$mode" = duplicate; then printf 'http_status\t200\n'; fi
   } > "$stub_meta"
   if test "$mode" = missing; then
@@ -119,6 +131,14 @@ test "$(cat "$work/private/responses.arena.used")" -gt 0
 printf '<html><body>C67 π ☼</body></html>\n' > "$work/expected"
 readback first > "$work/first-body"
 cmp -s "$work/expected" "$work/first-body"
+
+for mode in legacy_eight chunked; do
+  export IB_TEST_MODE="$mode"
+  run "$mode" https://example.com/start 17 > "$work/output_$mode"
+  test "$(field "$mode" navigation_admitted)" = YES
+  readback "$mode" > "$work/read_$mode"
+  cmp -s "$work/expected" "$work/read_$mode"
+done
 
 export IB_TEST_MODE=binary
 run second https://example.com/binary 18 > "$work/output2"
@@ -180,7 +200,7 @@ expect_refusal() {
   test ! -e "$work/private/receipts/reject_$mode.tsv"
   test "$(cat "$work/private/responses.arena.used")" = "$used"
 }
-for mode in fail bad_frame oversized wrong_length wrong_declared duplicate bad_status bad_resolved missing; do
+for mode in fail bad_frame oversized wrong_length wrong_declared duplicate bad_status bad_resolved missing range partial_extensions unknown_transfer duplicate_extension; do
   expect_refusal "$mode"
 done
 export IB_TEST_MODE=ok

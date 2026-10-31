@@ -109,7 +109,7 @@ jobs:
       - name: Qualify the maintained ICU path repair against its original source
         shell: sh
         run: |
-          .tools/runtime/.build/grease/bin/grease -c 'sudo apt-get install -y libssl-dev'
+          .tools/runtime/.build/grease/bin/grease -c 'sudo apt-get install -y ripgrep libssl-dev'
           .tools/runtime/.build/grease/bin/grease .tools/icu/tests/verify-search-path.grease "$GITHUB_WORKSPACE/.tools/icu" "${{ steps.ick.outputs.compiler }}" "$RUNNER_TEMP/ib-reader/icu-native"
       - name: Exercise the maintained native ingress boundary
         shell: sh
