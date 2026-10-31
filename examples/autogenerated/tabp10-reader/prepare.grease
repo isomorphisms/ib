@@ -5,6 +5,7 @@ var repository = ARGV[0]
 var backend = ARGV[1]
 var frontend = ARGV[2]
 var evidence = ARGV[3]
+var grease = ENV.IB_GREASE
 for path in "$repository" "$backend" "$frontend" "$evidence" {
   if (len(path) === 0 or path[0] !== '/') { echo 'FAIL absolute path required' >&2; exit 2 }
 }
@@ -24,7 +25,7 @@ setglobal ENV.IDRIS2_LIBS = "$frontend/_/build/exec/idris2_app"
 setglobal ENV.CHEZ = "$frontend/_/.tools/bin/scheme"
 setglobal ENV.PATH = "$frontend/_/.tools/bin:" ++ ENV.PATH
 setglobal ENV.IDRIS2_CG = 'chez'
-grease "$backend/dex/idric/install-frontend.grease" "$frontend"
+"$grease" "$backend/dex/idric/install-frontend.grease" "$frontend"
 cd "$backend/dex/idric"
 "$frontend/_/build/exec/idris2" --build backend.ipkg > "$evidence/backend-build.txt" 2>&1
 cat "$evidence/backend-build.txt"
@@ -36,5 +37,5 @@ curl -fL https://github.com/baksmali/smali/releases/download/3.0.10/smali-3.0.10
 printf '%s  %s\n' 37ae4a41a8886e15c20b8362fa4250f96bbdb55e1a608199ad8b5dff068b588f "$evidence/oracles/baksmali.jar" | sha256sum -c -
 printf '%s  %s\n' 32fa0e88a6c397b3922201adf5f3e534fbaed5a663c71d0c558c3ddce0af844a "$evidence/oracles/smali.jar" | sha256sum -c -
 "$frontend/_/build/exec/idris2" --version > "$evidence/frontend-version.txt"
-grease --version > "$evidence/grease-version.txt"
+"$grease" --version > "$evidence/grease-version.txt"
 printf '\033[32mPASS\033[0m exact compiler dependency prepared; consumer execution follows\n'

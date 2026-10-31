@@ -1,0 +1,18 @@
+#!/usr/bin/env grease
+set -eu -o pipefail
+if (len(ARGV) !== 3) { echo 'usage: grease bundle.grease BACKEND FRONTEND EVIDENCE' >&2; exit 2 }
+var backend = ARGV[0]
+var frontend = ARGV[1]
+var evidence = ARGV[2]
+for path in "$backend" "$frontend" "$evidence" {
+  if (len(path) === 0 or path[0] !== '/') { echo 'FAIL absolute path required' >&2; exit 2 }
+}
+# A failed bootstrap is not a compiler artifact. Its original failure remains
+# the failed required stage; optional preservation cannot grant a PASS.
+if not test -x "$backend/dex/idric/build/exec/idric-dex" { exit 0 }
+test -s "$evidence/compiler.sha256"
+tar -czf "$evidence/frontend-replay.tar.gz" -C "$frontend" \
+  _/.tools _/bootstrap-build _/build
+tar -czf "$evidence/backend-replay.tar.gz" -C "$backend" dex/idric/build
+sha256sum "$evidence/frontend-replay.tar.gz" "$evidence/backend-replay.tar.gz" \
+  > "$evidence/replay-bundles.sha256"

@@ -1,0 +1,21 @@
+#!/usr/bin/env grease
+set -eu -o pipefail
+if (len(ARGV) !== 3) { echo 'usage: grease verify-native.grease IB QUALIFIED_ICK NEW_EVIDENCE' >&2; exit 2 }
+var repository = ARGV[0]
+var compiler = ARGV[1]
+var evidence = ARGV[2]
+for path in "$repository" "$compiler" "$evidence" {
+  if (len(path) === 0 or path[0] !== '/') { echo 'FAIL absolute path required' >&2; exit 2 }
+}
+test -x "$compiler"
+if test -e "$evidence" { echo 'FAIL reused native output' >&2; exit 2 }
+mkdir -p "$evidence"
+"$compiler" -fno-link-libatomic -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror -pthread \
+  "$repository/native/android/ib_reader_pfd.c" \
+  "$repository/native/android/ib_shizuku_arena_ingress.c" \
+  "$repository/tests/test_shizuku_arena_ingress_host.c" -o "$evidence/ingress-test"
+"$evidence/ingress-test" > "$evidence/ingress.txt" 2>&1
+cat "$evidence/ingress.txt"
+rg -F 'PASS: cross-process anonymous FD delivery' "$evidence/ingress.txt"
+sha256sum "$compiler" "$evidence/ingress-test" > "$evidence/native.sha256"
+printf 'host_private_stream\tPASS\nAndroid_Binder\tNOT_RUN\nphysical_Shizuku\tNOT_RUN\n' > "$evidence/stages.tsv"
