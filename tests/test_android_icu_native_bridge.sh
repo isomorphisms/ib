@@ -102,6 +102,11 @@ class Handler(BaseHTTPRequestHandler):
         pass
 
     def do_GET(self):
+        if self.path == "/cross-origin":
+            self.send_response(301)
+            self.send_header("Location", f"https://localhost:{tls_port}/start")
+            self.end_headers()
+            return
         if self.path == "/start":
             self.send_response(302)
             self.send_header("Location", "/final")
@@ -123,7 +128,7 @@ class Handler(BaseHTTPRequestHandler):
         if self.path == "/binary":
             body = bytes([0, 255, 10])
             mime = "application/octet-stream"
-        elif self.path == "/final":
+        elif self.path in ("/final", "/"):
             body = b"<p>ICU 35 host</p>\n"
             mime = "text/html; charset=utf-8"
         else:
@@ -169,6 +174,9 @@ run secure "https://localhost:$tls_port/start" 17 > "$work/out-secure"
 test "$(field secure schema)" = ib-icu-arena-v2
 test "$(field secure resolved_url)" = "https://localhost:$tls_port/final"
 test "$(field secure redirect_count)" = 1
+first="https://localhost:$tls_port/start"
+final="https://localhost:$tls_port/final"
+test "$(field secure redirect_chain)" = "R1 ${#first} ${first}302 ${#final} $final"
 test "$(field secure http_status)" = 200
 test "$(field secure mime_type)" = text/html
 test "$(field secure charset)" = utf-8
@@ -195,6 +203,36 @@ cmp -s "$work/expected.html" "$work/plain.body"
 sh "$aici_verify" "$work/private" plain 18 "http://127.0.0.1:$http_port/start" \
   > "$work/aici-plain.tsv"
 grep -F "$(printf 'PASS\tib-source-v2-admitted\tplain\t18\t')" "$work/aici-plain.tsv"
+
+run crossed "http://127.0.0.1:$http_port/cross-origin" 19 > "$work/out-crossed"
+first="http://127.0.0.1:$http_port/cross-origin"
+middle="https://localhost:$tls_port/start"
+final="https://localhost:$tls_port/final"
+test "$(field crossed redirect_chain)" = "R1 ${#first} ${first}301 ${#middle} ${middle}302 ${#final} $final"
+test "$(field crossed redirect_count)" = 2
+readback crossed > "$work/crossed.body"
+cmp -s "$work/expected.html" "$work/crossed.body"
+sh "$aici_verify" "$work/private" crossed 19 "$first" > "$work/aici-crossed.tsv"
+
+run normalized "http://127.0.0.1:$http_port" 20 > "$work/out-normalized"
+first="http://127.0.0.1:$http_port/"
+test "$(field normalized redirect_chain)" = "R1 ${#first} $first"
+test "$(field normalized redirect_count)" = 0
+test "$(field normalized navigation_admitted)" = YES
+sh "$aici_verify" "$work/private" normalized 20 "http://127.0.0.1:$http_port" > "$work/aici-normalized.tsv"
+
+# A correct body hash cannot hide a corrupted redirect observation. Both
+# readers must refuse before emitting bytes/acceptance, then recover unchanged.
+cp "$work/private/receipts/crossed.tsv" "$work/crossed.original.tsv"
+sed -i 's/^redirect_chain.*/redirect_chain\tR1 1 x/' "$work/private/receipts/crossed.tsv"
+if readback crossed > "$work/corrupt-chain.body" 2>/dev/null; then exit 1; fi
+test ! -s "$work/corrupt-chain.body"
+if sh "$aici_verify" "$work/private" crossed 19 \
+    "http://127.0.0.1:$http_port/cross-origin" > "$work/corrupt-chain.tsv" 2>/dev/null; then exit 1; fi
+test ! -s "$work/corrupt-chain.tsv"
+cp "$work/crossed.original.tsv" "$work/private/receipts/crossed.tsv"
+readback crossed > "$work/recovered-chain.body"
+cmp -s "$work/expected.html" "$work/recovered-chain.body"
 
 run binary "http://127.0.0.1:$http_port/binary" 19 > "$work/out-binary"
 test "$(field binary utf8)" = invalid
@@ -250,15 +288,19 @@ if test -n "$evidence"; then
     cp "$work/private/receipts/secure.tsv" "$evidence/secure-receipt.tsv"
     cp "$work/private/receipts/plain.tsv" "$evidence/plain-receipt.tsv"
     cp "$work/private/receipts/binary.tsv" "$evidence/binary-receipt.tsv"
+    cp "$work/private/receipts/crossed.tsv" "$evidence/crossed-receipt.tsv"
+    cp "$work/private/receipts/normalized.tsv" "$evidence/normalized-receipt.tsv"
     cp "$work/secure.body" "$evidence/secure-body.html"
     cp "$work/plain.body" "$evidence/plain-body.html"
     cp "$work/binary.body" "$evidence/binary-body"
     cp "$work/aici-secure.tsv" "$evidence/independent-secure.tsv"
     cp "$work/aici-plain.tsv" "$evidence/independent-plain.tsv"
-    printf 'host_ICU_TLS_Arena\tPASS\nuntrusted_TLS\tREJECTED\nfailed_status\tREJECTED\ntruncation\tREJECTED\nwrong_native_hash\tREJECTED\nlast_good_after_failure\tPASS\nAndroid_app_process\tNOT_RUN\nBinder_Shizuku\tNOT_RUN\nphysical_TAB_P10\tNOT_RUN\n' > "$evidence/stages.tsv"
+    cp "$work/aici-crossed.tsv" "$evidence/independent-crossed.tsv"
+    cp "$work/aici-normalized.tsv" "$evidence/independent-normalized.tsv"
+    printf 'host_ICU_TLS_Arena\tPASS\nordered_cross_origin_redirects\tPASS\ninitial_endpoint_projection\tPASS\ncorrupted_chain\tREJECTED\nuntrusted_TLS\tREJECTED\nfailed_status\tREJECTED\ntruncation\tREJECTED\nwrong_native_hash\tREJECTED\nlast_good_after_failure\tPASS\nAndroid_app_process\tNOT_RUN\nBinder_Shizuku\tNOT_RUN\nphysical_TAB_P10\tNOT_RUN\n' > "$evidence/stages.tsv"
 fi
 printf '%s\n' \
   'PASS: real compiled pinned ICU #35 native HTTP and HTTPS+redirect captured by IB Shizuku frame into canonical appendfat and verified v2 reader' \
-  'PASS: independent AI-CI verified two actual persisted HTML sources and rejected binary resource' \
+  'PASS: independent AI-CI verified four actual persisted HTML sources, ordered cross-origin redirects and omitted-path projection, rejecting a corrupted chain and binary resource' \
   'PASS: binary fidelity, HTTP 404, truncated length, untrusted TLS, native hash mismatch, denied publication and last-good readback' \
   'NOT_RUN: actual Android app_process Idric DEX, physical Shizuku/rish, Binder/PFD and TAB_P10 UI'

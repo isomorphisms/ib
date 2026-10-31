@@ -3,6 +3,7 @@
 #include "ib_shizuku_arena_publish.h"
 #include "ib_shizuku_arena_ingress.h"
 #include "ib_reader_pfd.h"
+#include "ib_redirect_observations.h"
 #include "appendfat_arena.h"
 
 #include <errno.h>
@@ -16,7 +17,9 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-#define RECEIPT_MAX_BYTES 8192U
+/* A bounded capture (8192 metadata bytes) plus requested URL and durable
+ * provenance fields can require more space than the capture metadata alone. */
+#define RECEIPT_MAX_BYTES 16384U
 #define READBACK_CHUNK 65536U
 
 typedef struct {
@@ -27,6 +30,8 @@ typedef struct {
     char content_encoding[256];
     int utf8_valid;
     unsigned redirects;
+    int has_redirect_chain;
+    char redirect_chain[IB_REDIRECT_OBSERVATION_CAP + 1U];
     int64_t declared_length;
     uint64_t received_length;
     int admitted;
@@ -121,7 +126,7 @@ static int frame_response(const unsigned char *frame, size_t length,
     static const char *const names[] = {
         "http_status", "content_type", "content_encoding", "declared_length",
         "received_length", "utf8", "resolved_url", "redirect_count",
-        "content_range", "transfer_decoding"
+        "content_range", "transfer_decoding", "redirect_chain"
     };
     if (length < IB_INGRESS_FRAME_HEADER_BYTES ||
         memcmp(frame, "IBICU01 ", 8U) != 0 || frame[16] != ' ' ||
@@ -140,7 +145,7 @@ static int frame_response(const unsigned char *frame, size_t length,
     char metadata[IB_INGRESS_METADATA_MAX_BYTES + 1U];
     memcpy(metadata, frame + IB_INGRESS_FRAME_HEADER_BYTES, metadata_length);
     metadata[metadata_length] = '\0';
-    char *fields[10] = {0};
+    char *fields[11] = {0};
     char *position = metadata, *end = metadata + metadata_length;
     while (position < end) {
         char *newline = memchr(position, '\n', (size_t)(end - position));
@@ -152,8 +157,8 @@ static int frame_response(const unsigned char *frame, size_t length,
                 return -1;
         *tab = '\0'; *newline = '\0';
         size_t key = 0;
-        while (key < 10U && strcmp(position, names[key]) != 0) ++key;
-        if (key == 10U || fields[key]) return -1;
+        while (key < 11U && strcmp(position, names[key]) != 0) ++key;
+        if (key == 11U || fields[key]) return -1;
         fields[key] = tab + 1;
         position = newline + 1;
     }
@@ -174,6 +179,7 @@ static int frame_response(const unsigned char *frame, size_t length,
          (decimal(fields[3], &declared) != 0 || declared != source_length)))
         return -1;
     if (copied(response->resolved_url, sizeof(response->resolved_url), fields[6]) != 0 ||
+        !ib_observed_url(fields[6], strlen(fields[6])) ||
         copied(response->content_encoding, sizeof(response->content_encoding), fields[2]) != 0 ||
         media_type(response, fields[1]) != 0)
         return -1;
@@ -187,13 +193,22 @@ static int frame_response(const unsigned char *frame, size_t length,
     response->received_length = received;
     response->declared_length = strcmp(fields[3], "-1") == 0 ? -1 : (int64_t)declared;
     response->redirects = (unsigned)redirects;
-    /* The current ICU capture reports only a redirect count, not the chain.
-     * Retain those bytes, but do not admit redirected content on that evidence. */
+    if (fields[10]) {
+        if (!fields[8] ||
+            !ib_redirect_chain_valid(fields[10], requested_url,
+                                     response->resolved_url, (unsigned)redirects) ||
+            copied(response->redirect_chain, sizeof(response->redirect_chain), fields[10]) != 0)
+            return -1;
+        response->has_redirect_chain = 1;
+    }
+    /* Legacy capture retains its old direct-response admission. New
+     * redirected HTML needs the full ordered response-owner observations. */
     response->admitted = status == 200U && response->utf8_valid &&
         strcmp(response->mime_type, "text/html") == 0 &&
         strcmp(response->charset, "utf-8") == 0 &&
         strcmp(response->content_encoding, "identity") == 0 &&
-        redirects == 0 && strcmp(requested_url, response->resolved_url) == 0;
+        (response->has_redirect_chain ||
+         (redirects == 0 && strcmp(requested_url, response->resolved_url) == 0));
     return 0;
 }
 
@@ -285,13 +300,16 @@ static int receipt_publish(int receipts_dir, const char *id,
                      "arena_name\tresponses.arena\narena_offset\t%" PRIu64 "\n"
                      "arena_end\t%" PRIu64 "\nbyte_count\t%zu\nsha256\t%s\n"
                      "reopen_check\tMATCH\nacquisition_complete\tYES\n"
-                     "navigation_admitted\t%s\n",
+                     "navigation_admitted\t%s\n%s%s%s",
                      id, id, generation, url, response->resolved_url, response->status,
                      response->mime_type, response->charset, response->content_encoding,
                      response->utf8_valid ? "valid" : "invalid", response->redirects,
                      response->declared_length, response->received_length,
                      offset, offset + (uint64_t)length, length, digest,
-                     response->admitted ? "YES" : "NO");
+                     response->admitted ? "YES" : "NO",
+                     response->has_redirect_chain ? "redirect_chain\t" : "",
+                     response->has_redirect_chain ? response->redirect_chain : "",
+                     response->has_redirect_chain ? "\n" : "");
     } else n = snprintf(content, sizeof(content),
                  "schema\tib-icu-arena-v1\n"
                  "request_id\t%s\n"

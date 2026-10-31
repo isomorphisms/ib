@@ -78,6 +78,7 @@ awk -F '\t' '
     for (i=1;i<=count;i++) allowed[names[i]]=1
     allowed["content_range"]=1
     allowed["transfer_decoding"]=1
+    allowed["redirect_chain"]=1
   }
   NF!=2 || !allowed[$1] || $2=="" { bad=1 }
   { seen[$1]++ }
@@ -85,7 +86,8 @@ awk -F '\t' '
     for (i=1;i<=count;i++) if (seen[names[i]]!=1) bad=1
     if (seen["content_range"]!=seen["transfer_decoding"] ||
         seen["content_range"]>1 || seen["transfer_decoding"]>1) bad=1
-    if (bad || (NR!=8 && NR!=10)) exit 1
+    if (seen["redirect_chain"]>1 || (seen["redirect_chain"] && !seen["content_range"])) bad=1
+    if (bad || (NR!=8 && NR!=10 && NR!=11)) exit 1
   }
 ' "$metadata" || fail 'invalid ICU metadata structure'
 field() { awk -F '\t' -v name="$1" '$1==name {print $2}' "$metadata"; }
@@ -100,6 +102,7 @@ resolved_url=$(field resolved_url)
 redirect_count=$(field redirect_count)
 content_range=$(field content_range)
 transfer_decoding=$(field transfer_decoding)
+redirect_chain=$(field redirect_chain)
 if test -n "$content_range"; then
   test "$content_range" = absent || fail 'range response cannot supply a complete document'
   case "$transfer_decoding" in identity|chunked) ;; *) fail 'unsupported transfer decoding observation' ;; esac
@@ -120,6 +123,10 @@ case "$redirect_count" in ''|*[!0123456789]*) fail 'invalid redirect count' ;; e
 test "${#redirect_count}" -le 2 && test "$redirect_count" -le 8 ||
   fail 'redirect count exceeds ICU bound'
 case "$utf8" in valid|invalid) ;; *) fail 'invalid ICU UTF-8 observation' ;; esac
+if test -n "$redirect_chain"; then
+  "$slice_tool" redirects "$url" "$resolved_url" "$redirect_count" "$redirect_chain" ||
+    fail 'invalid response-owner redirect observations'
+fi
 
 # Preserve MIME and explicit charset separately. Byte-level UTF-8 validity is
 # not a substitute for an observed/declared charset.
@@ -141,7 +148,10 @@ navigation_admitted=NO
 if test "$http_status" = 200 && test "$mime_type" = text/html &&
    test "$charset" = utf-8 && test "$content_encoding" = identity &&
    test "$utf8" = valid; then
-  navigation_admitted=YES
+  if test -n "$redirect_chain" ||
+     { test "$redirect_count" = 0 && test "$resolved_url" = "$url"; }; then
+    navigation_admitted=YES
+  fi
 fi
 digest=$(sha256sum "$capture" | cut -d ' ' -f 1)
 
@@ -181,6 +191,7 @@ cmp -s "$capture" "$work/reopened" || fail 'Arena reopened bytes mismatch'
   printf 'reopen_check\tMATCH\n'
   printf 'acquisition_complete\tYES\n'
   printf 'navigation_admitted\t%s\n' "$navigation_admitted"
+  if test -n "$redirect_chain"; then printf 'redirect_chain\t%s\n' "$redirect_chain"; fi
 } > "$work/receipt.tsv"
 "$slice_tool" sync "$work/receipt.tsv" || fail 'could not sync staged receipt'
 test ! -e "$receipt" || fail 'receipt already exists before publication'

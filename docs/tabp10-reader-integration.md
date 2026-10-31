@@ -27,8 +27,8 @@ old stacked branch histories or replace the canonical information model.
 | Merged DEX foundation | `6ab4818219efa7ea5eda137ca6b76976eb2a4d42` | Retained ancestor; no obsolete backend reconstruction |
 | Reusable Text numeric cast repair | `0f9b6e1b867d424ac2ba0b2036a54ac74a277d7d` | Declared `vendor/android-NDK` gitlink; checks the erased numeric helper result before width conversion |
 | Checked frontend | `740bbf2b1d9e811fd00c719c3473eede17ceea3b` | Matching bootstrap/compiler API |
-| Independent reader observer | `1241ba7cca98be3d708319a17a83700c2e1d1f62` | ai-ci-owned reader/numeric expectations, failure diagnostics and independent checkpoint replay |
-| ICU transport repair | `22730ba7e93d9fecc37f7da440cbdd086deb3d15` | Host path/framing regression and fixture diagnostics; not yet the live app worker |
+| Independent reader observer | `3ebad8f94476c9e9a1628e464fd32f1f40c1d584` | ai-ci-owned reader/numeric expectations, diagnostics and independent redirect/readback checks |
+| ICU transport repair | `efec28ba28c129a471b8862cb81e56eef9160a51` | Actual response-owner redirect observations and retained path/framing repairs; not yet the live app worker |
 
 `IB.Reader.Document` joins the maintained admission, HTML/Prepaint and
 source-linked layout owners. The compiled projection receives every readback
@@ -77,7 +77,12 @@ mutation stages. Its DEX matches the separate local build, including Prepaint
 SHA-256 `52faf7c36fc9fb42c8090f52121518349e2b89a02d6664bdb922dcd34144b670`.
 Actual API 29 ART passes the unchanged title and SEARCH projections, then kills
 the numeric-cast process with status 137 before Prepaint/mutant execution.
-The cause was not observed; no full ART pass is claimed. ai-ci's diagnostic
+The later exact-source run at `2f98978207055da89fff12102738961c69fda411`
+retains Android logcat proving `VerifyError`: fixed-width numeric methods
+used an erased `Object` result as `BigInteger`. Android's uncaught-exception
+handler then sent SIGKILL. Backend `0f9b6e1` checks that boundary before width
+conversion. Its full local generation, repeat determinism and decode pass;
+fresh runtime qualification remains pending. ai-ci's diagnostic
 replay binds the official candidate archive and committed source before testing
 the same bytes on independently declared API 29/34 emulator lanes. The changed
 archive control is rejected before extraction. A later integration head needs
@@ -86,8 +91,14 @@ its own qualification.
 The [controlled host network record](host-network-2026-10-31.md) separately
 records actual native ICU HTTP/TLS acquisition, canonical publication and
 independent readback, with TLS/status/truncation/hash and binary controls. Its
-Android/Shizuku wrapper is simulated. Complete redirect-hop provenance and the
-actual application path remain unqualified.
+Android/Shizuku wrapper is simulated. The new protocol also passes local
+actual ICU HTTP/TLS acquisition of ordered cross-origin hops, exact endpoint
+projection, canonical publication and independent readback. Corrupt chains
+refuse before bytes/acceptance and recover after restoration. The bounded R1
+chain preserves observed selected endpoints and statuses; receipts preserve
+the exact request independently. Legacy retained v2 receipts remain readable.
+New redirected acquisitions without a complete chain cannot gain admission.
+The actual application path remains unqualified.
 
 | Requirement | State | Evidence / remaining boundary |
 | --- | --- | --- |

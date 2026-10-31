@@ -34,14 +34,14 @@ jobs:
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           repository: dilapidated-shed/icu
-          ref: 22730ba7e93d9fecc37f7da440cbdd086deb3d15
+          ref: efec28ba28c129a471b8862cb81e56eef9160a51
           path: .deps/icu
           persist-credentials: false
       - name: Check out independent AI-CI admitted-source verifier
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           repository: isomorphisms/ai-ci
-          ref: 634626a14834e14b776616440e0a9071708f81b7
+          ref: 3ebad8f94476c9e9a1628e464fd32f1f40c1d584
           path: .deps/ai-ci
           persist-credentials: false
       - id: ick
@@ -76,9 +76,9 @@ jobs:
           ICK: ${{ steps.ick.outputs.compiler }}
         run: |
           set -eu
-          test "$(git -C .deps/icu rev-parse HEAD)" = 22730ba7e93d9fecc37f7da440cbdd086deb3d15
+          test "$(git -C .deps/icu rev-parse HEAD)" = efec28ba28c129a471b8862cb81e56eef9160a51
           sh -n tests/test_android_icu_native_bridge.sh
-          test "$(git -C .deps/ai-ci rev-parse HEAD)" = 634626a14834e14b776616440e0a9071708f81b7
+          test "$(git -C .deps/ai-ci rev-parse HEAD)" = 3ebad8f94476c9e9a1628e464fd32f1f40c1d584
           sh -n .deps/ai-ci/ib-source/verify.sh
           sh .deps/ai-ci/ib-source/self-test.sh > build/c67-icu-arena/aici-source-self-test.txt
           grep -F 'PASS: independent IB v2 oracle' build/c67-icu-arena/aici-source-self-test.txt

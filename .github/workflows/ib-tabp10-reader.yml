@@ -34,13 +34,13 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           repository: dilapidated-shed/icu
-          ref: 22730ba7e93d9fecc37f7da440cbdd086deb3d15
+          ref: efec28ba28c129a471b8862cb81e56eef9160a51
           path: .tools/icu
           persist-credentials: false
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           repository: isomorphisms/ai-ci
-          ref: 1241ba7cca98be3d708319a17a83700c2e1d1f62
+          ref: 3ebad8f94476c9e9a1628e464fd32f1f40c1d584
           path: .tools/reader-acceptance
           persist-credentials: false
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683

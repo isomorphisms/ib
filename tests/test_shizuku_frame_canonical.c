@@ -2,6 +2,7 @@
 #include "../native/android/ib_shizuku_arena_ingress.h"
 #include "../native/android/ib_shizuku_arena_publish.h"
 #include "../native/android/ib_arena_source_owner.h"
+#include "../native/android/ib_redirect_observations.h"
 #include "appendfat_arena.h"
 
 #include <assert.h>
@@ -136,6 +137,86 @@ static void current_metadata_cases(ib_ingress_arena *publisher, const char *root
     puts("PASS: current ICU ten-field identity/chunked captures and paired-field/range/decoder/duplicate refusals");
 }
 
+static void redirect_observation_cases(ib_ingress_arena *publisher, const char *root) {
+    assert(ib_redirect_chain_valid("R1 20 https://example.com/", "https://example.com", "https://example.com/", 0));
+    assert(ib_redirect_chain_valid("R1 22 https://example.com/?q", "https://example.com:0443?q#anchor", "https://example.com/?q", 0));
+    assert(!ib_redirect_chain_valid("R1 20 https://example.com/", "http://example.com", "https://example.com/", 0));
+    assert(!ib_redirect_chain_valid("R1 20 https://example.com/", "https://example.com:444", "https://example.com/", 0));
+    unsigned char packet[16384];
+    char base[4096], fields[8193], chain[4096];
+    const char *final = "https://example.org/final?x=302;next";
+    metadata(base, sizeof(base), "text/html; charset=utf-8", final, 2,
+             "valid", sizeof(html)-1U);
+    int n = snprintf(chain, sizeof(chain), "R1 %zu %s302 %zu %s307 %zu %s",
+                     strlen(url), url, strlen("https://other.example/path"),
+                     "https://other.example/path", strlen(final), final);
+    assert(n > 0 && (size_t)n < sizeof(chain));
+    n = snprintf(fields, sizeof(fields),
+                  "%scontent_range\tabsent\ntransfer_decoding\tidentity\nredirect_chain\t%s\n",
+                  base, chain);
+    assert(n > 0 && (size_t)n < sizeof(fields));
+    size_t count = frame(packet, sizeof(packet), fields, html, sizeof(html)-1U);
+    assert(send_frame(publisher, "proven-redirect", packet, count, 0, 0) == 0);
+    assert(reopen(root, "proven-redirect", 19) == 0);
+
+    char receipt_path[4096], original[16384];
+    n = snprintf(receipt_path, sizeof(receipt_path), "%s/receipts/proven-redirect.tsv", root);
+    assert(n > 0 && (size_t)n < sizeof(receipt_path));
+    FILE *receipt = fopen(receipt_path, "rb");
+    assert(receipt != NULL);
+    size_t length = fread(original, 1, sizeof(original)-1U, receipt);
+    assert(length > 0 && length < sizeof(original)-1U && !ferror(receipt));
+    assert(fclose(receipt) == 0);
+    original[length] = '\0';
+    char *retained = strstr(original, "redirect_chain\tR1 ");
+    assert(retained != NULL && strstr(retained, chain) != NULL);
+    /* A valid body/digest cannot hide a corrupt persisted observation. */
+    char changed[16384];
+    memcpy(changed, original, length);
+    size_t position = (size_t)(retained - original) + strlen("redirect_chain\tR1 ");
+    changed[position] = '0';
+    receipt = fopen(receipt_path, "wb");
+    assert(receipt != NULL && fwrite(changed, 1, length, receipt) == length);
+    assert(fclose(receipt) == 0);
+    assert(reopen(root, "proven-redirect", 19) != 0);
+    assert(reopen(root, "observed", 19) == 0);
+    receipt = fopen(receipt_path, "wb");
+    assert(receipt != NULL && fwrite(original, 1, length, receipt) == length);
+    assert(fclose(receipt) == 0);
+    assert(reopen(root, "proven-redirect", 19) == 0);
+
+    const char *invalid[] = {
+        "R1 20 https://example.com/200 20 https://example.org/",
+        "R1 20 https://example.net/302 20 https://example.org/",
+        "R1 20 https://example.com/302 20 https://example.net/",
+        "R1 20 https://example.com/302 19 https://example.org/",
+        "R1 020 https://example.com/302 20 https://example.org/",
+        "R1 20 https://example.com/302 20 https://example.org/trailing",
+        "R1 20 https://example.com/302 29 https://user:secret@test.org/"
+    };
+    metadata(base, sizeof(base), "text/html; charset=utf-8", "https://example.org/", 1,
+             "valid", sizeof(html)-1U);
+    for (size_t i = 0; i < sizeof(invalid)/sizeof(invalid[0]); ++i) {
+        char identity[64];
+        n = snprintf(identity, sizeof(identity), "redirect-refusal-%zu", i);
+        assert(n > 0 && (size_t)n < sizeof(identity));
+        n = snprintf(fields, sizeof(fields),
+                      "%scontent_range\tabsent\ntransfer_decoding\tidentity\nredirect_chain\t%s\n",
+                      base, invalid[i]);
+        assert(n > 0 && (size_t)n < sizeof(fields));
+        count = frame(packet, sizeof(packet), fields, html, sizeof(html)-1U);
+        reject(publisher, root, identity, packet, count);
+    }
+    /* The chain says two followed responses; the independent count says one. */
+    n = snprintf(fields, sizeof(fields),
+                  "%scontent_range\tabsent\ntransfer_decoding\tidentity\nredirect_chain\t%s\n",
+                  base, chain);
+    assert(n > 0 && (size_t)n < sizeof(fields));
+    count = frame(packet, sizeof(packet), fields, html, sizeof(html)-1U);
+    reject(publisher, root, "redirect-wrong-count", packet, count);
+    puts("PASS: ordered response-owner redirect chain, canonical retention/readback and origin/final/count/status/length/corruption refusals");
+}
+
 static unsigned char *read_observation(const char *filename, size_t bound, size_t *length) {
     FILE *stream = fopen(filename, "rb");
     assert(stream != NULL);
@@ -244,11 +325,12 @@ int main(int argc, char **argv) {
     assert(reopen(root, "unknown-charset", 19) != 0);
     assert(reopen(root, "observed", 19) == 0);
     current_metadata_cases(&publisher, root);
+    redirect_observation_cases(&publisher, root);
     if (argc == 5) retain_live_observation(&publisher, root, argv[2], argv[3], argv[4]);
     puts("PASS: paired ICU frame through private ingress into real canonical Arena v2 and exact reopened reader bytes");
     puts("PASS: body-only, partial, trailing, header, size, metadata, UTF-8, credentials, digest, worker and stale refusals preserve prior content");
     puts("PASS: incomplete redirect provenance and unobserved charset cannot admit navigation");
-    puts("NOT_RUN: real Shizuku/Binder, checked Idric view, Android ART and physical C67");
+    puts("NOT_RUN: real Shizuku/Binder, checked Idric view, Android ART and physical TAB_P10");
     if (argc == 2) puts("NOT_RUN: ICU HTTPS; this invocation used synthetic captures only");
     return 0;
 }

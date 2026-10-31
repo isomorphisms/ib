@@ -20,6 +20,17 @@ mkdir -p "$evidence"
   -o "$evidence/appendfat-arena"
 "$compiler" -fno-link-libatomic -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror \
   "$repository/native/android/ib_arena_slice.c" -o "$evidence/arena-slice"
+"$compiler" -fno-link-libatomic -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror -pthread \
+  -I "$appendfat/lib" "$appendfat/lib/appendfat_arena.c" \
+  "$repository/native/android/ib_reader_pfd.c" \
+  "$repository/native/android/ib_shizuku_arena_ingress.c" \
+  "$repository/native/android/ib_shizuku_arena_publish.c" \
+  "$repository/native/android/ib_arena_source_owner.c" \
+  "$repository/tests/test_shizuku_frame_canonical.c" -o "$evidence/frame-test"
+env IB_APPEND_ARENA="$evidence/appendfat-arena" IB_INGRESS_CANONICAL_TEST="$evidence/frame-test" \
+  sh "$repository/tests/test_shizuku_ingress_canonical.sh" > "$evidence/frame.txt" 2>&1
+cat "$evidence/frame.txt"
+rg -F 'PASS: ordered response-owner redirect chain' "$evidence/frame.txt"
 var oracle = "$repository/.tools/reader-acceptance/ib-source/verify.sh"
 test -s "$oracle"
 env IB_APPEND_ARENA="$evidence/appendfat-arena" IB_ARENA_SLICE="$evidence/arena-slice" \
@@ -39,5 +50,5 @@ rg -x -F 'STAGE retained source generation 1 at navigation generation 3' "$evide
 rg -F 'Assertion' "$evidence/wrong-generation.txt" | rg -F 'ib_arena_source_owner_open_retained'
 git -C "$appendfat" rev-parse HEAD > "$evidence/appendfat-commit.txt"
 sha256sum "$compiler" "$evidence/appendfat-arena" "$evidence/arena-slice" \
-  "$native/source-owner-test" "$native/wrong-generation-test" > "$evidence/sha256.txt"
-printf 'host_canonical_userspace_append\tPASS\nindependent_source_oracle\tPASS\nretained_source_readback\tPASS\ncompiled_generation_mutant\tREJECTED\nreal_response_metadata\tNOT_RUN\nAndroid_Binder\tNOT_RUN\nphysical_TAB_P10\tNOT_RUN\n' > "$evidence/stages.tsv"
+  "$evidence/frame-test" "$native/source-owner-test" "$native/wrong-generation-test" > "$evidence/sha256.txt"
+printf 'host_canonical_userspace_append\tPASS\nhost_redirect_chain_boundary\tPASS\nindependent_source_oracle\tPASS\nretained_source_readback\tPASS\ncompiled_generation_mutant\tREJECTED\nreal_response_metadata\tNOT_RUN\nAndroid_Binder\tNOT_RUN\nphysical_TAB_P10\tNOT_RUN\n' > "$evidence/stages.tsv"
