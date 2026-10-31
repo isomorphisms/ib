@@ -108,6 +108,17 @@ and a compiled Binder-loss mutant are mandatory on API 29/34. This changed
 integration head requires its own fresh qualification. A Parcelable wire check
 is not a kernel Binder transaction, provider authorization or worker launch.
 
+At checkpoint `753d4f5a3f1acbea4c54b838a2d3ecfca656019b`,
+[run 41246667032](https://github.com/isomorphisms/ib/actions/runs/41246667032)
+passes source compilation, decode, repeat output, native builds and the API 29
+reader semantic and compiled-mutant checks. The older reader observer then
+kills the emulator before the new Parcel observer can begin. The resulting
+Parcel check is NOT_RUN, and API 34 is skipped. Removing that premature kill
+leaves lane teardown with emulator-runner; it does not turn the failed run into
+a pass. Backend `6c1ebcd14c8d1d1736fdf088db7c6de2ec6a09c5` separately passes
+the native-instance-field observer and its static-field mutant on both APIs in
+[run 41245527257](https://github.com/isomorphisms/android-NDK/actions/runs/41245527257).
+
 The [controlled host network record](host-network-2026-10-31.md) separately
 records actual native ICU HTTP/TLS acquisition, canonical publication and
 independent readback, with TLS/status/truncation/hash and binary controls. Its

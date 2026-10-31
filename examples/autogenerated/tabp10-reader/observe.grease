@@ -11,5 +11,5 @@ if (observed !== ENV.AICI_EXPECTED_ANDROID_API) { echo 'FAIL emulator API differ
 "$grease" "$repository/.tools/reader-acceptance/ib-source/reader/observe-art.grease" \
   "$repository/.tools/reader-acceptance" "$input" "$input/oracles/smali.jar" \
   "$adb" emulator-5554 "$evidence"
-# Each subsequent API gets its own freshly booted emulator, never the prior API.
-"$adb" -s emulator-5554 emu kill
+# The emulator-runner owns this lane's lifetime. Further independent observers
+# run on the same declared API before its normal termination step.
