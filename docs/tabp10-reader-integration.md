@@ -25,7 +25,7 @@ old stacked branch histories or replace the canonical information model.
 | Private ingress | `b2f4cbc1611ac34852cfb78332e1c4147307b5ca` | Existing app-private stream and canonical publisher |
 | Search constructor | `dcbd86c0f7a69c4e0b381c0ab53f7c41f9966900` | Existing checked raw-query encoding and Intent projection |
 | Merged DEX foundation | `6ab4818219efa7ea5eda137ca6b76976eb2a4d42` | Retained ancestor; no obsolete backend reconstruction |
-| Reusable Text numeric cast repair | `b2720c422f957bd53f3e5e0895e38b4289735ad8` | Declared `vendor/android-NDK` gitlink; builds on the merged foundation |
+| Reusable Text numeric cast repair | `0f9b6e1b867d424ac2ba0b2036a54ac74a277d7d` | Declared `vendor/android-NDK` gitlink; checks the erased numeric helper result before width conversion |
 | Checked frontend | `740bbf2b1d9e811fd00c719c3473eede17ceea3b` | Matching bootstrap/compiler API |
 | Independent reader observer | `1241ba7cca98be3d708319a17a83700c2e1d1f62` | ai-ci-owned reader/numeric expectations, failure diagnostics and independent checkpoint replay |
 | ICU transport repair | `22730ba7e93d9fecc37f7da440cbdd086deb3d15` | Host path/framing regression and fixture diagnostics; not yet the live app worker |
