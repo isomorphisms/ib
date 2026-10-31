@@ -1,4 +1,4 @@
-name: IB C67 ICU to Arena slice
+name: IB ICU to Arena host contract
 
 on:
   pull_request:
@@ -34,7 +34,7 @@ jobs:
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           repository: dilapidated-shed/icu
-          ref: 0da041fbe906657f4f705da45a842d96832e5ee1
+          ref: 22730ba7e93d9fecc37f7da440cbdd086deb3d15
           path: .deps/icu
           persist-credentials: false
       - name: Check out independent AI-CI admitted-source verifier
@@ -45,7 +45,7 @@ jobs:
           path: .deps/ai-ci
           persist-credentials: false
       - id: ick
-        uses: isomorphisms/ai-ci/ick-host@015cc7901ae0b3ad262b476f24e129b53c56db95
+        uses: isomorphisms/ai-ci/ick-host@32cb45b3a3a257aeb07881c75f3b846495cfb2c9
       - name: Compile storage and checked slice reader
         env:
           ICK: ${{ steps.ick.outputs.compiler }}
@@ -55,7 +55,7 @@ jobs:
           "$ICK" -fno-link-libatomic -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror \
             .deps/appendfat/lib/appendfat_arena.c \
             .deps/appendfat/tools/appendfat_arena.c -o build/c67-icu-arena/appendfat_arena
-          cc -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror \
+          "$ICK" -fno-link-libatomic -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror \
             native/android/ib_arena_slice.c -o build/c67-icu-arena/ib-arena-slice
           sh -n bin/ib_android_icu_arena.grease
           sh -n bin/ib_android_arena_read.grease
@@ -70,13 +70,13 @@ jobs:
           export IB_APPEND_ARENA="$GITHUB_WORKSPACE/build/c67-icu-arena/appendfat_arena"
           export IB_ARENA_SLICE="$GITHUB_WORKSPACE/build/c67-icu-arena/ib-arena-slice"
           sh tests/test_android_icu_arena.sh
-          echo 'real_ICU_HTTPS=NOT_RUN physical_C67=NOT_RUN browser_UI=NOT_RUN'
+          echo 'real_ICU_HTTPS=NOT_RUN physical_TAB_P10=NOT_RUN browser_UI=NOT_RUN'
       - name: Compile and test actual pinned ICU #35 HTTP/TLS against IB Arena host contract
         env:
           ICK: ${{ steps.ick.outputs.compiler }}
         run: |
           set -eu
-          test "$(git -C .deps/icu rev-parse HEAD)" = 0da041fbe906657f4f705da45a842d96832e5ee1
+          test "$(git -C .deps/icu rev-parse HEAD)" = 22730ba7e93d9fecc37f7da440cbdd086deb3d15
           sh -n tests/test_android_icu_native_bridge.sh
           test "$(git -C .deps/ai-ci rev-parse HEAD)" = 634626a14834e14b776616440e0a9071708f81b7
           sh -n .deps/ai-ci/ib-source/verify.sh
@@ -94,6 +94,7 @@ jobs:
           export IB_ICU_NATIVE_PROBE="$GITHUB_WORKSPACE/build/c67-icu-arena/icu-native-probe"
           export IB_ICU_NATIVE_SO="$GITHUB_WORKSPACE/build/c67-icu-arena/libicu_transport.so"
           export IB_AICI_SOURCE_VERIFY="$GITHUB_WORKSPACE/.deps/ai-ci/ib-source/verify.sh"
+          export IB_TEST_EVIDENCE="$GITHUB_WORKSPACE/build/c67-icu-arena/native-response-evidence"
           sh tests/test_android_icu_native_bridge.sh | tee build/c67-icu-arena/native-icu-bridge-receipt.txt
           grep -F 'real compiled pinned ICU #35 native HTTP and HTTPS' \
             build/c67-icu-arena/native-icu-bridge-receipt.txt
@@ -130,4 +131,5 @@ jobs:
             build/c67-icu-arena/native-icu-bridge-receipt.txt
             build/c67-icu-arena/native-icu-sha256.txt
             build/c67-icu-arena/aici-source-self-test.txt
+            build/c67-icu-arena/native-response-evidence/
           if-no-files-found: error

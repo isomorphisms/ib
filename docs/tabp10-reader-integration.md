@@ -27,7 +27,7 @@ old stacked branch histories or replace the canonical information model.
 | Merged DEX foundation | `6ab4818219efa7ea5eda137ca6b76976eb2a4d42` | Retained ancestor; no obsolete backend reconstruction |
 | Reusable Text numeric cast repair | `b2720c422f957bd53f3e5e0895e38b4289735ad8` | Declared `vendor/android-NDK` gitlink; builds on the merged foundation |
 | Checked frontend | `740bbf2b1d9e811fd00c719c3473eede17ceea3b` | Matching bootstrap/compiler API |
-| Independent reader observer | `e1fff1e155951bdff49cce78cd3dbb31866d5c54` | ai-ci-owned reader/numeric expectations and compiled-mutant rejection |
+| Independent reader observer | `1241ba7cca98be3d708319a17a83700c2e1d1f62` | ai-ci-owned reader/numeric expectations, failure diagnostics and independent checkpoint replay |
 | ICU transport repair | `22730ba7e93d9fecc37f7da440cbdd086deb3d15` | Host path/framing regression and fixture diagnostics; not yet the live app worker |
 
 `IB.Reader.Document` joins the maintained admission, HTML/Prepaint and
@@ -70,6 +70,24 @@ assert that a runtime test ran. `NOT_RUN` is never a pass. Exact source, tool
 versions, DEX identities, transfer readback, outputs and exit statuses belong to
 the workflow's `ib-reader` artifact and may replace these pending entries only
 after inspection of the completed exact-head run.
+
+The retained checkpoint `9b97c4a2fae1ee5b95f4595587f7bdad7b6e0e38` passes all
+checked-source generation, independent decode, repeat-output and compiled-source
+mutation stages. Its DEX matches the separate local build, including Prepaint
+SHA-256 `52faf7c36fc9fb42c8090f52121518349e2b89a02d6664bdb922dcd34144b670`.
+Actual API 29 ART passes the unchanged title and SEARCH projections, then kills
+the numeric-cast process with status 137 before Prepaint/mutant execution.
+The cause was not observed; no full ART pass is claimed. ai-ci's diagnostic
+replay binds the official candidate archive and committed source before testing
+the same bytes on independently declared API 29/34 emulator lanes. The changed
+archive control is rejected before extraction. A later integration head needs
+its own qualification.
+
+The [controlled host network record](host-network-2026-10-31.md) separately
+records actual native ICU HTTP/TLS acquisition, canonical publication and
+independent readback, with TLS/status/truncation/hash and binary controls. Its
+Android/Shizuku wrapper is simulated. Complete redirect-hop provenance and the
+actual application path remain unqualified.
 
 | Requirement | State | Evidence / remaining boundary |
 | --- | --- | --- |
