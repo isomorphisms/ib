@@ -1,0 +1,156 @@
+module KeepBridgeCases
+
+import IB.HumanDecisions
+import IB.KeepBridge
+import System
+
+%unbound_implicits off
+
+source : SourceReference
+source = RetainedSource "source-01" "revision-01"
+  (TargetReference resource_target "resource-01")
+
+revised : SourceReference
+revised = RetainedSource "source-01" "revision-02"
+  (TargetReference resource_target "resource-01")
+
+export_decision : Decision
+export_decision = HumanDecision "decision-share-01" source export_to_keep Nothing Nothing
+
+ordinary_keep : Decision
+ordinary_keep = HumanDecision "decision-keep-01" source keep_item Nothing Nothing
+
+rejection : Decision
+rejection = HumanDecision "decision-dismiss-01" source dismiss_item Nothing Nothing
+
+proposal : Proposal
+proposal = CategoryProposal "proposal-01" source "interesting" "model-01" "rev-01" "policy-01"
+
+url : Text
+url = "https://example.org/read?q=Tuğba&x=1#text"
+
+body : Text
+body = "A note with Turkish ğ and exact  newlines.\n"
+
+accepted : Maybe KeepExport
+accepted = prepare_keep_export [source] [export_decision] source url "Research source" body
+
+refused : {value : Type} → Maybe value → Bool
+refused Nothing = True
+refused (Just _) = False
+
+export_requires_explicit_action : Bool
+export_requires_explicit_action =
+  refused (prepare_keep_export [source] [] source url "Research source" body) &&
+  refused (prepare_keep_export [source] [ordinary_keep] source url "Research source" body) &&
+  refused (prepare_keep_export [source] [rejection] source url "Research source" body)
+
+proposal_does_not_approve : Bool
+proposal_does_not_approve = case validate_proposal [source] proposal of
+  Nothing ⇒ False
+  Just _ ⇒ refused (prepare_keep_export [source] [] source url "Research source" body)
+
+stale_or_revoked_refused : Bool
+stale_or_revoked_refused =
+  refused (prepare_keep_export [revised] [export_decision] source url "Research source" body) &&
+  refused (prepare_keep_export [source] [export_decision, rejection] source url "Research source" body)
+
+exact_source_and_stable_identity : Bool
+exact_source_and_stable_identity = case (accepted, accepted) of
+  (Just first, Just second) ⇒
+    first.local_identity ≟ "keep.decision-share-01" &&
+    first.local_identity ≟ second.local_identity &&
+    first.original_url ≟ url &&
+    first.provenance_label ≟ "Research source" &&
+    share_text first ≟ (body ++ "\n\nSource: " ++ url)
+  _ ⇒ False
+
+android_has_no_read_access : Bool
+android_has_no_read_access =
+  capability_enabled android_share_capabilities ui_create_request &&
+  not (capability_enabled android_share_capabilities remote_get) &&
+  not (capability_enabled android_share_capabilities remote_search) &&
+  not (capability_enabled unconfigured_remote_capabilities remote_get)
+
+started_is_not_saved : Bool
+started_is_not_saved = case accepted of
+  Nothing ⇒ False
+  Just request ⇒ case begin_dispatch (initial_delivery request) of
+    Nothing ⇒ False
+    Just in_flight ⇒ case record_dispatch in_flight intent_started of
+      Nothing ⇒ False
+      Just handed_off ⇒ case handed_off.phase of
+        awaiting_user_confirmation ⇒ refused (begin_dispatch handed_off) &&
+          refused (confirm_saved in_flight Nothing)
+        _ ⇒ False
+
+user_must_confirm : Bool
+user_must_confirm = case accepted of
+  Nothing ⇒ False
+  Just request ⇒ case begin_dispatch (initial_delivery request) of
+    Nothing ⇒ False
+    Just in_flight ⇒ case record_dispatch in_flight intent_started of
+      Nothing ⇒ False
+      Just handed_off ⇒ case confirm_saved handed_off Nothing of
+        Nothing ⇒ False
+        Just confirmed ⇒ case confirmed.phase of
+          confirmed_in_keep ⇒ refused (begin_dispatch confirmed) &&
+            refused (confirm_saved confirmed Nothing)
+          _ ⇒ False
+
+missing_keep_is_not_delivery : Bool
+missing_keep_is_not_delivery = case accepted of
+  Nothing ⇒ False
+  Just request ⇒ case begin_dispatch (initial_delivery request) of
+    Nothing ⇒ False
+    Just in_flight ⇒ case record_dispatch in_flight keep_missing of
+      Nothing ⇒ False
+      Just unavailable ⇒ case unavailable.phase of
+        keep_unavailable ⇒ refused (confirm_saved unavailable Nothing) &&
+          not (refused (begin_dispatch unavailable))
+        _ ⇒ False
+
+failure_blocks_repeat : Bool
+failure_blocks_repeat = case accepted of
+  Nothing ⇒ False
+  Just request ⇒ case begin_dispatch (initial_delivery request) of
+    Nothing ⇒ False
+    Just in_flight ⇒ case record_dispatch in_flight dispatch_failed_or_uncertain of
+      Nothing ⇒ False
+      Just uncertain ⇒ case uncertain.phase of
+        delivery_uncertain ⇒ refused (begin_dispatch uncertain)
+        _ ⇒ False
+
+restart_conservative : Bool
+restart_conservative = case accepted of
+  Nothing ⇒ False
+  Just request ⇒ case begin_dispatch (initial_delivery request) of
+    Nothing ⇒ False
+    Just in_flight ⇒ case encode_delivery in_flight of
+      Nothing ⇒ False
+      Just disk_bytes ⇒ case decode_delivery disk_bytes of
+        Nothing ⇒ False
+        Just from_disk ⇒ case (recover_delivery from_disk).phase of
+          delivery_uncertain ⇒ refused (begin_dispatch (recover_delivery from_disk))
+          _ ⇒ False
+
+round_trip_and_corruption : Bool
+round_trip_and_corruption = case accepted of
+  Nothing ⇒ False
+  Just request ⇒ case encode_delivery (initial_delivery request) of
+    Nothing ⇒ False
+    Just wire ⇒ case decode_delivery wire of
+      Nothing ⇒ False
+      Just recovered ⇒ encode_delivery recovered ≟ Just wire &&
+        refused (decode_delivery "ib-keep-delivery-v1\tkeep.x\tconfirmed\t\tsecret\n") &&
+        refused (decode_delivery "ib-keep-delivery-v1\tkeep.x\tin-flight\tnotes/1\n")
+
+all_cases : Bool
+all_cases = and [export_requires_explicit_action, proposal_does_not_approve,
+  stale_or_revoked_refused, exact_source_and_stable_identity,
+  android_has_no_read_access, started_is_not_saved, user_must_confirm,
+  missing_keep_is_not_delivery, failure_blocks_repeat,
+  restart_conservative, round_trip_and_corruption]
+
+main : IO ()
+main = if all_cases then putStrLn "keep-bridge-cases=PASS" else exitFailure

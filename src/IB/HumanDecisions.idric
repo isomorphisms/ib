@@ -48,6 +48,7 @@ choice human_action one_of
   dismiss_item
   finish_item
   defer_item
+  export_to_keep
 
 public export
 record Decision where
@@ -141,6 +142,7 @@ same_action keep_item keep_item = True
 same_action dismiss_item dismiss_item = True
 same_action finish_item finish_item = True
 same_action defer_item defer_item = True
+same_action export_to_keep export_to_keep = True
 same_action _ _ = False
 
 category_action : human_action → Bool
@@ -314,6 +316,7 @@ action_text keep_item = "keep"
 action_text dismiss_item = "dismiss"
 action_text finish_item = "done"
 action_text defer_item = "later"
+action_text export_to_keep = "export-keep"
 
 decode_action : Text → Maybe human_action
 decode_action "include-category" = Just include_category
@@ -324,6 +327,7 @@ decode_action "keep" = Just keep_item
 decode_action "dismiss" = Just dismiss_item
 decode_action "done" = Just finish_item
 decode_action "later" = Just defer_item
+decode_action "export-keep" = Just export_to_keep
 decode_action _ = Nothing
 
 optional_text : Maybe Text → Text

@@ -126,6 +126,7 @@ item_action keep_item = True
 item_action dismiss_item = True
 item_action finish_item = True
 item_action defer_item = True
+item_action export_to_keep = True
 item_action _ = False
 
 -- Only the browser-owned explicit action path calls this. The result remains
@@ -140,7 +141,11 @@ prepare_item_decision budget current_sources committed_decisions activities
   case current_row requested home.rows of
     Nothing ⇒ Left stale_row
     Just row ⇒
-      if not (item_action action) then Left item_action_refused else
+      if not (item_action action) ||
+         (case (row.source_state, action) of
+            (source_unavailable, export_to_keep) ⇒ True
+            _ ⇒ False)
+        then Left item_action_refused else
       let decision = HumanDecision decision_identity row.candidate.evidence
                        action Nothing Nothing
       in case append_decision current_sources decision committed_decisions of
@@ -164,7 +169,7 @@ export
 row_action_labels : HomeRow → List Text
 row_action_labels row = case row.source_state of
   source_unavailable ⇒ ["Keep", "Dismiss", "Done", "Later"]
-  readable_source ⇒ ["Keep", "Dismiss", "Done", "Later", "Open source"]
+  readable_source ⇒ ["Keep", "Dismiss", "Done", "Later", "Open source", "Share to Google Keep"]
 
 -- The existing durable adapter supplies this report. A chooser, prepared
 -- Decision or local animation cannot manufacture store_recorded.
