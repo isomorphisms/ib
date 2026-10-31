@@ -1,0 +1,40 @@
+#!/usr/bin/env grease
+set -eu -o pipefail
+if (len(ARGV) !== 4) { echo 'usage: grease prepare.grease IB BACKEND FRONTEND NEW_EVIDENCE' >&2; exit 2 }
+var repository = ARGV[0]
+var backend = ARGV[1]
+var frontend = ARGV[2]
+var evidence = ARGV[3]
+for path in "$repository" "$backend" "$frontend" "$evidence" {
+  if (len(path) === 0 or path[0] !== '/') { echo 'FAIL absolute path required' >&2; exit 2 }
+}
+if test -e "$evidence" { echo 'FAIL evidence directory already exists' >&2; exit 2 }
+mkdir -p "$evidence/oracles"
+var declared = $(git -C "$repository" ls-tree HEAD vendor/android-NDK | cut -f 1 | cut -d ' ' -f 3)
+var observed = $(git -C "$backend" rev-parse HEAD)
+if (declared !== observed) { echo 'FAIL declared compiler gitlink differs from checkout' >&2; exit 1 }
+git -C "$repository" rev-parse HEAD > "$evidence/ib-commit.txt"
+git -C "$backend" rev-parse HEAD > "$evidence/backend-commit.txt"
+git -C "$frontend" rev-parse HEAD > "$evidence/frontend-commit.txt"
+var prefix = "$frontend/_/bootstrap-build"
+setglobal ENV.IDRIS2_PREFIX = prefix
+setglobal ENV.IDRIS2_PACKAGE_PATH = "$prefix/idris2-0.8.0"
+setglobal ENV.IDRIS2_DATA = "$frontend/_/support"
+setglobal ENV.IDRIS2_LIBS = "$frontend/_/build/exec/idris2_app"
+setglobal ENV.CHEZ = "$frontend/_/.tools/bin/scheme"
+setglobal ENV.PATH = "$frontend/_/.tools/bin:" ++ ENV.PATH
+setglobal ENV.IDRIS2_CG = 'chez'
+grease "$backend/dex/idric/install-frontend.grease" "$frontend"
+cd "$backend/dex/idric"
+"$frontend/_/build/exec/idris2" --build backend.ipkg > "$evidence/backend-build.txt" 2>&1
+cat "$evidence/backend-build.txt"
+test -x build/exec/idric-dex
+cp "$frontend/_/build/exec/idris2_app/libidris2_support.so" build/exec/idric-dex_app/
+sha256sum build/exec/idric-dex build/exec/idric-dex_app/idric-dex.so > "$evidence/compiler.sha256"
+curl -fL https://github.com/baksmali/smali/releases/download/3.0.10/baksmali-3.0.10-fat-release.jar -o "$evidence/oracles/baksmali.jar"
+curl -fL https://github.com/baksmali/smali/releases/download/3.0.10/smali-3.0.10-fat-release.jar -o "$evidence/oracles/smali.jar"
+printf '%s  %s\n' 37ae4a41a8886e15c20b8362fa4250f96bbdb55e1a608199ad8b5dff068b588f "$evidence/oracles/baksmali.jar" | sha256sum -c -
+printf '%s  %s\n' 32fa0e88a6c397b3922201adf5f3e534fbaed5a663c71d0c558c3ddce0af844a "$evidence/oracles/smali.jar" | sha256sum -c -
+"$frontend/_/build/exec/idris2" --version > "$evidence/frontend-version.txt"
+grease --version > "$evidence/grease-version.txt"
+printf '\033[32mPASS\033[0m exact compiler dependency prepared; consumer execution follows\n'

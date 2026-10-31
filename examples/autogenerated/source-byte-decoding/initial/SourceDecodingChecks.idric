@@ -1,0 +1,131 @@
+module SourceDecodingChecks
+
+import Data.Text
+import Data.List
+import Data.Buffer
+import System
+import System.File
+import System.File.Buffer
+import IB.SourceDecoding
+
+index_identity : Text
+index_identity = "# Identifier: e56d49d9176e9a412283cf29ac9bd613f5620462f2a080a84eceaf974cfa18b7"
+
+digit_value : Char → Maybe Int
+digit_value character =
+  let scalar = ord character in
+    if scalar >= 48 && scalar <= 57 then Just (scalar − 48) else Nothing
+
+hex_value : Char → Maybe Int
+hex_value character =
+  case digit_value character of
+    Just value ⇒ Just value
+    Nothing ⇒
+      let scalar = ord character in
+        if scalar >= 65 && scalar <= 70 then Just (scalar − 55)
+        else if scalar >= 97 && scalar <= 102 then Just (scalar − 87)
+        else Nothing
+
+digits_from : (Char → Maybe Int) → Int → Int → List Char → Maybe Int
+digits_from digit base value [] = Just value
+digits_from digit base value (character :: rest) = do
+  next ← digit character
+  digits_from digit base (value × base + next) rest
+
+decimal : Text → Maybe Int
+decimal value = case unpack value of
+  [] ⇒ Nothing
+  digits ⇒ digits_from digit_value 10 0 digits
+
+hexadecimal : Text → Maybe Int
+hexadecimal value = case unpack value of
+  '0' :: 'x' :: first :: rest ⇒ digits_from hex_value 16 0 (first :: rest)
+  _ ⇒ Nothing
+
+index_values : Int → List Text → Either Text (List Int)
+index_values expected [] =
+  if expected ≟ 128 then Right [] else Left "normative index has missing entries"
+index_values expected (line :: rest) =
+  case words line of
+    [] ⇒ index_values expected rest
+    "#" :: _ ⇒ index_values expected rest
+    pointer :: codepoint :: _ ⇒
+      case (decimal pointer, hexadecimal codepoint) of
+        (Just actual, Just scalar) ⇒
+          if actual ≟ expected && scalar >= 0 && scalar <= 0x10FFFF
+            then map (scalar ::) (index_values (expected + 1) rest)
+            else Left "normative index order or scalar invalid"
+        _ ⇒ Left "normative index numeric fields invalid"
+    _ ⇒ Left "normative index row invalid"
+
+assert_case : Text → Bool → IO ()
+assert_case label True = putStrLn ("PASS " ++ label)
+assert_case label False = die ("FAIL " ++ label)
+
+decoded_scalars : Text → List SourceOctet → Maybe (List Int)
+decoded_scalars label octets =
+  case decode_html_bytes label octets of
+    Left _ ⇒ Nothing
+    Right decoded ⇒ Just (map ord (unpack decoded.decoded_text))
+
+is_refused : Text → List SourceOctet → Bool
+is_refused label octets = case decode_html_bytes label octets of
+  Left _ ⇒ True
+  Right _ ⇒ False
+
+write_text_bytes : Text → Text → IO ()
+write_text_bytes path value = do
+  let count = stringByteLength value
+  Just buffer ← newBuffer count | Nothing ⇒ die "test UTF-8 allocation failed"
+  setString buffer 0 value
+  Right () ← writeBufferToFile path buffer count | Left _ ⇒ die "test UTF-8 write failed"
+  pure ()
+
+covering
+write_octet_fixture : Text → IO ()
+write_octet_fixture path = do
+  Just buffer ← newBuffer 256 | Nothing ⇒ die "test raw allocation failed"
+  fill buffer 0
+  Right () ← writeBufferToFile path buffer 256 | Left _ ⇒ die "test raw write failed"
+  pure ()
+  where
+    covering
+    fill : Buffer → Int → IO ()
+    fill buffer offset =
+      if offset >= 256 then pure () else do
+        setBits8 buffer offset (cast offset)
+        fill buffer (offset + 1)
+
+covering
+main : IO ()
+main = do
+  arguments ← getArgs
+  case arguments of
+    [_, index_path, all_octets_path, expected_utf8_path] ⇒ do
+      Right index ← readFile index_path | Left _ ⇒ die "normative index unreadable"
+      assert_case "normative index identity" (elem index_identity (lines index))
+      Right high_scalars ← pure (index_values 0 (lines index)) | Left reason ⇒ die reason
+      let expected_scalars = [0..127] ++ high_scalars
+      let octets : List SourceOctet = map cast (the (List Int) [0..255])
+      assert_case "all 256 octets match normative index"
+        (decoded_scalars "windows-1252" octets ≟ Just expected_scalars)
+      assert_case "NUL CR LF Euro quotes cafe NBSP and five C1 scalars"
+        (decoded_scalars "ISO-8859-1" [0,13,10,128,145,146,233,160,129,141,143,144,157] ≟
+          Just [0,13,10,0x20AC,0x2018,0x2019,0xE9,0xA0,0x81,0x8D,0x8F,0x90,0x9D])
+      assert_case "seventeen labels"
+        (all windows_1252_label ["ansi_x3.4-1968", "ascii", "cp1252", "cp819",
+          "csisolatin1", "ibm819", "iso-8859-1", "iso-ir-100", "iso8859-1",
+          "iso88591", "iso_8859-1", "iso_8859-1:1987", "l1", "latin1",
+          "us-ascii", "windows-1252", "x-cp1252"])
+      assert_case "ASCII trim and case" (windows_1252_label "\t ISO-8859-1\r\n")
+      assert_case "NBSP padding is not ASCII whitespace"
+        (not (windows_1252_label (pack [chr 160] ++ "windows-1252")))
+      assert_case "unknown label refused" (is_refused "utf-8" [65])
+      assert_case "UTF-8 BOM refuses wrong decoder" (is_refused "windows-1252" [0xEF,0xBB,0xBF,65])
+      assert_case "UTF-16 LE BOM refuses wrong decoder" (is_refused "windows-1252" [0xFF,0xFE,65,0])
+      assert_case "UTF-16 BE BOM refuses wrong decoder" (is_refused "windows-1252" [0xFE,0xFF,0,65])
+      assert_case "empty input decodes without acquiring admission" (decoded_scalars "latin1" [] ≟ Just [])
+      write_octet_fixture all_octets_path
+      write_text_bytes expected_utf8_path (pack (map chr expected_scalars))
+      putStrLn "PASS source byte decoding semantic controls"
+    _ ⇒ die "usage: source-decoding-checks NORMATIVE_INDEX ALL_OCTETS EXPECTED_UTF8"

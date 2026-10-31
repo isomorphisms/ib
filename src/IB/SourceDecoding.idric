@@ -1,0 +1,98 @@
+module IB.SourceDecoding
+
+import Data.Text
+import Data.List
+
+-- Named raw boundary: these are source octets, never decoded characters.
+public export
+SourceOctet : Type
+SourceOctet = Bits8
+
+public export
+record HtmlDecodedText where
+  constructor DecodedHtml
+  declared_label : Text
+  selected_encoding : Text
+  original_byte_count : Number
+  decoded_text : Text
+
+export
+decoder_identity : Text
+decoder_identity = "whatwg-windows-1252-e56d49d9176e9a4-v1"
+
+ascii_whitespace : Char → Bool
+ascii_whitespace character = elem (ord character) [9, 10, 12, 13, 32]
+
+ascii_lower : Char → Char
+ascii_lower character =
+  let scalar = ord character in
+    if scalar >= 65 && scalar <= 90 then chr (scalar + 32) else character
+
+normalized_label : Text → Text
+normalized_label label =
+  pack (map ascii_lower
+    (reverse (dropWhile ascii_whitespace
+      (reverse (dropWhile ascii_whitespace (unpack label))))))
+
+export
+windows_1252_label : Text → Bool
+windows_1252_label label = elem (normalized_label label)
+  ["ansi_x3.4-1968", "ascii", "cp1252", "cp819", "csisolatin1",
+   "ibm819", "iso-8859-1", "iso-ir-100", "iso8859-1", "iso88591",
+   "iso_8859-1", "iso_8859-1:1987", "l1", "latin1", "us-ascii",
+   "windows-1252", "x-cp1252"]
+
+-- WHATWG index-windows-1252.txt identifier e56d49d9176e9a4... (2024-09-18).
+-- ASCII and 0xA0..0xFF retain their scalar values. The 0x80..0x9F range
+-- includes both punctuation and the five deliberately retained C1 controls.
+windows_1252_scalar : SourceOctet → Int
+windows_1252_scalar octet =
+  let value : Int = cast octet in
+  case value of
+    128 ⇒ 0x20AC
+    129 ⇒ 0x0081
+    130 ⇒ 0x201A
+    131 ⇒ 0x0192
+    132 ⇒ 0x201E
+    133 ⇒ 0x2026
+    134 ⇒ 0x2020
+    135 ⇒ 0x2021
+    136 ⇒ 0x02C6
+    137 ⇒ 0x2030
+    138 ⇒ 0x0160
+    139 ⇒ 0x2039
+    140 ⇒ 0x0152
+    141 ⇒ 0x008D
+    142 ⇒ 0x017D
+    143 ⇒ 0x008F
+    144 ⇒ 0x0090
+    145 ⇒ 0x2018
+    146 ⇒ 0x2019
+    147 ⇒ 0x201C
+    148 ⇒ 0x201D
+    149 ⇒ 0x2022
+    150 ⇒ 0x2013
+    151 ⇒ 0x2014
+    152 ⇒ 0x02DC
+    153 ⇒ 0x2122
+    154 ⇒ 0x0161
+    155 ⇒ 0x203A
+    156 ⇒ 0x0153
+    157 ⇒ 0x009D
+    158 ⇒ 0x017E
+    159 ⇒ 0x0178
+    _ ⇒ value
+
+recognized_bom : List SourceOctet → Bool
+recognized_bom (0xEF :: 0xBB :: 0xBF :: _) = True
+recognized_bom (0xFE :: 0xFF :: _) = True
+recognized_bom (0xFF :: 0xFE :: _) = True
+recognized_bom _ = False
+
+export
+decode_html_bytes : Text → List SourceOctet → Either Text HtmlDecodedText
+decode_html_bytes label octets =
+  if not (windows_1252_label label) then Left "unsupported-html-encoding-label"
+  else if recognized_bom octets then Left "bom-selects-an-unimplemented-decoder"
+  else Right (DecodedHtml label "windows-1252" (length octets)
+    (pack (map (chr . windows_1252_scalar) octets)))

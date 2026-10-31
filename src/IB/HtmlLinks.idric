@@ -1,0 +1,151 @@
+module IB.HtmlLinks
+
+import IB.Information
+
+-- Bounded by caller/admission; explicit conversion failures are returned.
+
+-- This is a deliberately bounded address resolver for admitted HTML links.
+-- It does not decode percent escapes or extend ICU's supported URL schemes.
+strip_prefix : List Char → List Char → Maybe (List Char)
+strip_prefix [] rest = Just rest
+strip_prefix (_ :: _) [] = Nothing
+strip_prefix (wanted :: following) (actual :: rest) =
+  if wanted == actual then strip_prefix following rest else Nothing
+
+starts : String → String → Bool
+starts sought_prefix value =
+  case strip_prefix (unpack sought_prefix) (unpack value) of
+    Nothing ⇒ False
+    Just _ ⇒ True
+
+before_character : Char → List Char → List Char
+before_character delimiter [] = []
+before_character delimiter (value :: rest) =
+  if value == delimiter then [] else value :: before_character delimiter rest
+
+before_either : List Char → List Char
+before_either [] = []
+before_either (value :: rest) =
+  if value == '/' || value == '?' || value == '#'
+    then [] else value :: before_either rest
+
+after_count : Nat → List Char → List Char
+after_count Z characters = characters
+after_count (S count) [] = []
+after_count (S count) (_ :: rest) = after_count count rest
+
+public export
+http_origin : String → Maybe String
+http_origin url =
+  if not (cheap_http_url url)
+    then Nothing
+    else if starts "https://" url
+      then Just ("https://" ++ pack (before_either (after_count 8 (unpack url))))
+      else if starts "http://" url
+        then Just ("http://" ++ pack (before_either (after_count 7 (unpack url))))
+        else Nothing
+
+url_tail : String → String → String
+url_tail origin url = pack (after_count (length (unpack origin)) (unpack url))
+
+strip_fragment : String → String
+strip_fragment value = pack (before_character '#' (unpack value))
+
+strip_query : String → String
+strip_query value = pack (before_character '?' (unpack value))
+
+url_path : String → String → String
+url_path origin url =
+  let rest = url_tail origin url in
+  case unpack rest of
+    '/' :: _ ⇒ strip_query (strip_fragment rest)
+    _ ⇒ "/"
+
+-- Directory of the final URL path, ending at its last slash.
+-- Removing the last *character* rather than the last segment breaks ../ links.
+at_last_slash : List Char → List Char
+at_last_slash [] = []
+at_last_slash ('/' :: rest) = '/' :: rest
+at_last_slash (_ :: rest) = at_last_slash rest
+
+parent_path : List Char → String
+parent_path path_chars = pack (reverse (at_last_slash (reverse path_chars)))
+
+-- Segment operations keep the origin outside the path stack.
+segments : List Char → List Char → List String → List String
+segments [] current done = reverse (pack (reverse current) :: done)
+segments ('/' :: rest) current done =
+  segments rest [] (pack (reverse current) :: done)
+segments (value :: rest) current done = segments rest (value :: current) done
+
+normalise : List String → List String → List String
+normalise [] stack = reverse stack
+normalise ("." :: rest) stack = normalise rest stack
+normalise (".." :: rest) [] = normalise rest []
+normalise (".." :: rest) (_ :: stack) = normalise rest stack
+normalise (value :: rest) stack = normalise rest (value :: stack)
+
+join_segments : List String → String
+join_segments [] = ""
+join_segments [value] = value
+join_segments (value :: rest) = value ++ "/" ++ join_segments rest
+
+split_path_suffix : List Char → List Char → (String, String)
+split_path_suffix [] path = (pack (reverse path), "")
+split_path_suffix chars@('?' :: _) path = (pack (reverse path), pack chars)
+split_path_suffix chars@('#' :: _) path = (pack (reverse path), pack chars)
+split_path_suffix (value :: rest) path = split_path_suffix rest (value :: path)
+
+path_normalised : String → String
+path_normalised path =
+  case unpack path of
+    '/' :: rest ⇒ "/" ++ join_segments (normalise (segments rest [] []) [])
+    rest ⇒ "/" ++ join_segments (normalise (segments rest [] []) [])
+
+has_scheme_colon : List Char → Bool
+has_scheme_colon [] = False
+has_scheme_colon ('/' :: _) = False
+has_scheme_colon ('?' :: _) = False
+has_scheme_colon ('#' :: _) = False
+has_scheme_colon (':' :: _) = True
+has_scheme_colon (_ :: rest) = has_scheme_colon rest
+
+checked_url : String → Maybe String
+checked_url address =
+  if cheap_http_url address then Just address else Nothing
+
+directory_for : String → String → String → String
+directory_for origin base relative =
+  if starts "/" relative
+    then ""
+    else parent_path (unpack (url_path origin base))
+
+relative_address : String → String → String → String
+relative_address origin base reference =
+  let (relative_path, suffix) = split_path_suffix (unpack reference) [] in
+  origin ++ path_normalised (directory_for origin base reference ++ relative_path) ++ suffix
+
+scheme_for : String → String
+scheme_for base = if starts "https://" base then "https:" else "http:"
+
+-- Returns a navigation *candidate*. ICU and navigation admission still decide
+-- whether another retrieval occurs; the renderer must never fetch a link.
+public export
+resolve_html_reference : String → String → Maybe String
+resolve_html_reference base reference =
+  if not (cheap_http_url base) || reference == ""
+    then Nothing
+    else if cheap_http_url reference
+      then Just reference
+      else if starts "//" reference
+        then checked_url (scheme_for base ++ reference)
+        else if has_scheme_colon (unpack reference)
+          then Nothing
+          else do
+            origin ← http_origin base
+            let current = strip_fragment base
+            if starts "#" reference
+              then checked_url (current ++ reference)
+              else if starts "?" reference
+                then checked_url (strip_query current ++ reference)
+                else checked_url (relative_address origin base reference)

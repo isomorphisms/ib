@@ -1,0 +1,27 @@
+module IB.Reflow.Threshold
+
+import Data.Text
+import IB.Reflow.Greedy
+
+-- A CSS text-wrap:balance-style approximation (not a browser's CSS engine).
+-- First determine the minimum greedy line count at the available width.
+-- Then repeatedly narrow the effective width while that count stays fixed.
+-- This often makes lines less uneven than greedy without quadratic DP state.
+-- Cost is repeated scans, up to available_width scans, and quality is only
+-- heuristic: the effective-width choice need not minimize raggedness.
+tighten : (Text → Number) → Number → Number → List Text →
+  List Text → List Text
+tighten measure Z wanted words best = best
+tighten measure (S Z) wanted words best = best
+tighten measure (S (S narrower)) wanted words best =
+  let candidate = reflow_greedily measure (S narrower) words in
+  if length candidate <= wanted
+    then tighten measure (S narrower) wanted words candidate
+    else best
+
+public export
+reflow_threshold_balanced : (Text → Number) → Number →
+  List Text → List Text
+reflow_threshold_balanced measure width words =
+  let first = reflow_greedily measure width words in
+  tighten measure width (length first) words first

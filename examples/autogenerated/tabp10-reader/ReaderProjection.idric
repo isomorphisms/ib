@@ -1,0 +1,50 @@
+module ReaderProjection
+
+import Data.Text
+import IB.HtmlPrepaint
+import IB.Reader.Document
+import IB.Prepaint.Reflow
+import IB.Reflow
+import IB.Reflow.SourceBreaks
+
+-- Every observation comes from the trusted committed-source owner. Neither
+-- receipt-shaped Intent text nor document content may supply this boundary.
+read_evidence : Text → Either Text HtmlEvidence
+read_evidence fields =
+  case split (≟ '\t') fields of
+    [source, generation, claimed, reopened, byte_count, reopened_count,
+     requested, resolved, mime, charset, status, utf8, complete] ⇒
+      if (utf8 ≟ "verified-utf8" || utf8 ≟ "invalid-utf8") &&
+         (complete ≟ "complete" || complete ≟ "incomplete")
+        then Right (HtmlSourceEvidence source generation claimed reopened
+          (cast byte_count) (cast reopened_count) requested resolved mime
+          charset status (utf8 ≟ "verified-utf8") (complete ≟ "complete"))
+        else Left "unknown-readback-observation"
+    _ ⇒ Left "malformed-readback-observations"
+
+line_coordinates : SourceLine → Text
+line_coordinates line =
+  show line.first_codepoint ++ ":" ++ show line.after_last_codepoint ++ ";"
+
+block_coordinates : BlockReflow → Text
+block_coordinates block =
+  show block.block_position ++ "=" ++ concat (map line_coordinates block.text_lines) ++ "\n"
+
+%export "dex:project_committed_html"
+project_committed_html : Text → Text → Int32 → Int32 → Text
+project_committed_html fields html width algorithm =
+  if width <= 0 then "refused:invalid-viewport-width"
+  else if algorithm < 0 || algorithm > 1 then "refused:unsupported-reflow"
+  else case read_evidence fields of
+    Left reason ⇒ "refused:" ++ reason
+    Right evidence ⇒
+      case prepare_committed_document evidence html
+             (Requirements (cast width) (if algorithm ≟ 0 then promptly else evenly))
+             "decoded-codepoint-width-v1" (length . unpack) of
+        Left reason ⇒ "refused:" ++ reason
+        Right prepared ⇒ prepared.source_result.wire ++
+          "\nsource-codepoint-ranges\n" ++
+          concat (map block_coordinates prepared.revision_layout.block_plans)
+
+main : IO ()
+main = pure ()
