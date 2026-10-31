@@ -23,3 +23,32 @@ jobs:
         run: sh tests/test_keep_bridge.sh
       - name: Check Idriç public vocabulary
         run: sh tests/idric-public-vocabulary.sh
+
+  semantic-synthetic:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Verify exact source head
+        env:
+          EXPECTED_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: test "$(git rev-parse HEAD)" = "$EXPECTED_HEAD"
+      - name: Install compiler prerequisites
+        run: sh bin/ci_browser_foundation.grease install-dependencies
+      - name: Restore pinned Idriç compiler
+        id: compiler-cache
+        uses: actions/cache/restore@caa296126883cff596d87d8935842f9db880ef25
+        with:
+          path: /tmp/idric
+          key: idric-relocatable-v2-${{ runner.os }}-7050c116326c9c8e8d0a56c2db7baf2119cbae19
+      - name: Build pinned compiler if cache missing
+        if: steps.compiler-cache.outputs.cache-hit != 'true'
+        env:
+          IDRIC_REF: 7050c116326c9c8e8d0a56c2db7baf2119cbae19
+        run: sh bin/ci_browser_foundation.grease build-idric
+      - name: Compile and execute Idriç keep cases
+        run: sh tests/test_keep_idric.sh
