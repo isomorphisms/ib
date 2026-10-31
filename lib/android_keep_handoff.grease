@@ -1,0 +1,63 @@
+#!/bin/sh
+# Grease/POSIX shell Android transport only. An Idriç-approved outbound
+# request must have already been durably marked in-flight before invoking this.
+# No dispatch result proves that the user saved a note.
+set -eu
+
+fail() { printf 'keep-handoff\t%s\n' "$1"; exit "$2"; }
+
+if test "$#" -ne 2; then fail invalid-arguments 12; fi
+mode=$1
+payload_file=$2
+case "$mode" in direct|rish) ;; *) fail invalid-arguments 12 ;; esac
+if test ! -f "$payload_file" || test -L "$payload_file" || test ! -r "$payload_file"; then
+  fail invalid-payload 12
+fi
+size=$(wc -c < "$payload_file" | tr -d '[:space:]')
+case "$size" in ''|*[!0-9]*) fail invalid-payload 12 ;; esac
+if test "$size" -eq 0 || test "$size" -gt 32768; then fail invalid-payload 12; fi
+
+# Sentinel survives command substitution's normal removal of trailing LF.
+payload=$(cat "$payload_file"; printf '\037') || fail invalid-payload 12
+payload=${payload%?}
+recovered_size=$(printf '%s' "$payload" | wc -c | tr -d '[:space:]')
+if test "$size" -ne "$recovered_size"; then fail invalid-payload 12; fi
+
+# Shell quote is used ONLY for rish's one remote -c command. Source text
+# remains data, even with quotes, dollars, semicolons and embedded newlines.
+if test "$mode" = direct; then
+  am_command=${IB_KEEP_AM_COMMAND:-am}
+  if ! command -v "$am_command" >/dev/null 2>&1; then fail unavailable 10; fi
+  if output=$("$am_command" start -a android.intent.action.SEND -t text/plain \
+        -p com.google.android.keep --es android.intent.extra.TEXT "$payload" 2>&1); then
+    code=0
+  else
+    code=$?
+  fi
+else
+  rish_command=${IB_RISH_COMMAND:-rish}
+  if ! command -v "$rish_command" >/dev/null 2>&1; then fail unavailable 10; fi
+  escaped=$(printf '%sX' "$payload" | sed "s/'/'\\\\''/g")
+  escaped=${escaped%X}
+  command_text="am start -a android.intent.action.SEND -t text/plain -p com.google.android.keep --es android.intent.extra.TEXT '$escaped'"
+  if output=$("$rish_command" -c "$command_text" 2>&1); then
+    code=0
+  else
+    code=$?
+  fi
+fi
+
+# Some Android builds print 'Error: ...' while returning zero. Do not
+# confuse successfully starting an editor with committing a Keep note.
+case "$output" in
+  *'unable to resolve Intent'*|*'ActivityNotFoundException'*|*'No Activity found'*)
+    fail unavailable 10 ;;
+  *'Error:'*|*'Exception'*|*'Permission Denial'*|*'Warning: Activity not started'*)
+    fail outcome-unknown 11 ;;
+esac
+if test "$code" -ne 0; then fail outcome-unknown 11; fi
+case "$output" in
+  *'Starting: Intent'*|*'Starting activity: Intent'*)
+    printf 'keep-handoff\tstarted-unconfirmed\n' ;;
+  *) fail outcome-unknown 11 ;;
+esac

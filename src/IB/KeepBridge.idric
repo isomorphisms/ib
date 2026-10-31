@@ -1,0 +1,245 @@
+module IB.KeepBridge
+
+import Data.Text
+import Data.List
+import IB.HumanDecisions
+
+-- Keep is an optional transport. UI sharing does not establish remote read,
+-- write, or sync authority. Authentication belongs to an external adapter.
+public export
+choice keep_capability one_of
+  ui_create_request
+  remote_get
+  remote_search
+  remote_create
+  remote_update
+  remote_labels
+  remote_checklists
+  remote_sync
+
+public export
+record KeepCapabilities where
+  constructor KeepPermissions
+  can_request_ui_create : Bool
+  can_get : Bool
+  can_search : Bool
+  can_create : Bool
+  can_update : Bool
+  can_label : Bool
+  can_checklist : Bool
+  can_sync : Bool
+
+public export
+android_share_capabilities : KeepCapabilities
+android_share_capabilities = KeepPermissions True False False False False False False False
+
+public export
+unconfigured_remote_capabilities : KeepCapabilities
+unconfigured_remote_capabilities = KeepPermissions False False False False False False False False
+
+public export
+capability_enabled : KeepCapabilities → keep_capability → Bool
+capability_enabled caps ui_create_request = caps.can_request_ui_create
+capability_enabled caps remote_get = caps.can_get
+capability_enabled caps remote_search = caps.can_search
+capability_enabled caps remote_create = caps.can_create
+capability_enabled caps remote_update = caps.can_update
+capability_enabled caps remote_labels = caps.can_label
+capability_enabled caps remote_checklists = caps.can_checklist
+capability_enabled caps remote_sync = caps.can_sync
+
+-- The note body is an ephemeral value reloaded from the permitted retained
+-- source at execution. Only the separate bounded delivery snapshot is persisted.
+public export
+record KeepExport where
+  constructor ApprovedKeepExport
+  local_identity : Text
+  accepted_decision : Text
+  evidence : SourceReference
+  original_url : Text
+  provenance_label : Text
+  note_text : Text
+
+is_identity_character : Char → Bool
+is_identity_character c =
+  (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+  (c >= '0' && c <= '9') || elem c ['_', '-', '.', ':']
+
+safe_identity : Text → Bool
+safe_identity value = not (value ≟ "") && length (unpack value) <= 160 &&
+  all is_identity_character (unpack value)
+
+no_controls : Text → Bool
+no_controls value = all (\c ⇒ ord c >= 32 && ord c /= 127) (unpack value)
+
+-- The retained source owner must separately verify that this URL may leave IB.
+-- Preserve its supplied exact spelling, including original query/fragment.
+valid_export_source : Text → Text → Text → Bool
+valid_export_source url label body =
+  (isPrefixOf "https://" url || isPrefixOf "http://" url) &&
+  length (unpack url) <= 4096 && length (unpack url) > 8 && no_controls url &&
+  length (unpack label) <= 256 && no_controls label &&
+  length (unpack body) > 0 && length (unpack body) <= 16384 &&
+  not (elem '\0' (unpack body))
+
+-- A Keep export is never implied by a model proposal or by Pensieve's
+-- ordinary Keep action. Only an already committed export_to_keep decision
+-- grants this request. Later dismissal/done revokes the unexecuted permission.
+permission_step : SourceReference → Maybe Text → Decision → Maybe Text
+permission_step evidence permission decision =
+  if not (same_evidence evidence decision.evidence) then permission else
+    case decision.action of
+      export_to_keep ⇒ Just decision.decision_identity
+      dismiss_item ⇒ Nothing
+      finish_item ⇒ Nothing
+      _ ⇒ permission
+
+permission_replay : SourceReference → Maybe Text → List Decision → Maybe Text
+permission_replay evidence permission [] = permission
+permission_replay evidence permission (decision :: rest) =
+  permission_replay evidence (permission_step evidence permission decision) rest
+
+current_source : SourceReference → List SourceReference → Bool
+current_source evidence [] = False
+current_source evidence (entry :: rest) =
+  same_evidence evidence entry || current_source evidence rest
+
+public export
+prepare_keep_export : List SourceReference → List Decision →
+  SourceReference → Text → Text → Text → Maybe KeepExport
+prepare_keep_export current_sources committed evidence url label body =
+  if not (current_source evidence current_sources) ||
+     not (valid_export_source url label body) then Nothing else
+    case encode_journal committed of
+      Nothing ⇒ Nothing
+      Just _ ⇒ case permission_replay evidence Nothing committed of
+        Nothing ⇒ Nothing
+        Just decision_identity ⇒ Just (ApprovedKeepExport
+          ("keep." ++ decision_identity) decision_identity evidence url label body)
+
+-- This is the only payload sent to the Android intent. Identifiers and
+-- provenance/reducer records remain in IB; the original URL is not rewritten.
+public export
+share_text : KeepExport → Text
+share_text request = request.note_text ++ "\n\nSource: " ++ request.original_url
+
+public export
+choice keep_delivery_phase one_of
+  ready_to_dispatch
+  dispatch_in_flight
+  awaiting_user_confirmation
+  keep_unavailable
+  delivery_uncertain
+  confirmed_in_keep
+  declined_in_keep
+
+public export
+choice keep_dispatch_result one_of
+  intent_started
+  keep_missing
+  dispatch_failed_or_uncertain
+
+public export
+record KeepDelivery where
+  constructor DeliverySnapshot
+  local_identity : Text
+  phase : keep_delivery_phase
+  remote_note_identity : Maybe Text
+
+public export
+initial_delivery : KeepExport → KeepDelivery
+initial_delivery request = DeliverySnapshot request.local_identity ready_to_dispatch Nothing
+
+-- Dispatch must be persisted as in-flight BEFORE calling an Android adapter;
+-- restarting in that state blocks automatic resubmission.
+public export
+begin_dispatch : KeepDelivery → Maybe KeepDelivery
+begin_dispatch delivery = case delivery.phase of
+  ready_to_dispatch ⇒ Just (DeliverySnapshot delivery.local_identity dispatch_in_flight Nothing)
+  keep_unavailable ⇒ Just (DeliverySnapshot delivery.local_identity dispatch_in_flight Nothing)
+  _ ⇒ Nothing
+
+public export
+record_dispatch : KeepDelivery → keep_dispatch_result → Maybe KeepDelivery
+record_dispatch delivery report = case delivery.phase of
+  dispatch_in_flight ⇒ Just (DeliverySnapshot delivery.local_identity
+    (case report of
+      intent_started ⇒ awaiting_user_confirmation
+      keep_missing ⇒ keep_unavailable
+      dispatch_failed_or_uncertain ⇒ delivery_uncertain) Nothing)
+  _ ⇒ Nothing
+
+public export
+confirm_saved : KeepDelivery → Maybe Text → Maybe KeepDelivery
+confirm_saved delivery remote_identity = case delivery.phase of
+  awaiting_user_confirmation ⇒
+    if maybe True safe_identity remote_identity then
+      Just (DeliverySnapshot delivery.local_identity confirmed_in_keep remote_identity)
+    else Nothing
+  _ ⇒ Nothing
+
+public export
+decline_save : KeepDelivery → Maybe KeepDelivery
+decline_save delivery = case delivery.phase of
+  awaiting_user_confirmation ⇒ Just (DeliverySnapshot delivery.local_identity declined_in_keep Nothing)
+  _ ⇒ Nothing
+
+public export
+recover_delivery : KeepDelivery → KeepDelivery
+recover_delivery delivery = case delivery.phase of
+  dispatch_in_flight ⇒ DeliverySnapshot delivery.local_identity delivery_uncertain Nothing
+  _ ⇒ delivery
+
+phase_text : keep_delivery_phase → Text
+phase_text ready_to_dispatch = "ready"
+phase_text dispatch_in_flight = "in-flight"
+phase_text awaiting_user_confirmation = "awaiting-user"
+phase_text keep_unavailable = "unavailable"
+phase_text delivery_uncertain = "uncertain"
+phase_text confirmed_in_keep = "confirmed"
+phase_text declined_in_keep = "declined"
+
+parse_phase : Text → Maybe keep_delivery_phase
+parse_phase "ready" = Just ready_to_dispatch
+parse_phase "in-flight" = Just dispatch_in_flight
+parse_phase "awaiting-user" = Just awaiting_user_confirmation
+parse_phase "unavailable" = Just keep_unavailable
+parse_phase "uncertain" = Just delivery_uncertain
+parse_phase "confirmed" = Just confirmed_in_keep
+parse_phase "declined" = Just declined_in_keep
+parse_phase _ = Nothing
+
+id_text : Maybe Text → Text
+id_text Nothing = ""
+id_text (Just value) = value
+
+-- One strict bounded ASCII snapshot. The platform adapter atomically replaces
+-- these bytes in an app-private directory; it never interprets phase/policy.
+public export
+encode_delivery : KeepDelivery → Maybe Text
+encode_delivery delivery =
+  if safe_identity delivery.local_identity &&
+     maybe True safe_identity delivery.remote_note_identity &&
+     (case delivery.phase of
+        confirmed_in_keep ⇒ True
+        _ ⇒ isNothing delivery.remote_note_identity) then
+    Just ("ib-keep-delivery-v1\t" ++ delivery.local_identity ++ "\t" ++
+          phase_text delivery.phase ++ "\t" ++ id_text delivery.remote_note_identity ++ "\n")
+  else Nothing
+
+public export
+decode_delivery : Text → Maybe KeepDelivery
+decode_delivery value =
+  if length (unpack value) > 512 || not (isSuffixOf "\n" value) ||
+     not (all (\c ⇒ ord c < 128) (unpack value)) then Nothing else
+    case lines value of
+      [row] ⇒ case forget (split (≟ '\t') row) of
+        ["ib-keep-delivery-v1", identity, phase_name, remote] ⇒ do
+          phase ← parse_phase phase_name
+          let entry = DeliverySnapshot identity phase
+                (if remote ≟ "" then Nothing else Just remote)
+          case encode_delivery entry of
+            Just encoded ⇒ if encoded ≟ value then Just entry else Nothing
+            Nothing ⇒ Nothing
+        _ ⇒ Nothing
+      _ ⇒ Nothing

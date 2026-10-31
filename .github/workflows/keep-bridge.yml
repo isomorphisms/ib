@@ -1,0 +1,25 @@
+name: Keep share bridge synthetic acceptance
+on:
+  pull_request:
+    paths:
+      - 'native/android/ib_keep_*'
+      - 'lib/android_keep_handoff.grease'
+      - 'tests/test_keep_*'
+      - 'tests/verify_keep_argv.c'
+      - 'src/IB/KeepBridge.idric'
+      - 'src/KeepBridgeCases.idric'
+      - 'src/IB/HumanDecisions.idric'
+      - 'src/IB/PensieveHome.idric'
+      - '.github/workflows/keep-bridge.yml'
+  workflow_dispatch:
+jobs:
+  transport-synthetic:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: false
+      - name: C and Grease executable synthetic checks
+        run: sh tests/test_keep_bridge.sh
+      - name: Check Idriç public vocabulary
+        run: sh tests/idric-public-vocabulary.sh
