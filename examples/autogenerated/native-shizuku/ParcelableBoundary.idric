@@ -51,6 +51,64 @@ creator_plan = do
     , native_method "newArray" [ExistingValue IntegerValue] (object "[Ljava/lang/Object;")
     ] } base)
 
+provider_plan : Either Text FilePlan
+provider_plan = do
+  base ← framework_class_plan
+    (Subclass "Lorg/isomorphisms/ib/ShizukuProvider;" "Landroid/content/ContentProvider;"
+      (Just "ib_reader")
+      [ Callback "onCreate" "Z" []
+      , Callback "call" "Landroid/os/Bundle;"
+          ["Ljava/lang/String;", "Ljava/lang/String;", "Landroid/os/Bundle;"]
+      , Callback "getType" "Ljava/lang/String;" ["Landroid/net/Uri;"]
+      , Callback "insert" "Landroid/net/Uri;" ["Landroid/net/Uri;", "Landroid/content/ContentValues;"]
+      ]) []
+  -- Array-bearing SDK methods use the writer's typed reference plans. They
+  -- do not add array operations to the checked source foreign-call grammar.
+  Right ({ methods := base.methods ++
+    [ native_method "query"
+        [object "Landroid/net/Uri;", object "[Ljava/lang/String;", ExistingValue TextValue,
+         object "[Ljava/lang/String;", ExistingValue TextValue] (object "Landroid/database/Cursor;")
+    , native_method "delete"
+        [object "Landroid/net/Uri;", ExistingValue TextValue, object "[Ljava/lang/String;"]
+        (ExistingValue IntegerValue)
+    , native_method "update"
+        [object "Landroid/net/Uri;", object "Landroid/content/ContentValues;",
+         ExistingValue TextValue, object "[Ljava/lang/String;"] (ExistingValue IntegerValue)
+    ] } base)
+
+application_plan : Either Text FilePlan
+application_plan = framework_class_plan
+  (Subclass "Lorg/isomorphisms/ib/ShizukuApplicationCallback;" "Landroid/os/Binder;"
+    (Just "ib_reader")
+    [Callback "onTransact" "Z" ["I", "Landroid/os/Parcel;", "Landroid/os/Parcel;", "I"]]) []
+
+death_plan : Either Text FilePlan
+death_plan = framework_class_plan
+  (Subclass "Lorg/isomorphisms/ib/ShizukuDeathRecipient;" "Ljava/lang/Object;"
+    (Just "ib_reader") [Callback "binderDied" "V" []]) ["Landroid/os/IBinder$DeathRecipient;"]
+
+client_plan : Either Text FilePlan
+client_plan = do
+  base ← framework_class_plan
+    (Subclass "Lorg/isomorphisms/ib/ShizukuClient;" "Ljava/lang/Object;"
+      (Just "ib_reader") []) []
+  Right ({ methods := base.methods ++
+    [ MkBoundMethodPlan "observe current SDK authority" "state" 0 []
+        (ExistingValue IntegerValue) 0 [] NativeStaticMethod
+    , MkBoundMethodPlan "request SDK permission" "requestPermission" 0 []
+        (ExistingValue IntegerValue) 0 [] NativeStaticMethod
+    ] } base)
+
+client_bytes : Either Text (List Int)
+client_bytes = do
+  container ← container_plan
+  creator ← creator_plan
+  provider ← provider_plan
+  application ← application_plan
+  death ← death_plan
+  client ← client_plan
+  encode_dex_classes [container, creator, provider, application, death, client]
+
 parcelable_bytes : Either Text (List Int)
 parcelable_bytes = do
   container ← container_plan
@@ -60,13 +118,17 @@ parcelable_bytes = do
 main : IO ()
 main = do
   args ← getArgs
-  case args of
-    [_, destination] ⇒
-      case parcelable_bytes of
+  let request : Maybe (Text, Either Text (List Int)) = case args of
+        [_, destination] ⇒ Just (destination, parcelable_bytes)
+        [_, "--client", destination] ⇒ Just (destination, client_bytes)
+        _ ⇒ Nothing
+  case request of
+    Just (destination, generated) ⇒
+      case generated of
           Left problem ⇒ do putStrLn problem; exitFailure
           Right bytes ⇒ do
             written ← write_dex destination bytes
             case written of
               Left problem ⇒ do putStrLn problem; exitFailure
               Right () ⇒ putStrLn "PASS maintained Shizuku Parcelable declarations through the shared DEX writer"
-    _ ⇒ do putStrLn "usage: parcelable-boundary NEW_DEX"; exitFailure
+    _ ⇒ do putStrLn "usage: parcelable-boundary [--client] NEW_DEX"; exitFailure

@@ -7,4 +7,6 @@
     <public type="id" name="sources_panel" id="0x7f030002" />
     <public type="id" name="sources_button" id="0x7f030003" />
     <public type="id" name="read_button" id="0x7f030004" />
+    <public type="id" name="reader_status" id="0x7f030005" />
+    <public type="id" name="permission_button" id="0x7f030006" />
 </resources>

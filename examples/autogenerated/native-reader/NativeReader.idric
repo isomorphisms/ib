@@ -33,6 +33,10 @@ clicked_view_identity : ViewReference → PrimIO Int32
 reader_view_visibility : ViewReference → PrimIO Int32
 %foreign "dex:virtual:Landroid/view/View;:setVisibility:(I)V"
 set_reader_view_visibility : ViewReference → Int32 → PrimIO ()
+%foreign "dex:static:Lorg/isomorphisms/ib/ShizukuClient;:state:()I"
+current_acquisition_capability : PrimIO Int32
+%foreign "dex:static:Lorg/isomorphisms/ib/ShizukuClient;:requestPermission:()I"
+request_acquisition_permission : PrimIO Int32
 
 -- Stable resource IDs are checked against android-native/res/values/public.xml.
 reader_layout : Int32
@@ -47,6 +51,24 @@ sources_button : Int32
 sources_button = 2130903043
 read_button : Int32
 read_button = 2130903044
+reader_status : Int32
+reader_status = 2130903045
+permission_button : Int32
+permission_button = 2130903046
+
+capability_message : Int32 → Text
+capability_message 0 = "Shizuku unavailable — start Shizuku, then retry."
+capability_message 1 = "Connecting to Shizuku…"
+capability_message 2 = "Shizuku permission required."
+capability_message 3 = "Shizuku authorized."
+capability_message _ = "Shizuku connection failed — restart Shizuku, then retry."
+
+refresh_acquisition_capability : ActivityReference → IO ()
+refresh_acquisition_capability activity = do
+  view ← primIO (find_reader_view activity reader_status)
+  text_view ← primIO (as_text_view view)
+  capability ← primIO current_acquisition_capability
+  primIO (write_reader_text text_view (capability_message capability))
 
 %export "dex:present_source_text"
 present_source_text : ActivityReference → Text → IO ()
@@ -59,6 +81,7 @@ present_source_text activity text = do
 create_reader : ActivityReference → IO ()
 create_reader activity = do
   primIO (apply_reader_layout activity reader_layout)
+  refresh_acquisition_capability activity
   intent ← primIO (incoming_intent activity)
   raw_text ← primIO (incoming_text intent "android.intent.extra.TEXT")
   empty ← primIO (raw_text_is_empty raw_text)
@@ -72,6 +95,7 @@ receive_reader_action activity clicked = do
   identity ← primIO (clicked_view_identity clicked)
   if identity ≟ sources_button
     then do
+      refresh_acquisition_capability activity
       panel ← primIO (find_reader_view activity sources_panel)
       visibility ← primIO (reader_view_visibility panel)
       primIO (set_reader_view_visibility panel (if visibility ≟ 0 then 8 else 0))
@@ -84,7 +108,11 @@ receive_reader_action activity clicked = do
         present_source_text activity text
         panel ← primIO (find_reader_view activity sources_panel)
         primIO (set_reader_view_visibility panel 8)
-      else pure ()
+      else if identity ≟ permission_button
+        then do
+          _ ← primIO request_acquisition_permission
+          refresh_acquisition_capability activity
+        else pure ()
 
 %cg dex activity create_reader receive_reader_action
 

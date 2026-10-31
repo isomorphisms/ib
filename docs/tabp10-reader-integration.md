@@ -26,9 +26,9 @@ old stacked branch histories or replace the canonical information model.
 | Search constructor | `dcbd86c0f7a69c4e0b381c0ab53f7c41f9966900` | Existing checked raw-query encoding and Intent projection |
 | Merged DEX foundation | `6ab4818219efa7ea5eda137ca6b76976eb2a4d42` | Retained ancestor; no obsolete backend reconstruction |
 | Reusable Text numeric cast repair | `0f9b6e1b867d424ac2ba0b2036a54ac74a277d7d` | Qualified ancestor; checks the erased numeric helper result before width conversion |
-| Native instance-reference fields | `6c1ebcd14c8d1d1736fdf088db7c6de2ec6a09c5` | Declared `vendor/android-NDK` gitlink; preserves Shizuku's per-instance Binder wire container |
+| Native platform fields/interfaces and APK payloads | `52fb79b79295ee7e22dabd4b6f1f2846cff58538` | Declared gitlink; adds isolated class interfaces at `ec6d6e7` and the maintained native APK payload path |
 | Checked frontend | `740bbf2b1d9e811fd00c719c3473eede17ceea3b` | Matching bootstrap/compiler API |
-| Independent reader observer | `87b1129e498197d372752e117eee0c2acac82bbe` | ai-ci-owned reader/numeric, redirect/readback and native SDK wire expectations |
+| Independent reader observer | `50a01cafdf9c436630b894a65b28cdffbe7f93fb` | ai-ci-owned reader/numeric, redirect/readback, SDK wire and installed Shizuku expectations |
 | ICU transport repair | `efec28ba28c129a471b8862cb81e56eef9160a51` | Actual response-owner redirect observations and retained path/framing repairs; not yet the live app worker |
 
 `IB.Reader.Document` joins the maintained admission, HTML/Prepaint and
@@ -118,6 +118,26 @@ leaves lane teardown with emulator-runner; it does not turn the failed run into
 a pass. Backend `6c1ebcd14c8d1d1736fdf088db7c6de2ec6a09c5` separately passes
 the native-instance-field observer and its static-field mutant on both APIs in
 [run 41245527257](https://github.com/isomorphisms/android-NDK/actions/runs/41245527257).
+
+The teardown correction at `8523d49005d0ca975ecea85a46cd1015b4c88d65` passes
+[run 41247706260](https://github.com/isomorphisms/ib/actions/runs/41247706260),
+including actual API 29/34 SDK Parcel reads/writes and rejection of the compiled
+Binder-loss control. Archive 13060547029 is 156615771 bytes, SHA-256
+`3594071d47f0c4632e2eba26418920b0e2140f37f0374cc94a6b70abb8f0ba8c`.
+The subsequently discovered empty-interface offset defect is fixed in backend
+`ec6d6e708194995ca554cd61ddb6ca584dc40fe3`; its independent class-interface and
+field controls pass both APIs in
+[run 41248361292](https://github.com/isomorphisms/android-NDK/actions/runs/41248361292).
+The direct native payload continuation is
+[isomorphisms/android-NDK PR #37, “Package checked secondary DEX and native ABI payloads in direct APKs”](https://github.com/isomorphisms/android-NDK/pull/37).
+
+The current provider/client continuation has a real native SDK implementation,
+checked capability/error controls in the Activity, generic three-ABI builds and
+compiled caller/death variants. Its new installed-app observer uses official
+Shizuku and Android UI, with explicit denial/grant, death, reconnection and
+ordinary-caller controls. That execution is pending. This boundary APK is not a
+working URL reader; worker launch, source-to-view/history and RPC timeout work
+remain incomplete. No physical or full reader acceptance is promoted.
 
 The [controlled host network record](host-network-2026-10-31.md) separately
 records actual native ICU HTTP/TLS acquisition, canonical publication and
