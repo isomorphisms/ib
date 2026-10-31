@@ -27,7 +27,7 @@ old stacked branch histories or replace the canonical information model.
 | Merged DEX backend | `6ab4818219efa7ea5eda137ca6b76976eb2a4d42` | Declared `vendor/android-NDK` gitlink and actual compiler checkout |
 | Checked frontend | `740bbf2b1d9e811fd00c719c3473eede17ceea3b` | Matching bootstrap/compiler API |
 | Independent reader observer | `ac06d67dd82cdf82c59ea06f9378ddccb09e8bc7` | ai-ci-owned semantic expectations and compiled-mutant rejection |
-| ICU transport repair | `f81a529fe87e388a2da57d172572c84adde2ffc7` | Host path/framing regression; not yet the live app worker |
+| ICU transport repair | `fd86cccb2f9f73f87fdd9ae6c685e72a7771ef35` | Host path/framing regression; not yet the live app worker |
 
 `IB.Reader.Document` joins the maintained admission, HTML/Prepaint and
 source-linked layout owners. The compiled projection receives every readback
@@ -44,6 +44,16 @@ raggedness at a declared code-point metric. It requires rejection of compiled
 selector, admission and title mutants. Candidate DEX always comes from checked
 Idriç; smali assembles only external observers.
 
+The native source owner now has an explicit retained-source open operation.
+It checks the immutable source generation against the committed receipt while
+checking the current navigation epoch independently. The original open method
+still requires coincident generations and retains its replay refusals. This
+lets a trusted future history callback reopen an older source without rewriting
+the receipt. It does not by itself wire Back/Forward into the application. Host
+tests also compile a mutant that confuses those generations and require failure
+at the new retained-read assertion. The fast fixture remains synthetic ordinary
+Arena files; it is not canonical publication or an Android Binder transaction.
+
 ## Requirement ledger
 
 `FAIL` below means the product requirement is still unsatisfied; it does not
@@ -55,7 +65,7 @@ after inspection of the completed exact-head run.
 | Requirement | State | Evidence / remaining boundary |
 | --- | --- | --- |
 | Reconcile retained sources and remove Java application paths | PASS | Source/tree reconciliation; no runtime claim |
-| Consume merged compiler instead of obsolete backend | PASS | Gitlink plus checked-out revision equality in prepare stage |
+| Consume merged compiler instead of obsolete backend | PASS | Gitlink and local checkout match; prepare enforces the same condition |
 | Compile actual maintained parser/search/Activity on current head | NOT_RUN | Hosted qualification in progress |
 | Independently decode DEX and prove determinism/refusal | NOT_RUN | Required qualifier stages |
 | ART semantics and compiled-mutant rejection, API 29/34 | NOT_RUN | ai-ci observer wired; execution pending |

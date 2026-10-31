@@ -326,14 +326,15 @@ void ib_arena_source_owner_want(ib_arena_source_owner *owner,
                      navigation_generation);
 }
 
-int ib_arena_source_owner_open(ib_arena_source_owner *owner,
-                               const char *request_id,
-                               uint64_t navigation_generation,
-                               ib_reader_source_ticket *ticket,
-                               int *read_fd) {
+int ib_arena_source_owner_open_retained(ib_arena_source_owner *owner,
+                                       const char *request_id,
+                                       uint64_t retained_source_generation,
+                                       uint64_t navigation_generation,
+                                       ib_reader_source_ticket *ticket,
+                                       int *read_fd) {
     if (read_fd) *read_fd = -1;
     if (!owner || !read_fd || !safe_request_id(request_id) ||
-        navigation_generation == 0 ||
+        retained_source_generation == 0 || navigation_generation == 0 ||
         navigation_generation !=
             atomic_load(&owner->wanted_navigation_generation))
         return -1;
@@ -352,7 +353,7 @@ int ib_arena_source_owner_open(ib_arena_source_owner *owner,
     if (root < 0 || fstat(root, &info) != 0 ||
         !S_ISDIR(info.st_mode) || info.st_uid != geteuid() ||
         (info.st_mode & 077U) != 0) goto done;
-    if (read_manifest(root, request_id, navigation_generation,
+    if (read_manifest(root, request_id, retained_source_generation,
                       &offset, &length, expected) != 0)
         goto done;
     bytes = malloc(length);
@@ -415,6 +416,15 @@ done:
     if (root >= 0) close(root);
     free(bytes);
     return result;
+}
+
+int ib_arena_source_owner_open(ib_arena_source_owner *owner,
+                               const char *request_id,
+                               uint64_t navigation_generation,
+                               ib_reader_source_ticket *ticket,
+                               int *read_fd) {
+    return ib_arena_source_owner_open_retained(owner, request_id,
+        navigation_generation, navigation_generation, ticket, read_fd);
 }
 
 int ib_arena_source_owner_open_binder(void *owner, const char *request_id,
