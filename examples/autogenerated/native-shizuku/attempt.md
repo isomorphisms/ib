@@ -58,3 +58,10 @@ control and cannot count as actual Shizuku evidence. These installed checks are
 pending. UI-thread SDK RPC timeout behavior, private acquisition capability
 distribution, Grease worker launch, Arena/document wiring and physical acceptance
 remain unfinished; the campaign is INCOMPLETE.
+
+Installed boundary run 41250102609 at 4ab6ffef did not reach a compiler or
+Android execution. Ubuntu mirror downloads stalled in the ICK action's package
+prerequisite until the 60-minute job deadline. No compiler cache/build was
+entered and no Android receipt was produced. The next workflow pins ai-ci's
+bounded signed-HTTPS Ubuntu provisioning, selects the SDK's required JDK 17,
+and allows 90 minutes for the actual multi-stage build and two emulators.
