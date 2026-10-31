@@ -12,6 +12,7 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include "ib_redirect_observations.h"
 
 #ifndef O_NOFOLLOW
 #error "This reader requires O_NOFOLLOW"
@@ -137,12 +138,21 @@ done:
 }
 
 int main(int argc, char **argv) {
+    if (argc == 6 && strcmp(argv[1], "redirects") == 0) {
+        uint64_t count = 0;
+        if (number(argv[4], &count) != 0 || count > 8U ||
+            !ib_redirect_chain_valid(argv[5], argv[2], argv[3], (unsigned)count)) {
+            fprintf(stderr, "ib-arena-slice: refused redirect observation chain\n");
+            return 1;
+        }
+        return 0;
+    }
     uint64_t offset, length;
     if (argc == 3 && strcmp(argv[1], "sync") == 0)
         return sync_path_and_directory(argv[2]);
     if (argc == 5 && strcmp(argv[1], "slice") == 0 &&
         number(argv[3], &offset) == 0 && number(argv[4], &length) == 0)
         return dump_slice(argv[2], offset, length);
-    fprintf(stderr, "usage: ib-arena-slice slice ARENA OFFSET LENGTH | sync PATH\n");
+    fprintf(stderr, "usage: ib-arena-slice slice ARENA OFFSET LENGTH | sync PATH | redirects REQUESTED RESOLVED COUNT CHAIN\n");
     return 2;
 }

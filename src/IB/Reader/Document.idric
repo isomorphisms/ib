@@ -1,0 +1,16 @@
+module IB.Reader.Document
+
+import Data.Text
+import IB.HtmlPrepaint
+import IB.Prepaint.Reflow
+import IB.Reflow
+
+-- Admission remains the maintained HtmlEvidence gate. Layout retains the
+-- admitted source, original blocks and exact source-linked code-point spans.
+-- This function performs neither network acquisition nor durable publication.
+export
+prepare_committed_document : HtmlEvidence → Text → ReflowRequirements → Text →
+                             (Text → Number) → Either Text HtmlPrepaintLayout
+prepare_committed_document evidence html request metric measure = do
+  admitted ← convert_admitted_html evidence html
+  reflow_html_prepaint request metric measure admitted

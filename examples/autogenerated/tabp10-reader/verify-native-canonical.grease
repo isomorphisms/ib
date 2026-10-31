@@ -1,0 +1,54 @@
+#!/usr/bin/env grease
+set -eu -o pipefail
+if (len(ARGV) !== 5) { echo 'usage: grease verify-native-canonical.grease IB APPENDFAT QUALIFIED_ICK NATIVE_EVIDENCE NEW_EVIDENCE' >&2; exit 2 }
+var repository = ARGV[0]
+var appendfat = ARGV[1]
+var compiler = ARGV[2]
+var native = ARGV[3]
+var evidence = ARGV[4]
+for path in "$repository" "$appendfat" "$compiler" "$native" "$evidence" {
+  if (len(path) === 0 or path[0] !== '/') { echo 'FAIL absolute path required' >&2; exit 2 }
+}
+if test -e "$evidence" { echo 'FAIL reused canonical evidence' >&2; exit 2 }
+test "$(git -C "$appendfat" rev-parse HEAD)" = 05a0cb7246c5a9f46abfbe92925812e7b607f454
+test -s "$native/stages.tsv"
+test -x "$native/source-owner-test"
+test -x "$native/wrong-generation-test"
+mkdir -p "$evidence"
+"$compiler" -fno-link-libatomic -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror \
+  "$appendfat/lib/appendfat_arena.c" "$appendfat/tools/appendfat_arena.c" \
+  -o "$evidence/appendfat-arena"
+"$compiler" -fno-link-libatomic -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror \
+  "$repository/native/android/ib_arena_slice.c" -o "$evidence/arena-slice"
+"$compiler" -fno-link-libatomic -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror -pthread \
+  -I "$appendfat/lib" "$appendfat/lib/appendfat_arena.c" \
+  "$repository/native/android/ib_reader_pfd.c" \
+  "$repository/native/android/ib_shizuku_arena_ingress.c" \
+  "$repository/native/android/ib_shizuku_arena_publish.c" \
+  "$repository/native/android/ib_arena_source_owner.c" \
+  "$repository/tests/test_shizuku_frame_canonical.c" -o "$evidence/frame-test"
+env IB_APPEND_ARENA="$evidence/appendfat-arena" IB_INGRESS_CANONICAL_TEST="$evidence/frame-test" \
+  sh "$repository/tests/test_shizuku_ingress_canonical.sh" > "$evidence/frame.txt" 2>&1
+cat "$evidence/frame.txt"
+rg -F 'PASS: ordered response-owner redirect chain' "$evidence/frame.txt"
+var oracle = "$repository/.tools/reader-acceptance/ib-source/verify.sh"
+test -s "$oracle"
+env IB_APPEND_ARENA="$evidence/appendfat-arena" IB_ARENA_SLICE="$evidence/arena-slice" \
+  IB_TEST_VERIFIED_ARENA_PIPE="$native/source-owner-test" IB_AICI_SOURCE_VERIFY="$oracle" \
+  sh "$repository/tests/test_android_arena_source_owner.sh" > "$evidence/readback.txt" 2>&1
+cat "$evidence/readback.txt"
+rg -x -F 'checked_arena=actual_appends' "$evidence/readback.txt"
+rg -F 'PASS: retained source generation stays immutable' "$evidence/readback.txt"
+ulimit -c 0
+try {
+  env IB_APPEND_ARENA="$evidence/appendfat-arena" IB_ARENA_SLICE="$evidence/arena-slice" \
+    IB_TEST_VERIFIED_ARENA_PIPE="$native/wrong-generation-test" IB_AICI_SOURCE_VERIFY="$oracle" \
+    sh "$repository/tests/test_android_arena_source_owner.sh" > "$evidence/wrong-generation.txt" 2>&1
+}
+if (_error.code !== 134) { echo 'FAIL canonical retained-generation mutant was not rejected' >&2; exit 1 }
+rg -x -F 'STAGE retained source generation 1 at navigation generation 3' "$evidence/wrong-generation.txt"
+rg -F 'Assertion' "$evidence/wrong-generation.txt" | rg -F 'ib_arena_source_owner_open_retained'
+git -C "$appendfat" rev-parse HEAD > "$evidence/appendfat-commit.txt"
+sha256sum "$compiler" "$evidence/appendfat-arena" "$evidence/arena-slice" \
+  "$evidence/frame-test" "$native/source-owner-test" "$native/wrong-generation-test" > "$evidence/sha256.txt"
+printf 'host_canonical_userspace_append\tPASS\nhost_redirect_chain_boundary\tPASS\nindependent_source_oracle\tPASS\nretained_source_readback\tPASS\ncompiled_generation_mutant\tREJECTED\nreal_response_metadata\tNOT_RUN\nAndroid_Binder\tNOT_RUN\nphysical_TAB_P10\tNOT_RUN\n' > "$evidence/stages.tsv"

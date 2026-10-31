@@ -1,0 +1,15 @@
+#!/usr/bin/env grease
+# Private Binder worker: send ICU's paired capture to the app's WRITE PFD.
+# The app validates framing/metadata, commits the body, and reopens it. This
+# worker has no app-private Arena path or publication authority.
+set -eu
+if test "$#" -ne 1; then
+  printf 'usage: ib_android_icu_frame.grease HTTP_URL\n' >&2
+  exit 2
+fi
+script_directory=$(dirname "$0")
+repository_root=$(CDPATH='' cd -- "$script_directory/.." && pwd)
+. "$repository_root/lib/android_shizuku_host.grease"
+. "$repository_root/lib/android_shizuku_icu_provider.grease"
+. "$repository_root/lib/android_binder_icu.grease"
+ib_binder_icu_frame "$1"

@@ -34,6 +34,21 @@ int ib_arena_source_owner_open(ib_arena_source_owner *owner,
                                ib_reader_source_ticket *ticket,
                                int *read_fd);
 
+/* Reopen an already committed source selected by trusted browser history.
+ * retained_source_generation is the immutable generation in that source's
+ * receipt; navigation_generation is the current disposable-reader request.
+ * Validate both independently. Never rewrite a source receipt to make Back,
+ * Forward or process recreation appear to be a new acquisition. The trusted
+ * application callback supplies the retained generation, not a Binder parcel
+ * or a renderer. The existing open entrypoint keeps its stricter initial-
+ * acquisition contract where both generations must coincide. */
+int ib_arena_source_owner_open_retained(ib_arena_source_owner *owner,
+                                       const char *request_id,
+                                       uint64_t retained_source_generation,
+                                       uint64_t navigation_generation,
+                                       ib_reader_source_ticket *ticket,
+                                       int *read_fd);
+
 /* Adapter for ib_arena_pfd_provider.open_verified_fd. */
 int ib_arena_source_owner_open_binder(void *owner, const char *request_id,
                                       uint64_t navigation_generation,

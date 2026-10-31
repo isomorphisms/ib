@@ -1,0 +1,28 @@
+module SearchIntentRequest
+
+import Data.Text
+import IB.WebSearch
+
+data IntentReference : Type where [external]
+
+%foreign "dex:virtual:Landroid/content/Intent;:getStringExtra:(Ljava/lang/String;)Ljava/lang/String;"
+original_query_from_intent : IntentReference → Text → PrimIO Text
+
+%foreign "dex:static:Landroid/text/TextUtils;:isEmpty:(Ljava/lang/CharSequence;)Z"
+query_is_empty : Text → PrimIO Int32
+
+-- This is only the checked receiver-to-acquisition request boundary. An empty
+-- result refuses navigation. Acquisition and history are not implemented here.
+%export "dex:search_request_from_intent"
+search_request_from_intent : IntentReference → IO Text
+search_request_from_intent intent = do
+  supplied ← primIO (original_query_from_intent intent "query")
+  empty ← primIO (query_is_empty supplied)
+  if empty ≟ 0
+    then case google_icu_url supplied of
+      Just address ⇒ pure address
+      Nothing ⇒ pure ""
+    else pure ""
+
+main : IO ()
+main = pure ()

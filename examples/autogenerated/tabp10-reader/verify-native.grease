@@ -1,0 +1,63 @@
+#!/usr/bin/env grease
+set -eu -o pipefail
+if (len(ARGV) !== 3) { echo 'usage: grease verify-native.grease IB QUALIFIED_ICK NEW_EVIDENCE' >&2; exit 2 }
+var repository = ARGV[0]
+var compiler = ARGV[1]
+var evidence = ARGV[2]
+for path in "$repository" "$compiler" "$evidence" {
+  if (len(path) === 0 or path[0] !== '/') { echo 'FAIL absolute path required' >&2; exit 2 }
+}
+test -x "$compiler"
+if test -e "$evidence" { echo 'FAIL reused native output' >&2; exit 2 }
+mkdir -p "$evidence"
+"$compiler" -fno-link-libatomic -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror -pthread \
+  "$repository/native/android/ib_reader_pfd.c" \
+  "$repository/native/android/ib_shizuku_arena_ingress.c" \
+  "$repository/tests/test_shizuku_arena_ingress_host.c" -o "$evidence/ingress-test"
+"$evidence/ingress-test" > "$evidence/ingress.txt" 2>&1
+cat "$evidence/ingress.txt"
+rg -F 'PASS: cross-process anonymous FD delivery' "$evidence/ingress.txt"
+rg -F 'PASS: revoked ingress cannot rearm, reopen or publish' "$evidence/ingress.txt"
+sed 's/return session \&\& !atomic_load(\&session->cancelled) \&\&/return session \&\&/' \
+  "$repository/native/android/ib_shizuku_arena_ingress.c" > "$evidence/revivable-ingress.c"
+if cmp -s "$repository/native/android/ib_shizuku_arena_ingress.c" "$evidence/revivable-ingress.c" {
+  echo 'FAIL revocation mutation did not change source' >&2; exit 1
+}
+"$compiler" -fno-link-libatomic -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror -pthread \
+  -I "$repository/native/android" "$repository/native/android/ib_reader_pfd.c" \
+  "$evidence/revivable-ingress.c" "$repository/tests/test_shizuku_arena_ingress_host.c" \
+  -o "$evidence/revivable-ingress-test"
+ulimit -c 0
+try { "$evidence/revivable-ingress-test" > "$evidence/revivable-ingress.txt" 2>&1 }
+if (_error.code !== 134) { echo 'FAIL revocation mutant was not rejected at its intended assertion' >&2; exit 1 }
+rg -x -F 'STAGE irrevocable ingress capability revocation' "$evidence/revivable-ingress.txt"
+rg -F 'Assertion' "$evidence/revivable-ingress.txt" | rg -F 'ib_ingress_begin'
+"$compiler" -fno-link-libatomic -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror -pthread \
+  "$repository/native/android/ib_reader_pfd.c" \
+  "$repository/native/android/ib_arena_source_owner.c" \
+  "$repository/tests/test_android_arena_source_owner.c" -o "$evidence/source-owner-test"
+var oracle = "$repository/.tools/reader-acceptance/ib-source/verify.sh"
+test -s "$oracle"
+env IB_TEST_VERIFIED_ARENA_PIPE="$evidence/source-owner-test" IB_AICI_SOURCE_VERIFY="$oracle" \
+  sh "$repository/tests/test_android_arena_source_owner_synthetic.sh" > "$evidence/source-owner.txt" 2>&1
+cat "$evidence/source-owner.txt"
+rg -F 'PASS: retained source generation stays immutable' "$evidence/source-owner.txt"
+sed 's/read_manifest(root, request_id, retained_source_generation/read_manifest(root, request_id, navigation_generation/' \
+  "$repository/native/android/ib_arena_source_owner.c" > "$evidence/wrong-generation-owner.c"
+if cmp -s "$repository/native/android/ib_arena_source_owner.c" "$evidence/wrong-generation-owner.c" {
+  echo 'FAIL retained-generation mutation did not change source' >&2; exit 1
+}
+"$compiler" -fno-link-libatomic -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror -pthread \
+  -I "$repository/native/android" "$repository/native/android/ib_reader_pfd.c" \
+  "$evidence/wrong-generation-owner.c" "$repository/tests/test_android_arena_source_owner.c" \
+  -o "$evidence/wrong-generation-test"
+ulimit -c 0
+try {
+  env IB_TEST_VERIFIED_ARENA_PIPE="$evidence/wrong-generation-test" IB_AICI_SOURCE_VERIFY="$oracle" \
+    sh "$repository/tests/test_android_arena_source_owner_synthetic.sh" > "$evidence/wrong-generation.txt" 2>&1
+}
+if (_error.code !== 134) { echo 'FAIL generation-confusion mutant was not rejected by its intended assertion' >&2; exit 1 }
+rg -x -F 'STAGE retained source generation 1 at navigation generation 3' "$evidence/wrong-generation.txt"
+rg -F 'Assertion' "$evidence/wrong-generation.txt" | rg -F 'ib_arena_source_owner_open_retained'
+sha256sum "$compiler" "$evidence/ingress-test" "$evidence/revivable-ingress-test" "$evidence/source-owner-test" "$evidence/wrong-generation-test" > "$evidence/native.sha256"
+printf 'host_private_stream\tPASS\nhost_irrevocable_capability\tPASS\ncompiled_revocation_mutant\tREJECTED\nhost_retained_source_readback\tPASS\ncompiled_generation_mutant\tREJECTED\ncanonical_publication\tNOT_RUN\nAndroid_Binder\tNOT_RUN\nphysical_Shizuku\tNOT_RUN\n' > "$evidence/stages.tsv"

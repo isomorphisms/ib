@@ -1,0 +1,15 @@
+#!/usr/bin/env grease
+set -eu -o pipefail
+if (len(ARGV) !== 4) { echo 'usage: grease observe.grease IB INPUT ADB NEW_EVIDENCE' >&2; exit 2 }
+var repository = ARGV[0]
+var input = ARGV[1]
+var adb = ARGV[2]
+var evidence = ARGV[3]
+var grease = ENV.IB_GREASE
+var observed = $("$adb" -s emulator-5554 shell getprop ro.build.version.sdk | tr -d '\r')
+if (observed !== ENV.AICI_EXPECTED_ANDROID_API) { echo 'FAIL emulator API differs from declared acceptance target' >&2; exit 1 }
+"$grease" "$repository/.tools/reader-acceptance/ib-source/reader/observe-art.grease" \
+  "$repository/.tools/reader-acceptance" "$input" "$input/oracles/smali.jar" \
+  "$adb" emulator-5554 "$evidence"
+# Each subsequent API gets its own freshly booted emulator, never the prior API.
+"$adb" -s emulator-5554 emu kill

@@ -1,6 +1,7 @@
 #define _GNU_SOURCE
 #define _FILE_OFFSET_BITS 64
 #include "ib_arena_source_owner.h"
+#include "ib_redirect_observations.h"
 
 #include <errno.h>
 #include <fcntl.h>
@@ -21,14 +22,15 @@
 
 /* ICU #35/IB #152 v2 receipts carry both committed byte provenance and
  * explicit HTML admission. No v1 UNOBSERVED receipt can be delivered to
- * a visible reader. Source generation must match the requested navigation. */
+ * a visible reader. Retained source and current navigation generations are
+ * checked independently; neither field is rewritten during history reads. */
 enum receipt_key {
     RK_SCHEMA, RK_REQUEST, RK_SOURCE_KEY, RK_SOURCE_GENERATION,
     RK_REQUESTED_URL, RK_RESOLVED_URL, RK_STATUS, RK_MIME, RK_CHARSET,
     RK_CONTENT_ENCODING, RK_UTF8, RK_REDIRECT_COUNT,
     RK_DECLARED_LENGTH, RK_RECEIVED_LENGTH, RK_TRANSPORT,
     RK_ARENA, RK_OFFSET, RK_END, RK_LENGTH, RK_SHA256,
-    RK_REOPEN, RK_ACQUISITION, RK_NAVIGATION, RK_COUNT
+    RK_REOPEN, RK_ACQUISITION, RK_NAVIGATION, RK_REDIRECT_CHAIN, RK_COUNT
 };
 static const char *const receipt_names[RK_COUNT] = {
     "schema", "request_id", "source_key", "source_generation",
@@ -37,9 +39,9 @@ static const char *const receipt_names[RK_COUNT] = {
     "declared_length", "received_length", "transport",
     "arena_name", "arena_offset", "arena_end", "byte_count",
     "sha256", "reopen_check", "acquisition_complete",
-    "navigation_admitted"
+    "navigation_admitted", "redirect_chain"
 };
-#define RECEIPT_MAX_BYTES 8192U
+#define RECEIPT_MAX_BYTES 16384U
 #define SOURCE_WRITER_DEADLINE_MS 5000
 #define SOURCE_MAX_CONCURRENT_WRITERS 2U
 static atomic_uint source_writers = 0;
@@ -133,7 +135,9 @@ static int parse_receipt(char *text, size_t size, const char *request_id,
 
     /* A body-only v1 receipt is not a proof of response identity/charset,
      * and cannot authorize reader publication even with a valid byte hash. */
-    if (found != RK_COUNT ||
+    for (size_t i = 0; i < RK_REDIRECT_CHAIN; ++i)
+        if (!fields[i]) return -1;
+    if ((found != RK_REDIRECT_CHAIN && found != RK_COUNT) ||
         strcmp(fields[RK_SCHEMA], "ib-icu-arena-v2") != 0 ||
         strcmp(fields[RK_REQUEST], request_id) != 0 ||
         strcmp(fields[RK_TRANSPORT], "icu-app-process-via-binder-shizuku") != 0 ||
@@ -162,6 +166,12 @@ static int parse_receipt(char *text, size_t size, const char *request_id,
         generation == 0 || generation != wanted_generation ||
         parse_uint(fields[RK_REDIRECT_COUNT], &redirects) != 0 ||
         redirects > 8U)
+        return -1;
+    /* Preserve already retained v2 records. When a new response-owner chain
+     * is present it is mandatory evidence, never an ignored extension. */
+    if (fields[RK_REDIRECT_CHAIN] &&
+        !ib_redirect_chain_valid(fields[RK_REDIRECT_CHAIN], fields[RK_REQUESTED_URL],
+                                 fields[RK_RESOLVED_URL], (unsigned)redirects))
         return -1;
 
     uint64_t begin = 0, finish = 0, amount = 0, received = 0;
@@ -326,14 +336,15 @@ void ib_arena_source_owner_want(ib_arena_source_owner *owner,
                      navigation_generation);
 }
 
-int ib_arena_source_owner_open(ib_arena_source_owner *owner,
-                               const char *request_id,
-                               uint64_t navigation_generation,
-                               ib_reader_source_ticket *ticket,
-                               int *read_fd) {
+int ib_arena_source_owner_open_retained(ib_arena_source_owner *owner,
+                                       const char *request_id,
+                                       uint64_t retained_source_generation,
+                                       uint64_t navigation_generation,
+                                       ib_reader_source_ticket *ticket,
+                                       int *read_fd) {
     if (read_fd) *read_fd = -1;
     if (!owner || !read_fd || !safe_request_id(request_id) ||
-        navigation_generation == 0 ||
+        retained_source_generation == 0 || navigation_generation == 0 ||
         navigation_generation !=
             atomic_load(&owner->wanted_navigation_generation))
         return -1;
@@ -352,7 +363,7 @@ int ib_arena_source_owner_open(ib_arena_source_owner *owner,
     if (root < 0 || fstat(root, &info) != 0 ||
         !S_ISDIR(info.st_mode) || info.st_uid != geteuid() ||
         (info.st_mode & 077U) != 0) goto done;
-    if (read_manifest(root, request_id, navigation_generation,
+    if (read_manifest(root, request_id, retained_source_generation,
                       &offset, &length, expected) != 0)
         goto done;
     bytes = malloc(length);
@@ -415,6 +426,15 @@ done:
     if (root >= 0) close(root);
     free(bytes);
     return result;
+}
+
+int ib_arena_source_owner_open(ib_arena_source_owner *owner,
+                               const char *request_id,
+                               uint64_t navigation_generation,
+                               ib_reader_source_ticket *ticket,
+                               int *read_fd) {
+    return ib_arena_source_owner_open_retained(owner, request_id,
+        navigation_generation, navigation_generation, ticket, read_fd);
 }
 
 int ib_arena_source_owner_open_binder(void *owner, const char *request_id,

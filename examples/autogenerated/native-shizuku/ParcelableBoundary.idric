@@ -1,0 +1,72 @@
+module ParcelableBoundary
+
+import Backend.DEX.Encode
+import Backend.DEX.FrameworkClasses
+import Backend.DEX.IR
+import Data.Text
+import System
+
+%default covering
+
+object : Text → FrameworkValueType
+object = ReferenceValue . MkTypeReference
+
+container_name : Text
+container_name = "Lmoe/shizuku/api/BinderContainer;"
+
+native_method : Text → List FrameworkValueType → FrameworkValueType → MethodPlan
+native_method name arguments result =
+  MkBoundMethodPlan "Shizuku Parcelable JNI boundary" name (cast (length arguments))
+    arguments result 0 [] NativeInstanceMethod
+
+container_plan : Either Text FilePlan
+container_plan = do
+  base ← framework_class_plan
+    (Subclass container_name "Ljava/lang/Object;" Nothing []) []
+  let initialize = MkBoundMethodPlan "initialize Parcelable Creator" "initializeCreator"
+        0 [] VoidValue 0 [] NativeStaticMethod
+  let startup = MkBoundMethodPlan "load native Parcelable adapter" "<clinit>" 0 [] VoidValue 1
+        [ TextConstant (MkRegister 0) "ib_reader"
+        , InvokeMethod (Invoke InvokeStatic
+            (MkMethodReference (MkTypeReference "Ljava/lang/System;") "loadLibrary"
+              [ExistingValue TextValue] VoidValue) [MkRegister 0] Nothing)
+        , InvokeMethod (Invoke InvokeStatic
+            (MkMethodReference (MkTypeReference container_name) "initializeCreator" [] VoidValue) [] Nothing)
+        , ReturnVoid ] ClassInitializerMethod
+  Right ({ interfaces := [MkTypeReference "Landroid/os/Parcelable;"], fields :=
+    [ MkFieldPlan "binder" (object "Landroid/os/IBinder;") 1
+    , MkFieldPlan "CREATOR" (object "Landroid/os/Parcelable$Creator;") 9
+    ], methods := base.methods ++ [initialize, startup,
+      native_method "describeContents" [] (ExistingValue IntegerValue),
+      native_method "writeToParcel" [object "Landroid/os/Parcel;", ExistingValue IntegerValue] VoidValue]
+    } base)
+
+creator_plan : Either Text FilePlan
+creator_plan = do
+  base ← framework_class_plan
+    (Subclass "Lorg/isomorphisms/ib/BinderContainerCreator;" "Ljava/lang/Object;" Nothing [])
+    ["Landroid/os/Parcelable$Creator;"]
+  Right ({ methods := base.methods ++
+    [ native_method "createFromParcel" [object "Landroid/os/Parcel;"] (object "Ljava/lang/Object;")
+    , native_method "newArray" [ExistingValue IntegerValue] (object "[Ljava/lang/Object;")
+    ] } base)
+
+parcelable_bytes : Either Text (List Int)
+parcelable_bytes = do
+  container ← container_plan
+  creator ← creator_plan
+  encode_dex_classes [container, creator]
+
+main : IO ()
+main = do
+  args ← getArgs
+  case args of
+    [_, destination] ⇒
+      case parcelable_bytes of
+          Left problem ⇒ do putStrLn problem; exitFailure
+          Right bytes ⇒ do
+            written ← write_dex destination bytes
+            case written of
+              Left problem ⇒ do putStrLn problem; exitFailure
+              Right () ⇒ putStrLn "PASS maintained Shizuku Parcelable declarations through the shared DEX writer"
+    _ ⇒ do putStrLn "usage: parcelable-boundary NEW_DEX"; exitFailure

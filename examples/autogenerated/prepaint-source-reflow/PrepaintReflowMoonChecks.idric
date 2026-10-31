@@ -1,0 +1,134 @@
+module PrepaintReflowMoonChecks
+
+import Data.Text
+import Data.Maybe
+import IB.Strand
+import IB.Prepaint
+import IB.Prepaint.Version1
+import IB.Prepaint.Reflow
+import IB.Reflow
+import IB.Reflow.Source
+import IB.Reflow.SourceBreaks
+import System
+
+measure_codepoints : Text → Number
+measure_codepoints text = length (unpack text)
+
+source_name : PrepaintRevision → Text
+source_name revision = nonempty_text_value revision.source.reference
+
+original_blocks : List BlockReflow → List InformationBlock
+original_blocks plans = map (\plan ⇒ plan.original_block) plans
+
+same_origin : RepresentationOrigin → RepresentationOrigin → Bool
+same_origin HtmlSource HtmlSource = True
+same_origin PdfSource PdfSource = True
+same_origin PlainTextSource PlainTextSource = True
+same_origin DerivedSource DerivedSource = True
+same_origin OtherSource OtherSource = True
+same_origin _ _ = False
+
+same_completeness : RepresentationCompleteness → RepresentationCompleteness → Bool
+same_completeness PartialSource PartialSource = True
+same_completeness CompleteSource CompleteSource = True
+same_completeness _ _ = False
+
+same_revision : PrepaintRevision → PrepaintRevision → Bool
+same_revision expected actual =
+  source_name expected ≟ source_name actual &&
+  same_origin expected.source.origin actual.source.origin &&
+  same_completeness expected.source.completeness actual.source.completeness &&
+  serialize_version1 [expected] ≟ serialize_version1 [actual]
+
+contiguous : Number → Number → List SourceLine → Bool
+contiguous source_length offset [] = offset ≟ source_length
+contiguous source_length offset (line :: rest) =
+  line.first_codepoint ≟ offset &&
+  line.after_last_codepoint > offset &&
+  line.after_last_codepoint <= source_length &&
+  contiguous source_length line.after_last_codepoint rest
+
+-- Intentionally independent of the production source_for_line helper.
+recover_slices : Text → List SourceLine → Text
+recover_slices source [] = ""
+recover_slices source (line :: rest) =
+  let before_end = take line.after_last_codepoint (unpack source) in
+  pack (drop line.first_codepoint before_end) ++ recover_slices source rest
+
+text_plan_valid : BlockReflow → Bool
+text_plan_valid plan = case plan.decoded_text of
+  Nothing ⇒ null plan.text_lines
+  Just text ⇒ contiguous (measure_codepoints text) 0 plan.text_lines &&
+    recover_slices text plan.text_lines ≟ text
+
+positions_valid : Number → List BlockReflow → Bool
+positions_valid offset [] = True
+positions_valid offset (plan :: rest) =
+  plan.block_position ≟ offset && positions_valid (S offset) rest
+
+layout_valid : PrepaintRevision → PrepaintLayout → Bool
+layout_valid expected layout =
+  same_revision expected layout.source_revision &&
+  same_revision expected (record { blocks = original_blocks layout.block_plans } layout.source_revision) &&
+  positions_valid 0 layout.block_plans && all text_plan_valid layout.block_plans
+
+visible : List SourceLine → List Text
+visible lines = map (\line ⇒ line.visible_text) lines
+
+mixed_blocks : Maybe (List InformationBlock)
+mixed_blocks = do
+  link ← link_reference "https://example.test/next"
+  form ← form_reference "https://example.test/submit"
+  image ← image_reference "arena-image-id"
+  pure [Heading Heading2 "漢字漢字", TextBlock "a\r\nb", Link "ab­cd" link,
+        TableRow (table_row "first cell" ["second cell"]),
+        Form "form label" form, Image image "alternate" "caption" (Just link),
+        TextBlock "ab​cd", TextBlock "a b", TextBlock "éx", TextBlock "👩‍💻x"]
+
+check_revision : PrepaintRevision → Bool
+check_revision revision =
+  case (reflow_prepaint (Requirements 3 promptly) "cp-v1" measure_codepoints revision,
+        reflow_prepaint (Requirements 4 evenly) "cp-v2" measure_codepoints revision) of
+    (Right layout, Right changed) ⇒
+      let plans = layout.block_plans in
+      let same_mixed = layout_valid revision layout && layout_valid revision changed in
+      let geometry = case plans of
+            heading :: hard :: soft :: table :: form :: image :: zero :: no_break :: accent :: emoji :: [] ⇒
+              visible heading.text_lines ≟ ["漢字漢", "字"] &&
+              visible hard.text_lines ≟ ["a", "b"] &&
+              visible soft.text_lines ≟ ["ab-", "cd"] &&
+              isNothing table.decoded_text && isNothing form.decoded_text && isNothing image.decoded_text &&
+              visible zero.text_lines ≟ ["ab", "cd"] &&
+              visible no_break.text_lines ≟ ["a b"] &&
+              visible accent.text_lines ≟ ["éx"] &&
+              visible emoji.text_lines ≟ ["👩‍💻x"]
+            _ ⇒ False in
+      let dropped = record { block_plans = drop 1 plans } layout in
+      let reordered = record { block_plans = reverse plans } layout in
+      let new_revision = record { sequence = next_revision revision.sequence } revision in
+      let changed_source = case nonempty_text "another-arena-source" of
+            Nothing ⇒ revision
+            Just reference ⇒ record { source = record { reference = reference } revision.source } revision in
+      same_mixed && geometry &&
+      not (layout_valid revision dropped) && not (layout_valid revision reordered) &&
+      not (layout_valid new_revision layout) && not (layout_valid changed_source layout) &&
+      layout.measurement_identity ≟ "cp-v1" && changed.measurement_identity ≟ "cp-v2" &&
+      (case (layout.requirements, changed.requirements) of
+         (Requirements 3 promptly, Requirements 4 evenly) ⇒ True
+         _ ⇒ False)
+    _ ⇒ False
+
+main : IO ()
+main = do
+  let source = do
+        reference ← nonempty_text "arena-source;generation=7;sha256=fixture"
+        requested ← requested_address "https://example.test/requested"
+        resolved ← resolved_address "https://example.test/resolved"
+        blocks ← mixed_blocks
+        pure (Prepaint first_revision CompleteRevision
+          (Source reference HtmlSource CompleteSource) requested resolved (Just "title") blocks)
+  let passed = case source of
+        Nothing ⇒ False
+        Just revision ⇒ check_revision revision
+  putStrLn ("prepaint-moon-independent-cases=" ++ show passed)
+  if passed then pure () else exitFailure

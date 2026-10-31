@@ -14,7 +14,8 @@ data DocumentEvent
 public export
 data RecoveredDocumentLog = DocumentLog String (List DocumentEvent)
 
-data RecoveryState = RecoverState (Maybe String) (Maybe String) Bool Bool
+data RecoveryState =
+  RecoverState (Maybe String) (Maybe String) Bool Bool (Maybe String)
 
 heading_tag : String → Bool
 heading_tag name = elem name ["h1", "h2", "h3", "h4", "h5", "h6"]
@@ -23,7 +24,7 @@ paragraph_boundary : String → Bool
 paragraph_boundary name =
   heading_tag name ||
   elem name ["table", "tr", "div", "section", "article", "aside", "nav",
-             "ul", "ol", "form"]
+             "ul", "ol", "form", "figure", "figcaption", "blockquote"]
 
 close_matching : String → Maybe String → Maybe String
 close_matching wanted Nothing = Nothing
@@ -35,63 +36,74 @@ close_maybe Nothing = []
 close_maybe (Just name) = [ImpliedEndTag name]
 
 eof_events : RecoveryState → List DocumentEvent
-eof_events (RecoverState paragraph cell row_open link_open) =
+eof_events (RecoverState paragraph cell row_open link_open heading) =
   (if link_open then [ImpliedEndTag "a"] else []) ++
   close_maybe cell ++
   (if row_open then [ImpliedEndTag "tr"] else []) ++
-  close_maybe paragraph
+  close_maybe paragraph ++ close_maybe heading
 
 recover_tokens : List InformationToken → RecoveryState → List DocumentEvent
 recover_tokens [] state = eof_events state
 recover_tokens (TextToken text :: rest) state =
   TextEvent text :: recover_tokens rest state
-recover_tokens (CloseTag name :: rest) (RecoverState paragraph cell row_open link_open) =
-  if name == "p" || name == "li"
+recover_tokens (CloseTag name :: rest)
+  (RecoverState paragraph cell row_open link_open heading) =
+  if heading_tag name
     then EndTag name :: recover_tokens rest
-      (RecoverState (close_matching name paragraph) cell row_open link_open)
+      (RecoverState paragraph cell row_open link_open (close_matching name heading))
+  else if name == "p" || name == "li"
+    then EndTag name :: recover_tokens rest
+      (RecoverState (close_matching name paragraph) cell row_open link_open heading)
     else if name == "td" || name == "th"
       then EndTag name :: recover_tokens rest
-        (RecoverState paragraph Nothing row_open link_open)
+        (RecoverState paragraph Nothing row_open link_open heading)
       else if name == "tr"
         then close_maybe cell ++ [EndTag "tr"] ++ recover_tokens rest
-          (RecoverState paragraph Nothing False link_open)
+          (RecoverState paragraph Nothing False link_open heading)
         else if name == "table"
           then close_maybe cell ++
             (if row_open then [ImpliedEndTag "tr"] else []) ++
             [EndTag "table"] ++ recover_tokens rest
-              (RecoverState paragraph Nothing False link_open)
+              (RecoverState paragraph Nothing False link_open heading)
           else if name == "a"
             then EndTag "a" :: recover_tokens rest
-              (RecoverState paragraph cell row_open False)
+              (RecoverState paragraph cell row_open False heading)
             else EndTag name :: recover_tokens rest
-              (RecoverState paragraph cell row_open link_open)
-recover_tokens (OpenTag name tag :: rest) (RecoverState paragraph cell row_open link_open) =
-  if name == "p" || name == "li"
-    then close_maybe paragraph ++ [StartTag name tag] ++ recover_tokens rest
-      (RecoverState (Just name) cell row_open link_open)
+              (RecoverState paragraph cell row_open link_open heading)
+recover_tokens (OpenTag name tag :: rest)
+  (RecoverState paragraph cell row_open link_open heading) =
+  if heading_tag name
+    then close_maybe heading ++ close_maybe paragraph ++
+      [StartTag name tag] ++ recover_tokens rest
+      (RecoverState Nothing cell row_open link_open (Just name))
+  else if name == "p" || name == "li"
+    then close_maybe heading ++ close_maybe paragraph ++
+      [StartTag name tag] ++ recover_tokens rest
+      (RecoverState (Just name) cell row_open link_open Nothing)
     else if name == "tr"
-      then close_maybe paragraph ++ close_maybe cell ++
+      then close_maybe heading ++ close_maybe paragraph ++ close_maybe cell ++
         (if row_open then [ImpliedEndTag "tr"] else []) ++
         [StartTag name tag] ++ recover_tokens rest
-          (RecoverState Nothing Nothing True link_open)
+          (RecoverState Nothing Nothing True link_open Nothing)
       else if name == "td" || name == "th"
         then close_maybe cell ++ [StartTag name tag] ++ recover_tokens rest
-          (RecoverState paragraph (Just name) row_open link_open)
+          (RecoverState paragraph (Just name) row_open link_open heading)
         else if name == "a"
           then (if link_open then [ImpliedEndTag "a"] else []) ++
             [StartTag name tag] ++ recover_tokens rest
-              (RecoverState paragraph cell row_open True)
+              (RecoverState paragraph cell row_open True heading)
           else if paragraph_boundary name
-            then close_maybe paragraph ++ [StartTag name tag] ++ recover_tokens rest
-              (RecoverState Nothing cell row_open link_open)
+            then close_maybe heading ++ close_maybe paragraph ++
+              [StartTag name tag] ++ recover_tokens rest
+              (RecoverState Nothing cell row_open link_open Nothing)
             else StartTag name tag :: recover_tokens rest
-              (RecoverState paragraph cell row_open link_open)
+              (RecoverState paragraph cell row_open link_open heading)
 
 public export
 recover_document_log : String → String → RecoveredDocumentLog
 recover_document_log source html =
   DocumentLog source
-    (recover_tokens (tokenize_information_html html) (RecoverState Nothing Nothing False False))
+    (recover_tokens (tokenize_information_html html) (RecoverState Nothing Nothing False False Nothing))
 
 public export
 document_log_contract : String

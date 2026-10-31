@@ -67,20 +67,27 @@ test "$bytes" -gt 0 && test "$bytes" -le 4194304 || fail 'ICU body empty or exce
 metadata_bytes=$(wc -c < "$metadata" | tr -d '[:space:]')
 test "$metadata_bytes" -gt 0 && test "$metadata_bytes" -le 8192 || fail 'bad ICU metadata length'
 
-# PR #35's metadata has exactly eight named fields. Reject injected lines,
-# duplicate/missing keys, control bytes, CR and arbitrary extension fields.
+# Retain the original eight observations or the complete ten-field capture.
+# The full-response extensions must arrive together; range responses and
+# unsupported transfer decoding cannot enter this whole-document path.
 tr -cd '\011\012\040-\176' < "$metadata" | cmp -s - "$metadata" ||
   fail 'ICU metadata includes non-printable bytes'
 awk -F '\t' '
   BEGIN {
     count=split("http_status content_type content_encoding declared_length received_length utf8 resolved_url redirect_count", names, " ")
     for (i=1;i<=count;i++) allowed[names[i]]=1
+    allowed["content_range"]=1
+    allowed["transfer_decoding"]=1
+    allowed["redirect_chain"]=1
   }
   NF!=2 || !allowed[$1] || $2=="" { bad=1 }
   { seen[$1]++ }
   END {
-    for (key in allowed) if (seen[key]!=1) bad=1
-    if (bad || NR!=8) exit 1
+    for (i=1;i<=count;i++) if (seen[names[i]]!=1) bad=1
+    if (seen["content_range"]!=seen["transfer_decoding"] ||
+        seen["content_range"]>1 || seen["transfer_decoding"]>1) bad=1
+    if (seen["redirect_chain"]>1 || (seen["redirect_chain"] && !seen["content_range"])) bad=1
+    if (bad || (NR!=8 && NR!=10 && NR!=11)) exit 1
   }
 ' "$metadata" || fail 'invalid ICU metadata structure'
 field() { awk -F '\t' -v name="$1" '$1==name {print $2}' "$metadata"; }
@@ -93,6 +100,13 @@ received_length=$(field received_length)
 utf8=$(field utf8)
 resolved_url=$(field resolved_url)
 redirect_count=$(field redirect_count)
+content_range=$(field content_range)
+transfer_decoding=$(field transfer_decoding)
+redirect_chain=$(field redirect_chain)
+if test -n "$content_range"; then
+  test "$content_range" = absent || fail 'range response cannot supply a complete document'
+  case "$transfer_decoding" in identity|chunked) ;; *) fail 'unsupported transfer decoding observation' ;; esac
+fi
 
 # ICU #35 returns success only for complete 2xx responses; check its observed
 # fields independently before making any body bytes reader-eligible.
@@ -109,6 +123,10 @@ case "$redirect_count" in ''|*[!0123456789]*) fail 'invalid redirect count' ;; e
 test "${#redirect_count}" -le 2 && test "$redirect_count" -le 8 ||
   fail 'redirect count exceeds ICU bound'
 case "$utf8" in valid|invalid) ;; *) fail 'invalid ICU UTF-8 observation' ;; esac
+if test -n "$redirect_chain"; then
+  "$slice_tool" redirects "$url" "$resolved_url" "$redirect_count" "$redirect_chain" ||
+    fail 'invalid response-owner redirect observations'
+fi
 
 # Preserve MIME and explicit charset separately. Byte-level UTF-8 validity is
 # not a substitute for an observed/declared charset.
@@ -130,7 +148,10 @@ navigation_admitted=NO
 if test "$http_status" = 200 && test "$mime_type" = text/html &&
    test "$charset" = utf-8 && test "$content_encoding" = identity &&
    test "$utf8" = valid; then
-  navigation_admitted=YES
+  if test -n "$redirect_chain" ||
+     { test "$redirect_count" = 0 && test "$resolved_url" = "$url"; }; then
+    navigation_admitted=YES
+  fi
 fi
 digest=$(sha256sum "$capture" | cut -d ' ' -f 1)
 
@@ -170,6 +191,7 @@ cmp -s "$capture" "$work/reopened" || fail 'Arena reopened bytes mismatch'
   printf 'reopen_check\tMATCH\n'
   printf 'acquisition_complete\tYES\n'
   printf 'navigation_admitted\t%s\n' "$navigation_admitted"
+  if test -n "$redirect_chain"; then printf 'redirect_chain\t%s\n' "$redirect_chain"; fi
 } > "$work/receipt.tsv"
 "$slice_tool" sync "$work/receipt.tsv" || fail 'could not sync staged receipt'
 test ! -e "$receipt" || fail 'receipt already exists before publication'
