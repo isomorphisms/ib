@@ -34,6 +34,14 @@ No handwritten candidate DEX or substitute application language is permitted.
 decodes DEX, compares deterministic output and records explicit failure stages.
 Compiled mutation controls and ART execution are separate stages.
 
+`verify-native.grease` checks bounded private streaming, permanent ingress
+revocation and retained source/navigation identities. Its two compiled mutants
+must fail the corresponding assertion, not merely exit for an unrelated error.
+`verify-native-canonical.grease` repeats retained-source readback and the
+generation mutant using actual pinned canonical userspace appends and ai-ci's
+independent source oracle. Response observations in these native host tests are
+explicit fixtures. They do not prove an Android Binder transaction or fetching.
+
 ## Current boundary
 
 Source reconciliation and new implementation are in progress. There is no

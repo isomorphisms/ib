@@ -69,7 +69,8 @@ static int allowed_broker_uid(uid_t uid) {
 
 static int matching_session(const ib_shizuku_arena_ingress *session,
                             uid_t caller, const char *id, uint64_t generation) {
-    return session && caller == session->permitted_bridge_uid &&
+    return session && !atomic_load(&session->cancelled) &&
+           caller == session->permitted_bridge_uid &&
            valid_request_id(id) &&
            strcmp(id, session->request_id) == 0 &&
            generation != 0 && generation == session->request_generation &&
@@ -153,7 +154,8 @@ int ib_ingress_arm(ib_shizuku_arena_ingress *session,
         !allowed_broker_uid(explicitly_allowed_uid) ||
         navigation_generation == 0) return -1;
     pthread_mutex_lock(&session->mutex);
-    if (session->state != IB_INGRESS_IDLE) {
+    if (session->state != IB_INGRESS_IDLE ||
+        atomic_load(&session->cancelled)) {
         pthread_mutex_unlock(&session->mutex);
         return -1;
     }
@@ -172,6 +174,12 @@ void ib_ingress_want(ib_shizuku_arena_ingress *session,
     if (session)
         atomic_store(&session->wanted_navigation_generation,
                      navigation_generation);
+}
+
+void ib_ingress_revoke(ib_shizuku_arena_ingress *session) {
+    if (!session) return;
+    atomic_store(&session->cancelled, true);
+    atomic_store(&session->wanted_navigation_generation, 0);
 }
 
 int ib_ingress_begin(ib_shizuku_arena_ingress *session,

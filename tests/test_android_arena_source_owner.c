@@ -235,8 +235,8 @@ int main(int argc, char **argv) {
     ib_reader_source_clear(&reader);
     free(original);
     free(damaged);
-    puts("PASS: canonical appendfat v2 HTML admission, matching navigation generation, pipe/double SHA, v1/stale/forged-metadata/byte/permission/symlink/corrupt-pointer refusal and recovery");
+    puts("PASS: v2 HTML receipt admission, matching navigation generation, pipe/double SHA, v1/stale/forged-metadata/byte/permission/symlink/corrupt-pointer refusal and recovery");
     puts("PASS: retained source generation stays immutable across a newer navigation; stale retained reads preserve the last good document");
-    puts("NOT_RUN: Android private Binder transaction, actual Shizuku/ICU network, Idric reader screen or physical C67");
+    puts("NOT_RUN: Android private Binder transaction, actual Shizuku/ICU network, Idric reader screen or physical TAB_P10");
     return 0;
 }

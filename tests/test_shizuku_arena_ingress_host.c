@@ -208,7 +208,36 @@ int main(void) {
     assert(store.publications == 2);
     ib_ingress_dispose(&session);
 
+    assert(ib_ingress_init(&session, publish, &store) == 0);
+    ib_ingress_revoke(&session);
+    assert(ib_ingress_arm(&session, "revoked-before-arm", 8,
+                          example_url, bridge_uid) != 0);
+    ib_ingress_dispose(&session);
+
+    arm(&session, &store, "revoked-before-begin", 8);
+    ib_ingress_revoke(&session);
+    /* A restored navigation epoch must not restore a revoked capability. */
+    ib_ingress_want(&session, 8);
+    int revoked_fd = -1;
+    fputs("STAGE irrevocable ingress capability revocation\n", stderr);
+    assert(ib_ingress_begin(&session, bridge_uid, "revoked-before-begin", 8,
+                            &revoked_fd) != 0);
+    assert(revoked_fd == -1);
+    assert(ib_ingress_finish(&session, bridge_uid, "revoked-before-begin", 8, 0) != 0);
+    ib_ingress_dispose(&session);
+
+    arm(&session, &store, "revoked-stream", 9);
+    assert(ib_ingress_begin(&session, bridge_uid, "revoked-stream", 9,
+                            &revoked_fd) == 0);
+    assert(write(revoked_fd, body, sizeof(body)) == (ssize_t)sizeof(body));
+    ib_ingress_revoke(&session);
+    close(revoked_fd);
+    assert(ib_ingress_finish(&session, bridge_uid, "revoked-stream", 9, 0) != 0);
+    ib_ingress_dispose(&session);
+    assert(store.publications == 2);
+
+    puts("PASS: revoked ingress cannot rearm, reopen or publish; restoring navigation cannot revive it");
     puts("PASS: cross-process anonymous FD delivery, app-owned source publish, binary bytes, UID/ID/generation/URL refusal, nonzero ICU exit, stale, empty, oversized, duplicate and recovery");
-    puts("NOT_RUN: actual Android Binder, real Shizuku/ICU HTTPS and physical C67");
+    puts("NOT_RUN: actual Android Binder, real Shizuku/ICU HTTPS and physical TAB_P10");
     return 0;
 }

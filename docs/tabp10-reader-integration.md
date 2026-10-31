@@ -73,7 +73,8 @@ after inspection of the completed exact-head run.
 | Authorized live Grease/Shizuku/ICU acquisition | FAIL | No working application worker handoff |
 | Real response observations and redirect provenance | FAIL | Live integrated acquisition and complete redirect evidence absent |
 | Decode supported non-UTF-8 source in admitted reader | FAIL | Decoder retained; current native HTML admission still UTF-8 only |
-| Canonical Arena admission and independent readback | NOT_RUN | Retained source gates exist; current integrated native execution pending |
+| Host retained-source identity and independent readback | PASS | Actual canonical userspace appends and synthetic-pointer control; fixture response metadata; compiled generation mutant rejected |
+| Canonical Arena admission in the application pipeline | NOT_RUN | Native source gate passes on host; acquisition-to-display remains unconnected |
 | Durable browser-owned Back/Forward and source recovery | FAIL | Not wired into the Activity |
 | Real title/blocks/links in native view | FAIL | Trusted source-to-view connection still absent |
 | Source-faithful selection, exact copy and user reflow selector | FAIL | Source layout exists; native interaction remains unconnected |
@@ -83,6 +84,25 @@ after inspection of the completed exact-head run.
 | Installation, restart, reboot and adversarial tablet behavior | BLOCKED | No authenticated physical tablet execution channel |
 | Independent complete user-visible end-to-end acceptance | FAIL | Required application behavior has not been demonstrated |
 | Later permanent release decision | BLOCKED | Incomplete critical behavior and physical acceptance |
+
+The native owner now checks immutable retained-source generation separately
+from the current navigation generation. Reopening source generation 1 at
+navigation generation 3 succeeds without rewriting its receipt; a compiled
+generation-confusion mutant fails the exact readback assertion. The ingress
+also has permanent instance revocation: changing the wanted generation cannot
+restore a revoked capability. Host tests cover revocation before arming,
+before transfer and during transfer; removing the cancellation check produces
+an assertion failure. Application lifecycle/Binder-death wiring remains FAIL.
+
+These local native observations use the exact maintained Grease source
+`f19c94c6df18cddbdc1e81463e5bd689533e3c13`, source gitlink
+`6d29702a10ea9eb72a43950554dbcd4174d07a89`, bootstrapped through Cat Food
+`609a9628d5a52860f956bf62e0914a0cd03292ae` with qualified ICK
+`c61e448251744a2f40ad743ebef1a027bdcd2f9d`. That older host compiler is distinct
+from the workflow's pinned ICK `fbe86e23d55cfec2000c08e61deea2a407fd7175`;
+local passes do not substitute for that workflow. The canonical userspace
+backend is pinned at `05a0cb7246c5a9f46abfbe92925812e7b607f454`. This is neither
+kernel appendfat nor an observed SD-card deployment.
 
 ## Device and package identity
 

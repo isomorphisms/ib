@@ -70,6 +70,11 @@ int ib_ingress_arm(ib_shizuku_arena_ingress *session,
 void ib_ingress_want(ib_shizuku_arena_ingress *session,
                      uint64_t navigation_generation);
 
+/* App lifecycle, authorization loss and Binder-death handling revoke an
+ * instance permanently. Advancing or restoring its wanted generation cannot
+ * revive the old capability. Legitimate reconnection needs a new instance. */
+void ib_ingress_revoke(ib_shizuku_arena_ingress *session);
+
 /* Returns an owned blocking WRITE pipe descriptor suitable for Binder PFD.
  * The app retains only the READ end and consumes in a bounded worker thread.
  * No app-private Arena pathname or FD is passed to Shizuku. */
