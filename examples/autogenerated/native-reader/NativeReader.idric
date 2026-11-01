@@ -296,6 +296,17 @@ presented_history source kind text = do
           else Left "Retained navigation has no selected source"
       else Left "Unknown browser navigation occurrence"
 
+-- The file adapter verifies byte framing; this checked owner alone decides
+-- whether its opaque journal selects the retained source being reopened.
+%export "dex:reader_retained_history_valid"
+reader_retained_history_valid : Text → Text → Text → Int32
+reader_retained_history_valid identity generation journal =
+  case retained_source identity generation of
+    Left _ ⇒ 0
+    Right source ⇒ case presented_history source 1 journal of
+      Left _ ⇒ 0
+      Right _ ⇒ 1
+
 enable_history_control : ActivityReference → Int32 → Bool → IO ()
 enable_history_control activity identity enabled = do
   view ← primIO (find_reader_view activity identity)

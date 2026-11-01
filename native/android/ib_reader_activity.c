@@ -53,7 +53,7 @@ static struct {
     jobject context;
     jweak activity;
     jclass generated, acquire_task, completion_task;
-    jmethodID ready_callback, error_callback;
+    jmethodID ready_callback, error_callback, history_validator;
     reader_job *active;
     ib_ingress_capability *capability;
     uint64_t capability_epoch;
@@ -213,6 +213,28 @@ static int start_job(JNIEnv *e, reader_job *job) {
     return thread && start && !(*e)->ExceptionCheck(e) ? 0 : -1;
 }
 
+
+/* Byte-verified index contents are still untrusted navigation semantics.
+ * Invoke the maintained checked owner; never parse an IBH journal in C. */
+static int checked_retained_history(JNIEnv *e, const char *id, uint32_t generation,
+                                    const char *journal) {
+    if (!application.ready || !application.generated || !application.history_validator ||
+        !id || !journal || !generation || generation > INT32_MAX ||
+        (*e)->ExceptionCheck(e) || (*e)->PushLocalFrame(e, 8) != 0) return 0;
+    char generation_text[16];
+    int count = snprintf(generation_text, sizeof(generation_text), "%u", generation);
+    jstring source = count > 0 && (size_t)count < sizeof(generation_text) ?
+        (*e)->NewStringUTF(e, id) : NULL;
+    jstring number = source ? (*e)->NewStringUTF(e, generation_text) : NULL;
+    jstring history = number ? (*e)->NewStringUTF(e, journal) : NULL;
+    jint accepted = history && !(*e)->ExceptionCheck(e) ?
+        (*e)->CallStaticIntMethod(e, application.generated, application.history_validator,
+            source, number, history) : 0;
+    if ((*e)->ExceptionCheck(e)) { (*e)->ExceptionClear(e); accepted = 0; }
+    (*e)->PopLocalFrame(e, NULL);
+    return accepted == 1;
+}
+
 /* The index stores opaque Idriç history references only; Arena owns source
  * identity, admission and all original bytes. */
 static int last_source(reader_job *job, unsigned first) {
@@ -248,6 +270,11 @@ Java_org_isomorphisms_ib_ReaderBridge_history(JNIEnv *e, jclass type) {
     ib_reader_index index;
     int root = open(application.root, O_RDONLY | O_CLOEXEC | O_DIRECTORY | O_NOFOLLOW);
     int result = root >= 0 ? ib_reader_index_read(root, 0, &index) : -1;
+    if (result == 0 && !checked_retained_history(e, index.source_id, index.source_generation, index.journal)) {
+        result = !index.previous ? ib_reader_index_read(root, 1, &index) : -1;
+        if (result == 0 && !checked_retained_history(e, index.source_id, index.source_generation, index.journal))
+            result = -1;
+    }
     if (root >= 0) close(root);
     return (*e)->NewStringUTF(e, result == 0 ? index.journal : result == 1 ? "" : "INVALID\n");
 }
@@ -346,7 +373,10 @@ Java_org_isomorphisms_ib_ReaderBridge_attach(JNIEnv *e, jclass type, jobject act
             "(Landroid/app/Activity;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ILjava/lang/String;I)V") : NULL;
         application.error_callback = application.ready_callback ? (*e)->GetStaticMethodID(e, generated, "reader_acquisition_failed",
             "(Landroid/app/Activity;Ljava/lang/String;)V") : NULL;
-        ok = ok && application.error_callback && !(*e)->ExceptionCheck(e);
+        application.history_validator = application.error_callback ?
+            (*e)->GetStaticMethodID(e, generated, "reader_retained_history_valid",
+                "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)I") : NULL;
+        ok = ok && application.history_validator && !(*e)->ExceptionCheck(e);
         if (ok) {
             application.context = (*e)->NewGlobalRef(e, context);
             application.generated = (*e)->NewGlobalRef(e, generated);
@@ -399,8 +429,9 @@ Java_org_isomorphisms_ib_ReaderAcquireTask_run(JNIEnv *e, jobject self) {
     reader_job *job = anchor ? AIBinder_getUserData(anchor) : NULL;
     if (!job) { if (anchor) AIBinder_decStrong(anchor); (*e)->PopLocalFrame(e, NULL); return; }
     job->result = -1;
-    int acquired = job->retained;
-    if (!acquired) {
+    int acquired = job->retained ?
+        checked_retained_history(e, job->id, job->source_generation, job->index.journal) : 0;
+    if (!job->retained) {
         uid_t uid;
         uint64_t epoch;
         if (ib_shizuku_client_authorization(e, &uid, &epoch) == IB_SHIZUKU_AUTHORIZED && uid == 2000) {
@@ -430,7 +461,8 @@ Java_org_isomorphisms_ib_ReaderAcquireTask_run(JNIEnv *e, jobject self) {
         job->result = stream_status == IB_READER_PFD_ACCEPTED ? 0 : -1;
         close(fd);
     }
-    if (job->retained == 1 && job->result != 0 && last_source(job, 1) == 0 &&
+    if (job->retained == 1 && job->result != 0 && !job->index.previous && last_source(job, 1) == 0 &&
+        checked_retained_history(e, job->id, job->source_generation, job->index.journal) &&
         ib_arena_source_owner_open_decode_input(&application.sources, job->id,
             job->source_generation, job->navigation, &job->ticket, &job->observations, &fd) == 0) {
         job->result = ib_reader_source_accept_fd(&job->source, &job->ticket, fd) == IB_READER_PFD_ACCEPTED ? 0 : -1;

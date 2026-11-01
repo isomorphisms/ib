@@ -175,6 +175,16 @@ emit NativeReader activity-copy-mutant managed-exports "$evidence/activity-copy-
 if cmp -s "$evidence/activity/reader.dex" "$evidence/activity-copy-mutant/reader.dex" {
   echo 'FAIL actual Activity copy mutation emitted the positive candidate' >&2; exit 1
 }
+
+cp -R "$evidence/source" "$evidence/activity-journal-source"
+sed 's/Left _ ⇒ 0/Left _ ⇒ 1/g' "$evidence/source/NativeReader.idric" > "$evidence/activity-journal-source/NativeReader.idric"
+if cmp -s "$evidence/source/NativeReader.idric" "$evidence/activity-journal-source/NativeReader.idric" {
+  echo 'FAIL unchanged checked journal source mutation' >&2; exit 1
+}
+emit NativeReader activity-journal-mutant managed-exports "$evidence/activity-journal-source"
+if cmp -s "$evidence/activity/reader.dex" "$evidence/activity-journal-mutant/reader.dex" {
+  echo 'FAIL journal mutation emitted positive Activity DEX' >&2; exit 1
+}
 for mutation in limit unicode {
   var changed = "$evidence/query-$mutation-source"
   cp -R "$evidence/source" "$changed"
