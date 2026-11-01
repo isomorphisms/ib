@@ -11,6 +11,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
 static const char *url = "https://example.com/";
@@ -101,6 +102,33 @@ static void reject(ib_ingress_arena *publisher, const char *root,
     assert(committed(root) == before);
     assert(reopen(root, id, 19) != 0);
     assert(reopen(root, "observed", 19) == 0);
+}
+
+static void immutable_receipt_case(ib_ingress_arena *publisher, const char *root,
+                                   const unsigned char *packet, size_t count) {
+    char path[4096];
+    int n = snprintf(path, sizeof(path), "%s/receipts/immutable-collision.tsv", root);
+    assert(n > 0 && (size_t)n < sizeof(path));
+    static const char original_receipt[] = "previous immutable receipt\n";
+    int fd = open(path, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC, 0600);
+    assert(fd >= 0);
+    assert(write(fd, original_receipt, sizeof(original_receipt)-1U) == sizeof(original_receipt)-1U);
+    assert(fsync(fd) == 0 && close(fd) == 0);
+    puts("STAGE immutable receipt no-replace preserves previous bytes");
+    assert(fflush(stdout) == 0);
+    int publication = send_frame(publisher, "immutable-collision", packet, count, 0, 0);
+    assert(publication != 0);
+    fd = open(path, O_RDONLY | O_NOFOLLOW | O_CLOEXEC);
+    assert(fd >= 0);
+    char retained[sizeof(original_receipt) + 1U];
+    ssize_t retained_length = read(fd, retained, sizeof(retained));
+    struct stat info;
+    assert(fstat(fd, &info) == 0 && info.st_nlink == 1);
+    assert(close(fd) == 0);
+    assert(retained_length == sizeof(original_receipt)-1U &&
+        memcmp(retained, original_receipt, sizeof(original_receipt)-1U) == 0);
+    assert(reopen(root, "observed", 19) == 0);
+    puts("PASS: immutable receipt collision refuses replacement and preserves previous source");
 }
 
 static void current_metadata_cases(ib_ingress_arena *publisher, const char *root) {
@@ -276,6 +304,7 @@ int main(int argc, char **argv) {
     assert(committed(root) == sizeof(html)-1U); /* Frame/metadata are not page bytes. */
     assert(reopen(root, "observed", 19) == 0);
     assert(reopen(root, "observed", 20) != 0);
+    immutable_receipt_case(&publisher, root, packet, count);
     reject(&publisher, root, "body-only", html, sizeof(html)-1U);
     reject(&publisher, root, "incomplete", packet, count-1U);
     memcpy(bad, packet, count); bad[count] = 'x';

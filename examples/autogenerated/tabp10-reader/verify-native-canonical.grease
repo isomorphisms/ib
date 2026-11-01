@@ -31,6 +31,25 @@ env IB_APPEND_ARENA="$evidence/appendfat-arena" IB_INGRESS_CANONICAL_TEST="$evid
   sh "$repository/tests/test_shizuku_ingress_canonical.sh" > "$evidence/frame.txt" 2>&1
 cat "$evidence/frame.txt"
 rg -F 'PASS: ordered response-owner redirect chain' "$evidence/frame.txt"
+rg -F 'PASS: immutable receipt collision refuses replacement and preserves previous source' "$evidence/frame.txt"
+sed 's/#define IB_RECEIPT_NOREPLACE 1U/#define IB_RECEIPT_NOREPLACE 0U/' \
+  "$repository/native/android/ib_shizuku_arena_publish.c" > "$evidence/receipt-replace-mutant.c"
+if cmp -s "$repository/native/android/ib_shizuku_arena_publish.c" "$evidence/receipt-replace-mutant.c" {
+  echo 'FAIL unchanged immutable receipt mutation' >&2; exit 1
+}
+"$compiler" -fno-link-libatomic -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror -pthread \
+  -I "$appendfat/lib" -I "$repository/native/android" "$appendfat/lib/appendfat_arena.c" \
+  "$repository/native/android/ib_reader_pfd.c" "$repository/native/android/ib_shizuku_arena_ingress.c" \
+  "$evidence/receipt-replace-mutant.c" "$repository/native/android/ib_arena_source_owner.c" \
+  "$repository/tests/test_shizuku_frame_canonical.c" -o "$evidence/receipt-replace-mutant"
+ulimit -c 0
+try {
+  env IB_APPEND_ARENA="$evidence/appendfat-arena" IB_INGRESS_CANONICAL_TEST="$evidence/receipt-replace-mutant" \
+    sh "$repository/tests/test_shizuku_ingress_canonical.sh" > "$evidence/receipt-replace-mutant.txt" 2>&1
+}
+if (_error.code !== 134) { echo 'FAIL receipt replacement mutant missed its intended assertion' >&2; exit 1 }
+rg -x -F 'STAGE immutable receipt no-replace preserves previous bytes' "$evidence/receipt-replace-mutant.txt"
+rg -F 'Assertion' "$evidence/receipt-replace-mutant.txt" | rg -F 'publication != 0'
 var oracle = "$repository/.tools/reader-acceptance/ib-source/verify.sh"
 test -s "$oracle"
 env IB_APPEND_ARENA="$evidence/appendfat-arena" IB_ARENA_SLICE="$evidence/arena-slice" \
@@ -50,5 +69,6 @@ rg -x -F 'STAGE retained source generation 1 at navigation generation 3' "$evide
 rg -F 'Assertion' "$evidence/wrong-generation.txt" | rg -F 'ib_arena_source_owner_open_retained'
 git -C "$appendfat" rev-parse HEAD > "$evidence/appendfat-commit.txt"
 sha256sum "$compiler" "$evidence/appendfat-arena" "$evidence/arena-slice" \
-  "$evidence/frame-test" "$native/source-owner-test" "$native/wrong-generation-test" > "$evidence/sha256.txt"
-printf 'host_canonical_userspace_append\tPASS\nhost_redirect_chain_boundary\tPASS\nindependent_source_oracle\tPASS\nretained_source_readback\tPASS\ncompiled_generation_mutant\tREJECTED\nreal_response_metadata\tNOT_RUN\nAndroid_Binder\tNOT_RUN\nphysical_TAB_P10\tNOT_RUN\n' > "$evidence/stages.tsv"
+  "$repository/native/android/ib_shizuku_arena_publish.c" "$repository/tests/test_shizuku_frame_canonical.c" \
+  "$evidence/frame-test" "$evidence/receipt-replace-mutant" "$native/source-owner-test" "$native/wrong-generation-test" > "$evidence/sha256.txt"
+printf 'host_canonical_userspace_append\tPASS\nhost_redirect_chain_boundary\tPASS\nimmutable_receipt_no_replace\tPASS\ncompiled_receipt_replacement_mutant\tREJECTED\nindependent_source_oracle\tPASS\nretained_source_readback\tPASS\ncompiled_generation_mutant\tREJECTED\nreal_response_metadata\tNOT_RUN\nAndroid_Binder\tNOT_RUN\nphysical_TAB_P10\tNOT_RUN\n' > "$evidence/stages.tsv"

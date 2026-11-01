@@ -15,6 +15,7 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <sys/syscall.h>
 #include <unistd.h>
 #ifdef __ANDROID__
 #include <android/log.h>
@@ -33,6 +34,7 @@ static int refused_stage(unsigned stage) {
  * provenance fields can require more space than the capture metadata alone. */
 #define RECEIPT_MAX_BYTES 16384U
 #define READBACK_CHUNK 65536U
+#define IB_RECEIPT_NOREPLACE 1U
 
 typedef struct {
     unsigned status;
@@ -342,20 +344,29 @@ static int receipt_publish(int receipts_dir, const char *id,
 
     int fd = openat(receipts_dir, temporary_name,
                     O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC, 0600);
-    if (fd < 0) return -1;
+    if (fd < 0) return refused_stage(40);
     int ok = write_all(fd, content, (size_t)n) == 0 && fsync(fd) == 0;
     if (close(fd) != 0) ok = 0;
     if (!ok) {
+        (void)refused_stage(41);
         (void)unlinkat(receipts_dir, temporary_name, 0);
         return -1;
     }
     /* Immutable source receipt appears atomically only after source readback
      * has succeeded and the complete staged receipt was synced. */
-    int linked = linkat(receipts_dir, temporary_name,
-                        receipts_dir, receipt_name, 0) == 0;
-    (void)unlinkat(receipts_dir, temporary_name, 0);
-    if (!linked) return -1;
+    /* Keep the target immutable without a transient second hard link:
+     * atomically rename only if
+     * the destination does not exist. Unsupported syscalls refuse; there is
+     * no fallback to an overwriting rename or relaxed storage authority. */
+    int published = syscall(SYS_renameat2, receipts_dir, temporary_name,
+                             receipts_dir, receipt_name, IB_RECEIPT_NOREPLACE) == 0;
+    if (!published) {
+        (void)refused_stage(42);
+        (void)unlinkat(receipts_dir, temporary_name, 0);
+        return -1;
+    }
     if (fsync(receipts_dir) != 0) {
+        (void)refused_stage(43);
         (void)unlinkat(receipts_dir, receipt_name, 0);
         (void)fsync(receipts_dir);
         return -1;
