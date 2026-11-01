@@ -1,0 +1,31 @@
+#!/usr/bin/env grease
+set -eu -o pipefail
+if (len(ARGV) !== 2) { echo 'usage: grease checkpoint.grease IB NEW_EVIDENCE' >&2; exit 2 }
+var repository = ARGV[0]
+var evidence = ARGV[1]
+if test -e "$evidence" { echo 'FAIL reused checkpoint' >&2; exit 2 }
+mkdir -p "$evidence/sources" "$evidence/replay" "$evidence/ick-host" "$evidence/android-ick"
+# Exact source snapshots are reproducible independently of a scratch checkout.
+# All Actions checkouts have persist-credentials:false. Archive tracked source
+# and Git identity separately; never collect runner credentials or environment.
+for owner in android-NDK Idric icu reader-acceptance appendfat Idric-Net OpenSSL catfood {
+  var source = "$repository/.tools/$owner"
+  git -C "$source" rev-parse HEAD > "$evidence/sources/$owner.commit"
+  git -C "$source" archive --format=tar.gz HEAD -o "$evidence/sources/$owner.source.tar.gz"
+  tar -czf "$evidence/sources/$owner.git.tar.gz" -C "$source" .git
+}
+git -C "$repository" rev-parse HEAD > "$evidence/sources/ib.commit"
+git -C "$repository" archive --format=tar.gz HEAD -o "$evidence/sources/ib.source.tar.gz"
+tar -czf "$evidence/sources/ib.git.tar.gz" -C "$repository" .git
+git -C "$repository/.tools/runtime/grease" rev-parse HEAD > "$evidence/sources/grease.commit"
+git -C "$repository/.tools/runtime/grease" archive --format=tar.gz HEAD -o "$evidence/sources/grease.source.tar.gz"
+tar -czf "$evidence/sources/grease.git.tar.gz" -C "$repository/.tools/runtime/grease" .git
+tar -czf "$evidence/replay/grease-host.tar.gz" -C "$repository/.tools/runtime" .build/grease
+cp "$evidence/../ib-reader/frontend-replay.tar.gz" "$evidence/replay/"
+cp "$evidence/../ib-reader/backend-replay.tar.gz" "$evidence/replay/"
+tar -czf "$evidence/ick-host/compiler.tar.gz" -C "$evidence/../ick-host-stage" .
+for abi in x86_64 armeabi-v7a arm64-v8a {
+  tar -czf "$evidence/android-ick/$abi.tar.gz" -C "$evidence/../ib-worker-toolchains/ick/$abi" .
+}
+sha256sum "$evidence/sources/"*.tar.gz "$evidence/replay/"*.tar.gz \
+  "$evidence/ick-host/"*.tar.gz "$evidence/android-ick/"*.tar.gz > "$evidence/checkpoint.sha256"
