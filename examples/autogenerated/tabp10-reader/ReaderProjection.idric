@@ -33,9 +33,9 @@ project_committed_html fields html width algorithm =
   else case read_evidence fields of
     Left reason ⇒ "refused:" ++ reason
     Right evidence ⇒
-      case prepare_committed_document evidence html
+      case prepare_committed_document_advances evidence html
              (Requirements (cast width) (if algorithm ≟ 0 then promptly else evenly))
-             "decoded-codepoint-width-v1" (length . unpack) of
+             "decoded-codepoint-advances-v1" (\_ ⇒ 1) of
         Left reason ⇒ "refused:" ++ reason
         Right prepared ⇒ prepared.source_result.wire ++
           "\nsource-codepoint-ranges\n" ++
@@ -49,8 +49,8 @@ project_committed_representation fields carrier =
   case read_evidence fields of
     Left reason ⇒ "refused:" ++ reason
     Right evidence ⇒
-      case prepare_committed_document evidence carrier (Requirements 128 promptly)
-          "decoded-codepoint-width-v1" (length . unpack) of
+      case prepare_committed_document_advances evidence carrier (Requirements 128 promptly)
+          "decoded-codepoint-advances-v1" (\_ ⇒ 1) of
         Left reason ⇒ "refused:" ++ reason
         Right prepared ⇒
           case selection_projection prepared.revision_layout of

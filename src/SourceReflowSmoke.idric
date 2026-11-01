@@ -107,8 +107,64 @@ run_cases =
   preserves_every_mode && unsupported_modes && bad_width && bad_breaks &&
   empty_input && some_breaks_are_refused
 
+same_lines : List SourceLine → List SourceLine → Bool
+same_lines [] [] = True
+same_lines (first :: rest) (other :: later) =
+  first.first_codepoint ≟ other.first_codepoint &&
+  first.after_last_codepoint ≟ other.after_last_codepoint &&
+  first.visible_text ≟ other.visible_text &&
+  kind_is first.ending other.ending && same_lines rest later
+same_lines _ _ = False
+
+same_projection : Either Text (List SourceLine) → Either Text (List SourceLine) → Bool
+same_projection (Left first) (Left other) = first ≟ other
+same_projection (Right first) (Right other) = same_lines first other
+same_projection _ _ = False
+
+one_advance : Char → Number
+one_advance _ = 1
+
+unequal_advance : Char → Number
+unequal_advance '-' = 5
+unequal_advance ' ' = 2
+unequal_advance character = if ord character > 127 then 3 else 1
+
+zero_advance : Char → Number
+zero_advance _ = 0
+
+compare_widths : Number → reflow_adverb → (Char → Number) → Text → Bool
+compare_widths Z mode advance source = True
+compare_widths (S width) mode advance source =
+  let request = Requirements (S width) mode in
+  let exhaustive = reflow_source request
+        (\text ⇒ sum (map advance (unpack text))) source in
+  same_projection exhaustive (reflow_source_advances request advance source) &&
+  compare_widths width mode advance source
+
+compare_modes : List reflow_adverb → (Char → Number) → Text → Bool
+compare_modes [] advance source = True
+compare_modes (mode :: later) advance source =
+  compare_widths 8 mode advance source && compare_modes later advance source
+
+compare_sources : List Text → Bool
+compare_sources [] = True
+compare_sources (source :: later) =
+  let modes = [promptly, evenly, minimizing_raggedness, ignoring_final_line,
+               minimizing_worst_gap, without_extra_lines] in
+  compare_modes modes one_advance source &&
+  compare_modes modes unequal_advance source &&
+  compare_modes modes zero_advance source && compare_sources later
+
+advance_contract_cases : Bool
+advance_contract_cases =
+  compare_sources ["", "red blue green", "ab­cd ef", "a\r\n\nb",
+    "漢字漢字", "👩‍💻 x é", "a b c", " a  b  ", "ab​cd"] &&
+  refused (reflow_source_advances (Requirements 0 promptly) one_advance "abc") &&
+  refused (reflow_source_advances (Requirements 4 streamingly) one_advance "abc") &&
+  refused (reflow_source_advances (Requirements 4 typographically) one_advance "abc")
+
 main : IO ()
 main = do
-  let passed = run_cases
+  let passed = run_cases && advance_contract_cases
   putStrLn ("source-reflow-unicode-offset-cases=" ++ show passed)
   if passed then pure () else exitFailure

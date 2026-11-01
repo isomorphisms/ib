@@ -352,8 +352,9 @@ reader_acquisition_ready activity observations html source_id generation planned
             Nothing ⇒ Right ()
           source ← retained_source source_id evidence.source_generation
           history ← presented_history source kind current_history
-          document ← prepare_committed_document evidence html (Requirements (cast width) manner)
-            "android-Paint-snapshot-pixels-times-64-v1" (cast . metric_measure metric)
+          document ← prepare_committed_document_advances evidence html (Requirements (cast width) manner)
+            "android-Paint-codepoint-advances-pixels-times-64-v1"
+            (\character ⇒ cast (metric_measure metric (pack [character])))
           if not (layout_fits metric width document.revision_layout)
             then Left "An unbreakable source run exceeds the native viewport"
             else do

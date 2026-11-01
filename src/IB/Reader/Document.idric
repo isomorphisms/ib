@@ -26,14 +26,25 @@ read_committed_evidence fields =
 -- Admission remains the maintained HtmlEvidence gate. Layout retains the
 -- admitted source, original blocks and exact source-linked code-point spans.
 -- This function performs neither network acquisition nor durable publication.
-export
-prepare_committed_document : HtmlEvidence → Text → ReflowRequirements → Text →
-                             (Text → Number) → Either Text HtmlPrepaintLayout
-prepare_committed_document evidence html request metric measure = do
-  admitted ← if evidence.charset ≟ "utf-8" || evidence.charset ≟ "UTF-8"
+admit_committed_document : HtmlEvidence → Text → Either Text HtmlPrepaintResult
+admit_committed_document evidence html =
+  if evidence.charset ≟ "utf-8" || evidence.charset ≟ "UTF-8"
     then convert_admitted_html evidence html
     else if not (windows_1252_label evidence.charset) then Left "unsupported-charset"
     else do
       octets ← source_octet_carrier html
       convert_committed_html_octets evidence octets
+
+export
+prepare_committed_document : HtmlEvidence → Text → ReflowRequirements → Text →
+  (Text → Number) → Either Text HtmlPrepaintLayout
+prepare_committed_document evidence html request metric measure = do
+  admitted ← admit_committed_document evidence html
   reflow_html_prepaint request metric measure admitted
+
+export
+prepare_committed_document_advances : HtmlEvidence → Text → ReflowRequirements → Text →
+  (Char → Number) → Either Text HtmlPrepaintLayout
+prepare_committed_document_advances evidence html request metric advance = do
+  admitted ← admit_committed_document evidence html
+  reflow_html_prepaint_advances request metric advance admitted

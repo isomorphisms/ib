@@ -34,13 +34,18 @@ display_break_mark : BreakKind → Text → Text
 display_break_mark DiscretionaryHyphen painted = painted ++ "-"
 display_break_mark _ painted = painted
 
-public export
-source_line : Text → Number → SourceBreak → SourceLine
-source_line source start (At finish kind) =
-  let span = FromSource start finish "" kind in
-  let raw = unpack (source_for_line source span) in
+-- The suffix belongs to the same decoded source and begins at start.
+-- Advancing the suffix with selected cuts avoids rescanning the source prefix.
+line_from_suffix : List Char → Number → SourceBreak → SourceLine
+line_from_suffix suffix start (At finish kind) =
+  let raw = take (nonnegative_difference finish start) suffix in
   let painted = pack (reverse (strip_trailing_space (reverse (without_controls raw)))) in
   FromSource start finish (display_break_mark kind painted) kind
+
+public export
+source_line : Text → Number → SourceBreak → SourceLine
+source_line source start cut =
+  line_from_suffix (drop start (unpack source)) start cut
 
 line_fits : (Text → Number) → Number → SourceLine → Bool
 line_fits measure width line =
@@ -221,3 +226,146 @@ reflow_source : ReflowRequirements → (Text → Number) → Text →
   Either Text (List SourceLine)
 reflow_source requirements measure source =
   reflow_at_breaks requirements measure source (source_breaks source)
+
+-- An advance provider assigns a nonnegative width to each decoded code point.
+-- This is an explicit additive measurement contract; it is not a claim that
+-- arbitrary whole-string shaping or callback measurements are monotone.
+-- The general callback API above retains its exhaustive candidate semantics.
+record MeasuredCut where
+  constructor MeasuredAt
+  cut : SourceBreak
+  through_width : Number
+  visible_width : Number
+  remaining_characters : List Char
+
+measure_cuts : (Char → Number) → Number → Number → Number → List Char →
+  List SourceBreak → List MeasuredCut
+measure_cuts advance position through visible [] cuts = []
+measure_cuts advance position through visible (character :: rest) [] = []
+measure_cuts advance position through visible (character :: rest) cuts@(first :: later) =
+  let next = S position in
+  let next_through = if hidden_character character
+        then through else through + advance character in
+  let next_visible = if hidden_character character || character ≟ ' '
+        then visible else next_through in
+  if first.source_offset ≟ next
+    then MeasuredAt first next_through next_visible rest ::
+      measure_cuts advance next next_through next_visible rest later
+    else measure_cuts advance next next_through next_visible rest cuts
+
+base_advance : Number → MeasuredCut → Number
+base_advance start cut = nonnegative_difference cut.visible_width start
+
+painted_advance : Number → Number → MeasuredCut → Number
+painted_advance hyphen start cut =
+  base_advance start cut + (case cut.cut.break_kind of
+    DiscretionaryHyphen ⇒ hyphen
+    _ ⇒ 0)
+
+-- The base advance cannot decrease as a line grows. A discretionary hyphen
+-- may disappear at a later cut, so only the base (without that glyph) permits
+-- pruning. Every mandatory boundary still ends the candidate search.
+choose_advance : Number → Number → Number → MeasuredCut → List MeasuredCut →
+  List MeasuredCut → Maybe (MeasuredCut, List MeasuredCut) →
+  (MeasuredCut, List MeasuredCut)
+choose_advance width hyphen start first first_later [] best =
+  case best of
+    Nothing ⇒ (first, first_later)
+    Just answer ⇒ answer
+choose_advance width hyphen start first first_later (candidate :: later) best =
+  let updated = if painted_advance hyphen start candidate <= width
+        then Just (candidate, later) else best in
+  if terminal candidate.cut.break_kind || base_advance start candidate > width
+    then case updated of
+      Nothing ⇒ (first, first_later)
+      Just answer ⇒ answer
+    else choose_advance width hyphen start first first_later later updated
+
+greedy_advances : Number → Number → Number → Number → Number → List Char →
+  List MeasuredCut → Either Text (List SourceLine)
+greedy_advances budget width hyphen start starting_width characters [] = Right []
+greedy_advances Z width hyphen start starting_width characters cuts =
+  Left "Reflow candidate budget exhausted"
+greedy_advances (S budget) width hyphen start starting_width characters
+  (first :: later) =
+  let (chosen, remaining) =
+        choose_advance width hyphen starting_width first later (first :: later) Nothing in
+  case greedy_advances budget width hyphen chosen.cut.source_offset
+         chosen.through_width chosen.remaining_characters remaining of
+    Left message ⇒ Left message
+    Right lines ⇒ Right (line_from_suffix characters start chosen.cut :: lines)
+
+advance_plan : reflow_adverb → Number → Number → Number → Number →
+  Number → List Char → MeasuredCut → SourcePlan → SourcePlan
+advance_plan mode width hyphen source_end start starting_width characters cut
+  (PlannedSource tail_cost count tail) =
+  let used = painted_advance hyphen starting_width cut in
+  let last = cut.cut.source_offset ≟ source_end in
+  let cost = badness mode width used last + soft_hyphen_cost cut.cut.break_kind in
+  PlannedSource (combined_cost mode cost tail_cost) (S count)
+    (line_from_suffix characters start cut.cut :: tail)
+
+consider_advances : reflow_adverb → Number → Number → Number → Number →
+  Number → List Char → Bool → List MeasuredCut → List SourcePlan →
+  Maybe SourcePlan → Maybe SourcePlan
+consider_advances mode width hyphen source_end start starting_width characters
+  first [] plans best = best
+consider_advances mode width hyphen source_end start starting_width characters
+  first cuts [] best = best
+consider_advances mode width hyphen source_end start starting_width characters
+  first (cut :: later) (tail :: tails) best =
+  let admissible = first || painted_advance hyphen starting_width cut <= width in
+  let updated = if admissible
+        then update_best mode best
+          (advance_plan mode width hyphen source_end start starting_width characters cut tail)
+        else best in
+  if terminal cut.cut.break_kind || base_advance starting_width cut > width
+    then updated
+    else consider_advances mode width hyphen source_end start starting_width characters
+      False later tails updated
+
+plan_advances : reflow_adverb → Number → Number → Number → Number → Number →
+  List Char → List MeasuredCut → List SourcePlan → SourcePlan
+plan_advances mode width hyphen source_end start starting_width characters cuts tails =
+  case consider_advances mode width hyphen source_end start starting_width characters
+         True cuts tails Nothing of
+    Just answer ⇒ answer
+    Nothing ⇒ PlannedSource 0 0 []
+
+suffix_advances : reflow_adverb → Number → Number → Number →
+  List MeasuredCut → List SourcePlan
+suffix_advances mode width hyphen source_end [] = [PlannedSource 0 0 []]
+suffix_advances mode width hyphen source_end (cut :: later) =
+  let tails = suffix_advances mode width hyphen source_end later in
+  let plan = plan_advances mode width hyphen source_end cut.cut.source_offset
+        cut.through_width cut.remaining_characters later tails in
+  plan :: tails
+
+-- Source coordinates, break validation, objective costs and tie ordering are
+-- shared with the general solver. Only the explicit additive provider permits
+-- stopping once every later candidate has a width greater than the viewport.
+public export
+reflow_source_advances : ReflowRequirements → (Char → Number) → Text →
+  Either Text (List SourceLine)
+reflow_source_advances (Requirements Z _) advance source =
+  Left "Reflow width must be positive"
+reflow_source_advances request@(Requirements width mode) advance source =
+  let cuts = source_breaks source in
+  if not (valid_source_breaks source cuts)
+    then Left "Invalid, unsafe or incomplete source break opportunities"
+    else case mode of
+      streamingly ⇒ Left "Source-offset streaming has not been qualified"
+      typographically ⇒ Left "Source-backed adjustable glue is not qualified"
+      _ ⇒ case unpack source of
+        [] ⇒ Right []
+        characters ⇒
+          let measured = measure_cuts advance 0 0 0 characters cuts in
+          let hyphen = advance '-' in
+          case mode of
+            promptly ⇒ greedy_advances (length cuts) width hyphen 0 0 characters measured
+            _ ⇒
+              let source_end = length characters in
+              let tails = suffix_advances mode width hyphen source_end measured in
+              let (PlannedSource _ _ lines) =
+                    plan_advances mode width hyphen source_end 0 0 characters measured tails in
+              Right lines
