@@ -2,9 +2,12 @@
  * SDK delivery and authorization. It owns no browser state or network client. */
 #include "ib_shizuku_client.h"
 #include "ib_binder_flags.h"
+#include "ib_shizuku_worker.h"
 
+#include <errno.h>
 #include <pthread.h>
 #include <string.h>
+#include <time.h>
 #include <unistd.h>
 
 #define IB_PACKAGE "org.isomorphisms.ib.prepaint"
@@ -16,6 +19,8 @@
 #define BINDER_EXTRA "moe.shizuku.privileged.api.intent.extra.BINDER"
 #define REQUEST_PERMISSION_CODE 151
 #define INTERFACE_TRANSACTION 0x5f4e5446
+#define WORKER_CONNECTION_DESCRIPTOR "moe.shizuku.server.IShizukuServiceConnection"
+#define WORKER_DESCRIPTOR "org.isomorphisms.ib.AcquisitionWorker.v1"
 
 static struct {
     pthread_mutex_t mutex;
@@ -33,6 +38,18 @@ static struct {
     .handlers_finished = PTHREAD_COND_INITIALIZER
 };
 static pthread_mutex_t delivery_mutex = PTHREAD_MUTEX_INITIALIZER;
+static pthread_mutex_t worker_request_mutex = PTHREAD_MUTEX_INITIALIZER;
+static struct {
+    pthread_mutex_t mutex;
+    pthread_cond_t changed;
+    jobject connection, service;
+    uint64_t epoch;
+    uid_t uid;
+    int dead;
+} worker_connection = {
+    .mutex = PTHREAD_MUTEX_INITIALIZER,
+    .changed = PTHREAD_COND_INITIALIZER
+};
 
 static void unlink_death(JNIEnv *e, jobject server, jobject death) {
     /* Cleanup cannot change the authority decision or replace its exception.
@@ -158,6 +175,12 @@ static int invalidate_at(JNIEnv *e, ib_shizuku_capability_state state, int detac
         client.server = client.application = client.death = NULL;
     }
     pthread_mutex_unlock(&client.mutex);
+    pthread_mutex_lock(&worker_connection.mutex);
+    if (worker_connection.connection && worker_connection.epoch <= revoked_through) {
+        worker_connection.dead = 1;
+        pthread_cond_broadcast(&worker_connection.changed);
+    }
+    pthread_mutex_unlock(&worker_connection.mutex);
     unlink_death(e, server, death);
     if (server) (*e)->DeleteGlobalRef(e, server);
     if (application) (*e)->DeleteGlobalRef(e, application);
@@ -723,4 +746,197 @@ JNIEXPORT jint JNICALL
 Java_org_isomorphisms_ib_ShizukuProvider_update(JNIEnv *e, jobject self, jobject uri,
     jobject values, jstring selection, jobjectArray arguments) {
     (void)e; (void)self; (void)uri; (void)values; (void)selection; (void)arguments; return 0;
+}
+
+static int bundle_boolean(JNIEnv *e, jobject bundle, const char *key, jboolean value) {
+    jmethodID put = method(e, "android/os/Bundle", "putBoolean", "(Ljava/lang/String;Z)V");
+    jstring name = put ? (*e)->NewStringUTF(e, key) : NULL;
+    if (name) (*e)->CallVoidMethod(e, bundle, put, name, value);
+    return name && !(*e)->ExceptionCheck(e);
+}
+
+static jobject worker_options(JNIEnv *e, jobject context) {
+    jmethodID get_name = method(e, "android/content/Context", "getPackageName", "()Ljava/lang/String;");
+    jstring name = get_name ? (*e)->CallObjectMethod(e, context, get_name) : NULL;
+    if (!text_equals(e, name, IB_PACKAGE)) return NULL;
+    jmethodID get_pm = method(e, "android/content/Context", "getPackageManager", "()Landroid/content/pm/PackageManager;");
+    jobject pm = get_pm ? (*e)->CallObjectMethod(e, context, get_pm) : NULL;
+    jmethodID get_info = method(e, "android/content/pm/PackageManager", "getPackageInfo", "(Ljava/lang/String;I)Landroid/content/pm/PackageInfo;");
+    jobject info = pm && get_info ? (*e)->CallObjectMethod(e, pm, get_info, name, 0) : NULL;
+    jclass info_type = (*e)->FindClass(e, "android/content/pm/PackageInfo");
+    jfieldID version_field = info_type ? (*e)->GetFieldID(e, info_type, "versionCode", "I") : NULL;
+    jint version = info && version_field ? (*e)->GetIntField(e, info, version_field) : 0;
+    if ((*e)->ExceptionCheck(e) || version < 1) return NULL;
+    jclass component_type = (*e)->FindClass(e, "android/content/ComponentName");
+    jmethodID constructor = component_type ? (*e)->GetMethodID(e, component_type, "<init>", "(Ljava/lang/String;Ljava/lang/String;)V") : NULL;
+    jstring worker_name = constructor ? (*e)->NewStringUTF(e, "org.isomorphisms.ib.ShizukuWorker") : NULL;
+    jobject component = worker_name ? (*e)->NewObject(e, component_type, constructor, name, worker_name) : NULL;
+    jobject options = component ? new_bundle(e) : NULL;
+    jmethodID put = method(e, "android/os/Bundle", "putParcelable", "(Ljava/lang/String;Landroid/os/Parcelable;)V");
+    jstring key = options && put ? (*e)->NewStringUTF(e, "shizuku:user-service-arg-component") : NULL;
+    if (key) (*e)->CallVoidMethod(e, options, put, key, component);
+    int ok = key && !(*e)->ExceptionCheck(e) &&
+        bundle_int(e, options, "shizuku:user-service-arg-version-code", version) &&
+        bundle_text(e, options, "shizuku:user-service-arg-tag", "ib-acquisition-v1") &&
+        bundle_text(e, options, "shizuku:user-service-arg-process-name", "ib_acquisition") &&
+        bundle_boolean(e, options, "shizuku:user-service-arg-debuggable", JNI_FALSE) &&
+        bundle_boolean(e, options, "shizuku:user-service-arg-daemon", JNI_FALSE) &&
+        bundle_boolean(e, options, "shizuku:user-service-arg-use-32-bit-app-process", JNI_FALSE) &&
+        bundle_boolean(e, options, "shizuku:user-service-remove", JNI_FALSE);
+    return ok ? options : NULL;
+}
+
+static int user_service_rpc(JNIEnv *e, jobject server, jint code, jobject connection, jobject options) {
+    jobject data = parcel(e), reply = parcel(e);
+    jmethodID binder = method(e, "android/os/Parcel", "writeStrongBinder", "(Landroid/os/IBinder;)V");
+    jmethodID integer = method(e, "android/os/Parcel", "writeInt", "(I)V");
+    jmethodID bundle = method(e, "android/os/Bundle", "writeToParcel", "(Landroid/os/Parcel;I)V");
+    int ok = data && reply && binder && integer && bundle && interface_token(e, data, SHIZUKU_DESCRIPTOR);
+    if (ok) (*e)->CallVoidMethod(e, data, binder, connection);
+    if (ok && !(*e)->ExceptionCheck(e)) (*e)->CallVoidMethod(e, data, integer, 1);
+    if (ok && !(*e)->ExceptionCheck(e)) (*e)->CallVoidMethod(e, options, bundle, data, 0);
+    ok = ok && !(*e)->ExceptionCheck(e) && transact(e, server, code, data, reply);
+    jmethodID read = method(e, "android/os/Parcel", "readInt", "()I");
+    jint result = ok && read ? (*e)->CallIntMethod(e, reply, read) : -1;
+    ok = ok && read && result == 0 && !(*e)->ExceptionCheck(e) && parcel_consumed(e, reply);
+    recycle(e, data, reply);
+    return ok;
+}
+
+JNIEXPORT jboolean JNICALL
+Java_org_isomorphisms_ib_ShizukuWorkerConnection_onTransact(JNIEnv *e, jobject self,
+    jint code, jobject data, jobject reply, jint flags) {
+    if ((*e)->PushLocalFrame(e, 64) != 0) return JNI_FALSE;
+    if (code == INTERFACE_TRANSACTION && ib_binder_synchronous(flags) && reply) {
+        jmethodID write = method(e, "android/os/Parcel", "writeString", "(Ljava/lang/String;)V");
+        jstring descriptor = write ? (*e)->NewStringUTF(e, WORKER_CONNECTION_DESCRIPTOR) : NULL;
+        if (descriptor) (*e)->CallVoidMethod(e, reply, write, descriptor);
+        int described = descriptor && !(*e)->ExceptionCheck(e);
+        (*e)->PopLocalFrame(e, NULL);
+        return described ? JNI_TRUE : JNI_FALSE;
+    }
+    int uid = calling_identity(e, "getCallingUid");
+    pthread_mutex_lock(&worker_connection.mutex);
+    uint64_t epoch = worker_connection.epoch;
+    int current = worker_connection.connection && !worker_connection.dead &&
+        (*e)->IsSameObject(e, self, worker_connection.connection) && uid == (jint)worker_connection.uid;
+    pthread_mutex_unlock(&worker_connection.mutex);
+    pthread_mutex_lock(&client.mutex);
+    current = current && epoch == client.epoch && client.attached && client.state == IB_SHIZUKU_AUTHORIZED;
+    pthread_mutex_unlock(&client.mutex);
+    jmethodID size = method(e, "android/os/Parcel", "dataSize", "()I");
+    jmethodID fds = method(e, "android/os/Parcel", "hasFileDescriptors", "()Z");
+    jint bytes = current && data && size ? (*e)->CallIntMethod(e, data, size) : -1;
+    int ok = current && ib_binder_oneway(flags) && (code == 1 || code == 2) && fds && bytes > 0 && bytes <= 512 &&
+        !(*e)->CallBooleanMethod(e, data, fds) && !(*e)->ExceptionCheck(e);
+    jmethodID enforce = method(e, "android/os/Parcel", "enforceInterface", "(Ljava/lang/String;)V");
+    jstring descriptor = ok && enforce ? (*e)->NewStringUTF(e, WORKER_CONNECTION_DESCRIPTOR) : NULL;
+    if (descriptor) (*e)->CallVoidMethod(e, data, enforce, descriptor);
+    ok = ok && descriptor && !(*e)->ExceptionCheck(e);
+    jobject service = NULL;
+    if (ok && code == 1) {
+        jmethodID read = method(e, "android/os/Parcel", "readStrongBinder", "()Landroid/os/IBinder;");
+        if (read) service = (*e)->CallObjectMethod(e, data, read);
+        ok = service && !(*e)->ExceptionCheck(e);
+    }
+    ok = ok && parcel_consumed(e, data);
+    jobject global = ok && service ? (*e)->NewGlobalRef(e, service) : NULL;
+    ok = ok && (code == 2 || global) && !(*e)->ExceptionCheck(e);
+    if (ok) {
+        pthread_mutex_lock(&worker_connection.mutex);
+        if (worker_connection.connection && worker_connection.epoch == epoch && !worker_connection.dead &&
+            (*e)->IsSameObject(e, self, worker_connection.connection)) {
+            if (worker_connection.service) (*e)->DeleteGlobalRef(e, worker_connection.service);
+            worker_connection.service = global;
+            global = NULL;
+            worker_connection.dead = code == 2;
+            pthread_cond_broadcast(&worker_connection.changed);
+        } else ok = 0;
+        pthread_mutex_unlock(&worker_connection.mutex);
+    }
+    if (global) (*e)->DeleteGlobalRef(e, global);
+    if ((*e)->ExceptionCheck(e)) (*e)->ExceptionClear(e);
+    (*e)->PopLocalFrame(e, NULL);
+    return ok ? JNI_TRUE : JNI_FALSE;
+}
+
+int ib_shizuku_worker_acquire(JNIEnv *e, jobject context, jobject ingress,
+    const char *request_id, uint64_t generation, uint64_t authorized_epoch) {
+    if (!e || !context || !ingress || !request_id || !generation || generation > INT64_MAX ||
+        pthread_mutex_trylock(&worker_request_mutex) != 0) return -1;
+    if ((*e)->PushLocalFrame(e, 128) != 0) { pthread_mutex_unlock(&worker_request_mutex); return -1; }
+    uid_t uid = (uid_t)-1;
+    uint64_t epoch = 0;
+    jobject server = ib_shizuku_client_authorized_server(e, &uid, &epoch);
+    /* Root is a distinct, not-yet-qualified profile. Do not broaden ingress. */
+    int ok = server && uid == 2000 && epoch == authorized_epoch;
+    jobject options = ok ? worker_options(e, context) : NULL;
+    jobject connection = options ? construct(e, "org/isomorphisms/ib/ShizukuWorkerConnection") : NULL;
+    jmethodID attach_interface = method(e, "android/os/Binder", "attachInterface", "(Landroid/os/IInterface;Ljava/lang/String;)V");
+    jstring connection_descriptor = connection && attach_interface ? (*e)->NewStringUTF(e, WORKER_CONNECTION_DESCRIPTOR) : NULL;
+    if (connection_descriptor) (*e)->CallVoidMethod(e, connection, attach_interface, NULL, connection_descriptor);
+    jobject global = connection ? (*e)->NewGlobalRef(e, connection) : NULL;
+    ok = ok && global && connection_descriptor && !(*e)->ExceptionCheck(e);
+    pthread_mutex_lock(&worker_connection.mutex);
+    worker_connection.connection = global;
+    worker_connection.service = NULL;
+    worker_connection.epoch = epoch;
+    worker_connection.uid = uid;
+    worker_connection.dead = 0;
+    pthread_mutex_unlock(&worker_connection.mutex);
+    int registered = ok && user_service_rpc(e, server, 12, connection, options);
+    ok = registered;
+    jobject service = NULL;
+    if (ok) {
+        struct timespec deadline = {0};
+        ok = clock_gettime(CLOCK_REALTIME, &deadline) == 0;
+        deadline.tv_sec += 32;
+        pthread_mutex_lock(&worker_connection.mutex);
+        while (ok && !worker_connection.dead && !worker_connection.service) {
+            int waited = pthread_cond_timedwait(&worker_connection.changed, &worker_connection.mutex, &deadline);
+            if (waited != 0 && waited != EINTR) ok = 0;
+        }
+        if (ok && !worker_connection.dead && worker_connection.service)
+            service = (*e)->NewLocalRef(e, worker_connection.service);
+        pthread_mutex_unlock(&worker_connection.mutex);
+        ok = ok && service && !(*e)->ExceptionCheck(e);
+    }
+    uid_t now_uid;
+    uint64_t now_epoch;
+    ok = ok && ib_shizuku_client_authorization(e, &now_uid, &now_epoch) == IB_SHIZUKU_AUTHORIZED &&
+        now_uid == uid && now_epoch == epoch;
+    jmethodID describe = method(e, "android/os/IBinder", "getInterfaceDescriptor", "()Ljava/lang/String;");
+    jstring actual = ok && describe ? (*e)->CallObjectMethod(e, service, describe) : NULL;
+    ok = ok && text_equals(e, actual, WORKER_DESCRIPTOR);
+    jobject data = ok ? parcel(e) : NULL, reply = ok ? parcel(e) : NULL;
+    jmethodID binder = method(e, "android/os/Parcel", "writeStrongBinder", "(Landroid/os/IBinder;)V");
+    jmethodID name = method(e, "android/os/Parcel", "writeString", "(Ljava/lang/String;)V");
+    jmethodID number = method(e, "android/os/Parcel", "writeLong", "(J)V");
+    jstring id = ok && name ? (*e)->NewStringUTF(e, request_id) : NULL;
+    ok = ok && data && reply && id && binder && number && interface_token(e, data, WORKER_DESCRIPTOR);
+    if (ok) (*e)->CallVoidMethod(e, data, binder, ingress);
+    if (ok && !(*e)->ExceptionCheck(e)) (*e)->CallVoidMethod(e, data, name, id);
+    if (ok && !(*e)->ExceptionCheck(e)) (*e)->CallVoidMethod(e, data, number, (jlong)generation);
+    jmethodID send = method(e, "android/os/IBinder", "transact", "(ILandroid/os/Parcel;Landroid/os/Parcel;I)Z");
+    if (ok && !(*e)->ExceptionCheck(e)) ok = send && (*e)->CallBooleanMethod(e, service, send, 2, data, reply, 0);
+    jmethodID read = method(e, "android/os/Parcel", "readInt", "()I");
+    ok = ok && read && !(*e)->ExceptionCheck(e) && (*e)->CallIntMethod(e, reply, read) == 0 &&
+        !(*e)->ExceptionCheck(e) && parcel_consumed(e, reply);
+    recycle(e, data, reply);
+    if ((*e)->ExceptionCheck(e)) (*e)->ExceptionClear(e);
+    /* Detach the callback on every outcome. A late connection is permanently
+     * stale; it cannot deliver a handle into a later request's slot. */
+    pthread_mutex_lock(&worker_connection.mutex);
+    jobject held = worker_connection.service;
+    worker_connection.service = NULL;
+    worker_connection.connection = NULL;
+    worker_connection.dead = 1;
+    pthread_mutex_unlock(&worker_connection.mutex);
+    if (held) (*e)->DeleteGlobalRef(e, held);
+    if (global) (*e)->DeleteGlobalRef(e, global);
+    if (registered) (void)user_service_rpc(e, server, 13, connection, options);
+    if ((*e)->ExceptionCheck(e)) { (*e)->ExceptionClear(e); ok = 0; }
+    (*e)->PopLocalFrame(e, NULL);
+    pthread_mutex_unlock(&worker_request_mutex);
+    return ok ? 0 : -1;
 }

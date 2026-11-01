@@ -1,13 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="org.isomorphisms.ib.prepaint" android:versionCode="3" android:versionName="0.3.0">
-    <uses-sdk android:minSdkVersion="26" android:targetSdkVersion="36" />
+    <uses-sdk android:minSdkVersion="29" android:targetSdkVersion="36" />
     <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
     <uses-permission android:name="moe.shizuku.manager.permission.API_V23" />
     <queries><package android:name="moe.shizuku.privileged.api" /></queries>
     <application android:allowBackup="false" android:label="IB Prepaint"
         android:supportsRtl="true" android:theme="@style/Theme.IBNative"
-        android:usesCleartextTraffic="false">
+        android:usesCleartextTraffic="false" android:extractNativeLibs="true">
         <meta-data android:name="moe.shizuku.client.V3_SUPPORT" android:value="true" />
         <provider android:name="org.isomorphisms.ib.ShizukuProvider"
             android:authorities="org.isomorphisms.ib.prepaint.shizuku"

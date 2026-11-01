@@ -1,9 +1,26 @@
 module IB.Reader.Document
 
 import Data.Text
+import Data.List1
 import IB.HtmlPrepaint
 import IB.Prepaint.Reflow
 import IB.Reflow
+
+-- Only the trusted source owner may supply these observations. Incoming
+-- Intents, HTML and search text never enter this constructor path.
+export
+read_committed_evidence : Text → Either Text HtmlEvidence
+read_committed_evidence fields =
+  case forget (split (≟ '\t') fields) of
+    [source, generation, claimed, reopened, byte_count, reopened_count,
+     requested, resolved, mime, charset, status, utf8, complete] ⇒
+      if (utf8 ≟ "verified-utf8" || utf8 ≟ "invalid-utf8") &&
+         (complete ≟ "complete" || complete ≟ "incomplete")
+        then Right (HtmlSourceEvidence source generation claimed reopened
+          (cast byte_count) (cast reopened_count) requested resolved mime
+          charset status (utf8 ≟ "verified-utf8") (complete ≟ "complete"))
+        else Left "unknown-readback-observation"
+    _ ⇒ Left "malformed-readback-observations"
 
 -- Admission remains the maintained HtmlEvidence gate. Layout retains the
 -- admitted source, original blocks and exact source-linked code-point spans.

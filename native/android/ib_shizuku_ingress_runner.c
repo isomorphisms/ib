@@ -7,10 +7,10 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <signal.h>
-#include <spawn.h>
 #include <stdint.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <sys/prctl.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <time.h>
@@ -40,39 +40,55 @@ static int approved_executable_path(const char *path, int executable) {
     struct stat info;
     if (lstat(path, &info) != 0 || !S_ISREG(info.st_mode) ||
         (info.st_mode & 022U) != 0 ||
-        (info.st_uid != geteuid() && info.st_uid != 0))
+        (info.st_uid != geteuid() && info.st_uid != 0 && info.st_uid != 1000))
         return 0;
     return !executable || (info.st_mode & 0111U) != 0;
 }
 
-static int run_process(const char *qualified_grease, const char *worker_script,
+static int run_process(const ib_icu_worker_runtime *runtime,
                        const char *authorized_url, int write_fd) {
-    posix_spawn_file_actions_t actions;
-    if (posix_spawn_file_actions_init(&actions) != 0) return 127;
-    int actions_status =
-        posix_spawn_file_actions_adddup2(&actions, write_fd, STDOUT_FILENO);
-    if (actions_status == 0 && write_fd != STDOUT_FILENO)
-        actions_status = posix_spawn_file_actions_addclose(&actions, write_fd);
-
-    pid_t pid = -1;
-    int spawned = actions_status;
-    if (spawned == 0) {
-        char *const argv[] = {
-            (char *)qualified_grease, (char *)worker_script,
-            (char *)authorized_url, NULL
-        };
-        spawned = posix_spawn(&pid, qualified_grease, &actions,
-                              NULL, argv, environ);
+    /* Prepare all memory before fork in the ART-hosted user-service process.
+     * The child performs only fixed native syscalls before exec. The Grease
+     * supervisor installs its TERM trap before starting ICU; parent death
+     * therefore terminates its whole acquisition group, not just a wrapper. */
+    char *const argv[] = {
+        (char *)"ysh", (char *)runtime->script, (char *)authorized_url,
+        (char *)runtime->icu_dex, (char *)runtime->icu_library,
+        (char *)runtime->capture_directory, NULL
+    };
+    pid_t parent = getpid();
+    pid_t pid = fork();
+    if (pid == 0) {
+        if (setpgid(0, 0) != 0 || prctl(PR_SET_PDEATHSIG, SIGTERM) != 0 ||
+            getppid() != parent) _exit(127);
+        sigset_t unblocked;
+        if (sigemptyset(&unblocked) != 0 || sigprocmask(SIG_SETMASK, &unblocked, NULL) != 0 ||
+            dup2(write_fd, STDOUT_FILENO) < 0) _exit(127);
+        if (write_fd != STDOUT_FILENO) close(write_fd);
+        execve(runtime->grease, argv, environ);
+        _exit(127);
     }
-    (void)posix_spawn_file_actions_destroy(&actions);
-    if (spawned != 0 || pid <= 0) return 127;
+    if (pid < 0) return 127;
+    /* Either side may win group creation; exec may already have happened. */
+    if (setpgid(pid, pid) != 0 && errno != EACCES && errno != ESRCH) {
+        (void)kill(pid, SIGKILL);
+        while (waitpid(pid, NULL, 0) < 0 && errno == EINTR) { }
+        return 127;
+    }
 
     int64_t start = monotonic_milliseconds();
     int64_t deadline = start < 0 ? 0 : start + BROKER_PROCESS_DEADLINE_MS;
     for (;;) {
         int status = 0;
-        pid_t result = waitpid(pid, &status, WNOHANG);
-        if (result == pid) {
+        siginfo_t child = {0};
+        int result = waitid(P_PID, (id_t)pid, &child, WEXITED | WNOHANG | WNOWAIT);
+        if (result == 0 && child.si_pid == pid) {
+            /* Keep the leader unreaped until group cleanup, so its PID cannot
+             * be reused as an unrelated process/group between these calls. */
+            (void)kill(-pid, SIGKILL);
+            while (waitpid(pid, &status, 0) < 0) {
+                if (errno != EINTR) return 125;
+            }
             if (WIFEXITED(status)) return WEXITSTATUS(status);
             if (WIFSIGNALED(status)) {
                 int code = 128 + WTERMSIG(status);
@@ -83,6 +99,7 @@ static int run_process(const char *qualified_grease, const char *worker_script,
         if (result < 0 && errno != EINTR) return 125;
         int64_t now = monotonic_milliseconds();
         if (now < 0 || now >= deadline) {
+            (void)kill(-pid, SIGKILL);
             (void)kill(pid, SIGKILL);
             while (waitpid(pid, NULL, 0) < 0 && errno == EINTR) { }
             return 124;
@@ -92,32 +109,37 @@ static int run_process(const char *qualified_grease, const char *worker_script,
     }
 }
 
-int ib_shizuku_ingress_run_icu(AIBinder *private_ingress,
+int ib_shizuku_ingress_run_icu(JNIEnv *environment, jobject private_ingress,
                                const char *request_id,
                                uint64_t navigation_generation,
-                               const char *qualified_grease,
-                               const char *trusted_worker_script) {
-    if (!private_ingress || !request_id || navigation_generation == 0)
+                               const ib_icu_worker_runtime *runtime) {
+    if (!environment || !private_ingress || !request_id || !runtime || navigation_generation == 0)
         return -1;
 
     char authorized_url[IB_INGRESS_URL_CAP + 1U] = {0};
     int write_fd = -1;
     if (ib_shizuku_ingress_begin_remote(
-            private_ingress, request_id, navigation_generation,
+            environment, private_ingress, request_id, navigation_generation,
             authorized_url, &write_fd) != 0 || write_fd < 0)
         return -1;
 
     int result = 127;
-    if (approved_executable_path(qualified_grease, 1) &&
-        approved_executable_path(trusted_worker_script, 0))
-        result = run_process(qualified_grease, trusted_worker_script,
-                             authorized_url, write_fd);
+    struct stat directory;
+    if (approved_executable_path(runtime->grease, 1) &&
+        approved_executable_path(runtime->script, 0) &&
+        approved_executable_path(runtime->icu_dex, 0) &&
+        approved_executable_path(runtime->icu_library, 0) &&
+        runtime->capture_directory &&
+        lstat(runtime->capture_directory, &directory) == 0 &&
+        S_ISDIR(directory.st_mode) && directory.st_uid == geteuid() &&
+        (directory.st_mode & 0777U) == 0700U)
+        result = run_process(runtime, authorized_url, write_fd);
 
     /* Always close the only broker-side copy BEFORE FINISH. Otherwise a
      * held write reference prevents the app from observing the exact EOF. */
     close(write_fd);
     int published = ib_shizuku_ingress_finish_remote(
-        private_ingress, request_id, navigation_generation, result);
+        environment, private_ingress, request_id, navigation_generation, result);
     return result == 0 && published == 0 ? 0 : -1;
 }
 #endif

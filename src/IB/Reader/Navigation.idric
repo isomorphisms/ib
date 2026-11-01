@@ -1,0 +1,24 @@
+module IB.Reader.Navigation
+
+import Data.Text
+import IB.Information
+
+export
+data NavigationRequest = CheckedHttpAddress Text
+
+-- Source/attempt identities and Binder authority are minted by the app host.
+-- Page text can request an address; it cannot supply those capabilities.
+export
+navigation_request : Text → Either Text NavigationRequest
+navigation_request input =
+  let address = trim input in
+  if length (unpack address) > 2048 then Left "URL exceeds the acquisition limit"
+  else if not (cheap_http_url address) then Left "Enter an ordinary HTTP or HTTPS URL"
+  else if any (\character => let point = ord character in point < 33 || point > 126)
+       (unpack address)
+    then Left "URL spaces and Unicode must be percent encoded"
+  else Right (CheckedHttpAddress address)
+
+export
+navigation_address : NavigationRequest → Text
+navigation_address (CheckedHttpAddress address) = address

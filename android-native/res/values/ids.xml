@@ -7,4 +7,5 @@
     <item type="id" name="read_button" />
     <item type="id" name="reader_status" />
     <item type="id" name="permission_button" />
+    <item type="id" name="reflow_button" />
 </resources>

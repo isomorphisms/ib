@@ -1,0 +1,569 @@
+/* Android process/file/JNI adapter. Checked Idriç owns URL policy, extraction,
+ * layout and the decision to acknowledge a presented document. */
+#define _GNU_SOURCE
+#define _FILE_OFFSET_BITS 64
+#include "ib_shizuku_client.h"
+#include "ib_shizuku_worker.h"
+#include "ib_shizuku_ingress_binder.h"
+#include "ib_shizuku_arena_publish.h"
+#include "ib_arena_source_owner.h"
+#include "appendfat_arena.h"
+
+#include <android/binder_ibinder_jni.h>
+#include <android/binder_status.h>
+#include <errno.h>
+#include <fcntl.h>
+#include <inttypes.h>
+#include <jni.h>
+#include <math.h>
+#include <pthread.h>
+#include <stdatomic.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/random.h>
+#include <sys/stat.h>
+#include <sys/statvfs.h>
+#include <sys/syscall.h>
+#include <unistd.h>
+
+#define BODY_VIEW 2130903040
+#define INITIAL_ARENA_BYTES (4U * 1024U * 1024U)
+#define AVAILABLE_RESERVE_BYTES (8U * 1024U * 1024U)
+
+typedef struct {
+    atomic_uint references;
+    uint32_t navigation, source_generation;
+    uint64_t epoch;
+    int retained, result;
+    char id[IB_READER_REQUEST_ID_CAP + 1U], url[2049];
+    ib_reader_source source;
+    ib_reader_source_ticket ticket;
+    ib_arena_source_observations observations;
+} reader_job;
+
+static struct {
+    pthread_mutex_t mutex;
+    int ready;
+    uint32_t navigation;
+    char root[4096];
+    jobject context;
+    jweak activity;
+    jclass generated, acquire_task, completion_task;
+    jmethodID ready_callback, error_callback;
+    reader_job *active;
+    ib_ingress_capability *capability;
+    uint64_t capability_epoch;
+    ib_ingress_arena arena;
+    ib_arena_source_owner sources;
+} application = { .mutex = PTHREAD_MUTEX_INITIALIZER };
+
+static jmethodID method(JNIEnv *e, const char *type, const char *name, const char *signature) {
+    if ((*e)->ExceptionCheck(e)) return NULL;
+    jclass klass = (*e)->FindClass(e, type);
+    return klass ? (*e)->GetMethodID(e, klass, name, signature) : NULL;
+}
+
+static int ascii(JNIEnv *e, jstring text, char *out, size_t capacity) {
+    if (!text || (*e)->ExceptionCheck(e)) return 0;
+    jsize size = (*e)->GetStringLength(e, text);
+    if (size < 1 || (size_t)size >= capacity) return 0;
+    const jchar *units = (*e)->GetStringChars(e, text, NULL);
+    if (!units) return 0;
+    int ok = 1;
+    for (jsize i = 0; i < size; ++i) {
+        if (units[i] < 33 || units[i] > 126) { ok = 0; break; }
+        out[i] = (char)units[i];
+    }
+    (*e)->ReleaseStringChars(e, text, units);
+    if (ok) out[size] = 0;
+    return ok;
+}
+
+static int all_bytes(int fd, const unsigned char *bytes, size_t count) {
+    size_t done = 0;
+    while (done < count) {
+        ssize_t n = write(fd, bytes + done, count - done);
+        if (n < 0 && errno == EINTR) continue;
+        if (n <= 0) return -1;
+        done += (size_t)n;
+    }
+    return 0;
+}
+
+static int random_identity(char out[IB_READER_REQUEST_ID_CAP + 1U]) {
+    unsigned char bytes[24];
+    size_t used = 0;
+    while (used < sizeof(bytes)) {
+        ssize_t count = getrandom(bytes + used, sizeof(bytes) - used, 0);
+        if (count < 0 && errno == EINTR) continue;
+        if (count <= 0) return -1;
+        used += (size_t)count;
+    }
+    static const char hex[] = "0123456789abcdef";
+    for (unsigned i = 0; i < sizeof(bytes); ++i) {
+        out[2*i] = hex[bytes[i] >> 4];
+        out[2*i+1] = hex[bytes[i] & 15];
+    }
+    out[48] = 0;
+    return 0;
+}
+
+static int private_directory(int fd) {
+    struct stat info;
+    return fd >= 0 && fstat(fd, &info) == 0 && S_ISDIR(info.st_mode) &&
+        info.st_uid == geteuid() && (info.st_mode & 077U) == 0;
+}
+
+static int application_directory(int fd) {
+    struct stat info;
+    /* Android can give files/ group access for the application's own GID.
+     * The newly selected Arena itself must still be strictly private. */
+    return fd >= 0 && fstat(fd, &info) == 0 && S_ISDIR(info.st_mode) &&
+        info.st_uid == geteuid() && (info.st_mode & 0002U) == 0 &&
+        ((info.st_mode & 0020U) == 0 || info.st_gid == getegid());
+}
+
+static int initialize_arena(const char *files, char root[4096]) {
+    int files_fd = open(files, O_RDONLY | O_CLOEXEC | O_DIRECTORY | O_NOFOLLOW);
+    if (!application_directory(files_fd)) { if (files_fd >= 0) close(files_fd); return -1; }
+    int count = snprintf(root, 4096, "%s/arena", files);
+    if (count < 1 || count >= 4096) { close(files_fd); return -1; }
+    int existing = openat(files_fd, "arena", O_RDONLY | O_CLOEXEC | O_DIRECTORY | O_NOFOLLOW);
+    if (existing >= 0) {
+        int ok = private_directory(existing);
+        close(existing); close(files_fd);
+        return ok ? 0 : -1;
+    }
+    if (errno != ENOENT) { close(files_fd); return -1; }
+    struct statvfs space;
+    if (fstatvfs(files_fd, &space) != 0 || !space.f_frsize ||
+        space.f_bavail < (INITIAL_ARENA_BYTES + AVAILABLE_RESERVE_BYTES) / space.f_frsize + 1U) {
+        close(files_fd); return -1;
+    }
+    char identity[IB_READER_REQUEST_ID_CAP + 1U], leaf[80], temporary[4096], arena[4096];
+    if (random_identity(identity) != 0) { close(files_fd); return -1; }
+    int a = snprintf(leaf, sizeof(leaf), "arena-initializing-%s", identity);
+    int b = snprintf(temporary, sizeof(temporary), "%s/%s", files, leaf);
+    int c = snprintf(arena, sizeof(arena), "%s/responses.arena", temporary);
+    int ok = a > 0 && (size_t)a < sizeof(leaf) && b > 0 && (size_t)b < sizeof(temporary) &&
+        c > 0 && (size_t)c < sizeof(arena) && mkdirat(files_fd, leaf, 0700) == 0;
+    int directory = ok ? openat(files_fd, leaf, O_RDONLY | O_CLOEXEC | O_DIRECTORY | O_NOFOLLOW) : -1;
+    ok = ok && private_directory(directory) && mkdirat(directory, "receipts", 0700) == 0 &&
+        mkdirat(directory, "locks", 0700) == 0 && appendfat_arena_create(arena, INITIAL_ARENA_BYTES) == 0 &&
+        fsync(directory) == 0;
+    /* Never replace an existing source directory, even if another initializer
+     * won the race. An interrupted unselected directory is retained for audit. */
+    if (ok) ok = syscall(SYS_renameat2, files_fd, leaf, files_fd, "arena", 1U) == 0 && fsync(files_fd) == 0;
+    if (directory >= 0) close(directory);
+    close(files_fd);
+    return ok ? 0 : -1;
+}
+
+static void job_retain(reader_job *job) { atomic_fetch_add(&job->references, 1); }
+static void job_release(reader_job *job) {
+    if (job && atomic_fetch_sub(&job->references, 1) == 1) {
+        ib_reader_source_clear(&job->source);
+        free(job);
+    }
+}
+static void *job_created(void *opaque) { return opaque; }
+static void job_destroyed(void *opaque) { job_release(opaque); }
+static binder_status_t job_refuses(AIBinder *self, transaction_code_t code, const AParcel *in, AParcel *out) {
+    (void)self; (void)code; (void)in; (void)out; return STATUS_UNKNOWN_TRANSACTION;
+}
+static pthread_once_t job_once = PTHREAD_ONCE_INIT;
+static AIBinder_Class *job_class;
+static void initialize_job_class(void) {
+    job_class = AIBinder_Class_define("org.isomorphisms.ib.ReaderJobStorage.v1", job_created, job_destroyed, job_refuses);
+}
+
+static jobject task(JNIEnv *e, reader_job *job, jclass type) {
+    (void)pthread_once(&job_once, initialize_job_class);
+    if (!job_class || (*e)->ExceptionCheck(e)) return NULL;
+    jmethodID constructor = (*e)->GetMethodID(e, type, "<init>", "()V");
+    jfieldID field = constructor ? (*e)->GetFieldID(e, type, "storageAnchor", "Landroid/os/IBinder;") : NULL;
+    jobject runnable = field ? (*e)->NewObject(e, type, constructor) : NULL;
+    if (!runnable) return NULL;
+    job_retain(job);
+    AIBinder *anchor = AIBinder_new(job_class, job);
+    if (!anchor) { job_release(job); return NULL; }
+    jobject java_anchor = AIBinder_toJavaBinder(e, anchor);
+    if (java_anchor && !(*e)->ExceptionCheck(e)) (*e)->SetObjectField(e, runnable, field, java_anchor);
+    AIBinder_decStrong(anchor);
+    return java_anchor && !(*e)->ExceptionCheck(e) ? runnable : NULL;
+}
+
+static AIBinder *task_anchor(JNIEnv *e, jobject self) {
+    jclass type = (*e)->GetObjectClass(e, self);
+    jfieldID field = type ? (*e)->GetFieldID(e, type, "storageAnchor", "Landroid/os/IBinder;") : NULL;
+    jobject value = field ? (*e)->GetObjectField(e, self, field) : NULL;
+    AIBinder *anchor = value && !(*e)->ExceptionCheck(e) ? AIBinder_fromJavaBinder(e, value) : NULL;
+    if (anchor && AIBinder_getClass(anchor) != job_class) { AIBinder_decStrong(anchor); return NULL; }
+    return anchor;
+}
+
+static void authority_revoked(void *owner, uint64_t through) {
+    (void)owner;
+    pthread_mutex_lock(&application.mutex);
+    if (application.capability && application.capability_epoch <= through)
+        ib_ingress_revoke(ib_ingress_capability_session(application.capability));
+    pthread_mutex_unlock(&application.mutex);
+}
+
+static int start_job(JNIEnv *e, reader_job *job) {
+    jobject runnable = task(e, job, application.acquire_task);
+    jclass type = (*e)->FindClass(e, "java/lang/Thread");
+    jmethodID constructor = type ? (*e)->GetMethodID(e, type, "<init>", "(Ljava/lang/Runnable;)V") : NULL;
+    jobject thread = runnable && constructor ? (*e)->NewObject(e, type, constructor, runnable) : NULL;
+    jmethodID start = method(e, "java/lang/Thread", "start", "()V");
+    if (thread && start) (*e)->CallVoidMethod(e, thread, start);
+    return thread && start && !(*e)->ExceptionCheck(e) ? 0 : -1;
+}
+
+/* The last-good source index contains no document bytes and is not a second
+ * source store. Arena receipts and independent readback remain authoritative. */
+static int last_source(reader_job *job, unsigned first) {
+    int root = open(application.root, O_RDONLY | O_CLOEXEC | O_DIRECTORY | O_NOFOLLOW);
+    if (!private_directory(root)) { if (root >= 0) close(root); return -1; }
+    int result = -1;
+    const char *names[] = {"last-source", "last-source.previous"};
+    for (unsigned i = first; i < 2 && result != 0; ++i) {
+        int fd = openat(root, names[i], O_RDONLY | O_CLOEXEC | O_NOFOLLOW);
+        struct stat info;
+        char text[256] = {0}, id[65] = {0}, claimed[65] = {0}, actual[65], generation_text[11] = {0};
+        ssize_t count = fd >= 0 ? read(fd, text, sizeof(text) - 1U) : -1;
+        int ok = fd >= 0 && fstat(fd, &info) == 0 && S_ISREG(info.st_mode) && info.st_uid == geteuid() &&
+            info.st_nlink == 1 && info.st_size == count && count > 0 && count < (ssize_t)sizeof(text) - 1 &&
+            memchr(text, 0, (size_t)count) == NULL;
+        if (fd >= 0) close(fd);
+        int used = 0;
+        ok = ok && sscanf(text, "IBLAST1\n%64[0-9a-f]\n%10[0-9]\n%64[0-9a-f]\n%n", id, generation_text, claimed, &used) == 3 &&
+            strlen(id) == 48 && strlen(claimed) == 64 && used == count;
+        errno = 0;
+        char *generation_end = NULL;
+        unsigned long generation = ok ? strtoul(generation_text, &generation_end, 10) : 0;
+        ok = ok && errno == 0 && generation_end && *generation_end == 0 && generation > 0 && generation <= INT32_MAX;
+        char *hash_line = ok ? strstr(text + 8, "\n") : NULL;
+        hash_line = hash_line ? strchr(hash_line + 1, '\n') : NULL;
+        if (hash_line) {
+            size_t prefix = (size_t)(hash_line + 1 - text);
+            ib_reader_sha256_hex((unsigned char *)text, prefix, actual);
+            ok = !strcmp(actual, claimed);
+        } else ok = 0;
+        if (ok) { memcpy(job->id, id, strlen(id) + 1U); job->source_generation = generation; result = 0; }
+    }
+    close(root);
+    return result;
+}
+
+static int atomic_index(int root, const char *name, const char *bytes, size_t count) {
+    char identity[65], temporary[128];
+    if (random_identity(identity) != 0) return -1;
+    int n = snprintf(temporary, sizeof(temporary), "%s.new.%s", name, identity);
+    if (n < 1 || (size_t)n >= sizeof(temporary)) return -1;
+    int fd = openat(root, temporary, O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC | O_NOFOLLOW, 0600);
+    if (fd < 0) return -1;
+    int ok = all_bytes(fd, (const unsigned char *)bytes, count) == 0 && fsync(fd) == 0;
+    if (close(fd) != 0) ok = 0;
+    if (ok) ok = renameat(root, temporary, root, name) == 0 && fsync(root) == 0;
+    if (!ok) (void)unlinkat(root, temporary, 0); /* Exact leaf minted above. */
+    return ok ? 0 : -1;
+}
+
+JNIEXPORT jint JNICALL
+Java_org_isomorphisms_ib_ReaderBridge_acknowledge(JNIEnv *e, jclass type, jstring id_text, jint navigation) {
+    (void)type;
+    char id[65] = {0};
+    if (!ascii(e, id_text, id, sizeof(id))) return -1;
+    pthread_mutex_lock(&application.mutex);
+    reader_job *job = application.active;
+    int ok = job && job->result == 0 && job->navigation == (uint32_t)navigation && !strcmp(job->id, id) &&
+        application.navigation == job->navigation;
+    char text[256], digest[65];
+    int count = ok ? snprintf(text, sizeof(text), "IBLAST1\n%s\n%u\n", job->id, job->source_generation) : -1;
+    if (count < 1 || (size_t)count >= sizeof(text) - 65U) ok = 0;
+    if (ok) {
+        ib_reader_sha256_hex((unsigned char *)text, (size_t)count, digest);
+        memcpy(text + count, digest, 64); text[count + 64] = '\n'; count += 65;
+        int root = open(application.root, O_RDONLY | O_CLOEXEC | O_DIRECTORY | O_NOFOLLOW);
+        ok = private_directory(root);
+        int old = ok && !job->retained ? openat(root, "last-source", O_RDONLY | O_CLOEXEC | O_NOFOLLOW) : -1;
+        if (old >= 0) {
+            char previous[256];
+            struct stat info;
+            ssize_t amount = read(old, previous, sizeof(previous));
+            ok = fstat(old, &info) == 0 && S_ISREG(info.st_mode) && info.st_uid == geteuid() &&
+                info.st_nlink == 1 && amount > 0 && amount < (ssize_t)sizeof(previous) && amount == info.st_size &&
+                atomic_index(root, "last-source.previous", previous, (size_t)amount) == 0;
+            close(old);
+        } else if (ok && !job->retained && errno != ENOENT) ok = 0;
+        if (ok) ok = atomic_index(root, "last-source", text, (size_t)count) == 0;
+        if (root >= 0) close(root);
+    }
+    pthread_mutex_unlock(&application.mutex);
+    return ok ? 0 : -1;
+}
+
+static int enqueue(JNIEnv *e, jstring url_text, int retained) {
+    reader_job *job = calloc(1, sizeof(*job));
+    if (!job) return -1;
+    atomic_init(&job->references, 1);
+    ib_reader_source_init(&job->source);
+    job->retained = retained;
+    int ok = retained ? last_source(job, 0) == 0 : ascii(e, url_text, job->url, sizeof(job->url)) && random_identity(job->id) == 0;
+    pthread_mutex_lock(&application.mutex);
+    ok = ok && application.ready && !application.active && application.navigation < INT32_MAX;
+    if (ok) {
+        job->navigation = ++application.navigation;
+        if (!retained) job->source_generation = job->navigation;
+        application.active = job;
+        ib_arena_source_owner_want(&application.sources, job->navigation);
+        ib_reader_source_want(&job->source, job->navigation);
+    }
+    pthread_mutex_unlock(&application.mutex);
+    if (ok && start_job(e, job) == 0) return 0;
+    pthread_mutex_lock(&application.mutex);
+    if (application.active == job) application.active = NULL;
+    pthread_mutex_unlock(&application.mutex);
+    job_release(job);
+    if ((*e)->ExceptionCheck(e)) (*e)->ExceptionClear(e);
+    return -1;
+}
+
+JNIEXPORT jint JNICALL
+Java_org_isomorphisms_ib_ReaderBridge_navigate(JNIEnv *e, jclass type, jstring url) {
+    (void)type; return enqueue(e, url, 0);
+}
+JNIEXPORT jint JNICALL
+Java_org_isomorphisms_ib_ReaderBridge_restore(JNIEnv *e, jclass type) {
+    (void)type; return enqueue(e, NULL, 1);
+}
+
+JNIEXPORT jint JNICALL
+Java_org_isomorphisms_ib_ReaderBridge_attach(JNIEnv *e, jclass type, jobject activity) {
+    (void)type;
+    if (!activity || getuid() < 10000 || (*e)->PushLocalFrame(e, 64) != 0) return -1;
+    pthread_mutex_lock(&application.mutex);
+    int ready = application.ready;
+    pthread_mutex_unlock(&application.mutex);
+    int ok = 1;
+    if (!ready) {
+        jmethodID get_context = method(e, "android/content/Context", "getApplicationContext", "()Landroid/content/Context;");
+        jobject context = get_context ? (*e)->CallObjectMethod(e, activity, get_context) : NULL;
+        jmethodID get_files = method(e, "android/content/Context", "getFilesDir", "()Ljava/io/File;");
+        jobject files = context && get_files ? (*e)->CallObjectMethod(e, context, get_files) : NULL;
+        jmethodID path = method(e, "java/io/File", "getCanonicalPath", "()Ljava/lang/String;");
+        jstring text = files && path ? (*e)->CallObjectMethod(e, files, path) : NULL;
+        char directory[4096];
+        ok = ascii(e, text, directory, sizeof(directory)) && initialize_arena(directory, application.root) == 0 &&
+            ib_ingress_arena_init(&application.arena, application.root) == 0 &&
+            ib_arena_source_owner_init(&application.sources, application.root) == 0;
+        jclass generated = ok ? (*e)->FindClass(e, "Idric/Generated") : NULL;
+        jclass acquire = generated ? (*e)->FindClass(e, "org/isomorphisms/ib/ReaderAcquireTask") : NULL;
+        jclass completion = acquire ? (*e)->FindClass(e, "org/isomorphisms/ib/ReaderCompletionTask") : NULL;
+        application.ready_callback = completion ? (*e)->GetStaticMethodID(e, generated, "reader_acquisition_ready",
+            "(Landroid/app/Activity;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;I)V") : NULL;
+        application.error_callback = application.ready_callback ? (*e)->GetStaticMethodID(e, generated, "reader_acquisition_failed",
+            "(Landroid/app/Activity;Ljava/lang/String;)V") : NULL;
+        ok = ok && application.error_callback && !(*e)->ExceptionCheck(e);
+        if (ok) {
+            application.context = (*e)->NewGlobalRef(e, context);
+            application.generated = (*e)->NewGlobalRef(e, generated);
+            application.acquire_task = (*e)->NewGlobalRef(e, acquire);
+            application.completion_task = (*e)->NewGlobalRef(e, completion);
+            ok = application.context && application.generated && application.acquire_task && application.completion_task && !(*e)->ExceptionCheck(e);
+        }
+        if (ok) ib_shizuku_client_set_revocation_handler(authority_revoked, NULL);
+    }
+    jweak weak = ok ? (*e)->NewWeakGlobalRef(e, activity) : NULL;
+    ok = ok && weak && !(*e)->ExceptionCheck(e);
+    if (ok) {
+        pthread_mutex_lock(&application.mutex);
+        jweak old = application.activity;
+        application.activity = weak;
+        application.ready = 1;
+        pthread_mutex_unlock(&application.mutex);
+        if (old) (*e)->DeleteWeakGlobalRef(e, old);
+        jclass listener_type = (*e)->FindClass(e, "org/isomorphisms/ib/ReaderLayoutListener");
+        jmethodID constructor = listener_type ? (*e)->GetMethodID(e, listener_type, "<init>", "()V") : NULL;
+        jobject listener = constructor ? (*e)->NewObject(e, listener_type, constructor) : NULL;
+        jmethodID find = method(e, "android/app/Activity", "findViewById", "(I)Landroid/view/View;");
+        jobject body = find ? (*e)->CallObjectMethod(e, activity, find, BODY_VIEW) : NULL;
+        jmethodID add = method(e, "android/view/View", "addOnLayoutChangeListener", "(Landroid/view/View$OnLayoutChangeListener;)V");
+        if (body && listener && add) (*e)->CallVoidMethod(e, body, add, listener);
+        ok = body && listener && add && !(*e)->ExceptionCheck(e);
+    }
+    if ((*e)->ExceptionCheck(e)) (*e)->ExceptionClear(e);
+    (*e)->PopLocalFrame(e, NULL);
+    return ok ? 0 : -1;
+}
+
+JNIEXPORT void JNICALL
+Java_org_isomorphisms_ib_ReaderLayoutListener_onLayoutChange(JNIEnv *e, jobject self, jobject view,
+    jint left, jint top, jint right, jint bottom, jint old_left, jint old_top, jint old_right, jint old_bottom) {
+    (void)self; (void)top; (void)bottom; (void)old_top; (void)old_bottom;
+    if (right <= left || right - left == old_right - old_left) return;
+    jmethodID context = method(e, "android/view/View", "getContext", "()Landroid/content/Context;");
+    jobject activity = context ? (*e)->CallObjectMethod(e, view, context) : NULL;
+    pthread_mutex_lock(&application.mutex);
+    int current = activity && application.activity && (*e)->IsSameObject(e, activity, application.activity) && !application.active;
+    pthread_mutex_unlock(&application.mutex);
+    if (current) (void)enqueue(e, NULL, 1);
+}
+
+JNIEXPORT void JNICALL
+Java_org_isomorphisms_ib_ReaderAcquireTask_run(JNIEnv *e, jobject self) {
+    if ((*e)->PushLocalFrame(e, 128) != 0) return;
+    AIBinder *anchor = task_anchor(e, self);
+    reader_job *job = anchor ? AIBinder_getUserData(anchor) : NULL;
+    if (!job) { if (anchor) AIBinder_decStrong(anchor); (*e)->PopLocalFrame(e, NULL); return; }
+    job->result = -1;
+    int acquired = job->retained;
+    if (!acquired) {
+        uid_t uid;
+        uint64_t epoch;
+        if (ib_shizuku_client_authorization(e, &uid, &epoch) == IB_SHIZUKU_AUTHORIZED && uid == 2000) {
+            ib_ingress_capability *capability = ib_ingress_capability_new(ib_ingress_arena_publish_frame, &application.arena);
+            ib_shizuku_arena_ingress *session = ib_ingress_capability_session(capability);
+            int armed = session && ib_ingress_arm(session, job->id, job->navigation, job->url, uid) == 0;
+            jobject ingress = armed ? ib_shizuku_ingress_binder_new(e, capability) : NULL;
+            if (ingress) {
+                pthread_mutex_lock(&application.mutex);
+                application.capability = capability;
+                application.capability_epoch = epoch;
+                pthread_mutex_unlock(&application.mutex);
+                acquired = ib_shizuku_worker_acquire(e, application.context, ingress, job->id, job->navigation, epoch) == 0;
+                pthread_mutex_lock(&application.mutex);
+                application.capability = NULL;
+                pthread_mutex_unlock(&application.mutex);
+            }
+            if (session) ib_ingress_revoke(session);
+            if (capability) ib_ingress_capability_release(capability);
+        }
+    }
+    int fd = -1;
+    if (acquired && ib_arena_source_owner_open_observed(&application.sources, job->id,
+        job->source_generation, job->navigation, &job->ticket, &job->observations, &fd) == 0) {
+        job->result = ib_reader_source_accept_fd(&job->source, &job->ticket, fd) == IB_READER_PFD_ACCEPTED ? 0 : -1;
+        close(fd);
+    }
+    if (job->retained && job->result != 0 && last_source(job, 1) == 0 &&
+        ib_arena_source_owner_open_observed(&application.sources, job->id,
+            job->source_generation, job->navigation, &job->ticket, &job->observations, &fd) == 0) {
+        job->result = ib_reader_source_accept_fd(&job->source, &job->ticket, fd) == IB_READER_PFD_ACCEPTED ? 0 : -1;
+        close(fd);
+    }
+    if ((*e)->ExceptionCheck(e)) { (*e)->ExceptionClear(e); job->result = -1; }
+    jobject completion = task(e, job, application.completion_task);
+    pthread_mutex_lock(&application.mutex);
+    jobject activity = application.activity ? (*e)->NewLocalRef(e, application.activity) : NULL;
+    pthread_mutex_unlock(&application.mutex);
+    jmethodID post = method(e, "android/app/Activity", "runOnUiThread", "(Ljava/lang/Runnable;)V");
+    int posted = activity && completion && post;
+    if (posted) (*e)->CallVoidMethod(e, activity, post, completion);
+    if (!posted || (*e)->ExceptionCheck(e)) {
+        if ((*e)->ExceptionCheck(e)) (*e)->ExceptionClear(e);
+        pthread_mutex_lock(&application.mutex);
+        if (application.active == job) application.active = NULL;
+        pthread_mutex_unlock(&application.mutex);
+        job_release(job);
+    }
+    AIBinder_decStrong(anchor);
+    (*e)->PopLocalFrame(e, NULL);
+}
+
+static jstring utf8_text(JNIEnv *e, const unsigned char *bytes, size_t count) {
+    if (count > IB_READER_SOURCE_MAX_BYTES || count > INT32_MAX) return NULL;
+    jbyteArray array = (*e)->NewByteArray(e, (jsize)count);
+    if (!array) return NULL;
+    (*e)->SetByteArrayRegion(e, array, 0, (jsize)count, (const jbyte *)bytes);
+    jclass type = (*e)->FindClass(e, "java/lang/String");
+    jmethodID constructor = type ? (*e)->GetMethodID(e, type, "<init>", "([BLjava/lang/String;)V") : NULL;
+    jstring charset = constructor ? (*e)->NewStringUTF(e, "UTF-8") : NULL;
+    /* UTF-8 was strictly validated by source admission and independently
+     * hashed again above. This only crosses the SDK's UTF-16 string ABI. */
+    return charset && !(*e)->ExceptionCheck(e) ? (*e)->NewObject(e, type, constructor, array, charset) : NULL;
+}
+
+JNIEXPORT void JNICALL
+Java_org_isomorphisms_ib_ReaderCompletionTask_run(JNIEnv *e, jobject self) {
+    if ((*e)->PushLocalFrame(e, 64) != 0) return;
+    AIBinder *anchor = task_anchor(e, self);
+    reader_job *job = anchor ? AIBinder_getUserData(anchor) : NULL;
+    pthread_mutex_lock(&application.mutex);
+    int current = job && application.active == job && application.navigation == job->navigation;
+    jobject activity = current && application.activity ? (*e)->NewLocalRef(e, application.activity) : NULL;
+    pthread_mutex_unlock(&application.mutex);
+    if (current && activity && job->result == 0) {
+        char fields[5000], observed[65];
+        ib_reader_sha256_hex(job->source.bytes, job->source.byte_count, observed);
+        int count = snprintf(fields, sizeof(fields), "%s\t%u\t%s\t%s\t%u\t%zu\t%s\t%s\t%s\t%s\t%s\tverified-utf8\tcomplete",
+            job->observations.source_key, job->source_generation, job->ticket.sha256_hex, observed,
+            job->ticket.byte_count, job->source.byte_count, job->observations.requested_url,
+            job->observations.resolved_url, job->observations.mime_type, job->observations.charset, job->observations.http_status);
+        jstring evidence = count > 0 && (size_t)count < sizeof(fields) ? (*e)->NewStringUTF(e, fields) : NULL;
+        jstring body = evidence ? utf8_text(e, job->source.bytes, job->source.byte_count) : NULL;
+        jstring id = body ? (*e)->NewStringUTF(e, job->id) : NULL;
+        if (id) (*e)->CallStaticVoidMethod(e, application.generated, application.ready_callback,
+            activity, evidence, body, id, (jint)job->navigation);
+    } else if (current && activity) {
+        jstring reason = (*e)->NewStringUTF(e, "Acquisition or verified source readback failed. The previous document is retained.");
+        if (reason) (*e)->CallStaticVoidMethod(e, application.generated, application.error_callback, activity, reason);
+    }
+    pthread_mutex_lock(&application.mutex);
+    if (current && application.active == job) application.active = NULL;
+    pthread_mutex_unlock(&application.mutex);
+    if (current) job_release(job);
+    if (anchor) AIBinder_decStrong(anchor);
+    (*e)->PopLocalFrame(e, NULL);
+}
+
+JNIEXPORT jobject JNICALL
+Java_org_isomorphisms_ib_ReaderBridge_metrics(JNIEnv *e, jclass type, jobject activity) {
+    (void)type;
+    jmethodID find = method(e, "android/app/Activity", "findViewById", "(I)Landroid/view/View;");
+    jobject body = find ? (*e)->CallObjectMethod(e, activity, find, BODY_VIEW) : NULL;
+    jmethodID get_paint = method(e, "android/widget/TextView", "getPaint", "()Landroid/text/TextPaint;");
+    jobject current = body && get_paint ? (*e)->CallObjectMethod(e, body, get_paint) : NULL;
+    jclass paint_type = (*e)->FindClass(e, "android/graphics/Paint");
+    jmethodID paint_copy = paint_type ? (*e)->GetMethodID(e, paint_type, "<init>", "(Landroid/graphics/Paint;)V") : NULL;
+    jobject paint = current && paint_copy ? (*e)->NewObject(e, paint_type, paint_copy, current) : NULL;
+    jmethodID get_width = method(e, "android/view/View", "getWidth", "()I");
+    jint width = body && get_width ? (*e)->CallIntMethod(e, body, get_width) : 0;
+    jmethodID left = method(e, "android/view/View", "getPaddingLeft", "()I");
+    jmethodID right = method(e, "android/view/View", "getPaddingRight", "()I");
+    if (body && left && right) width -= (*e)->CallIntMethod(e, body, left) + (*e)->CallIntMethod(e, body, right);
+    jclass integer_type = (*e)->FindClass(e, "java/lang/Integer");
+    jmethodID integer_constructor = integer_type ? (*e)->GetMethodID(e, integer_type, "<init>", "(I)V") : NULL;
+    jobject boxed = integer_constructor ? (*e)->NewObject(e, integer_type, integer_constructor,
+        width > 0 && width <= INT32_MAX / 64 ? width * 64 : 0) : NULL;
+    jclass metrics_type = (*e)->FindClass(e, "org/isomorphisms/ib/ReaderMetrics");
+    jmethodID constructor = metrics_type ? (*e)->GetMethodID(e, metrics_type, "<init>", "()V") : NULL;
+    jobject metrics = constructor && paint && boxed ? (*e)->NewObject(e, metrics_type, constructor) : NULL;
+    jfieldID paint_field = metrics ? (*e)->GetFieldID(e, metrics_type, "paint", "Landroid/graphics/Paint;") : NULL;
+    jfieldID width_field = paint_field ? (*e)->GetFieldID(e, metrics_type, "widthValue", "Ljava/lang/Integer;") : NULL;
+    if (width_field) { (*e)->SetObjectField(e, metrics, paint_field, paint); (*e)->SetObjectField(e, metrics, width_field, boxed); }
+    return width_field && !(*e)->ExceptionCheck(e) ? metrics : NULL;
+}
+
+JNIEXPORT jint JNICALL
+Java_org_isomorphisms_ib_ReaderMetrics_width(JNIEnv *e, jobject self) {
+    if (!self || (*e)->ExceptionCheck(e)) return 0;
+    jclass type = (*e)->GetObjectClass(e, self);
+    jfieldID field = type ? (*e)->GetFieldID(e, type, "widthValue", "Ljava/lang/Integer;") : NULL;
+    jobject boxed = field ? (*e)->GetObjectField(e, self, field) : NULL;
+    jmethodID value = method(e, "java/lang/Integer", "intValue", "()I");
+    return boxed && value ? (*e)->CallIntMethod(e, boxed, value) : 0;
+}
+JNIEXPORT jint JNICALL
+Java_org_isomorphisms_ib_ReaderMetrics_measure(JNIEnv *e, jobject self, jstring text) {
+    if (!self || (*e)->ExceptionCheck(e)) return INT32_MAX;
+    jclass type = (*e)->GetObjectClass(e, self);
+    jfieldID field = type ? (*e)->GetFieldID(e, type, "paint", "Landroid/graphics/Paint;") : NULL;
+    jobject paint = field ? (*e)->GetObjectField(e, self, field) : NULL;
+    jmethodID measure = method(e, "android/graphics/Paint", "measureText", "(Ljava/lang/String;)F");
+    float width = paint && measure && text ? (*e)->CallFloatMethod(e, paint, measure, text) : NAN;
+    return !(*e)->ExceptionCheck(e) && isfinite(width) && width >= 0 && width < (float)INT32_MAX / 64.0f ?
+        (jint)ceilf(width * 64.0f) : INT32_MAX;
+}

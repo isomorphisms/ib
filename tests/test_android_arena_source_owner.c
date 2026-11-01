@@ -87,6 +87,21 @@ int main(int argc, char **argv) {
     ib_reader_source_want(&reader, 1);
     accept(&owner, &reader, request_id, 1);
     int fd = -1;
+    ib_arena_source_observations observations;
+    ib_reader_source_ticket observed_ticket;
+    assert(ib_arena_source_owner_open_observed(&owner, request_id, 1, 1,
+        &observed_ticket, &observations, &fd) == 0);
+    assert(observations.source_generation == 1);
+    assert(strcmp(observations.source_key, "arena:verified") == 0);
+    assert(strcmp(observations.requested_url, "https://example.com/start") == 0);
+    assert(strcmp(observations.resolved_url, "https://example.com/final") == 0);
+    assert(strcmp(observations.mime_type, "text/html") == 0);
+    assert(strcmp(observations.charset, "utf-8") == 0);
+    assert(strcmp(observations.http_status, "200") == 0);
+    assert(observations.redirect_chain[0] == 0); /* Legacy v2 did not observe it. */
+    assert(ib_reader_source_accept_fd(&reader, &observed_ticket, fd) == IB_READER_PFD_ACCEPTED);
+    close(fd);
+    fd = -1;
     /* A legacy v1 receipt has matching bytes but no observed admission. */
     assert(ib_arena_source_owner_open(&owner, "legacy", 1, NULL, &fd) != 0);
     assert(fd == -1);
@@ -108,6 +123,11 @@ int main(int argc, char **argv) {
     digest += strlen("sha256\t");
     *digest = *digest == '0' ? '1' : '0';
     overwrite(receipt, damaged, count);
+    memset(&observations, 'X', sizeof(observations));
+    assert(ib_arena_source_owner_open_observed(&owner, request_id, 1, 1,
+        &observed_ticket, &observations, &fd) != 0);
+    ib_arena_source_observations empty_observations = {0};
+    assert(memcmp(&observations, &empty_observations, sizeof(observations)) == 0);
     assert(ib_arena_source_owner_open(&owner, request_id, 1, NULL, &fd) != 0);
     assert(fd == -1);
     preserved(&reader, request_id, 1);

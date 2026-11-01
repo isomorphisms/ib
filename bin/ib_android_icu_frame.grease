@@ -1,15 +1,55 @@
 #!/usr/bin/env grease
-# Private Binder worker: send ICU's paired capture to the app's WRITE PFD.
-# The app validates framing/metadata, commits the body, and reopens it. This
-# worker has no app-private Arena path or publication authority.
-set -eu
-if test "$#" -ne 1; then
-  printf 'usage: ib_android_icu_frame.grease HTTP_URL\n' >&2
+# Invoked by the app's authorized native user service, with stdout already
+# bound to the private WRITE PFD. No rish command string or app Arena path.
+set -eu -o pipefail
+if (len(ARGV) !== 4) {
+  echo 'requires AUTHORIZED_URL CHECKED_ICU_DEX ICU_LIBRARY PRIVATE_CAPTURE_DIRECTORY' >&2
   exit 2
-fi
-script_directory=$(dirname "$0")
-repository_root=$(CDPATH='' cd -- "$script_directory/.." && pwd)
-. "$repository_root/lib/android_shizuku_host.grease"
-. "$repository_root/lib/android_shizuku_icu_provider.grease"
-. "$repository_root/lib/android_binder_icu.grease"
-ib_binder_icu_frame "$1"
+}
+var url = ARGV[0]
+var dex = ARGV[1]
+var library = ARGV[2]
+var capture_directory = ARGV[3]
+if (len(url) < 8 or len(url) > 2048) { exit 2 }
+if (not url.startswith('https://') and not url.startswith('http://')) { exit 2 }
+# C has verified the pinned bytes, ownership and private directory. These
+# checks preserve the leaf contract at execution; policy remains in Idriç.
+for path in "$dex" "$library" "$capture_directory" {
+  if (len(path) === 0 or path[0] !== '/') { exit 2 }
+  if test -L "$path" { exit 2 }
+}
+test -f "$dex"
+test -f "$library"
+test -d "$capture_directory"
+test ! -e "$capture_directory/body"
+test ! -e "$capture_directory/metadata"
+umask 077
+# The native parent creates our process group before exec. Parent death sends
+# TERM here; kill the acquisition group so ICU cannot survive its authority.
+trap --add TERM HUP INT { kill -KILL -- -$$ }
+trap --add EXIT {
+  rm -f -- "$capture_directory/body" "$capture_directory/metadata"
+  rmdir -- "$capture_directory"
+}
+setglobal ENV.ICU_CAPTURE_BODY_PATH = "$capture_directory/body"
+setglobal ENV.ICU_CAPTURE_METADATA_PATH = "$capture_directory/metadata"
+setglobal ENV.CLASSPATH = dex
+fork {
+  exec /system/bin/app_process "-Dicu.library=$library" /system/bin Idric.Generated \
+    --http1.1 get "$url" > /dev/null
+}
+var icu_pid = $!
+# Waiting on a background child permits the signal trap to run immediately;
+# a foreground external command can defer a shell's pending trap until exit.
+try { wait "$icu_pid" }
+var result = _error.code
+if (result !== 0) { exit "$result" }
+test -f "$capture_directory/body"
+test ! -L "$capture_directory/body"
+test -f "$capture_directory/metadata"
+test ! -L "$capture_directory/metadata"
+var metadata_bytes = int($(wc -c < "$capture_directory/metadata"))
+var body_bytes = int($(wc -c < "$capture_directory/body"))
+if (metadata_bytes < 1 or metadata_bytes > 8192 or body_bytes < 1 or body_bytes > 4194304) { exit 81 }
+printf 'IBICU01 %08d %08d\n' "$metadata_bytes" "$body_bytes"
+cat "$capture_directory/metadata" "$capture_directory/body"

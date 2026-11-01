@@ -99,6 +99,81 @@ client_plan = do
         (ExistingValue IntegerValue) 0 [] NativeStaticMethod
     ] } base)
 
+private_ingress_plan : Either Text FilePlan
+private_ingress_plan = do
+  base ← framework_class_plan
+    (Subclass "Lorg/isomorphisms/ib/PrivateIngress;" "Landroid/os/Binder;"
+      (Just "ib_reader")
+      [Callback "onTransact" "Z" ["I", "Landroid/os/Parcel;", "Landroid/os/Parcel;", "I"]]) []
+  Right ({ fields := [MkFieldPlan "storageAnchor" (object "Landroid/os/IBinder;") 2] } base)
+
+connection_plan : Either Text FilePlan
+connection_plan = framework_class_plan
+  (Subclass "Lorg/isomorphisms/ib/ShizukuWorkerConnection;" "Landroid/os/Binder;"
+    (Just "ib_reader")
+    [Callback "onTransact" "Z" ["I", "Landroid/os/Parcel;", "Landroid/os/Parcel;", "I"]]) []
+
+worker_plan : Either Text FilePlan
+worker_plan = do
+  base ← framework_class_plan
+    (Subclass "Lorg/isomorphisms/ib/ShizukuWorker;" "Landroid/os/Binder;"
+      (Just "ib_reader")
+      [ Callback "onTransact" "Z" ["I", "Landroid/os/Parcel;", "Landroid/os/Parcel;", "I"]
+      , Callback "binderDied" "V" []
+      ]) ["Landroid/os/IBinder$DeathRecipient;"]
+  let initialize = native_method "initialize" [object "Landroid/content/Context;"] VoidValue
+  let contextual = MkBoundMethodPlan "Shizuku user-service Context constructor" "<init>" 1
+        [object "Landroid/content/Context;"] VoidValue 2
+        [ InvokeMethod (Invoke InvokeDirect
+            (MkMethodReference (MkTypeReference "Landroid/os/Binder;") "<init>" [] VoidValue)
+            [MkRegister 0] Nothing)
+        , InvokeMethod (Invoke InvokeVirtual
+            (MkMethodReference (MkTypeReference "Lorg/isomorphisms/ib/ShizukuWorker;")
+              "initialize" [object "Landroid/content/Context;"] VoidValue)
+            [MkRegister 0, MkRegister 1] Nothing)
+        , ReturnVoid ] ConstructorMethod
+  Right ({ methods := base.methods ++ [initialize, contextual] } base)
+
+reader_bridge_plan : Either Text FilePlan
+reader_bridge_plan = do
+  base ← framework_class_plan
+    (Subclass "Lorg/isomorphisms/ib/ReaderBridge;" "Ljava/lang/Object;" (Just "ib_reader") []) []
+  let native = \name, args, result => MkBoundMethodPlan "app-owned reader platform adapter" name
+        (cast (length args)) args result 0 [] NativeStaticMethod
+  Right ({ methods := base.methods ++
+    [ native "attach" [object "Landroid/app/Activity;"] (ExistingValue IntegerValue)
+    , native "navigate" [ExistingValue TextValue] (ExistingValue IntegerValue)
+    , native "restore" [] (ExistingValue IntegerValue)
+    , native "acknowledge" [ExistingValue TextValue, ExistingValue IntegerValue]
+        (ExistingValue IntegerValue)
+    , native "metrics" [object "Landroid/app/Activity;"] (object "Lorg/isomorphisms/ib/ReaderMetrics;")
+    ] } base)
+
+reader_task_plan : Text → Either Text FilePlan
+reader_task_plan name = do
+  base ← framework_class_plan
+    (Subclass name "Ljava/lang/Object;" (Just "ib_reader") [Callback "run" "V" []])
+    ["Ljava/lang/Runnable;"]
+  Right ({ fields := [MkFieldPlan "storageAnchor" (object "Landroid/os/IBinder;") 2] } base)
+
+reader_metrics_plan : Either Text FilePlan
+reader_metrics_plan = do
+  base ← framework_class_plan
+    (Subclass "Lorg/isomorphisms/ib/ReaderMetrics;" "Ljava/lang/Object;" (Just "ib_reader") []) []
+  Right ({ fields :=
+      [ MkFieldPlan "paint" (object "Landroid/graphics/Paint;") 2
+      , MkFieldPlan "widthValue" (object "Ljava/lang/Integer;") 2
+      ], methods := base.methods ++
+      [ native_method "width" [] (ExistingValue IntegerValue)
+      , native_method "measure" [ExistingValue TextValue] (ExistingValue IntegerValue)
+      ] } base)
+
+reader_layout_plan : Either Text FilePlan
+reader_layout_plan = framework_class_plan
+  (Subclass "Lorg/isomorphisms/ib/ReaderLayoutListener;" "Ljava/lang/Object;" (Just "ib_reader")
+    [Callback "onLayoutChange" "V" ["Landroid/view/View;", "I", "I", "I", "I", "I", "I", "I", "I"]])
+  ["Landroid/view/View$OnLayoutChangeListener;"]
+
 client_bytes : Either Text (List Int)
 client_bytes = do
   container ← container_plan
@@ -107,7 +182,16 @@ client_bytes = do
   application ← application_plan
   death ← death_plan
   client ← client_plan
-  encode_dex_classes [container, creator, provider, application, death, client]
+  ingress ← private_ingress_plan
+  connection ← connection_plan
+  worker ← worker_plan
+  reader ← reader_bridge_plan
+  acquire ← reader_task_plan "Lorg/isomorphisms/ib/ReaderAcquireTask;"
+  complete ← reader_task_plan "Lorg/isomorphisms/ib/ReaderCompletionTask;"
+  metrics ← reader_metrics_plan
+  layout ← reader_layout_plan
+  encode_dex_classes [container, creator, provider, application, death, client, ingress, connection,
+    worker, reader, acquire, complete, metrics, layout]
 
 parcelable_bytes : Either Text (List Int)
 parcelable_bytes = do

@@ -101,7 +101,8 @@ static int allowed_url(const char *value) {
 
 static int parse_receipt(char *text, size_t size, const char *request_id,
                          uint64_t wanted_generation, uint64_t *offset,
-                         uint32_t *length, char sha256[65]) {
+                         uint32_t *length, char sha256[65],
+                         ib_arena_source_observations *observations) {
     char *fields[RK_COUNT] = {0};
     size_t found = 0;
     char *position = text, *end = text + size;
@@ -199,12 +200,28 @@ static int parse_receipt(char *text, size_t size, const char *request_id,
     *offset = begin;
     *length = (uint32_t)amount;
     memcpy(sha256, hash, 65U);
+    if (observations) {
+        memset(observations, 0, sizeof(*observations));
+        observations->source_generation = generation;
+        memcpy(observations->source_key, expected_key, strlen(expected_key) + 1U);
+        memcpy(observations->requested_url, fields[RK_REQUESTED_URL], strlen(fields[RK_REQUESTED_URL]) + 1U);
+        memcpy(observations->resolved_url, fields[RK_RESOLVED_URL], strlen(fields[RK_RESOLVED_URL]) + 1U);
+        memcpy(observations->mime_type, fields[RK_MIME], strlen(fields[RK_MIME]) + 1U);
+        memcpy(observations->charset, fields[RK_CHARSET], strlen(fields[RK_CHARSET]) + 1U);
+        memcpy(observations->http_status, fields[RK_STATUS], strlen(fields[RK_STATUS]) + 1U);
+        if (fields[RK_REDIRECT_CHAIN]) {
+            size_t chain_bytes = strlen(fields[RK_REDIRECT_CHAIN]);
+            if (chain_bytes >= sizeof(observations->redirect_chain)) return -1;
+            memcpy(observations->redirect_chain, fields[RK_REDIRECT_CHAIN], chain_bytes + 1U);
+        }
+    }
     return 0;
 }
 
 static int read_manifest(int root_fd, const char *request_id,
                          uint64_t navigation_generation, uint64_t *offset,
-                         uint32_t *length, char sha256[65]) {
+                         uint32_t *length, char sha256[65],
+                         ib_arena_source_observations *observations) {
     int dir = -1, manifest = -1, result = -1;
     char filename[IB_READER_REQUEST_ID_CAP + 5U];
     struct stat info;
@@ -230,7 +247,7 @@ static int read_manifest(int root_fd, const char *request_id,
     }
     content[size] = '\0';
     result = parse_receipt(content, size, request_id, navigation_generation,
-                           offset, length, sha256);
+                           offset, length, sha256, observations);
 done:
     if (manifest >= 0) close(manifest);
     if (dir >= 0) close(dir);
@@ -336,12 +353,14 @@ void ib_arena_source_owner_want(ib_arena_source_owner *owner,
                      navigation_generation);
 }
 
-int ib_arena_source_owner_open_retained(ib_arena_source_owner *owner,
+int ib_arena_source_owner_open_observed(ib_arena_source_owner *owner,
                                        const char *request_id,
                                        uint64_t retained_source_generation,
                                        uint64_t navigation_generation,
                                        ib_reader_source_ticket *ticket,
+                                       ib_arena_source_observations *observations,
                                        int *read_fd) {
+    if (observations) memset(observations, 0, sizeof(*observations));
     if (read_fd) *read_fd = -1;
     if (!owner || !read_fd || !safe_request_id(request_id) ||
         retained_source_generation == 0 || navigation_generation == 0 ||
@@ -364,7 +383,7 @@ int ib_arena_source_owner_open_retained(ib_arena_source_owner *owner,
         !S_ISDIR(info.st_mode) || info.st_uid != geteuid() ||
         (info.st_mode & 077U) != 0) goto done;
     if (read_manifest(root, request_id, retained_source_generation,
-                      &offset, &length, expected) != 0)
+                      &offset, &length, expected, observations) != 0)
         goto done;
     bytes = malloc(length);
     if (!bytes || read_committed_bytes(root, offset, length, bytes) != 0)
@@ -425,7 +444,18 @@ done:
     if (descriptor[1] >= 0) close(descriptor[1]);
     if (root >= 0) close(root);
     free(bytes);
+    if (result != 0 && observations) memset(observations, 0, sizeof(*observations));
     return result;
+}
+
+int ib_arena_source_owner_open_retained(ib_arena_source_owner *owner,
+                                       const char *request_id,
+                                       uint64_t retained_source_generation,
+                                       uint64_t navigation_generation,
+                                       ib_reader_source_ticket *ticket,
+                                       int *read_fd) {
+    return ib_arena_source_owner_open_observed(owner, request_id,
+        retained_source_generation, navigation_generation, ticket, NULL, read_fd);
 }
 
 int ib_arena_source_owner_open(ib_arena_source_owner *owner,

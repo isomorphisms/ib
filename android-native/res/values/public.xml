@@ -9,4 +9,5 @@
     <public type="id" name="read_button" id="0x7f030004" />
     <public type="id" name="reader_status" id="0x7f030005" />
     <public type="id" name="permission_button" id="0x7f030006" />
+    <public type="id" name="reflow_button" id="0x7f030007" />
 </resources>

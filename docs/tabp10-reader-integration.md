@@ -8,6 +8,12 @@ The source integration is reviewable in
 This file records the remaining product boundary, not an alternate job or a
 declaration that individually compiled components constitute a browser.
 
+The [2026-11-01 implementation checkpoint](native-worker-integration-2026-11-01.md)
+records the newly connected native acquisition/source/view path and its exact
+remaining boundaries. Earlier descriptions of unwired components below are
+historical checkpoints. The connected implementation still lacks end-to-end
+runtime qualification and several required reader features.
+
 ## Reconciliation
 
 The branch starts on current main `0f3d8dcdc20239987ce30da3d27788a90d2c090a`.
@@ -158,15 +164,15 @@ The actual application path remains unqualified.
 | Compile actual maintained parser/search/Activity on current head | NOT_RUN | Hosted qualification in progress |
 | Independently decode DEX and prove determinism/refusal | NOT_RUN | Required qualifier stages |
 | ART semantics and compiled-mutant rejection, API 29/34 | NOT_RUN | ai-ci observer wired; execution pending |
-| App-owned Binder registration/distribution/revocation | FAIL | Retained native boundary lacks application lifecycle wiring |
-| Authorized live Grease/Shizuku/ICU acquisition | FAIL | No working application worker handoff |
+| App-owned Binder registration/distribution/revocation | NOT_RUN | App lifecycle, SDK ingress and authorized user-service handoff implemented; fresh actual transaction pending |
+| Authorized live Grease/Shizuku/ICU acquisition | NOT_RUN | Source-bound Grease/checked ICU runtime implemented; whole worker has not executed |
 | Real response observations and redirect provenance | FAIL | Live integrated acquisition and complete redirect evidence absent |
 | Decode supported non-UTF-8 source in admitted reader | FAIL | Decoder retained; current native HTML admission still UTF-8 only |
 | Host retained-source identity and independent readback | PASS | Actual canonical userspace appends and synthetic-pointer control; fixture response metadata; compiled generation mutant rejected |
-| Canonical Arena admission in the application pipeline | NOT_RUN | Native source gate passes on host; acquisition-to-display remains unconnected |
+| Canonical Arena admission in the application pipeline | NOT_RUN | Native source gate passes on host; connected acquisition/readback/checked display still requires actual Android execution |
 | Durable browser-owned Back/Forward and source recovery | FAIL | Not wired into the Activity |
-| Real title/blocks/links in native view | FAIL | Trusted source-to-view connection still absent |
-| Source-faithful selection, exact copy and user reflow selector | FAIL | Source layout exists; native interaction remains unconnected |
+| Real title/blocks/links in native view | FAIL | Committed title/blocks wired to checked Activity; clickable links remain unfinished; rendering unqualified |
+| Source-faithful selection, exact copy and user reflow selector | FAIL | Two reflow algorithms and native selector wired; default display-text selection is not source-faithful copy |
 | Tablet-measured width adaptation | BLOCKED | No fresh authenticated TAB_P10 inventory or display observations |
 | Actual SEARCH receiver and retained result navigation | FAIL | Query projection alone is insufficient; no receiver promotion |
 | Update-compatible signed TAB_P10 APK | BLOCKED | Working pipeline, current installed identity/signer and device ABI observations required |

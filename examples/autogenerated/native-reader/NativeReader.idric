@@ -1,6 +1,13 @@
 module NativeReader
 
 import Data.Text
+import IB.Reader.Document
+import IB.Reader.Navigation
+import IB.HtmlPrepaint
+import IB.Prepaint.Reflow
+import IB.Prepaint
+import IB.Reflow
+import IB.Reflow.SourceBreaks
 
 -- These domains belong to the Android adapter; none represents a browser task.
 data ActivityReference : Type where [external]
@@ -8,6 +15,7 @@ data IntentReference : Type where [external]
 data ViewReference : Type where [external]
 data TextViewReference : Type where [external]
 data CharacterSequenceReference : Type where [external]
+data MetricsReference : Type where [external]
 
 %foreign "dex:virtual:Landroid/app/Activity;:setContentView:(I)V"
 apply_reader_layout : ActivityReference → Int32 → PrimIO ()
@@ -37,6 +45,24 @@ set_reader_view_visibility : ViewReference → Int32 → PrimIO ()
 current_acquisition_capability : PrimIO Int32
 %foreign "dex:static:Lorg/isomorphisms/ib/ShizukuClient;:requestPermission:()I"
 request_acquisition_permission : PrimIO Int32
+%foreign "dex:static:Lorg/isomorphisms/ib/ReaderBridge;:attach:(Landroid/app/Activity;)I"
+attach_reader_host : ActivityReference → PrimIO Int32
+%foreign "dex:static:Lorg/isomorphisms/ib/ReaderBridge;:navigate:(Ljava/lang/String;)I"
+acquire_navigation : Text → PrimIO Int32
+%foreign "dex:static:Lorg/isomorphisms/ib/ReaderBridge;:restore:()I"
+restore_committed_source : PrimIO Int32
+%foreign "dex:static:Lorg/isomorphisms/ib/ReaderBridge;:acknowledge:(Ljava/lang/String;I)I"
+acknowledge_presented_source : Text → Int32 → PrimIO Int32
+%foreign "dex:static:Lorg/isomorphisms/ib/ReaderBridge;:metrics:(Landroid/app/Activity;)Lorg/isomorphisms/ib/ReaderMetrics;"
+snapshot_reader_metrics : ActivityReference → PrimIO MetricsReference
+-- The handle contains a private immutable copy of the current Paint and its
+-- measured viewport. Pure measurement cannot mutate Android or reader state.
+%foreign "dex:virtual:Lorg/isomorphisms/ib/ReaderMetrics;:width:()I"
+metric_width : MetricsReference → Int32
+%foreign "dex:virtual:Lorg/isomorphisms/ib/ReaderMetrics;:measure:(Ljava/lang/String;)I"
+metric_measure : MetricsReference → Text → Int32
+%foreign "dex:virtual:Landroid/app/Activity;:setTitle:(Ljava/lang/CharSequence;)V"
+set_document_title : ActivityReference → Text → PrimIO ()
 
 -- Stable resource IDs are checked against android-native/res/values/public.xml.
 reader_layout : Int32
@@ -55,6 +81,21 @@ reader_status : Int32
 reader_status = 2130903045
 permission_button : Int32
 permission_button = 2130903046
+reflow_button : Int32
+reflow_button = 2130903047
+
+read_view_text : ActivityReference → Int32 → IO Text
+read_view_text activity identity = do
+  view ← primIO (find_reader_view activity identity)
+  text_view ← primIO (as_text_view view)
+  characters ← primIO (read_reader_characters text_view)
+  primIO (characters_as_text characters)
+
+write_view_text : ActivityReference → Int32 → Text → IO ()
+write_view_text activity identity text = do
+  view ← primIO (find_reader_view activity identity)
+  text_view ← primIO (as_text_view view)
+  primIO (write_reader_text text_view text)
 
 capability_message : Int32 → Text
 capability_message 0 = "Shizuku unavailable — start Shizuku, then retry."
@@ -77,17 +118,70 @@ present_source_text activity text = do
   text_view ← primIO (as_text_view view)
   primIO (write_reader_text text_view text)
 
+%export "dex:reader_acquisition_failed"
+reader_acquisition_failed : ActivityReference → Text → IO ()
+reader_acquisition_failed activity reason = write_view_text activity reader_status reason
+
+line_text : SourceLine → Text
+line_text line = line.visible_text ++ "\n"
+
+block_text : BlockReflow → Text
+block_text block = concat (map line_text block.text_lines) ++
+  (if null block.text_lines then "" else "\n")
+
+%export "dex:reader_acquisition_ready"
+reader_acquisition_ready : ActivityReference → Text → Text → Text → Int32 → IO ()
+reader_acquisition_ready activity observations html source_id generation = do
+  metric ← primIO (snapshot_reader_metrics activity)
+  selected ← read_view_text activity reflow_button
+  let width = metric_width metric
+  let manner = if selected ≟ "Reflow: Squared" then evenly else promptly
+  let prepared = if width <= 0 then Left "Native viewport is not measured yet"
+        else do
+          evidence ← read_committed_evidence observations
+          prepare_committed_document evidence html (Requirements (cast width) manner)
+            "android-Paint-snapshot-pixels-times-64-v1" (cast . metric_measure metric)
+  case prepared of
+    Left reason ⇒ reader_acquisition_failed activity ("Document refused: " ++ reason)
+    Right document ⇒ do
+      let title = case document.source_result.revision.title of
+            Nothing ⇒ "IB"
+            Just value ⇒ value
+      let displayed = concat (map block_text document.revision_layout.block_plans)
+      present_source_text activity displayed
+      primIO (set_document_title activity title)
+      saved ← primIO (acknowledge_presented_source source_id generation)
+      write_view_text activity reader_status
+        (if saved ≟ 0 then "Static HTML — scripts and forms are unavailable."
+         else "Document displayed; saving its last-good source index failed.")
+
+navigate_to : ActivityReference → Text → IO ()
+navigate_to activity text =
+  case navigation_request text of
+    Left reason ⇒ reader_acquisition_failed activity reason
+    Right request ⇒ do
+      accepted ← primIO (acquire_navigation (navigation_address request))
+      if accepted ≟ 0
+        then do
+          write_view_text activity reader_status "Loading through Shizuku and ICU…"
+          panel ← primIO (find_reader_view activity sources_panel)
+          primIO (set_reader_view_visibility panel 8)
+        else reader_acquisition_failed activity "Acquisition is busy or unavailable. Retry after authorizing Shizuku."
+
 %export "dex:create_reader"
 create_reader : ActivityReference → IO ()
 create_reader activity = do
   primIO (apply_reader_layout activity reader_layout)
   refresh_acquisition_capability activity
+  attached ← primIO (attach_reader_host activity)
+  if attached ≟ 0 then pure ()
+    else reader_acquisition_failed activity "Private source storage or the native reader adapter is unavailable."
   intent ← primIO (incoming_intent activity)
   raw_text ← primIO (incoming_text intent "android.intent.extra.TEXT")
   empty ← primIO (raw_text_is_empty raw_text)
   if empty ≟ 0
-    then present_source_text activity raw_text
-    else present_source_text activity "Share text to IB or paste it in Sources to read it here."
+    then navigate_to activity raw_text
+    else present_source_text activity "Open Sources, enter an HTTP(S) URL, and select Read. Retained documents reopen after layout."
 
 %export "dex:receive_reader_action"
 receive_reader_action : ActivityReference → ViewReference → IO ()
@@ -101,18 +195,21 @@ receive_reader_action activity clicked = do
       primIO (set_reader_view_visibility panel (if visibility ≟ 0 then 8 else 0))
     else if identity ≟ read_button
       then do
-        input_view ← primIO (find_reader_view activity reader_input)
-        input_text_view ← primIO (as_text_view input_view)
-        characters ← primIO (read_reader_characters input_text_view)
-        text ← primIO (characters_as_text characters)
-        present_source_text activity text
-        panel ← primIO (find_reader_view activity sources_panel)
-        primIO (set_reader_view_visibility panel 8)
+        text ← read_view_text activity reader_input
+        navigate_to activity text
       else if identity ≟ permission_button
         then do
           _ ← primIO request_acquisition_permission
           refresh_acquisition_capability activity
-        else pure ()
+        else if identity ≟ reflow_button
+          then do
+            selected ← read_view_text activity reflow_button
+            write_view_text activity reflow_button
+              (if selected ≟ "Reflow: Greedy" then "Reflow: Squared" else "Reflow: Greedy")
+            restored ← primIO restore_committed_source
+            if restored ≟ 0 then pure ()
+              else reader_acquisition_failed activity "No retained readable document is ready for reflow."
+          else pure ()
 
 %cg dex activity create_reader receive_reader_action
 

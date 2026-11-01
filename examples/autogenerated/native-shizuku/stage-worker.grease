@@ -1,0 +1,38 @@
+#!/usr/bin/env grease
+# Orchestrate already source-bound checked ICU and native runtime builds.
+set -eu -o pipefail
+if (len(ARGV) !== 5) {
+  echo 'requires CHECKED_ICU_DEX ICU_NATIVE_ROOT QUALIFIED_GREASE_ROOT WORKER_SOURCE NEW_PAYLOAD' >&2
+  exit 2
+}
+var dex = ARGV[0]
+var icu = ARGV[1]
+var engines = ARGV[2]
+var worker_source = ARGV[3]
+var output = ARGV[4]
+for path in "$dex" "$icu" "$engines" "$worker_source" "$output" {
+  if (len(path) === 0 or path[0] !== '/') { exit 2 }
+}
+if test -e "$output" { echo 'FAIL reused worker payload' >&2; exit 2 }
+test -s "$dex"
+test -s "$worker_source"
+test "$(cat "$engines/source-commit.txt")" = 5651cf97a1b5042f24f14112a7ade9a1518eb0bc
+test "$(cat "$engines/packaging-commit.txt")" = 6d19932f7a63faf38444bd3693aa61304f061fda
+mkdir -p "$output/assets"
+cp "$dex" "$output/assets/icu-worker.dex"
+cp "$worker_source" "$output/assets/ib-worker.grease"
+for abi in x86_64 armeabi-v7a arm64-v8a {
+  var declared = $(head -n 1 "$engines/$abi/receipts/sha256.txt" | cut -d ' ' -f 1)
+  if ! rg -x '[0-9a-f]{64}' <<< "$declared" { exit 1 }
+  printf '%s  %s\n' "$declared" "$engines/$abi/libib_grease.so" | sha256sum -c -
+  test -s "$icu/$abi/libicu_transport.so"
+  mkdir -p "$output/lib/$abi"
+  cp "$engines/$abi/libib_grease.so" "$output/lib/$abi/libib_grease.so"
+  cp "$icu/$abi/libicu_transport.so" "$output/lib/$abi/libicu_transport.so"
+  printf 'IBWORKER1\n' > "$output/assets/worker-$abi.sha256"
+  for input in "$output/lib/$abi/libib_grease.so" "$output/lib/$abi/libicu_transport.so" \
+      "$output/assets/icu-worker.dex" "$output/assets/ib-worker.grease" {
+    sha256sum "$input" | cut -d ' ' -f 1 >> "$output/assets/worker-$abi.sha256"
+  }
+  test "$(wc -c < "$output/assets/worker-$abi.sha256")" -eq 270
+}

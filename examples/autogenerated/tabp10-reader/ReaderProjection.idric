@@ -11,17 +11,7 @@ import IB.Reflow.SourceBreaks
 -- Every observation comes from the trusted committed-source owner. Neither
 -- receipt-shaped Intent text nor document content may supply this boundary.
 read_evidence : Text → Either Text HtmlEvidence
-read_evidence fields =
-  case forget (split (≟ '\t') fields) of
-    [source, generation, claimed, reopened, byte_count, reopened_count,
-     requested, resolved, mime, charset, status, utf8, complete] ⇒
-      if (utf8 ≟ "verified-utf8" || utf8 ≟ "invalid-utf8") &&
-         (complete ≟ "complete" || complete ≟ "incomplete")
-        then Right (HtmlSourceEvidence source generation claimed reopened
-          (cast byte_count) (cast reopened_count) requested resolved mime
-          charset status (utf8 ≟ "verified-utf8") (complete ≟ "complete"))
-        else Left "unknown-readback-observation"
-    _ ⇒ Left "malformed-readback-observations"
+read_evidence = read_committed_evidence
 
 line_coordinates : SourceLine → Text
 line_coordinates line =

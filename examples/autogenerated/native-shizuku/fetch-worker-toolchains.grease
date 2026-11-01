@@ -1,0 +1,35 @@
+#!/usr/bin/env grease
+# Exact source-bound build inputs. GitHub credentials stay in gh's environment.
+set -eu -o pipefail
+if (len(ARGV) !== 1) { echo 'requires NEW_WORKER_TOOLCHAINS' >&2; exit 2 }
+var output = ARGV[0]
+if (len(output) === 0 or output[0] !== '/') { exit 2 }
+if test -e "$output" { echo 'FAIL reused worker toolchain inputs' >&2; exit 1 }
+mkdir -p "$output/archives" "$output/ick" "$output/grease"
+proc fetch_artifact(repository, artifact, source_commit, digest, label) {
+  var observed = $(gh api "repos/$repository/actions/artifacts/$artifact" --jq '.workflow_run.head_sha')
+  if (observed !== source_commit) { echo 'FAIL source-bound artifact commit mismatch' >&2; exit 1 }
+  gh api "repos/$repository/actions/artifacts/$artifact/zip" > "$output/archives/$label.zip"
+  printf '%s  %s\n' "$digest" "$output/archives/$label.zip" | sha256sum -c -
+}
+fetch_artifact dilapidated-shed/grease 13062463242 6d19932f7a63faf38444bd3693aa61304f061fda \
+  a929137a432e90cce9362aea9ad798085007d6424af71eebaca5bb5c882b5645 grease
+unzip -q "$output/archives/grease.zip" -d "$output/grease"
+for abi in x86_64 armeabi-v7a arm64-v8a {
+  var artifact = '12240692135'
+  var digest = '9fdd4788b872f355545ad177a825fd9aa99f04bddc07d1615efeb9348652f3ac'
+  if (abi === 'armeabi-v7a') {
+    setvar artifact = '12240891223'
+    setvar digest = '5e21c31de5462e4e8bf5fb541ce85f61ba69dde69608f755c6d9aa4ee3e976ed'
+  }
+  if (abi === 'arm64-v8a') {
+    setvar artifact = '12240678290'
+    setvar digest = '16525b18ca3cb38848be6f6ea35527eee218e52a0934a4719c7fda6a3332edd7'
+  }
+  fetch_artifact isomorphisms/ai-ci "$artifact" 82cc8716b3feb05a05e5aa7fa0bac7b4db40f8c6 "$digest" "$abi"
+  mkdir -p "$output/archives/$abi" "$output/ick/$abi"
+  unzip -q "$output/archives/$abi.zip" -d "$output/archives/$abi"
+  tar --no-same-owner -xzf "$output/archives/$abi/ick-android-$abi-stage.tar.gz" -C "$output/ick/$abi"
+  rg -x -F 'source	fbe86e23d55cfec2000c08e61deea2a407fd7175' "$output/ick/$abi/qualification/receipt.tsv"
+}
+printf 'schema\tib-worker-toolchain-inputs-v1\nGrease_packaging\t6d19932f7a63faf38444bd3693aa61304f061fda\nGrease_source\t5651cf97a1b5042f24f14112a7ade9a1518eb0bc\nICK_producer\t82cc8716b3feb05a05e5aa7fa0bac7b4db40f8c6\nICK_source\tfbe86e23d55cfec2000c08e61deea2a407fd7175\n' > "$output/receipt.tsv"

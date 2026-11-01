@@ -13,6 +13,16 @@ typedef struct {
     atomic_uint_fast64_t wanted_navigation_generation;
 } ib_arena_source_owner;
 
+/* Observations copied by the one maintained receipt parser, only after all
+ * admission checks. This is not an Intent/worker-provided metadata object. */
+typedef struct {
+    char source_key[IB_READER_REQUEST_ID_CAP + 7U];
+    uint64_t source_generation;
+    char requested_url[2049], resolved_url[2049];
+    char mime_type[64], charset[64], http_status[4];
+    char redirect_chain[8193];
+} ib_arena_source_observations;
+
 /* The trusted application host passes its existing app-private Arena root
  * (e.g. Context.getFilesDir()/arena). This does not choose/create a store. */
 int ib_arena_source_owner_init(ib_arena_source_owner *owner,
@@ -47,6 +57,14 @@ int ib_arena_source_owner_open_retained(ib_arena_source_owner *owner,
                                        uint64_t retained_source_generation,
                                        uint64_t navigation_generation,
                                        ib_reader_source_ticket *ticket,
+                                       int *read_fd);
+
+int ib_arena_source_owner_open_observed(ib_arena_source_owner *owner,
+                                       const char *request_id,
+                                       uint64_t retained_source_generation,
+                                       uint64_t navigation_generation,
+                                       ib_reader_source_ticket *ticket,
+                                       ib_arena_source_observations *observations,
                                        int *read_fd);
 
 /* Adapter for ib_arena_pfd_provider.open_verified_fd. */
