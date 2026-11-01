@@ -56,7 +56,8 @@ static struct {
     jmethodID ready_callback, error_callback, history_validator;
     reader_job *active;
     ib_ingress_capability *capability;
-    uint64_t capability_epoch;
+    uint64_t capability_epoch, activity_epoch;
+    int restore_after_retirement;
     ib_ingress_arena arena;
     ib_arena_source_owner sources;
 } application = { .mutex = PTHREAD_MUTEX_INITIALIZER };
@@ -203,6 +204,38 @@ static void authority_revoked(void *owner, uint64_t through) {
     pthread_mutex_unlock(&application.mutex);
 }
 
+/* Called with application.mutex held. Provider authorization and Activity
+ * ownership are separate generations; neither substitutes for the other. */
+static int current_job_locked(const reader_job *job) {
+    return job && application.active == job && application.navigation == job->navigation &&
+        application.activity && job->epoch == application.activity_epoch;
+}
+
+static int bind_activity(JNIEnv *e, jobject activity) {
+    jweak weak = (*e)->NewWeakGlobalRef(e, activity);
+    if (!weak || (*e)->ExceptionCheck(e)) return -1;
+    pthread_mutex_lock(&application.mutex);
+    if (application.activity && (*e)->IsSameObject(e, activity, application.activity)) {
+        pthread_mutex_unlock(&application.mutex);
+        (*e)->DeleteWeakGlobalRef(e, weak);
+        return 0;
+    }
+    if (application.activity_epoch == UINT64_MAX) {
+        pthread_mutex_unlock(&application.mutex);
+        (*e)->DeleteWeakGlobalRef(e, weak);
+        return -1;
+    }
+    jweak previous = application.activity;
+    application.activity = weak;
+    ++application.activity_epoch;
+    application.restore_after_retirement = application.active != NULL;
+    if (application.capability)
+        ib_ingress_revoke(ib_ingress_capability_session(application.capability));
+    pthread_mutex_unlock(&application.mutex);
+    if (previous) (*e)->DeleteWeakGlobalRef(e, previous);
+    return 1;
+}
+
 static int start_job(JNIEnv *e, reader_job *job) {
     jobject runnable = task(e, job, application.acquire_task);
     jclass type = (*e)->FindClass(e, "java/lang/Thread");
@@ -289,7 +322,7 @@ Java_org_isomorphisms_ib_ReaderBridge_acknowledge(JNIEnv *e, jclass type, jstrin
     pthread_mutex_lock(&application.mutex);
     reader_job *job = application.active;
     int ok = job && job->result == 0 && job->navigation == (uint32_t)navigation && !strcmp(job->id, id) &&
-        application.navigation == job->navigation;
+        current_job_locked(job);
     if (ok) {
         strcpy(index.source_id, job->id);
         index.source_generation = job->source_generation;
@@ -314,9 +347,11 @@ static int enqueue(JNIEnv *e, jstring url_text, int retained, jstring id, jint g
         ascii(e, url_text, job->url, sizeof(job->url)) && random_identity(job->id) == 0;
     if (retained == 2) job->source_generation = (uint32_t)generation;
     pthread_mutex_lock(&application.mutex);
-    ok = ok && application.ready && !application.active && application.navigation < INT32_MAX;
+    ok = ok && application.ready && application.activity && !application.active &&
+        application.navigation < INT32_MAX && application.activity_epoch < UINT64_MAX;
     if (ok) {
         job->navigation = ++application.navigation;
+        job->epoch = application.activity_epoch;
         if (!retained) job->source_generation = job->navigation;
         application.active = job;
         ib_arena_source_owner_want(&application.sources, job->navigation);
@@ -330,6 +365,32 @@ static int enqueue(JNIEnv *e, jstring url_text, int retained, jstring id, jint g
     job_release(job);
     if ((*e)->ExceptionCheck(e)) (*e)->ExceptionClear(e);
     return -1;
+}
+
+/* One application-owned reference is retired exactly once, including stale
+ * completions. Task Binder anchors retain their own references independently. */
+static void retire_job(JNIEnv *e, reader_job *job, int ui_thread) {
+    pthread_mutex_lock(&application.mutex);
+    int owned = job && application.active == job;
+    int restore = owned && application.restore_after_retirement && application.activity;
+    if (owned) {
+        application.active = NULL;
+        application.restore_after_retirement = 0;
+    }
+    pthread_mutex_unlock(&application.mutex);
+    if (owned) job_release(job);
+    if (restore && !(*e)->ExceptionCheck(e) && enqueue(e, NULL, 1, NULL, 0, NULL) != 0) {
+        __android_log_print(ANDROID_LOG_INFO, "IBReader", "Activity return has no committed source to restore");
+        if (ui_thread) {
+            pthread_mutex_lock(&application.mutex);
+            jobject activity = application.activity ? (*e)->NewLocalRef(e, application.activity) : NULL;
+            pthread_mutex_unlock(&application.mutex);
+            jstring reason = activity && !(*e)->ExceptionCheck(e) ? (*e)->NewStringUTF(e,
+                "The earlier navigation ended before a readable source was committed. Enter an HTTP(S) URL.") : NULL;
+            if (reason) (*e)->CallStaticVoidMethod(e, application.generated, application.error_callback, activity, reason);
+            if ((*e)->ExceptionCheck(e)) (*e)->ExceptionClear(e);
+        }
+    }
 }
 
 JNIEXPORT jint JNICALL
@@ -386,15 +447,7 @@ Java_org_isomorphisms_ib_ReaderBridge_attach(JNIEnv *e, jclass type, jobject act
         }
         if (ok) ib_shizuku_client_set_revocation_handler(authority_revoked, NULL);
     }
-    jweak weak = ok ? (*e)->NewWeakGlobalRef(e, activity) : NULL;
-    ok = ok && weak && !(*e)->ExceptionCheck(e);
     if (ok) {
-        pthread_mutex_lock(&application.mutex);
-        jweak old = application.activity;
-        application.activity = weak;
-        application.ready = 1;
-        pthread_mutex_unlock(&application.mutex);
-        if (old) (*e)->DeleteWeakGlobalRef(e, old);
         jclass listener_type = (*e)->FindClass(e, "org/isomorphisms/ib/ReaderLayoutListener");
         jmethodID constructor = listener_type ? (*e)->GetMethodID(e, listener_type, "<init>", "()V") : NULL;
         jobject listener = constructor ? (*e)->NewObject(e, listener_type, constructor) : NULL;
@@ -404,9 +457,54 @@ Java_org_isomorphisms_ib_ReaderBridge_attach(JNIEnv *e, jclass type, jobject act
         if (body && listener && add) (*e)->CallVoidMethod(e, body, add, listener);
         ok = body && listener && add && !(*e)->ExceptionCheck(e);
     }
+    if (ok) {
+        pthread_mutex_lock(&application.mutex);
+        application.ready = 1;
+        pthread_mutex_unlock(&application.mutex);
+        ok = bind_activity(e, activity) >= 0;
+    }
     if ((*e)->ExceptionCheck(e)) (*e)->ExceptionClear(e);
     (*e)->PopLocalFrame(e, NULL);
     return ok ? 0 : -1;
+}
+
+/* Framework onResume reclaims an existing Activity without registering another
+ * layout listener or granting a provider capability. Only a changed owner
+ * reopens committed state; returning from a permission dialog is a no-op. */
+JNIEXPORT jint JNICALL
+Java_org_isomorphisms_ib_ReaderBridge_resume(JNIEnv *e, jclass type, jobject activity) {
+    (void)type;
+    if (!activity || !application.ready || (*e)->ExceptionCheck(e)) return -1;
+    int changed = bind_activity(e, activity);
+    int result = changed;
+    if (changed > 0) {
+        pthread_mutex_lock(&application.mutex);
+        int busy = application.active != NULL;
+        pthread_mutex_unlock(&application.mutex);
+        if (!busy && enqueue(e, NULL, 1, NULL, 0, NULL) != 0) result = 2;
+    }
+    if ((*e)->ExceptionCheck(e)) { (*e)->ExceptionClear(e); return -1; }
+    return result;
+}
+
+/* A late destroy callback from an older Activity cannot detach a newer owner. */
+JNIEXPORT void JNICALL
+Java_org_isomorphisms_ib_ReaderBridge_detach(JNIEnv *e, jclass type, jobject activity) {
+    (void)type;
+    if (!activity || (*e)->ExceptionCheck(e)) return;
+    pthread_mutex_lock(&application.mutex);
+    int current = application.activity && (*e)->IsSameObject(e, activity, application.activity);
+    jweak previous = NULL;
+    if (current) {
+        previous = application.activity;
+        application.activity = NULL;
+        if (application.activity_epoch < UINT64_MAX) ++application.activity_epoch;
+        application.restore_after_retirement = 0;
+        if (application.capability)
+            ib_ingress_revoke(ib_ingress_capability_session(application.capability));
+    }
+    pthread_mutex_unlock(&application.mutex);
+    if (previous) (*e)->DeleteWeakGlobalRef(e, previous);
 }
 
 JNIEXPORT void JNICALL
@@ -429,9 +527,12 @@ Java_org_isomorphisms_ib_ReaderAcquireTask_run(JNIEnv *e, jobject self) {
     reader_job *job = anchor ? AIBinder_getUserData(anchor) : NULL;
     if (!job) { if (anchor) AIBinder_decStrong(anchor); (*e)->PopLocalFrame(e, NULL); return; }
     job->result = -1;
-    int acquired = job->retained ?
+    pthread_mutex_lock(&application.mutex);
+    int current = current_job_locked(job);
+    pthread_mutex_unlock(&application.mutex);
+    int acquired = current && job->retained ?
         checked_retained_history(e, job->id, job->source_generation, job->index.journal) : 0;
-    if (!job->retained) {
+    if (current && !job->retained) {
         uid_t uid;
         uint64_t epoch;
         if (ib_shizuku_client_authorization(e, &uid, &epoch) == IB_SHIZUKU_AUTHORIZED && uid == 2000) {
@@ -441,12 +542,16 @@ Java_org_isomorphisms_ib_ReaderAcquireTask_run(JNIEnv *e, jobject self) {
             jobject ingress = armed ? ib_shizuku_ingress_binder_new(e, capability) : NULL;
             if (ingress) {
                 pthread_mutex_lock(&application.mutex);
-                application.capability = capability;
-                application.capability_epoch = epoch;
+                int owned = current_job_locked(job);
+                if (owned) {
+                    application.capability = capability;
+                    application.capability_epoch = epoch;
+                }
                 pthread_mutex_unlock(&application.mutex);
-                acquired = ib_shizuku_worker_acquire(e, application.context, ingress, job->id, job->navigation, epoch) == 0;
+                acquired = owned &&
+                    ib_shizuku_worker_acquire(e, application.context, ingress, job->id, job->navigation, epoch) == 0;
                 pthread_mutex_lock(&application.mutex);
-                application.capability = NULL;
+                if (application.capability == capability) application.capability = NULL;
                 pthread_mutex_unlock(&application.mutex);
             }
             if (session) ib_ingress_revoke(session);
@@ -481,10 +586,7 @@ Java_org_isomorphisms_ib_ReaderAcquireTask_run(JNIEnv *e, jobject self) {
     __android_log_print(ANDROID_LOG_INFO, "IBReader", "source completion posted=%d exception=%d", posted, (*e)->ExceptionCheck(e));
     if (!posted || (*e)->ExceptionCheck(e)) {
         if ((*e)->ExceptionCheck(e)) (*e)->ExceptionClear(e);
-        pthread_mutex_lock(&application.mutex);
-        if (application.active == job) application.active = NULL;
-        pthread_mutex_unlock(&application.mutex);
-        job_release(job);
+        retire_job(e, job, 0);
     }
     AIBinder_decStrong(anchor);
     (*e)->PopLocalFrame(e, NULL);
@@ -576,7 +678,7 @@ Java_org_isomorphisms_ib_ReaderCompletionTask_run(JNIEnv *e, jobject self) {
     AIBinder *anchor = task_anchor(e, self);
     reader_job *job = anchor ? AIBinder_getUserData(anchor) : NULL;
     pthread_mutex_lock(&application.mutex);
-    int current = job && application.active == job && application.navigation == job->navigation;
+    int current = current_job_locked(job);
     jobject activity = current && application.activity ? (*e)->NewLocalRef(e, application.activity) : NULL;
     pthread_mutex_unlock(&application.mutex);
     __android_log_print(ANDROID_LOG_INFO, "IBReader", "source completion current=%d activity=%d result=%d bytes=%zu",
@@ -611,10 +713,7 @@ Java_org_isomorphisms_ib_ReaderCompletionTask_run(JNIEnv *e, jobject self) {
         jstring reason = (*e)->NewStringUTF(e, "Acquisition or verified source readback failed. The previous document is retained.");
         if (reason) (*e)->CallStaticVoidMethod(e, application.generated, application.error_callback, activity, reason);
     }
-    pthread_mutex_lock(&application.mutex);
-    if (current && application.active == job) application.active = NULL;
-    pthread_mutex_unlock(&application.mutex);
-    if (current) job_release(job);
+    retire_job(e, job, 1);
     if (anchor) AIBinder_decStrong(anchor);
     (*e)->PopLocalFrame(e, NULL);
 }

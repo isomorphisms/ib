@@ -77,6 +77,16 @@ if (navigation_status === 0) {
   setvar fragment_status = _error.code
 }
 if (fragment_status !== 0) { setglobal failed = true }
-printf 'schema\tib-required-observers-v3\napi\t%s\ncore_exit\t%s\nsource_reflow_exit\t%s\nhtml_anchors_exit\t%s\nlarge_source_exit\t%s\nparcelable_exit\t%s\ninstalled_exit\t%s\nnavigation_exit\t%s\nfragment_viewport_exit\t%s\n' \
-  "$api" "$core_status" "$reflow_status" "$anchors_status" "$large_status" "$parcel_status" "$reader_status" "$navigation_status" "$fragment_status" > "$evidence/required.tsv"
+var lifecycle_status = 125
+if (reader_status === 0) {
+  try {
+    "$grease" "$acceptance/ib-source/shizuku/observe-reader-lifecycle.grease" \
+      "$acceptance" "$input" "$sdk" "$compiler" "$adb" emulator-5554 \
+      "$evidence/installed" "$evidence/lifecycle"
+  }
+  setvar lifecycle_status = _error.code
+}
+if (lifecycle_status !== 0) { setglobal failed = true }
+printf 'schema\tib-required-observers-v4\napi\t%s\ncore_exit\t%s\nsource_reflow_exit\t%s\nhtml_anchors_exit\t%s\nlarge_source_exit\t%s\nparcelable_exit\t%s\ninstalled_exit\t%s\nnavigation_exit\t%s\nfragment_viewport_exit\t%s\nActivity_ownership_exit\t%s\n' \
+  "$api" "$core_status" "$reflow_status" "$anchors_status" "$large_status" "$parcel_status" "$reader_status" "$navigation_status" "$fragment_status" "$lifecycle_status" > "$evidence/required.tsv"
 if (failed) { exit 1 }

@@ -142,6 +142,8 @@ reader_bridge_plan = do
         (cast (length args)) args result 0 [] NativeStaticMethod
   Right ({ methods := base.methods ++
     [ native "attach" [object "Landroid/app/Activity;"] (ExistingValue IntegerValue)
+    , native "resume" [object "Landroid/app/Activity;"] (ExistingValue IntegerValue)
+    , native "detach" [object "Landroid/app/Activity;"] VoidValue
     , native "navigate" [ExistingValue TextValue] (ExistingValue IntegerValue)
     , native "restore" [] (ExistingValue IntegerValue)
     , native "history" [] (ExistingValue TextValue)

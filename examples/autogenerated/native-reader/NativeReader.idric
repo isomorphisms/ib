@@ -92,6 +92,10 @@ current_acquisition_capability : PrimIO Int32
 request_acquisition_permission : PrimIO Int32
 %foreign "dex:static:Lorg/isomorphisms/ib/ReaderBridge;:attach:(Landroid/app/Activity;)I"
 attach_reader_host : ActivityReference → PrimIO Int32
+%foreign "dex:static:Lorg/isomorphisms/ib/ReaderBridge;:resume:(Landroid/app/Activity;)I"
+resume_reader_host : ActivityReference → PrimIO Int32
+%foreign "dex:static:Lorg/isomorphisms/ib/ReaderBridge;:detach:(Landroid/app/Activity;)V"
+detach_reader_host : ActivityReference → PrimIO ()
 %foreign "dex:static:Lorg/isomorphisms/ib/ReaderBridge;:navigate:(Ljava/lang/String;)I"
 acquire_navigation : Text → PrimIO Int32
 %foreign "dex:static:Lorg/isomorphisms/ib/ReaderBridge;:restore:()I"
@@ -505,6 +509,21 @@ create_reader activity saved_state = do
       present_source_text activity "Reopening the last committed readable document…"
     else process_fresh_reader_request activity intent
 
+%export "dex:resume_reader"
+resume_reader : ActivityReference → IO ()
+resume_reader activity = do
+  resumed ← primIO (resume_reader_host activity)
+  if resumed ≟ 0 then pure ()
+    else if resumed ≟ 1
+      then write_view_text activity reader_status "Reopening the last committed readable document…"
+      else if resumed ≟ 2
+        then write_view_text activity reader_status "Reader ready. Enter an HTTP(S) URL."
+        else reader_acquisition_failed activity "The native reader could not reclaim this Activity; committed documents are retained."
+
+%export "dex:destroy_reader"
+destroy_reader : ActivityReference → IO ()
+destroy_reader activity = primIO (detach_reader_host activity)
+
 %export "dex:receive_reader_new_intent"
 receive_reader_new_intent : ActivityReference → IntentReference → IO ()
 receive_reader_new_intent activity delivered = do
@@ -555,6 +574,8 @@ receive_reader_view_action clicked = do
 
 %cg dex extends Landroid/app/Activity;
 %cg dex override onCreate (Landroid/os/Bundle;)V create_reader
+%cg dex override onResume ()V resume_reader
+%cg dex override onDestroy ()V destroy_reader
 %cg dex override onNewIntent (Landroid/content/Intent;)V receive_reader_new_intent
 %cg dex callback Landroid/view/View$OnClickListener; onClick (Landroid/view/View;)V receive_reader_view_action
 
