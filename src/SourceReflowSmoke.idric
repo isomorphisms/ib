@@ -4,6 +4,7 @@ import Data.Text
 import IB.Reflow
 import IB.Reflow.Source
 import IB.Reflow.SourceBreaks
+import IB.Reflow.Arithmetic
 import System
 
 codepoint_width : Text → Number
@@ -163,9 +164,38 @@ advance_contract_cases =
   refused (reflow_source_advances (Requirements 4 streamingly) one_advance "abc") &&
   refused (reflow_source_advances (Requirements 4 typographically) one_advance "abc")
 
+
+-- This deliberately slow reference belongs only to the small regression.
+difference_reference : Number → Number → Number
+difference_reference amount Z = amount
+difference_reference Z (S taken) = 0
+difference_reference (S amount) (S taken) = difference_reference amount taken
+
+compare_taken : Number → Number → Bool
+compare_taken amount Z = nonnegative_difference amount 0 ≟ amount
+compare_taken amount (S taken) =
+  nonnegative_difference amount (S taken) ≟ difference_reference amount (S taken) &&
+  compare_taken amount taken
+
+compare_amounts : Number → Bool
+compare_amounts Z = compare_taken 0 64
+compare_amounts (S amount) = compare_taken (S amount) 64 && compare_amounts amount
+
+arithmetic_contract_cases : Bool
+arithmetic_contract_cases =
+  compare_amounts 64 &&
+  nonnegative_difference 1000000000000000000000000000000
+    999999999999999999999999999999 ≟ 1 &&
+  nonnegative_difference 999999999999999999999999999999
+    1000000000000000000000000000000 ≟ 0 &&
+  nonnegative_difference 1000000000000000000000000000000
+    1000000000000000000000000000000 ≟ 0 &&
+  nonnegative_difference 1000000000000000000000000000000 0 ≟
+    1000000000000000000000000000000
+
 %export "dex:source_reflow_cases"
 main : IO ()
 main = do
-  let passed = run_cases && advance_contract_cases
+  let passed = run_cases && advance_contract_cases && arithmetic_contract_cases
   putStrLn ("source-reflow-unicode-offset-cases=" ++ show passed)
   if passed then pure () else exitFailure

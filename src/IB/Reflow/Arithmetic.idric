@@ -1,15 +1,11 @@
 module IB.Reflow.Arithmetic
 
--- Number is the maintained nonnegative whole-number surface. Subtracting
--- directly via (-) requires a Neg instance the pinned compiler does not have
--- for Number. This saturating difference is total, explicit and portable.
--- It is a correctness baseline, not a target-specific fast subtraction.
+-- The maintained Number minus operation saturates at zero. The frontend
+-- lowers it to integer subtraction and a nonnegative result, so subtracting
+-- source offsets does not walk once for every preceding code point.
 public export
 nonnegative_difference : Number → Number → Number
-nonnegative_difference amount Z = amount
-nonnegative_difference Z (S taken) = Z
-nonnegative_difference (S amount) (S taken) =
-  nonnegative_difference amount taken
+nonnegative_difference amount taken = amount `minus` taken
 
 -- Saturated division for TeX badness. The pinned Number/Nat surface lacks
 -- Integral, so div is not available. Compute the largest representable
