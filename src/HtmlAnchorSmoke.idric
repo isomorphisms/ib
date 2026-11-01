@@ -12,7 +12,7 @@ source_html : Text
 source_html =
   "<html><head><title>Anchors</title></head><body>" ++
   "<p>before text</p><h2 id='caf&#233;'>Cafe heading</h2>" ++
-  "<p>alpha <span id='inside'>beta</span> tail</p>" ++
+  "<p>alpha &#x1F30D; <span id='inside'>beta</span> tail</p>" ++
   "<a name='old'></a><p>after named anchor</p>" ++
   "<script id='hidden'>unavailable</script>" ++
   "<p id='dup'>first duplicate</p><p id='dup'>second duplicate</p>" ++
@@ -63,11 +63,11 @@ html_anchor_cases = do
         prepared ← prepare_committed_document_advances fixture_evidence source_html
           (Requirements 80 promptly) "unit-codepoint-advances-v1" (\_ ⇒ 1)
         point ← html_fragment_display_offset prepared "inside"
-        Right (point_is admitted "café" 1 0 && point_is admitted "inside" 2 6 &&
+        Right (point_is admitted "café" 1 0 && point_is admitted "inside" 2 8 &&
           point_is admitted "old" 3 0 && point_is admitted "dup" 4 0 &&
           point_is admitted "priority" 7 0 && point_is admitted "plus+name" 8 0 &&
           refused_point admitted "hidden" && refused_point admitted "missing" &&
-          refused_point admitted "%69nside" && point ≟ 33)
+          refused_point admitted "%69nside" && point ≟ 36)
   let passed = decoder_cases && case result of
         Left _ ⇒ False
         Right value ⇒ value

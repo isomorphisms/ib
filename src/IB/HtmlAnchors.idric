@@ -72,9 +72,11 @@ export
 decode_html_fragment : Text → Either Text Text
 decode_html_fragment encoded =
   if length (unpack encoded) > 2048 then Left "Fragment exceeds the navigation limit"
-  else case fragment_octets (unpack encoded) >>= strict_fragment_characters of
+  else case fragment_octets (unpack encoded) of
     Nothing ⇒ Left "Fragment contains malformed percent encoding or UTF-8"
-    Just characters ⇒ Right (pack characters)
+    Just octets ⇒ case strict_fragment_characters octets of
+      Nothing ⇒ Left "Fragment contains malformed percent encoding or UTF-8"
+      Just characters ⇒ Right (pack characters)
 
 fragment_tail : List Char → Maybe Text
 fragment_tail [] = Nothing
