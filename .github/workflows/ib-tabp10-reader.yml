@@ -20,7 +20,7 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           repository: isomorphisms/android-NDK
-          ref: d5c4cbe99735c13793621a5cdb45ecb154a37a1e
+          ref: b5f673062bb5681c29f70a9ee7c5412b4e8b785c
           path: .tools/android-NDK
           persist-credentials: false
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
@@ -40,7 +40,7 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           repository: isomorphisms/ai-ci
-          ref: eee9433db43ed70e2eab654e05f7b862a5b5b979
+          ref: dc0d85babeca5b437275578e9ba54021218cfbc6
           path: .tools/reader-acceptance
           persist-credentials: false
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
@@ -207,6 +207,7 @@ jobs:
             ${{ runner.temp }}/ib-reader/observed-api*/installed/*.screen.png
             ${{ runner.temp }}/ib-reader/observed-api*/installed/*.txt
             ${{ runner.temp }}/ib-reader/observed-api*/installed/*receipt.tsv
+            ${{ runner.temp }}/ib-reader/observed-api*/installed/*.failure-source.tar.gz
           if-no-files-found: ignore
       - name: Retain source and qualified compiler checkpoints
         if: always() && steps.native_candidate.outcome == 'success'

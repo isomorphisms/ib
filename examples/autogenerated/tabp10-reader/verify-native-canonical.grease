@@ -32,6 +32,7 @@ env IB_APPEND_ARENA="$evidence/appendfat-arena" IB_INGRESS_CANONICAL_TEST="$evid
 cat "$evidence/frame.txt"
 rg -F 'PASS: ordered response-owner redirect chain' "$evidence/frame.txt"
 rg -F 'PASS: immutable receipt collision refuses replacement and preserves previous source' "$evidence/frame.txt"
+rg -F 'PASS: original non-UTF-8 canonical bytes and unchanged observations reach only the decoder input; corruption, duplicate charset and stale generations refuse' "$evidence/frame.txt"
 sed 's/#define IB_RECEIPT_NOREPLACE 1U/#define IB_RECEIPT_NOREPLACE 0U/' \
   "$repository/native/android/ib_shizuku_arena_publish.c" > "$evidence/receipt-replace-mutant.c"
 if cmp -s "$repository/native/android/ib_shizuku_arena_publish.c" "$evidence/receipt-replace-mutant.c" {

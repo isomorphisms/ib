@@ -7,6 +7,10 @@ import IB.Reader.Document
 import IB.Prepaint.Reflow
 import IB.Reflow
 import IB.Reflow.SourceBreaks
+import IB.Reader.Selection
+import IB.SourceDecoding
+import IB.Strand
+import System
 
 -- Every observation comes from the trusted committed-source owner. Neither
 -- receipt-shaped Intent text nor document content may supply this boundary.
@@ -37,5 +41,37 @@ project_committed_html fields html width algorithm =
           "\nsource-codepoint-ranges\n" ++
           concat (map block_coordinates prepared.revision_layout.block_plans)
 
+-- Observation of the maintained admission/decoder/selection result. No
+-- fixture-local decoder or replacement source evidence is constructed.
+%export "dex:project_committed_representation"
+project_committed_representation : Text → Text → Text
+project_committed_representation fields carrier =
+  case read_evidence fields of
+    Left reason ⇒ "refused:" ++ reason
+    Right evidence ⇒
+      case prepare_committed_document evidence carrier (Requirements 128 promptly)
+          "decoded-codepoint-width-v1" (length . unpack) of
+        Left reason ⇒ "refused:" ++ reason
+        Right prepared ⇒
+          case selection_projection prepared.revision_layout of
+            Left reason ⇒ "refused:" ++ reason
+            Right projection ⇒
+              let original = prepared.source_result.evidence in
+              let decoding = case prepared.source_result.decoding of
+                    Nothing ⇒ "original-utf-8"
+                    Just decoded ⇒ decoder_identity ++ ":" ++ decoded.selected_encoding in
+              original.source_key ++ "\n" ++ original.source_generation ++ "\n" ++
+              original.claimed_sha256 ++ "\n" ++ original.charset ++ "\n" ++
+              (if original.utf8_decoded then "original-valid-utf8" else "original-invalid-utf8") ++ "\n" ++
+              decoding ++ "\n" ++
+              nonempty_text_value prepared.source_result.strand.source.reference ++ "\n" ++
+              projected_source projection
+
 main : IO ()
-main = pure ()
+main = do
+  arguments ← getArgs
+  case arguments of
+    [_, fields, carrier] ⇒ putStrLn (project_committed_representation fields carrier)
+    _ ⇒ do
+      putStrLn "usage: committed-representation OBSERVATIONS ORIGINAL_OCTET_CARRIER"
+      exitFailure

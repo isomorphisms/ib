@@ -119,18 +119,34 @@ static int media_type(observed_response *response, const char *value) {
     if (copied(response->mime_type, sizeof(response->mime_type), media) != 0)
         return -1;
     memcpy(response->charset, "UNOBSERVED", sizeof("UNOBSERVED"));
-    if (parameter) {
+    int charset_seen = 0;
+    while (parameter) {
+        char *next = strchr(parameter, ';');
+        if (next) *next++ = '\0';
         while (*parameter == ' ') ++parameter;
-        size_t parameter_length = strlen(parameter);
-        while (parameter_length && parameter[parameter_length-1U] == ' ')
-            parameter[--parameter_length] = '\0';
+        size_t amount = strlen(parameter);
+        while (amount && parameter[amount-1U] == ' ') parameter[--amount] = '\0';
+        char *equals = strchr(parameter, '=');
+        if (!equals || equals == parameter) return -1;
+        *equals++ = '\0';
+        amount = strlen(parameter);
+        while (amount && parameter[amount-1U] == ' ') parameter[--amount] = '\0';
+        if (strcmp(parameter, "charset") == 0) {
+            if (charset_seen++) return -1; /* Ambiguous declarations never win. */
+            while (*equals == ' ') ++equals;
+            amount = strlen(equals);
+            if (amount >= 2U && equals[0] == '"' && equals[amount-1U] == '"') {
+                ++equals; amount -= 2U; equals[amount] = '\0';
+            }
+            if (!amount || amount >= sizeof(response->charset)) return -1;
+            for (size_t i = 0; i < amount; ++i)
+                if (!((equals[i] >= 'a' && equals[i] <= 'z') ||
+                      (equals[i] >= '0' && equals[i] <= '9') ||
+                      strchr("._:-", equals[i]))) return -1;
+            memcpy(response->charset, equals, amount + 1U);
+        }
+        parameter = next;
     }
-    if (parameter && (strcmp(parameter, "charset=utf-8") == 0 ||
-                       strcmp(parameter, "charset=\"utf-8\"") == 0))
-        memcpy(response->charset, "utf-8", sizeof("utf-8"));
-    else if (parameter && (strcmp(parameter, "charset=iso-8859-1") == 0 ||
-                            strcmp(parameter, "charset=\"iso-8859-1\"") == 0))
-        memcpy(response->charset, "iso-8859-1", sizeof("iso-8859-1"));
     return 0;
 }
 

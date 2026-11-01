@@ -13,14 +13,16 @@ typedef struct {
     atomic_uint_fast64_t wanted_navigation_generation;
 } ib_arena_source_owner;
 
-/* Observations copied by the one maintained receipt parser, only after all
- * admission checks. This is not an Intent/worker-provided metadata object. */
+/* Observations copied by the one maintained receipt parser after committed
+ * source checks. Original representation admission remains an observation,
+ * separate from the decoder-input contract. No Intent supplies this object. */
 typedef struct {
     char source_key[IB_READER_REQUEST_ID_CAP + 7U];
     uint64_t source_generation;
     char requested_url[2049], resolved_url[2049];
     char mime_type[64], charset[64], http_status[4];
     char redirect_chain[8193];
+    int utf8_valid, navigation_admitted;
 } ib_arena_source_observations;
 
 /* The trusted application host passes its existing app-private Arena root
@@ -60,6 +62,21 @@ int ib_arena_source_owner_open_retained(ib_arena_source_owner *owner,
                                        int *read_fd);
 
 int ib_arena_source_owner_open_observed(ib_arena_source_owner *owner,
+                                       const char *request_id,
+                                       uint64_t retained_source_generation,
+                                       uint64_t navigation_generation,
+                                       ib_reader_source_ticket *ticket,
+                                       ib_arena_source_observations *observations,
+                                       int *read_fd);
+
+/* Original-byte input to a checked decoder, not HTML reader admission.
+ * Validate the same response identity, generation, complete acquisition,
+ * canonical range and independently reopened digest. Preserve the original
+ * charset, status and admission observation even when the representation is
+ * unsupported. The checked reader must then admit the decoded representation;
+ * successfully opening this pipe alone never authorizes visible content.
+ * The older admitted-source APIs retain their strict UTF-8 contract. */
+int ib_arena_source_owner_open_decode_input(ib_arena_source_owner *owner,
                                        const char *request_id,
                                        uint64_t retained_source_generation,
                                        uint64_t navigation_generation,

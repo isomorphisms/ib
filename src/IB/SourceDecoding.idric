@@ -8,6 +8,17 @@ public export
 SourceOctet : Type
 SourceOctet = Bits8
 
+-- Android transports raw bytes through an ISO-8859-1 SDK String only when
+-- the original response was not decoded as UTF-8. This is an octet carrier,
+-- not a decoded HTML representation. Refuse any scalar it cannot preserve.
+export
+source_octet_carrier : Text → Either Text (List SourceOctet)
+source_octet_carrier text = traverse octet (unpack text)
+  where
+    octet : Char → Either Text SourceOctet
+    octet character = if ord character <= 255 then Right (cast (ord character))
+      else Left "invalid-original-octet-carrier"
+
 public export
 record HtmlDecodedText where
   constructor DecodedHtml

@@ -423,7 +423,7 @@ Java_org_isomorphisms_ib_ReaderAcquireTask_run(JNIEnv *e, jobject self) {
         }
     }
     int fd = -1, open_status = -1, stream_status = -1;
-    if (acquired) open_status = ib_arena_source_owner_open_observed(&application.sources, job->id,
+    if (acquired) open_status = ib_arena_source_owner_open_decode_input(&application.sources, job->id,
         job->source_generation, job->navigation, &job->ticket, &job->observations, &fd);
     if (open_status == 0) {
         stream_status = ib_reader_source_accept_fd(&job->source, &job->ticket, fd);
@@ -431,7 +431,7 @@ Java_org_isomorphisms_ib_ReaderAcquireTask_run(JNIEnv *e, jobject self) {
         close(fd);
     }
     if (job->retained == 1 && job->result != 0 && last_source(job, 1) == 0 &&
-        ib_arena_source_owner_open_observed(&application.sources, job->id,
+        ib_arena_source_owner_open_decode_input(&application.sources, job->id,
             job->source_generation, job->navigation, &job->ticket, &job->observations, &fd) == 0) {
         job->result = ib_reader_source_accept_fd(&job->source, &job->ticket, fd) == IB_READER_PFD_ACCEPTED ? 0 : -1;
         close(fd);
@@ -458,17 +458,35 @@ Java_org_isomorphisms_ib_ReaderAcquireTask_run(JNIEnv *e, jobject self) {
     (*e)->PopLocalFrame(e, NULL);
 }
 
-static jstring utf8_text(JNIEnv *e, const unsigned char *bytes, size_t count) {
+static jstring source_text(JNIEnv *e, const unsigned char *bytes, size_t count, int utf8) {
     if (count > IB_READER_SOURCE_MAX_BYTES || count > INT32_MAX) return NULL;
     jbyteArray array = (*e)->NewByteArray(e, (jsize)count);
     if (!array) return NULL;
     (*e)->SetByteArrayRegion(e, array, 0, (jsize)count, (const jbyte *)bytes);
-    jclass type = (*e)->FindClass(e, "java/lang/String");
-    jmethodID constructor = type ? (*e)->GetMethodID(e, type, "<init>", "([BLjava/lang/String;)V") : NULL;
-    jstring charset = constructor ? (*e)->NewStringUTF(e, "UTF-8") : NULL;
-    /* UTF-8 was strictly validated by source admission and independently
-     * hashed again above. This only crosses the SDK's UTF-16 string ABI. */
-    return charset && !(*e)->ExceptionCheck(e) ? (*e)->NewObject(e, type, constructor, array, charset) : NULL;
+    if (!utf8) {
+        jclass type = (*e)->FindClass(e, "java/lang/String");
+        jmethodID constructor = type ? (*e)->GetMethodID(e, type, "<init>", "([BLjava/lang/String;)V") : NULL;
+        jstring charset = constructor ? (*e)->NewStringUTF(e, "ISO-8859-1") : NULL;
+        /* A one-octet/one-scalar carrier, never HTML charset inference. The
+         * checked Idriç decoder interprets these original octets and admits
+         * the derivative against the unchanged response observations. */
+        return charset && !(*e)->ExceptionCheck(e) ? (*e)->NewObject(e, type, constructor, array, charset) : NULL;
+    }
+    jclass charset_type = (*e)->FindClass(e, "java/nio/charset/Charset");
+    jmethodID for_name = charset_type ? (*e)->GetStaticMethodID(e, charset_type, "forName", "(Ljava/lang/String;)Ljava/nio/charset/Charset;") : NULL;
+    jstring encoding = for_name ? (*e)->NewStringUTF(e, "UTF-8") : NULL;
+    jobject charset = encoding ? (*e)->CallStaticObjectMethod(e, charset_type, for_name, encoding) : NULL;
+    jmethodID new_decoder = method(e, "java/nio/charset/Charset", "newDecoder", "()Ljava/nio/charset/CharsetDecoder;");
+    jobject decoder = charset && new_decoder ? (*e)->CallObjectMethod(e, charset, new_decoder) : NULL;
+    jclass buffer_type = (*e)->FindClass(e, "java/nio/ByteBuffer");
+    jmethodID wrap = buffer_type ? (*e)->GetStaticMethodID(e, buffer_type, "wrap", "([B)Ljava/nio/ByteBuffer;") : NULL;
+    jobject buffer = wrap ? (*e)->CallStaticObjectMethod(e, buffer_type, wrap, array) : NULL;
+    /* CharsetDecoder defaults to REPORT for malformed/unmappable input. Do
+     * not use String's replacement decoder even when a receipt says valid. */
+    jmethodID decode = method(e, "java/nio/charset/CharsetDecoder", "decode", "(Ljava/nio/ByteBuffer;)Ljava/nio/CharBuffer;");
+    jobject decoded = decoder && buffer && decode ? (*e)->CallObjectMethod(e, decoder, decode, buffer) : NULL;
+    jmethodID text = method(e, "java/nio/CharBuffer", "toString", "()Ljava/lang/String;");
+    return decoded && text && !(*e)->ExceptionCheck(e) ? (*e)->CallObjectMethod(e, decoded, text) : NULL;
 }
 
 JNIEXPORT void JNICALL
@@ -485,12 +503,15 @@ Java_org_isomorphisms_ib_ReaderCompletionTask_run(JNIEnv *e, jobject self) {
     if (current && activity && job->result == 0) {
         char fields[5000], observed[65];
         ib_reader_sha256_hex(job->source.bytes, job->source.byte_count, observed);
-        int count = snprintf(fields, sizeof(fields), "%s\t%u\t%s\t%s\t%u\t%zu\t%s\t%s\t%s\t%s\t%s\tverified-utf8\tcomplete",
+        int count = snprintf(fields, sizeof(fields), "%s\t%u\t%s\t%s\t%u\t%zu\t%s\t%s\t%s\t%s\t%s\t%s\tcomplete",
             job->observations.source_key, job->source_generation, job->ticket.sha256_hex, observed,
             job->ticket.byte_count, job->source.byte_count, job->observations.requested_url,
-            job->observations.resolved_url, job->observations.mime_type, job->observations.charset, job->observations.http_status);
+            job->observations.resolved_url, job->observations.mime_type, job->observations.charset, job->observations.http_status,
+            job->observations.utf8_valid ? "verified-utf8" : "invalid-utf8");
         jstring evidence = count > 0 && (size_t)count < sizeof(fields) ? (*e)->NewStringUTF(e, fields) : NULL;
-        jstring body = evidence ? utf8_text(e, job->source.bytes, job->source.byte_count) : NULL;
+        int utf8 = job->observations.utf8_valid &&
+            (strcmp(job->observations.charset, "utf-8") == 0 || strcmp(job->observations.charset, "UTF-8") == 0);
+        jstring body = evidence ? source_text(e, job->source.bytes, job->source.byte_count, utf8) : NULL;
         jstring id = body ? (*e)->NewStringUTF(e, job->id) : NULL;
         jstring journal = id ? (*e)->NewStringUTF(e, job->index.journal) : NULL;
         if (journal) {

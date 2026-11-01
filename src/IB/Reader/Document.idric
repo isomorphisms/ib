@@ -5,6 +5,7 @@ import Data.List1
 import IB.HtmlPrepaint
 import IB.Prepaint.Reflow
 import IB.Reflow
+import IB.SourceDecoding
 
 -- Only the trusted source owner may supply these observations. Incoming
 -- Intents, HTML and search text never enter this constructor path.
@@ -29,5 +30,10 @@ export
 prepare_committed_document : HtmlEvidence → Text → ReflowRequirements → Text →
                              (Text → Number) → Either Text HtmlPrepaintLayout
 prepare_committed_document evidence html request metric measure = do
-  admitted ← convert_admitted_html evidence html
+  admitted ← if evidence.charset ≟ "utf-8" || evidence.charset ≟ "UTF-8"
+    then convert_admitted_html evidence html
+    else if not (windows_1252_label evidence.charset) then Left "unsupported-charset"
+    else do
+      octets ← source_octet_carrier html
+      convert_committed_html_octets evidence octets
   reflow_html_prepaint request metric measure admitted

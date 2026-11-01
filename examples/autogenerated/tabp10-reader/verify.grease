@@ -149,5 +149,29 @@ emit NativeReader activity-copy-mutant managed-exports "$evidence/activity-copy-
 if cmp -s "$evidence/activity/reader.dex" "$evidence/activity-copy-mutant/reader.dex" {
   echo 'FAIL actual Activity copy mutation emitted the positive candidate' >&2; exit 1
 }
+for mutation in gate mapping count carrier {
+  var changed = "$evidence/decoding-$mutation-source"
+  cp -R "$evidence/source" "$changed"
+  var original = "$evidence/source/IB/HtmlPrepaint.idric"
+  var destination = "$changed/IB/HtmlPrepaint.idric"
+  if (mutation === 'gate') {
+    sed 's/case source_identity_reason admission of/case the (Maybe String) Nothing of/' "$original" > "$destination"
+  } elif (mutation === 'count') {
+    sed 's/if cast decoded.original_byte_count \/= admission.reopened_bytes/if False/' "$original" > "$destination"
+  } else {
+    setvar original = "$evidence/source/IB/SourceDecoding.idric"
+    setvar destination = "$changed/IB/SourceDecoding.idric"
+    if (mutation === 'mapping') {
+      sed 's/128 ⇒ 0x20AC/128 ⇒ 0x0080/' "$original" > "$destination"
+    } else {
+      sed 's/if ord character <= 255/if True/' "$original" > "$destination"
+    }
+  }
+  if cmp -s "$original" "$destination" { echo 'FAIL unchanged decoded-source mutation' >&2; exit 1 }
+  emit ReaderProjection "prepaint-decoding-$mutation-mutant" managed-exports "$changed"
+  if cmp -s "$evidence/prepaint/reader.dex" "$evidence/prepaint-decoding-$mutation-mutant/reader.dex" {
+    echo 'FAIL decoded-source mutation emitted positive bytes' >&2; exit 1
+  }
+}
 printf 'determinism\tPASS\nindependent_decode\tPASS\nART\tNOT_RUN\nBinder\tNOT_RUN\nAPK\tNOT_RUN\nphysical_TAB_P10\tBLOCKED\n' >> "$evidence/stages.tsv"
 cat "$evidence/stages.tsv"

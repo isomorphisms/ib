@@ -257,6 +257,67 @@ static unsigned char *read_observation(const char *filename, size_t bound, size_
     return bytes;
 }
 
+static void decoded_input_case(ib_ingress_arena *publisher, const char *root) {
+    const unsigned char original[] = "<p>caf\351 \200 \223source\224</p>";
+    char fields[8193];
+    unsigned char packet[16384];
+    metadata(fields, sizeof(fields), "text/html; profile=reader; charset = \"Windows-1252\"",
+        url, 0, "invalid", sizeof(original)-1U);
+    size_t count = frame(packet, sizeof(packet), fields, original, sizeof(original)-1U);
+    uint64_t original_offset = committed(root);
+    assert(send_frame(publisher, "decode-input", packet, count, 0, 0) == 0);
+    /* Original UTF-8 admission remains refused. The decoder input contract
+     * must preserve octets and observations without pretending admission. */
+    assert(reopen(root, "decode-input", 19) != 0);
+    ib_arena_source_owner owner;
+    ib_reader_source_ticket ticket;
+    ib_arena_source_observations observed;
+    ib_reader_source reader;
+    int fd = -1;
+    assert(ib_arena_source_owner_init(&owner, root) == 0);
+    ib_arena_source_owner_want(&owner, 20);
+    assert(ib_arena_source_owner_open_decode_input(&owner, "decode-input", 19, 20,
+        &ticket, &observed, &fd) == 0);
+    assert(!observed.utf8_valid && !observed.navigation_admitted);
+    assert(!strcmp(observed.charset, "windows-1252"));
+    assert(!strcmp(observed.source_key, "arena:decode-input") && observed.source_generation == 19);
+    assert(ticket.navigation_generation == 20 && ticket.byte_count == sizeof(original)-1U);
+    char digest[65];
+    ib_reader_sha256_hex(original, sizeof(original)-1U, digest);
+    assert(!strcmp(ticket.sha256_hex, digest));
+    ib_reader_source_init(&reader);
+    ib_reader_source_want(&reader, 20);
+    assert(ib_reader_source_accept_fd(&reader, &ticket, fd) == IB_READER_PFD_ACCEPTED);
+    assert(close(fd) == 0);
+    assert(reader.byte_count == sizeof(original)-1U && !memcmp(reader.bytes, original, sizeof(original)-1U));
+    fd = -1;
+    char path[4096];
+    assert(snprintf(path, sizeof(path), "%s/responses.arena", root) < (int)sizeof(path));
+    int storage = open(path, O_RDWR | O_CLOEXEC | O_NOFOLLOW);
+    assert(storage >= 0);
+    const unsigned char changed = 0;
+    assert(pwrite(storage, &changed, 1, (off_t)original_offset) == 1 && fsync(storage) == 0);
+    puts("STAGE original decoder input digest refusal");
+    assert(ib_arena_source_owner_open_decode_input(&owner, "decode-input", 19, 20,
+        &ticket, &observed, &fd) != 0 && fd == -1);
+    assert(observed.source_key[0] == 0);
+    assert(pwrite(storage, original, 1, (off_t)original_offset) == 1 && fsync(storage) == 0);
+    assert(close(storage) == 0);
+    assert(ib_arena_source_owner_open_decode_input(&owner, "decode-input", 20, 20,
+        &ticket, &observed, &fd) != 0 && fd == -1);
+    assert(observed.source_key[0] == 0);
+    ib_arena_source_owner_want(&owner, 21);
+    assert(ib_arena_source_owner_open_decode_input(&owner, "decode-input", 19, 20,
+        &ticket, &observed, &fd) != 0 && fd == -1);
+    ib_reader_source_clear(&reader);
+    /* No duplicate charset may silently win, even when each label is known. */
+    metadata(fields, sizeof(fields), "text/html; charset=windows-1252; charset=utf-8",
+        url, 0, "invalid", sizeof(original)-1U);
+    count = frame(packet, sizeof(packet), fields, original, sizeof(original)-1U);
+    reject(publisher, root, "ambiguous-charset", packet, count);
+    puts("PASS: original non-UTF-8 canonical bytes and unchanged observations reach only the decoder input; corruption, duplicate charset and stale generations refuse");
+}
+
 static void retain_live_observation(ib_ingress_arena *publisher, const char *root,
                                     const char *requested, const char *metadata_file,
                                     const char *body_file) {
@@ -355,6 +416,7 @@ int main(int argc, char **argv) {
     assert(reopen(root, "observed", 19) == 0);
     current_metadata_cases(&publisher, root);
     redirect_observation_cases(&publisher, root);
+    decoded_input_case(&publisher, root);
     if (argc == 5) retain_live_observation(&publisher, root, argv[2], argv[3], argv[4]);
     puts("PASS: paired ICU frame through private ingress into real canonical Arena v2 and exact reopened reader bytes");
     puts("PASS: body-only, partial, trailing, header, size, metadata, UTF-8, credentials, digest, worker and stale refusals preserve prior content");

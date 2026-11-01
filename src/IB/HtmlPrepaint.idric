@@ -6,6 +6,7 @@ import IB.Strand
 import IB.Prepaint
 import IB.Prepaint.Version1
 import IB.HtmlLinks
+import IB.SourceDecoding
 
 -- Bounded by caller/admission; explicit conversion failures are returned.
 
@@ -49,6 +50,7 @@ record HtmlPrepaintResult where
   wire : String
   pending_images : List PendingImage
   limitations : List String
+  decoding : Maybe HtmlDecodedText
 
 is_hex_character : Char → Bool
 is_hex_character character =
@@ -66,9 +68,8 @@ metadata_safe value =
   not (elem '\n' (unpack value)) &&
   not (elem '\r' (unpack value))
 
-public export
-source_admission_reason : HtmlEvidence → Maybe String
-source_admission_reason e =
+source_identity_reason : HtmlEvidence → Maybe String
+source_identity_reason e =
   if not (metadata_safe e.source_key) || not (metadata_safe e.source_generation)
     then Just "bad-source-identity"
   else if not (is_digest e.claimed_sha256) || e.claimed_sha256 /= e.reopened_sha256
@@ -80,17 +81,24 @@ source_admission_reason e =
     e.mime_type /= "text/html; charset=utf-8" &&
     e.mime_type /= "text/html; charset=UTF-8"
     then Just "unsupported-mime"
-  else if e.charset /= "utf-8" && e.charset /= "UTF-8"
-    then Just "unsupported-charset"
   else if e.http_status /= "200"
     then Just "unadmitted-http-status"
-  else if not e.utf8_decoded
-    then Just "invalid-utf8"
   else if not e.fully_acquired
     then Just "incomplete-or-stale-source"
   else if not (cheap_http_url e.requested_url) || not (cheap_http_url e.resolved_url)
     then Just "unverified-requested-or-resolved-url"
   else Nothing
+
+public export
+source_admission_reason : HtmlEvidence → Maybe String
+source_admission_reason evidence =
+  case source_identity_reason evidence of
+    Just reason ⇒ Just reason
+    Nothing ⇒
+      if evidence.charset /= "utf-8" && evidence.charset /= "UTF-8"
+        then Just "unsupported-charset"
+      else if not evidence.utf8_decoded then Just "invalid-utf8"
+      else Nothing
 
 first_html_base : List DocumentEvent → Maybe String
 first_html_base [] = Nothing
@@ -208,22 +216,24 @@ source_reference_text evidence =
   evidence.source_key ++ ";generation=" ++ evidence.source_generation ++
   ";sha256=" ++ evidence.claimed_sha256
 
-make_html_strand : HtmlEvidence → InformationView →
+make_html_strand : HtmlEvidence → Maybe HtmlDecodedText → InformationView →
   List InformationBlock → Maybe Strand
-make_html_strand evidence view blocks = do
-  source_id ← nonempty_text (source_reference_text evidence)
+make_html_strand evidence decoding view blocks = do
+  let representation = case decoding of
+        Nothing ⇒ ""
+        Just decoded ⇒ ";decoder=" ++ decoder_identity ++ ";encoding=" ++ decoded.selected_encoding
+  source_id ← nonempty_text (source_reference_text evidence ++ representation)
   requested ← requested_address evidence.requested_url
   resolved ← resolved_address evidence.resolved_url
-  let source = Source source_id HtmlSource CompleteSource
+  let origin = case decoding of
+        Nothing ⇒ HtmlSource
+        Just _ ⇒ DerivedSource
+  let source = Source source_id origin CompleteSource
   let heading_title = if view_title view == "" then Nothing else Just (view_title view)
   pure (MakeStrand source requested resolved heading_title blocks)
 
-public export
-convert_admitted_html : HtmlEvidence → String → Either String HtmlPrepaintResult
-convert_admitted_html admission html =
-  case source_admission_reason admission of
-    Just refusal ⇒ Left refusal
-    Nothing ⇒
+extract_verified_html : HtmlEvidence → Maybe HtmlDecodedText → String → Either String HtmlPrepaintResult
+extract_verified_html admission decoding html =
       let log = recover_document_log admission.source_key html in
       let view = information_from_log admission.requested_url admission.resolved_url log in
       let (base, base_notes) = link_base admission.resolved_url log in
@@ -231,7 +241,7 @@ convert_admitted_html admission html =
       if length blocks > 4096
         then Left "prepaint-block-budget-exceeded"
         else
-          case make_html_strand admission view blocks of
+          case make_html_strand admission decoding view blocks of
             Nothing ⇒ Left "invalid-source-strand"
             Just strand ⇒
               let revision = prepaint_from_strand first_revision CompleteRevision strand in
@@ -240,4 +250,25 @@ convert_admitted_html admission html =
                 Just wire ⇒
                   Right (MadeHtmlPrepaint admission log view strand revision wire
                     images (base_notes ++ notes ++
-                    unsupported_events (document_log_events log)))
+                    unsupported_events (document_log_events log)) decoding)
+
+public export
+convert_admitted_html : HtmlEvidence → String → Either String HtmlPrepaintResult
+convert_admitted_html admission html =
+  case source_admission_reason admission of
+    Just refusal ⇒ Left refusal
+    Nothing ⇒ extract_verified_html admission Nothing html
+
+-- The original receipt remains unchanged. A decoded derivative can enter
+-- Prepaint only after every source/HTTP/completeness check and the maintained
+-- decoder agree about its original encoding and exact byte count.
+public export
+convert_committed_html_octets : HtmlEvidence → List SourceOctet → Either String HtmlPrepaintResult
+convert_committed_html_octets admission octets = do
+  case source_identity_reason admission of
+    Just refusal ⇒ Left refusal
+    Nothing ⇒ Right ()
+  decoded ← decode_html_bytes admission.charset octets
+  if cast decoded.original_byte_count /= admission.reopened_bytes
+    then Left "decoded-original-byte-count-mismatch"
+    else extract_verified_html admission (Just decoded) decoded.decoded_text
