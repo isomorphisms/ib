@@ -6,6 +6,7 @@ import IB.Reader.Document
 import IB.Reader.Navigation
 import IB.Reader.Selection
 import IB.HtmlPrepaint
+import IB.HtmlAnchors
 import IB.Prepaint.Reflow
 import IB.Prepaint
 import IB.Reflow
@@ -115,6 +116,8 @@ metric_width : MetricsReference → Int32
 metric_measure : MetricsReference → Text → Int32
 %foreign "dex:virtual:Landroid/app/Activity;:setTitle:(Ljava/lang/CharSequence;)V"
 set_document_title : ActivityReference → Text → PrimIO ()
+%foreign "dex:static:Lorg/isomorphisms/ib/ReaderBridge;:scrollAnchor:(Landroid/app/Activity;I)I"
+scroll_fragment_target : ActivityReference → Int32 → PrimIO Int32
 
 -- Stable resource IDs are checked against android-native/res/values/public.xml.
 reader_layout : Int32
@@ -370,10 +373,15 @@ reader_acquisition_ready activity observations html source_id generation planned
             then Left "An unbreakable source run exceeds the native viewport"
             else do
               projection ← selection_projection document.revision_layout
-              Right (document, history, projection)
+              fragment ← requested_html_fragment evidence.requested_url
+              target ← case fragment of
+                Nothing ⇒ Right 0
+                Just "" ⇒ Right 0
+                Just label ⇒ html_fragment_display_offset document label
+              Right (document, history, projection, target)
   case prepared of
     Left reason ⇒ reader_acquisition_failed activity (document_refusal_message observations reason)
-    Right (document, history, projection) ⇒ do
+    Right (document, history, projection, target) ⇒ do
       let title = case document.source_result.revision.title of
             Nothing ⇒ "IB"
             Just value ⇒ value
@@ -385,13 +393,17 @@ reader_acquisition_ready activity observations html source_id generation planned
           primIO (set_document_title activity title)
           write_view_text activity reader_title title
           write_view_text activity reader_input document.source_result.evidence.requested_url
-          saved ← primIO (acknowledge_presented_source source_id generation (history_text history))
+          positioned ← primIO (scroll_fragment_target activity target)
+          saved ← if positioned ≟ 0
+            then primIO (acknowledge_presented_source source_id generation (history_text history))
+            else pure (-1)
           if saved ≟ 0 then show_history_controls activity history
             else do
               enable_history_control activity back_button False
               enable_history_control activity forward_button False
           write_view_text activity reader_status
-            (if saved /= 0 then "Document displayed; saving its last-good source index failed."
+            (if positioned /= 0 then "Document displayed; its fragment position could not be applied."
+             else if saved /= 0 then "Document displayed; saving its last-good source index failed."
              else if not styled then "Static HTML loaded; native link/heading styling failed."
              else if is_google_search_address document.source_result.evidence.requested_url
                then "Google response — partial static HTML. Results requiring scripts cannot be shown."
@@ -400,6 +412,24 @@ reader_acquisition_ready activity observations html source_id generation planned
           case refusal of
             Just message ⇒ write_view_text activity reader_status message
             Nothing ⇒ pure ()
+
+-- Independent ART observers execute this same source/admission/fragment owner
+-- with a declared unit-advance provider. It grants no navigation capability.
+%export "dex:reader_fragment_offset"
+reader_fragment_offset : Text → Text → Int32 → Int32
+reader_fragment_offset observations html width =
+  if width <= 0 then -1 else case (do
+    evidence ← read_committed_evidence observations
+    document ← prepare_committed_document_advances evidence html
+      (Requirements (cast width) promptly) "unit-codepoint-advances-v1" (\_ ⇒ 1)
+    fragment ← requested_html_fragment evidence.requested_url
+    case fragment of
+      Nothing ⇒ Right 0
+      Just "" ⇒ Right 0
+      Just label ⇒ html_fragment_display_offset document label) of
+        Left _ ⇒ -1
+        Right point ⇒ point
+
 
 navigate_to : ActivityReference → Text → IO ()
 navigate_to activity text = do

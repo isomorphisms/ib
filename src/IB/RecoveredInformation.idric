@@ -140,6 +140,12 @@ information_from_log requested_url resolved_url (DocumentLog _ events) =
   extract_information_tokens requested_url resolved_url (map information_token events)
 
 public export
+information_anchors_from_log : String → String → RecoveredDocumentLog →
+  (InformationView, List InformationAnchor)
+information_anchors_from_log requested_url resolved_url (DocumentLog _ events) =
+  extract_information_tokens_with_anchors requested_url resolved_url (map information_token events)
+
+public export
 extract_recovered_html : String → String → String → String → InformationView
 extract_recovered_html source requested_url resolved_url html =
   information_from_log requested_url resolved_url (recover_document_log source html)

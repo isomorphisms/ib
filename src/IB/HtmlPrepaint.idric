@@ -252,6 +252,17 @@ extract_verified_html admission decoding html =
                     images (base_notes ++ notes ++
                     unsupported_events (document_log_events log)) decoding)
 
+-- Reuse the exact semantic folding when a checked decoded-item coordinate
+-- needs the corresponding retained Prepaint block occurrence.
+export
+html_item_block_position : HtmlPrepaintResult → Number → Maybe Number
+html_item_block_position result position =
+  let items = view_items result.information in
+  if position >= length items then Nothing
+  else let (base, _) = link_base result.evidence.resolved_url result.recovered
+           (prefix, _, _) = map_items result.evidence base (take position items) in
+       Just (length prefix)
+
 public export
 convert_admitted_html : HtmlEvidence → String → Either String HtmlPrepaintResult
 convert_admitted_html admission html =

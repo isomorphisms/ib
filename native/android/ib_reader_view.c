@@ -8,6 +8,7 @@
 #define ANDROID_COPY 16908321
 
 static jmethodID sdk_method(JNIEnv *e, const char *owner, const char *name, const char *signature) {
+    if ((*e)->ExceptionCheck(e)) return NULL;
     jclass type = (*e)->FindClass(e, owner);
     return type ? (*e)->GetMethodID(e, type, name, signature) : NULL;
 }
@@ -20,6 +21,7 @@ static jobject reader_body(JNIEnv *e, jobject activity) {
 }
 
 static jfieldID view_field(JNIEnv *e, jobject view, const char *name, const char *type) {
+    if ((*e)->ExceptionCheck(e)) return NULL;
     jclass owner = view ? (*e)->GetObjectClass(e, view) : NULL;
     return owner ? (*e)->GetFieldID(e, owner, name, type) : NULL;
 }
@@ -88,6 +90,96 @@ Java_org_isomorphisms_ib_ReaderBridge_presentText(JNIEnv *e, jclass ignored, job
     if ((*e)->ExceptionCheck(e)) (*e)->ExceptionClear(e);
     (*e)->PopLocalFrame(e, NULL);
     return ok ? 0 : -1;
+}
+
+/* The listener binds the exact immutable projection, not a mutable screen
+ * pathname or a later document. Pre-draw runs after TextView layout, when the
+ * SDK can scroll the source-backed UTF-16 point into its parent viewport. */
+JNIEXPORT jint JNICALL
+Java_org_isomorphisms_ib_ReaderBridge_scrollAnchor(JNIEnv *e, jclass ignored,
+                                                  jobject activity, jint point) {
+    (void)ignored;
+    if (point < 0 || (*e)->PushLocalFrame(e, 32) != 0) return -1;
+    jobject view = reader_body(e, activity);
+    jfieldID stored = view ? view_field(e, view, "projection", "Lorg/isomorphisms/ib/NativeTextProjection;") : NULL;
+    jobject projection = stored ? (*e)->GetObjectField(e, view, stored) : NULL;
+    jstring source = NULL, display = NULL, coordinates = NULL;
+    int bounded = projection && projection_texts(e, view, &source, &display, &coordinates) &&
+        point <= (*e)->GetStringLength(e, display);
+    jclass type = bounded ? (*e)->FindClass(e, "org/isomorphisms/ib/ReaderAnchorListener") : NULL;
+    jmethodID construct = type ? (*e)->GetMethodID(e, type, "<init>", "()V") : NULL;
+    jobject listener = construct ? (*e)->NewObject(e, type, construct) : NULL;
+    jfieldID target = listener ? (*e)->GetFieldID(e, type, "targetView", "Lorg/isomorphisms/ib/NativeTextView;") : NULL;
+    jfieldID owner = target ? (*e)->GetFieldID(e, type, "projection", "Lorg/isomorphisms/ib/NativeTextProjection;") : NULL;
+    jfieldID offset = owner ? (*e)->GetFieldID(e, type, "offsetValue", "Ljava/lang/Integer;") : NULL;
+    jclass integer_type = offset ? (*e)->FindClass(e, "java/lang/Integer") : NULL;
+    jmethodID box = integer_type ? (*e)->GetMethodID(e, integer_type, "<init>", "(I)V") : NULL;
+    jobject number = box ? (*e)->NewObject(e, integer_type, box, point) : NULL;
+    jmethodID tree = number ? sdk_method(e, "android/view/View", "getViewTreeObserver", "()Landroid/view/ViewTreeObserver;") : NULL;
+    jobject observer = tree ? (*e)->CallObjectMethod(e, view, tree) : NULL;
+    jmethodID add = observer ? sdk_method(e, "android/view/ViewTreeObserver", "addOnPreDrawListener",
+        "(Landroid/view/ViewTreeObserver$OnPreDrawListener;)V") : NULL;
+    int ok = add && !(*e)->ExceptionCheck(e);
+    if (ok) {
+        (*e)->SetObjectField(e, listener, target, view);
+        (*e)->SetObjectField(e, listener, owner, projection);
+        (*e)->SetObjectField(e, listener, offset, number);
+        if (!(*e)->ExceptionCheck(e)) (*e)->CallVoidMethod(e, observer, add, listener);
+        jmethodID request = sdk_method(e, "android/view/View", "requestLayout", "()V");
+        if (request && !(*e)->ExceptionCheck(e)) (*e)->CallVoidMethod(e, view, request);
+        ok = request && !(*e)->ExceptionCheck(e);
+    }
+    if ((*e)->ExceptionCheck(e)) (*e)->ExceptionClear(e);
+    (*e)->PopLocalFrame(e, NULL);
+    return ok ? 0 : -1;
+}
+
+JNIEXPORT jboolean JNICALL
+Java_org_isomorphisms_ib_ReaderAnchorListener_onPreDraw(JNIEnv *e, jobject self) {
+    if ((*e)->PushLocalFrame(e, 32) != 0) return JNI_TRUE;
+    jfieldID target = view_field(e, self, "targetView", "Lorg/isomorphisms/ib/NativeTextView;");
+    jfieldID owner = target ? view_field(e, self, "projection", "Lorg/isomorphisms/ib/NativeTextProjection;") : NULL;
+    jfieldID offset = owner ? view_field(e, self, "offsetValue", "Ljava/lang/Integer;") : NULL;
+    jobject view = offset ? (*e)->GetObjectField(e, self, target) : NULL;
+    jobject projection = view ? (*e)->GetObjectField(e, self, owner) : NULL;
+    jobject number = projection ? (*e)->GetObjectField(e, self, offset) : NULL;
+    if (view) {
+        jmethodID tree = sdk_method(e, "android/view/View", "getViewTreeObserver", "()Landroid/view/ViewTreeObserver;");
+        jobject observer = tree ? (*e)->CallObjectMethod(e, view, tree) : NULL;
+        jmethodID remove = observer ? sdk_method(e, "android/view/ViewTreeObserver", "removeOnPreDrawListener",
+            "(Landroid/view/ViewTreeObserver$OnPreDrawListener;)V") : NULL;
+        if (remove) (*e)->CallVoidMethod(e, observer, remove, self);
+        int failed = (*e)->ExceptionCheck(e);
+        if (failed) (*e)->ExceptionClear(e);
+        /* Break the listener/view cycle even when a newer projection won. */
+        (*e)->SetObjectField(e, self, target, NULL);
+        (*e)->SetObjectField(e, self, owner, NULL);
+        (*e)->SetObjectField(e, self, offset, NULL);
+        jfieldID current_field = view_field(e, view, "projection", "Lorg/isomorphisms/ib/NativeTextProjection;");
+        jobject current = current_field ? (*e)->GetObjectField(e, view, current_field) : NULL;
+        int same = !failed && !(*e)->ExceptionCheck(e) && current && projection && (*e)->IsSameObject(e, current, projection);
+        if (failed) report_refusal(e, view, "The native fragment observer failed; the document is retained.");
+        if (same && number && !(*e)->ExceptionCheck(e)) {
+            jmethodID integer = sdk_method(e, "java/lang/Integer", "intValue", "()I");
+            jint point = integer ? (*e)->CallIntMethod(e, number, integer) : -1;
+            jstring source = NULL, display = NULL, coordinates = NULL;
+            int bounded = point >= 0 && projection_texts(e, view, &source, &display, &coordinates) &&
+                point <= (*e)->GetStringLength(e, display);
+            jmethodID bring = bounded ? sdk_method(e, "android/widget/TextView", "bringPointIntoView", "(I)Z") : NULL;
+            if (bring && !(*e)->ExceptionCheck(e)) {
+                /* False also means the target was already visible. */
+                (void)(*e)->CallBooleanMethod(e, view, bring, point);
+            }
+            if (!bring || (*e)->ExceptionCheck(e))
+                report_refusal(e, view, "The source-linked fragment could not be positioned; its document is retained.");
+        }
+    }
+    if ((*e)->ExceptionCheck(e)) {
+        if (view) report_refusal(e, view, "The native fragment adapter failed; the document is retained.");
+        else (*e)->ExceptionClear(e);
+    }
+    (*e)->PopLocalFrame(e, NULL);
+    return JNI_TRUE;
 }
 
 JNIEXPORT jint JNICALL

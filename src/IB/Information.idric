@@ -40,6 +40,21 @@ data InformationToken
   | CloseTag Text
   | TextToken Text
 
+-- Anchor coordinates belong to the maintained decoded information items,
+-- not HTML byte offsets or Android UTF-16 positions.
+public export
+record InformationAnchor where
+  constructor LocatedInformationAnchor
+  anchor_name : Text
+  identifier_attribute : Bool
+  item_position : Number
+  within_item : Number
+  supported_position : Bool
+
+data LocatedInformationToken
+  = SemanticToken InformationToken
+  | LocateInformationAnchor Text Text Bool
+
 data Capture
   = NoCapture
   | CaptureTitle
@@ -447,90 +462,129 @@ update_skip name closing (Skipping target depth) =
       else Skipping target (S depth)
     else Skipping target depth
 
-collect_information : List InformationToken → SkipState → Capture → List Char →
-  Maybe (List Text) → Text → List InformationItem → (Text, List InformationItem)
-collect_information [] skip capture chars row title items =
+collect_information : List LocatedInformationToken → SkipState → Capture → List Char →
+  Maybe (List Text) → Text → List InformationItem → List InformationAnchor →
+  (Text, List InformationItem, List InformationAnchor)
+collect_information [] skip capture chars row title items anchors =
   let text = clean_text (pack (reverse chars)) in
   let (final_title, final_items, final_row) = finish_capture capture text title items row in
-  (final_title, reverse (finish_open_row final_row final_items))
-collect_information (TextToken text :: rest) (Skipping target depth) capture chars row title items =
-  collect_information rest (Skipping target depth) capture chars row title items
-collect_information (TextToken text :: rest) NotSkipping NoCapture chars row title items =
-  collect_information rest NotSkipping NoCapture [] row title (add_standalone_text text row items)
-collect_information (TextToken text :: rest) NotSkipping capture chars row title items =
-  collect_information rest NotSkipping capture (append_capture_text text chars) row title items
-collect_information (OpenTag name tag :: rest) skip capture chars row title items =
+  (final_title, reverse (finish_open_row final_row final_items), reverse anchors)
+collect_information (SemanticToken (TextToken text) :: rest) (Skipping target depth) capture chars row title items anchors =
+  collect_information rest (Skipping target depth) capture chars row title items anchors
+collect_information (SemanticToken (TextToken text) :: rest) NotSkipping NoCapture chars row title items anchors =
+  collect_information rest NotSkipping NoCapture [] row title (add_standalone_text text row items) anchors
+collect_information (SemanticToken (TextToken text) :: rest) NotSkipping capture chars row title items anchors =
+  collect_information rest NotSkipping capture (append_capture_text text chars) row title items anchors
+collect_information (LocateInformationAnchor element label identifier :: rest) skip capture chars row title items anchors =
+  case skip of
+    Skipping _ _ ⇒
+      collect_information rest skip capture chars row title items
+        (LocatedInformationAnchor label identifier (length items) 0 False :: anchors)
+    NotSkipping ⇒
+      let supported = not (elem element ["img", "title", "figcaption", "table", "tr", "td", "th", "form"]) &&
+            (case capture of
+              CaptureTitle ⇒ False
+              CaptureCaption ⇒ False
+              CaptureCell _ ⇒ False
+              CaptureForm _ ⇒ False
+              _ ⇒ True)
+          prefix = clean_text (pack (reverse chars) ++ "x")
+          point = length (unpack prefix) `minus` 1
+          anchor = LocatedInformationAnchor label identifier (length items) point supported in
+      collect_information rest skip capture chars row title items (anchor :: anchors)
+
+collect_information (SemanticToken (OpenTag name tag) :: rest) skip capture chars row title items anchors =
   case skip of
     Skipping target depth ⇒
-      collect_information rest (update_skip name False (Skipping target depth)) capture chars row title items
+      collect_information rest (update_skip name False (Skipping target depth)) capture chars row title items anchors
     NotSkipping ⇒
       case capture of
         NoCapture ⇒
           if skipped_tag name
-            then collect_information rest (Skipping name Z) NoCapture chars row title items
+            then collect_information rest (Skipping name Z) NoCapture chars row title items anchors
             else if name ≟ "title"
-              then collect_information rest NotSkipping CaptureTitle [] row title items
+              then collect_information rest NotSkipping CaptureTitle [] row title items anchors
               else if heading_tag name
-                then collect_information rest NotSkipping (CaptureHeading name) [] row title items
+                then collect_information rest NotSkipping (CaptureHeading name) [] row title items anchors
                 else if name ≟ "p" || name ≟ "li"
-                  then collect_information rest NotSkipping (CaptureText name) [] row title items
+                  then collect_information rest NotSkipping (CaptureText name) [] row title items anchors
                   else if name ≟ "figcaption"
-                    then collect_information rest NotSkipping CaptureCaption [] row title items
+                    then collect_information rest NotSkipping CaptureCaption [] row title items anchors
                   else if name ≟ "a"
                     then collect_information rest NotSkipping
-                      (CaptureLink (attribute_or_empty "href" tag) False NoCapture) [] row title items
+                      (CaptureLink (attribute_or_empty "href" tag) False NoCapture) [] row title items anchors
                     else if name ≟ "img"
-                      then collect_information rest NotSkipping NoCapture [] row title (add_image "" tag items)
+                      then collect_information rest NotSkipping NoCapture [] row title (add_image "" tag items) anchors
                     else if name ≟ "form"
-                      then collect_information rest NotSkipping (CaptureForm (attribute_or_empty "action" tag)) [] row title items
+                      then collect_information rest NotSkipping (CaptureForm (attribute_or_empty "action" tag)) [] row title items anchors
                       else if name ≟ "tr"
-                        then collect_information rest NotSkipping NoCapture [] (Just []) title (finish_open_row row items)
+                        then collect_information rest NotSkipping NoCapture [] (Just []) title (finish_open_row row items) anchors
                         else if name ≟ "td" || name ≟ "th"
                           then case row of
-                            Nothing ⇒ collect_information rest NotSkipping NoCapture [] row title items
-                            Just _ ⇒ collect_information rest NotSkipping (CaptureCell name) [] row title items
-                          else collect_information rest NotSkipping NoCapture [] row title items
+                            Nothing ⇒ collect_information rest NotSkipping NoCapture [] row title items anchors
+                            Just _ ⇒ collect_information rest NotSkipping (CaptureCell name) [] row title items anchors
+                          else collect_information rest NotSkipping NoCapture [] row title items anchors
         _ ⇒
           if skipped_tag name
-            then collect_information rest (Skipping name Z) capture chars row title items
+            then collect_information rest (Skipping name Z) capture chars row title items anchors
             else if name ≟ "a"
               then case capture of
-                CaptureLink _ _ _ ⇒ collect_information rest NotSkipping capture chars row title items
+                CaptureLink _ _ _ ⇒ collect_information rest NotSkipping capture chars row title items anchors
                 _ ⇒
                   let text = clean_text (pack (reverse chars)) in
                   let (next_title, next_items, next_row) = finish_capture capture text title items row in
                   collect_information rest NotSkipping
                     (CaptureLink (attribute_or_empty "href" tag) False capture)
-                    [] next_row next_title next_items
+                    [] next_row next_title next_items anchors
               else if name ≟ "img"
                 then let next_capture = mark_link_image capture in
                   let text = clean_text (pack (reverse chars)) in
                   let (next_title, next_items, next_row) = finish_capture next_capture text title items row in
                   collect_information rest NotSkipping next_capture [] next_row next_title
-                    (add_image (capture_link capture) tag next_items)
-                else collect_information rest NotSkipping capture chars row title items
-collect_information (CloseTag name :: rest) skip capture chars row title items =
+                    (add_image (capture_link capture) tag next_items) anchors
+                else collect_information rest NotSkipping capture chars row title items anchors
+collect_information (SemanticToken (CloseTag name) :: rest) skip capture chars row title items anchors =
   case skip of
     Skipping target depth ⇒
-      collect_information rest (update_skip name True (Skipping target depth)) capture chars row title items
+      collect_information rest (update_skip name True (Skipping target depth)) capture chars row title items anchors
     NotSkipping ⇒
       case capture of
         NoCapture ⇒
           if name ≟ "tr"
-            then collect_information rest NotSkipping NoCapture [] Nothing title (finish_open_row row items)
-            else collect_information rest NotSkipping NoCapture [] row title items
+            then collect_information rest NotSkipping NoCapture [] Nothing title (finish_open_row row items) anchors
+            else collect_information rest NotSkipping NoCapture [] row title items anchors
         _ ⇒
           if name ≟ capture_target capture
             then let text = clean_text (pack (reverse chars)) in
               let (next_title, next_items, next_row) = finish_capture capture text title items row in
-              collect_information rest NotSkipping (capture_parent capture) [] next_row next_title next_items
-            else collect_information rest NotSkipping capture chars row title items
+              collect_information rest NotSkipping (capture_parent capture) [] next_row next_title next_items anchors
+            else collect_information rest NotSkipping capture chars row title items anchors
+
+-- Markers follow their opening token so the same collector has already
+-- flushed a parent paragraph or entered the element's capture state.
+locate_information_tokens : List InformationToken → List LocatedInformationToken
+locate_information_tokens [] = []
+locate_information_tokens (token@(OpenTag name tag) :: rest) =
+  let identity = attribute_or_empty "id" tag
+      named = if name ≟ "a" then attribute_or_empty "name" tag else ""
+      identities = if identity ≟ "" then [] else [LocateInformationAnchor name identity True]
+      names = if named ≟ "" || named ≟ identity then [] else [LocateInformationAnchor name named False] in
+  SemanticToken token :: identities ++ names ++ locate_information_tokens rest
+locate_information_tokens (token :: rest) = SemanticToken token :: locate_information_tokens rest
 
 public export
 extract_information_tokens : Text → Text → List InformationToken → InformationView
 extract_information_tokens requested_url resolved_url tokens =
-  let (title, items) = collect_information tokens NotSkipping NoCapture [] Nothing "" [] in
+  let (title, items, _) = collect_information (map SemanticToken tokens) NotSkipping NoCapture [] Nothing "" [] [] in
   View requested_url resolved_url title items
+
+public export
+extract_information_tokens_with_anchors : Text → Text → List InformationToken →
+  (InformationView, List InformationAnchor)
+extract_information_tokens_with_anchors requested_url resolved_url tokens =
+  let (title, items, anchors) = collect_information (locate_information_tokens tokens)
+        NotSkipping NoCapture [] Nothing "" [] [] in
+  (View requested_url resolved_url title items, anchors)
 
 public export
 extract_html : Text → Text → Text → InformationView

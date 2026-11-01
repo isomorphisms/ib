@@ -152,6 +152,8 @@ reader_bridge_plan = do
     , native "metrics" [object "Landroid/app/Activity;"] (object "Lorg/isomorphisms/ib/ReaderMetrics;")
     , native "presentText" [object "Landroid/app/Activity;", ExistingValue TextValue,
         ExistingValue TextValue, ExistingValue TextValue] (ExistingValue IntegerValue)
+    , native "scrollAnchor" [object "Landroid/app/Activity;", ExistingValue IntegerValue]
+        (ExistingValue IntegerValue)
     , native "markText" [object "Landroid/app/Activity;", ExistingValue IntegerValue,
         ExistingValue IntegerValue, ExistingValue IntegerValue] (ExistingValue IntegerValue)
     ] } base)
@@ -180,6 +182,18 @@ reader_layout_plan = framework_class_plan
   (Subclass "Lorg/isomorphisms/ib/ReaderLayoutListener;" "Ljava/lang/Object;" (Just "ib_reader")
     [Callback "onLayoutChange" "V" ["Landroid/view/View;", "I", "I", "I", "I", "I", "I", "I", "I"]])
   ["Landroid/view/View$OnLayoutChangeListener;"]
+
+reader_anchor_plan : Either Text FilePlan
+reader_anchor_plan = do
+  base ← framework_class_plan
+    (Subclass "Lorg/isomorphisms/ib/ReaderAnchorListener;" "Ljava/lang/Object;" (Just "ib_reader")
+      [Callback "onPreDraw" "Z" []])
+    ["Landroid/view/ViewTreeObserver$OnPreDrawListener;"]
+  Right ({ fields :=
+    [ MkFieldPlan "targetView" (object "Lorg/isomorphisms/ib/NativeTextView;") 2
+    , MkFieldPlan "projection" (object "Lorg/isomorphisms/ib/NativeTextProjection;") 2
+    , MkFieldPlan "offsetValue" (object "Ljava/lang/Integer;") 2
+    ] } base)
 
 reader_projection_plan : Either Text FilePlan
 reader_projection_plan = do
@@ -233,10 +247,11 @@ client_bytes = do
   complete ← reader_task_plan "Lorg/isomorphisms/ib/ReaderCompletionTask;"
   metrics ← reader_metrics_plan
   layout ← reader_layout_plan
+  anchor ← reader_anchor_plan
   projection ← reader_projection_plan
   text_view ← reader_text_plan
   encode_dex_classes [container, creator, provider, application, death, client, ingress, connection,
-    worker, reader, acquire, complete, metrics, layout, projection, text_view]
+    worker, reader, acquire, complete, metrics, layout, anchor, projection, text_view]
 
 parcelable_bytes : Either Text (List Int)
 parcelable_bytes = do

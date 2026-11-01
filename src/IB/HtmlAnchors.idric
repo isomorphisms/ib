@@ -1,0 +1,176 @@
+module IB.HtmlAnchors
+
+import Data.Text
+import Data.Maybe
+import IB.Information
+import IB.RecoveredInformation
+import IB.HtmlPrepaint
+import IB.Prepaint.Reflow
+import IB.Reflow.Source
+import IB.Reflow.SourceBreaks
+
+-- Fragments are decoded once as strict UTF-8 bytes. A plus sign is literal;
+-- query-form decoding would silently select another element.
+hex_digit : Char → Maybe Number
+hex_digit value =
+  if value >= '0' && value <= '9' then Just (cast (ord value - ord '0'))
+  else if value >= 'a' && value <= 'f' then Just (10 + cast (ord value - ord 'a'))
+  else if value >= 'A' && value <= 'F' then Just (10 + cast (ord value - ord 'A'))
+  else Nothing
+
+fragment_octets : List Char → Maybe (List Number)
+fragment_octets [] = Just []
+fragment_octets ('%' :: high :: low :: rest) = do
+  first ← hex_digit high
+  second ← hex_digit low
+  remaining ← fragment_octets rest
+  Just ((16 * first + second) :: remaining)
+fragment_octets ('%' :: _) = Nothing
+fragment_octets (value :: rest) =
+  if ord value > 127 then Nothing
+  else do
+    remaining ← fragment_octets rest
+    Just (cast (ord value) :: remaining)
+
+continuation : Number → Bool
+continuation value = value >= 128 && value <= 191
+
+strict_fragment_characters : List Number → Maybe (List Char)
+strict_fragment_characters [] = Just []
+strict_fragment_characters (first :: rest) =
+  if first > 0 && first < 128 then do
+    remaining ← strict_fragment_characters rest
+    Just (chr (cast first) :: remaining)
+  else if first >= 194 && first <= 223 then case rest of
+    second :: later ⇒ if not (continuation second) then Nothing else do
+      remaining ← strict_fragment_characters later
+      Just (chr (cast ((first `minus` 192) * 64 + (second `minus` 128))) :: remaining)
+    _ ⇒ Nothing
+  else if first >= 224 && first <= 239 then case rest of
+    second :: third :: later ⇒
+      if not (continuation second && continuation third) ||
+          (first ≟ 224 && second < 160) || (first ≟ 237 && second >= 160)
+        then Nothing else do
+          remaining ← strict_fragment_characters later
+          Just (chr (cast ((first `minus` 224) * 4096 +
+            (second `minus` 128) * 64 + (third `minus` 128))) :: remaining)
+    _ ⇒ Nothing
+  else if first >= 240 && first <= 244 then case rest of
+    second :: third :: fourth :: later ⇒
+      if not (continuation second && continuation third && continuation fourth) ||
+          (first ≟ 240 && second < 144) || (first ≟ 244 && second >= 144)
+        then Nothing else do
+          remaining ← strict_fragment_characters later
+          Just (chr (cast ((first `minus` 240) * 262144 +
+            (second `minus` 128) * 4096 + (third `minus` 128) * 64 +
+            (fourth `minus` 128))) :: remaining)
+    _ ⇒ Nothing
+  else Nothing
+
+export
+decode_html_fragment : Text → Either Text Text
+decode_html_fragment encoded =
+  if length (unpack encoded) > 2048 then Left "Fragment exceeds the navigation limit"
+  else case fragment_octets (unpack encoded) >>= strict_fragment_characters of
+    Nothing ⇒ Left "Fragment contains malformed percent encoding or UTF-8"
+    Just characters ⇒ Right (pack characters)
+
+fragment_tail : List Char → Maybe Text
+fragment_tail [] = Nothing
+fragment_tail ('#' :: rest) = Just (pack rest)
+fragment_tail (_ :: rest) = fragment_tail rest
+
+export
+requested_html_fragment : Text → Either Text (Maybe Text)
+requested_html_fragment address = case fragment_tail (unpack address) of
+  Nothing ⇒ Right Nothing
+  Just encoded ⇒ map Just (decode_html_fragment encoded)
+
+first_named_anchor : Bool → Text → List InformationAnchor → Maybe InformationAnchor
+first_named_anchor identifier wanted [] = Nothing
+first_named_anchor identifier wanted (anchor :: rest) =
+  if anchor.identifier_attribute ≟ identifier && anchor.anchor_name ≟ wanted
+    then Just anchor else first_named_anchor identifier wanted rest
+
+textual_item : InformationItem → Maybe Text
+textual_item (IB.Information.Heading text) = Just text
+textual_item (IB.Information.HeadingAt _ text) = Just text
+textual_item (IB.Information.TextBlock text) = Just text
+textual_item (IB.Information.Link text _) = Just text
+textual_item (IB.Information.FigureCaption text) = Just ("Figure caption: " ++ text)
+textual_item _ = Nothing
+
+item_at : Number → List InformationItem → Maybe InformationItem
+item_at _ [] = Nothing
+item_at 0 (item :: _) = Just item
+item_at (S later) (_ :: rest) = item_at later rest
+
+-- Mapping the prefix through the maintained semantic owner preserves its
+-- image/caption folding and block positions. It creates no parallel parser.
+-- Nontextual or absent targets refuse instead of inventing a source point.
+export
+html_fragment_source_point : HtmlPrepaintResult → Text → Either Text (Number, Number)
+html_fragment_source_point result label = do
+  let evidence = result.evidence
+  let (view, anchors) = information_anchors_from_log evidence.requested_url evidence.resolved_url result.recovered
+  if length anchors > 8192 then Left "Fragment anchor budget exceeded" else Right ()
+  let found = case first_named_anchor True label anchors of
+        Just anchor ⇒ Just anchor
+        Nothing ⇒ first_named_anchor False label anchors
+  anchor ← case found of
+    Nothing ⇒ Left "Fragment target is absent from the static document"
+    Just anchor ⇒ Right anchor
+  if not anchor.supported_position then Left "Fragment target requires an unsupported static position" else Right ()
+  let items = view_items view
+  item ← case item_at anchor.item_position items of
+    Nothing ⇒ Left "Fragment target has no retained text"
+    Just value ⇒ Right value
+  text ← case textual_item item of
+    Nothing ⇒ Left "Fragment target has no selectable static text"
+    Just value ⇒ Right value
+  if text ≟ "" || anchor.within_item > length (unpack text)
+    then Left "Fragment target exceeds its decoded text" else Right ()
+  block ← case html_item_block_position result anchor.item_position of
+    Nothing ⇒ Left "Fragment item has no retained block occurrence"
+    Just position ⇒ Right position
+  Right (block, anchor.within_item)
+
+utf16_units : Char → Number
+utf16_units character = if ord character > 65535 then 2 else 1
+
+text_units : Text → Number
+text_units text = sum (map utf16_units (unpack text))
+
+line_display_point : Text → Number → Number → List SourceLine → Maybe Number
+line_display_point original wanted displayed [] = Nothing
+line_display_point original wanted displayed (line :: rest) =
+  if wanted < line.first_codepoint then Nothing
+  else if wanted < line.after_last_codepoint || (wanted ≟ line.after_last_codepoint && null rest)
+    then let prefix = take (wanted `minus` line.first_codepoint)
+                (drop line.first_codepoint (unpack original))
+             visible_prefix = filter (not . hidden_character) prefix
+             advance = sum (map utf16_units visible_prefix) in
+         Just (displayed + min advance (text_units line.visible_text))
+    else line_display_point original wanted (displayed + S (text_units line.visible_text)) rest
+
+block_display_point : Number → Number → Number → List BlockReflow → Maybe Number
+block_display_point wanted point displayed [] = Nothing
+block_display_point wanted point displayed (block :: rest) =
+  case block.decoded_text of
+    Nothing ⇒ block_display_point wanted point displayed rest
+    Just "" ⇒ block_display_point wanted point displayed rest
+    Just text ⇒ if block.block_position ≟ wanted
+      then line_display_point text point displayed block.text_lines
+      else let size = sum (map (\line ⇒ S (text_units line.visible_text)) block.text_lines) in
+        block_display_point wanted point (displayed + S size) rest
+
+export
+html_fragment_display_offset : HtmlPrepaintLayout → Text → Either Text Int32
+html_fragment_display_offset document label =
+  case html_fragment_source_point document.source_result label of
+    Left reason ⇒ if reason ≟ "Fragment target is absent from the static document" && toLower label ≟ "top"
+      then Right 0 else Left reason
+    Right (block, point) ⇒ case block_display_point block point 0 document.revision_layout.block_plans of
+      Nothing ⇒ Left "Fragment target has no faithful display coordinate"
+      Just position ⇒ if position > 4194304 then Left "Fragment display coordinate exceeds the view limit"
+        else Right (cast position)
