@@ -1,40 +1,30 @@
-# Exact native APK candidate delivery
+# Publish the source-bound 966a native reader candidate
 
-This publishes the exact signed APK from independently exercised IB source
-a7349efc8041b4c41ff158afca7f13079c8df1c2, original run41294413498. It does not
-rebuild, repackage, resign, install, merge or create a release. The candidate
-passes both API29/API34 main reader/navigation profiles and actual checked
-query controls; real ChordReader/Google results and all physical TAB_P10
-acceptance remain unqualified.
+The user authorizes a directly installable APK candidate and reviewable PRs.
+The fixed delivery branch remains delivery/ib-reader-a7349efc; that historical
+branch name does not select or rebuild the old application source.
 
-The existing frozen CI archive is verified by exact length/SHA-256 and both
-source-commit receipts. Android build-tools35.0.0 independently reverify the
-finished package/version/minimum/target API and unchanged public test signer.
-DEX and all three native ELF payloads must match the build inputs byte for byte;
-the APK SHA-256 must match the original source-bound receipt. A plain TSV
-records artifact origin, package identity, packaged ABIs and scoped acceptance.
-Multi-ABI packaging is never a physical ABI observation.
+This publisher now consumes only IB966a producer artifact13088228711,
+837240680 bytes, SHA-256
+8de69e0bbf2e4a443cf5bc4a5f7296e25ea8f2a7a56bc298035947182f5f4de1,
+run41315891303. It checks both source receipts, compiler/frontend pins,
+package/version/minimum/target API, the unchanged signer, and exact byte
+identity of both DEX files and all three native ELF payloads. The APK is
+copied from that existing archive; there is no build, resigning, installation
+or release stage here.
 
-Grease owns this artifact/OS work; no browser semantics or new small-program
-fallback is introduced. The typed boundary is VerifiedExistingAPK + immutable
-source receipts to ReviewableCandidateBytes + scoped receipt. The declared
-Cat Food runtime supplies Grease. JSON is used only for the external GitHub
-Git-data API, with fixed paths and validated hashes; credentials never become
-public data or shell syntax.
+The new path candidates/ib-reader-966a613a.apk preserves the old A734
+candidate. The receipt includes APK length/hash and DEX/ELF hashes. Branch
+publication remains a fixed-target leased fast-forward; unrelated source,
+application or release refs are not writable through this script.
 
-The fixed delivery/ib-reader-a7349efc branch is the only publication target.
-It is checked against the expected exact CI head, then updated by a non-forced
-fast-forward to a direct child. A concurrent change refuses publication. The
-active implementation branch, default branch, releases, signing identity and
-application data cannot be changed by this path. The new commit retains the
-APK and receipt under candidates/ so the exact APK can have a durable direct
-download URL for review. Existing application compatibility on TAB_P10 remains
-BLOCKED until fresh Cat Food/installed-signer/ABI/SDK/storage observations exist.
-No installation instruction bypasses those checks.
+At authoring the current source's main installed producer passed both
+Android APIs, including checked journal recovery and update without
+uninstall. Independent current APK legacy/TLS/ChordReader replays and
+Google results/click remain pending. Physical TAB_P10 inventory, update and
+runtime acceptance remain BLOCKED. Package signing is unchanged and no
+user/device data is altered. This is a review candidate, not a release.
 
-The first publication attempt41299060008 refused before any Git write because
-the observer expected the older sdkVersion label. Independent captured
-badging from that exact signed APK reports minSdkVersion:'29' and
-targetSdkVersion:'36'. The guard now checks the actual label while keeping
-both exact required values; signer, package and byte checks are unchanged.
-No candidate or packaging change was needed for this observer repair.
+The source snapshot in this delivery branch is historical context. The
+published artifact's authoritative application source is the exact frozen
+IB966a receipt, not this publisher's checkout.

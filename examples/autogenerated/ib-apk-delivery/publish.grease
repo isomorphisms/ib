@@ -20,13 +20,15 @@ var authorization = ENV.GH_TOKEN
 var archive = "$evidence/source-bound-candidate.zip"
 curl --fail --location --silent --show-error --max-time 300 \
   --header "Authorization: Bearer $authorization" \
-  https://api.github.com/repos/isomorphisms/ib/actions/artifacts/13079411952/zip --output "$archive"
-test "$(wc -c < "$archive")" = 823903202
-printf '35422ddc46f92292d28917cf57386f86a17f7fbc2e72a844eede5da7f0dac6d2  %s\n' "$archive" | sha256sum -c -
+  https://api.github.com/repos/isomorphisms/ib/actions/artifacts/13088228711/zip --output "$archive"
+test "$(wc -c < "$archive")" = 837240680
+printf '8de69e0bbf2e4a443cf5bc4a5f7296e25ea8f2a7a56bc298035947182f5f4de1  %s\n' "$archive" | sha256sum -c -
 unzip -q "$archive" -d "$evidence/input"
 var input = "$evidence/input"
-test "$(cat "$input/ib-commit.txt")" = a7349efc8041b4c41ff158afca7f13079c8df1c2
-test "$(cat "$input/native-client/ib-commit.txt")" = a7349efc8041b4c41ff158afca7f13079c8df1c2
+test "$(cat "$input/ib-commit.txt")" = 966a613a79b2a5800c209298800678bd984d4966
+test "$(cat "$input/native-client/ib-commit.txt")" = 966a613a79b2a5800c209298800678bd984d4966
+test "$(cat "$input/backend-commit.txt")" = 0f69ef2019164710b66f5c323fdd3e815d6578ef
+test "$(cat "$input/frontend-commit.txt")" = 740bbf2b1d9e811fd00c719c3473eede17ceea3b
 var apk = "$input/native-client/ib-native-boundary.apk"
 var tools = "$sdk/build-tools/35.0.0"
 "$tools/apksigner" verify --verbose --print-certs "$apk" > "$evidence/signature.txt" 2>&1
@@ -49,8 +51,17 @@ var digest = $(sha256sum "$apk" | cut -d ' ' -f 1)
 var original_digest = $(awk '$2~/\/ib-native-boundary[.]apk$/ {print $1}' "$input/native-client/sha256.txt")
 if (digest !== original_digest) { echo 'FAIL candidate APK differs from the source-bound build receipt' >&2; exit 1 }
 var size = $(wc -c < "$apk")
-var receipt = "$evidence/ib-reader-a7349efc.receipt.tsv"
-printf 'schema\tib-reviewable-apk-candidate-v1\nsource\ta7349efc8041b4c41ff158afca7f13079c8df1c2\nsource_run\t41294413498\nsource_artifact\t13079411952\nsource_archive_sha256\t35422ddc46f92292d28917cf57386f86a17f7fbc2e72a844eede5da7f0dac6d2\npackage\torg.isomorphisms.ib.prepaint\nversion_code\t3\nversion_name\t0.3.0\nminimum_API\t29\ntarget_API\t36\npackaged_ABIs\tx86_64,armeabi-v7a,arm64-v8a\nsigner_sha256\tde9b1d47c5a65e6d46a204b79dd9ee566b9d3c9832ba81ebc4213d3392e92ff9\nAPK_byte_count\t%s\nAPK_sha256\t%s\nmain_reader_API29_API34\tPASS\nactual_ChordReader_SEARCH\tNOT_RUN\nGoogle_results_and_clicked_result\tNOT_RUN\nphysical_TAB_P10\tBLOCKED\nphysical_signer_ABI_SDK_inventory\tNOT_RUN\nrelease_decision\tINSUFFICIENT\n' "$size" "$digest" > "$receipt"
+var receipt = "$evidence/ib-reader-966a613a.receipt.tsv"
+printf 'schema\tib-reviewable-apk-candidate-v1\nsource\t966a613a79b2a5800c209298800678bd984d4966\nsource_run\t41315891303\nsource_artifact\t13088228711\nsource_archive_sha256\t8de69e0bbf2e4a443cf5bc4a5f7296e25ea8f2a7a56bc298035947182f5f4de1\npackage\torg.isomorphisms.ib.prepaint\nversion_code\t3\nversion_name\t0.3.0\nminimum_API\t29\ntarget_API\t36\npackaged_ABIs\tx86_64,armeabi-v7a,arm64-v8a\nsigner_sha256\tde9b1d47c5a65e6d46a204b79dd9ee566b9d3c9832ba81ebc4213d3392e92ff9\nAPK_byte_count\t%s\nAPK_sha256\t%s\nmain_reader_API29_API34\tPASS\nactual_ChordReader_SEARCH\tNOT_RUN\nGoogle_results_and_clicked_result\tNOT_RUN\nphysical_TAB_P10\tBLOCKED\nphysical_signer_ABI_SDK_inventory\tNOT_RUN\nrelease_decision\tINSUFFICIENT\n' "$size" "$digest" > "$receipt"
+printf 'compiler_source\t0f69ef2019164710b66f5c323fdd3e815d6578ef\nfrontend_source\t740bbf2b1d9e811fd00c719c3473eede17ceea3b\n' >> "$receipt"
+var activity_digest = $(sha256sum "$evidence/classes.dex" | cut -d ' ' -f 1)
+var platform_digest = $(sha256sum "$evidence/classes2.dex" | cut -d ' ' -f 1)
+printf 'Activity_DEX_sha256\t%s\nplatform_DEX_sha256\t%s\n' "$activity_digest" "$platform_digest" >> "$receipt"
+for abi in x86_64 armeabi-v7a arm64-v8a {
+  var elf_digest = $(sha256sum "$evidence/$abi.so" | cut -d ' ' -f 1)
+  printf 'native_ELF_%s_sha256\t%s\n' "$abi" "$elf_digest" >> "$receipt"
+}
+printf 'checksummed_history_recovery_API29_API34\tPASS\nemulator_replacement_install\tPASS\nindependent_new_APK_SEARCH_and_legacy_replay\tNOT_RUN\nreal_untrusted_certificate_negative\tNOT_RUN\nphysical_replacement_install\tBLOCKED\n' >> "$receipt"
 # The GitHub API requires JSON. Fixed paths and validated hashes only are
 # inserted into these bodies; credentials and source contents never become
 # shell syntax or public receipt fields.
@@ -66,7 +77,7 @@ for hash in "$apk_blob" "$receipt_blob" "$base_tree" {
   printf '%s\n' "$hash" > "$evidence/API-hash"
   rg -x '[0-9a-f]{40}' "$evidence/API-hash"
 }
-printf '{"base_tree":"%s","tree":[{"path":"candidates/ib-reader-a7349efc.apk","mode":"100644","type":"blob","sha":"%s"},{"path":"candidates/ib-reader-a7349efc.receipt.tsv","mode":"100644","type":"blob","sha":"%s"}]}\n' \
+printf '{"base_tree":"%s","tree":[{"path":"candidates/ib-reader-966a613a.apk","mode":"100644","type":"blob","sha":"%s"},{"path":"candidates/ib-reader-966a613a.receipt.tsv","mode":"100644","type":"blob","sha":"%s"}]}\n' \
   "$base_tree" "$apk_blob" "$receipt_blob" > "$evidence/tree.json"
 var tree = $(gh api --method POST repos/isomorphisms/ib/git/trees --input "$evidence/tree.json" --jq .sha)
 printf '%s\n' "$tree" > "$evidence/tree-sha"
@@ -85,7 +96,7 @@ gh api --method PATCH "repos/isomorphisms/ib/git/refs/heads/$branch" \
   --raw-field "sha=$published" --field force=false --jq .object.sha > "$evidence/updated-head"
 var updated = $(cat "$evidence/updated-head")
 if (updated !== published) { echo 'FAIL unexpected delivery reference result' >&2; exit 1 }
-printf 'https://raw.githubusercontent.com/isomorphisms/ib/%s/candidates/ib-reader-a7349efc.apk\n' "$published" > "$evidence/direct-APK-URL.txt"
+printf 'https://raw.githubusercontent.com/isomorphisms/ib/%s/candidates/ib-reader-966a613a.apk\n' "$published" > "$evidence/direct-APK-URL.txt"
 cat "$receipt"
 printf 'candidate_commit\t%s\n' "$published"
 cat "$evidence/direct-APK-URL.txt"

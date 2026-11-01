@@ -73,7 +73,7 @@ jobs:
           path: |
             ${{ runner.temp }}/ib-direct-APK/signature.txt
             ${{ runner.temp }}/ib-direct-APK/badging.txt
-            ${{ runner.temp }}/ib-direct-APK/ib-reader-a7349efc.receipt.tsv
+            ${{ runner.temp }}/ib-direct-APK/ib-reader-966a613a.receipt.tsv
             ${{ runner.temp }}/ib-direct-APK/published-sha
             ${{ runner.temp }}/ib-direct-APK/direct-APK-URL.txt
           if-no-files-found: warn
