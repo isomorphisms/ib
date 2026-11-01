@@ -83,3 +83,30 @@ the full installed test remains required on both APIs at the changed head.
 The replay checkpoint completed with separately retrievable host ICK pieces
 and Grease's generated modules. New reconstruction tests for the uncommitted
 browser history are independent work and do not qualify the reader here.
+
+## Actual acquisition at 81b5c47
+
+Run 41271152056 again passed source/native packaging and the real installed
+permission/identity/death controls. Both APIs now execute the maintained worker
+through authorized Shizuku, launch the checked ICU process, and finish Grease
+with exit zero. The app-side ingress observes EOF after 873 bytes with matching
+navigation generations. Private worker stderr is empty. The actual Arena
+publication returns -1; no committed reader source or fetched native document
+is accepted. Response fields/body digests have not yet been independently
+recovered, so no HTTP status or successful source admission is inferred.
+
+Compact artifact 13069893303 is 1,769,991 bytes with SHA-256
+`57edd7743b3325e5bf90dc927cbb3f9a2bc9f41e90e6b63bbe8e422bd13e9d46`.
+The canonical publisher now emits numeric refusal stages on Android: 1–15
+identify envelope/metadata/response validation; 20–32 identify private storage,
+request locking, canonical append/commit, independent reopen/readback and receipt
+publication. No source text, URL, authorization token or response value enters
+those logs. All refusal conditions remain unchanged. Fresh host canonical
+append, redirect-chain, independent readback and retained-generation mutation
+checks passed with this diagnostic change. Android execution remains required
+to localize the observed failure.
+
+Checked browser history is now published at f7daf125d44e9d53280dec4305125fc14c49318c,
+with fresh host fault/DEX checks and independent ai-ci 9ab044b92417f7ffd3eea54edb65367526e1503a
+observers. Its new Android/UI acceptance remains pending. The campaign remains
+INCOMPLETE; physical TAB_P10 acceptance remains BLOCKED.

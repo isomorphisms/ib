@@ -16,6 +16,18 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
+#ifdef __ANDROID__
+#include <android/log.h>
+#endif
+
+static int refused_stage(unsigned stage) {
+#ifdef __ANDROID__
+    __android_log_print(ANDROID_LOG_INFO, "IBReader", "Arena response refusal stage=%u errno=%d", stage, errno);
+#else
+    (void)stage;
+#endif
+    return -1;
+}
 
 /* A bounded capture (8192 metadata bytes) plus requested URL and durable
  * provenance fields can require more space than the capture metadata alone. */
@@ -130,18 +142,18 @@ static int frame_response(const unsigned char *frame, size_t length,
     };
     if (length < IB_INGRESS_FRAME_HEADER_BYTES ||
         memcmp(frame, "IBICU01 ", 8U) != 0 || frame[16] != ' ' ||
-        frame[25] != '\n') return -1;
+        frame[25] != '\n') return refused_stage(1);
     size_t metadata_length = 0, source_length = 0;
     for (size_t i = 0; i < 8U; ++i) {
         unsigned char m = frame[8U + i], b = frame[17U + i];
-        if (m < '0' || m > '9' || b < '0' || b > '9') return -1;
+        if (m < '0' || m > '9' || b < '0' || b > '9') return refused_stage(2);
         metadata_length = metadata_length * 10U + (m - '0');
         source_length = source_length * 10U + (b - '0');
     }
     if (!metadata_length || metadata_length > IB_INGRESS_METADATA_MAX_BYTES ||
         !source_length || source_length > IB_READER_SOURCE_MAX_BYTES ||
         length != IB_INGRESS_FRAME_HEADER_BYTES + metadata_length + source_length)
-        return -1;
+        return refused_stage(3);
     char metadata[IB_INGRESS_METADATA_MAX_BYTES + 1U];
     memcpy(metadata, frame + IB_INGRESS_FRAME_HEADER_BYTES, metadata_length);
     metadata[metadata_length] = '\0';
@@ -149,46 +161,46 @@ static int frame_response(const unsigned char *frame, size_t length,
     char *position = metadata, *end = metadata + metadata_length;
     while (position < end) {
         char *newline = memchr(position, '\n', (size_t)(end - position));
-        if (!newline) return -1;
+        if (!newline) return refused_stage(4);
         char *tab = memchr(position, '\t', (size_t)(newline - position));
-        if (!tab || tab == position || tab + 1 == newline) return -1;
+        if (!tab || tab == position || tab + 1 == newline) return refused_stage(5);
         for (char *p = position; p < newline; ++p)
             if (p != tab && ((unsigned char)*p < 32U || (unsigned char)*p > 126U))
-                return -1;
+                return refused_stage(6);
         *tab = '\0'; *newline = '\0';
         size_t key = 0;
         while (key < 11U && strcmp(position, names[key]) != 0) ++key;
-        if (key == 11U || fields[key]) return -1;
+        if (key == 11U || fields[key]) return refused_stage(7);
         fields[key] = tab + 1;
         position = newline + 1;
     }
-    for (size_t i = 0; i < 8U; ++i) if (!fields[i]) return -1;
+    for (size_t i = 0; i < 8U; ++i) if (!fields[i]) return refused_stage(8);
     /* Accept the original eight-field capture or ICU's complete ten-field
      * full-response capture. Extensions arrive as a pair, not arbitrary
      * ignored metadata. Range responses cannot enter this whole-page path. */
-    if ((fields[8] == NULL) != (fields[9] == NULL)) return -1;
+    if ((fields[8] == NULL) != (fields[9] == NULL)) return refused_stage(9);
     if (fields[8] &&
         (strcmp(fields[8], "absent") != 0 ||
          (strcmp(fields[9], "identity") != 0 &&
-          strcmp(fields[9], "chunked") != 0))) return -1;
+          strcmp(fields[9], "chunked") != 0))) return refused_stage(10);
     uint64_t status, received, redirects, declared = 0;
     if (decimal(fields[0], &status) != 0 || status < 200U || status > 299U ||
         decimal(fields[4], &received) != 0 || received != source_length ||
         decimal(fields[7], &redirects) != 0 || redirects > 8U ||
         (strcmp(fields[3], "-1") != 0 &&
          (decimal(fields[3], &declared) != 0 || declared != source_length)))
-        return -1;
+        return refused_stage(11);
     if (copied(response->resolved_url, sizeof(response->resolved_url), fields[6]) != 0 ||
         !ib_observed_url(fields[6], strlen(fields[6])) ||
         copied(response->content_encoding, sizeof(response->content_encoding), fields[2]) != 0 ||
         media_type(response, fields[1]) != 0)
-        return -1;
+        return refused_stage(12);
     if (strcmp(fields[5], "valid") != 0 && strcmp(fields[5], "invalid") != 0)
-        return -1;
+        return refused_stage(13);
     *body = frame + IB_INGRESS_FRAME_HEADER_BYTES + metadata_length;
     *body_bytes = source_length;
     response->utf8_valid = valid_utf8(*body, source_length);
-    if (response->utf8_valid != (strcmp(fields[5], "valid") == 0)) return -1;
+    if (response->utf8_valid != (strcmp(fields[5], "valid") == 0)) return refused_stage(14);
     response->status = (unsigned)status;
     response->received_length = received;
     response->declared_length = strcmp(fields[3], "-1") == 0 ? -1 : (int64_t)declared;
@@ -198,7 +210,7 @@ static int frame_response(const unsigned char *frame, size_t length,
             !ib_redirect_chain_valid(fields[10], requested_url,
                                      response->resolved_url, (unsigned)redirects) ||
             copied(response->redirect_chain, sizeof(response->redirect_chain), fields[10]) != 0)
-            return -1;
+            return refused_stage(15);
         response->has_redirect_chain = 1;
     }
     /* Legacy capture retains its old direct-response admission. New
@@ -378,6 +390,7 @@ static int publish_response(void *opaque, const char *request_id,
     if (memcmp(sha256_hex, computed, 65U) != 0) return -1;
 
     int root = -1, locks = -1, receipts = -1, result = -1;
+    unsigned stage = 20;
     int arena_is_open = 0;
     char arena_path[IB_INGRESS_ARENA_ROOT_CAP + 24U];
     appendfat_arena canonical = {0};
@@ -389,6 +402,7 @@ static int publish_response(void *opaque, const char *request_id,
     root = open(publisher->private_root,
                 O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
     if (!owned_directory(root)) goto done;
+    stage = 21;
     locks = openat(root, "locks",
                    O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
     receipts = openat(root, "receipts",
@@ -401,29 +415,38 @@ static int publish_response(void *opaque, const char *request_id,
 
     /* Bind request identity before changing the canonical commit pointer.
      * Lock remains after failure for audit and prevents retries with same ID. */
+    stage = 22;
     if (mkdirat(locks, request_id, 0700) != 0) goto done;
+    stage = 23;
     if (appendfat_arena_open(&canonical, arena_path, 1) != 0) goto done;
     arena_is_open = 1;
     uint64_t old_used = appendfat_arena_committed(&canonical);
+    stage = 24;
     if (old_used > appendfat_arena_capacity(&canonical) ||
         byte_count > appendfat_arena_capacity(&canonical) - old_used)
         goto done;
+    stage = 25;
     if (appendfat_arena_append(&canonical, exact_bytes, byte_count) != 0) {
         appendfat_arena_discard_uncommitted(&canonical);
         goto done;
     }
+    stage = 26;
     if (appendfat_arena_commit(&canonical) != 0) goto done;
+    stage = 27;
     if (appendfat_arena_committed(&canonical) - old_used != byte_count)
         goto done;
     appendfat_arena_close(&canonical);
     arena_is_open = 0;
 
+    stage = 28;
     if (appendfat_arena_open(&canonical, arena_path, 0) != 0) goto done;
     arena_is_open = 1;
+    stage = 29;
     if (appendfat_arena_committed(&canonical) <
         old_used + (uint64_t)byte_count) goto done;
     size_t read_back = 0;
     unsigned char block[READBACK_CHUNK];
+    stage = 30;
     while (read_back < byte_count) {
         size_t max = byte_count - read_back, amount = 0;
         if (max > sizeof(block)) max = sizeof(block);
@@ -437,13 +460,16 @@ static int publish_response(void *opaque, const char *request_id,
     }
     appendfat_arena_close(&canonical);
     arena_is_open = 0;
+    stage = 31;
     if (fstat(receipts, &info) != 0 || !S_ISDIR(info.st_mode))
         goto done;
+    stage = 32;
     if (receipt_publish(receipts, request_id, requested_url,
                         old_used, byte_count, computed, generation, response) != 0)
         goto done;
     result = 0;
 done:
+    if (result != 0) (void)refused_stage(stage);
     if (arena_is_open) appendfat_arena_close(&canonical);
     if (receipts >= 0) close(receipts);
     if (locks >= 0) close(locks);
