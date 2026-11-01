@@ -358,7 +358,8 @@ reader_acquisition_ready activity observations html source_id generation planned
   current_history ← if kind ≟ 0 then primIO retained_history_text else pure planned_history
   let width = metric_width metric
   let manner = if selected ≟ "Reflow: Squared" then evenly else promptly
-  let prepared = if width <= 0 then Left "Native viewport is not measured yet"
+  let prepared : Either Text (HtmlPrepaintLayout, BrowserHistory, SelectionProjection, Int32) =
+        if width <= 0 then Left "Native viewport is not measured yet"
         else do
           evidence ← read_committed_evidence observations
           case search_response_refusal evidence of
