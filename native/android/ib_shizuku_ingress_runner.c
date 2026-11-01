@@ -1,5 +1,6 @@
 #define _POSIX_C_SOURCE 200809L
 #include "ib_shizuku_ingress_runner.h"
+#include <android/log.h>
 
 #if defined(__ANDROID__) && __ANDROID_API__ >= 29
 #include "ib_shizuku_ingress_binder.h"
@@ -120,8 +121,10 @@ int ib_shizuku_ingress_run_icu(JNIEnv *environment, jobject private_ingress,
     int write_fd = -1;
     if (ib_shizuku_ingress_begin_remote(
             environment, private_ingress, request_id, navigation_generation,
-            authorized_url, &write_fd) != 0 || write_fd < 0)
+            authorized_url, &write_fd) != 0 || write_fd < 0) {
+        __android_log_print(ANDROID_LOG_WARN, "IBReader", "private acquisition BEGIN refused");
         return -1;
+    }
 
     int result = 127;
     struct stat directory;
@@ -140,6 +143,7 @@ int ib_shizuku_ingress_run_icu(JNIEnv *environment, jobject private_ingress,
     close(write_fd);
     int published = ib_shizuku_ingress_finish_remote(
         environment, private_ingress, request_id, navigation_generation, result);
+    __android_log_print(ANDROID_LOG_INFO, "IBReader", "Grease supervisor exit=%d publication=%d", result, published);
     return result == 0 && published == 0 ? 0 : -1;
 }
 #endif

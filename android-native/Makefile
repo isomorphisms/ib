@@ -45,7 +45,7 @@ $(READER_BUILD)/appendfat_arena.s: $(APPENDFAT)/lib/appendfat_arena.c FORCE | re
 	"$(ICK_COMPILER)" $(ICK_EXTRA_FLAGS) $(READER_FLAGS) -S "$<" -o "$@"
 
 $(READER_OUTPUT): $(READER_OBJECTS)
-	"$(READER_NDK_CC)" $(TARGET_FLAGS) -shared -Wl,--no-undefined -Wl,-z,max-page-size=16384 -Wl,-z,relro -Wl,-z,now -Wl,-z,noexecstack $(READER_OBJECTS) -landroid -lbinder_ndk -lm $(READER_EXTRA_LIBS_$(ABI)) -o "$@"
+	"$(READER_NDK_CC)" $(TARGET_FLAGS) -shared -Wl,--no-undefined -Wl,-z,max-page-size=16384 -Wl,-z,relro -Wl,-z,now -Wl,-z,noexecstack $(READER_OBJECTS) -landroid -lbinder_ndk -llog -lm $(READER_EXTRA_LIBS_$(ABI)) -o "$@"
 
 reader-receipt: $(READER_OUTPUT)
 	"$(NDK_READELF)" -h -r -l -d "$(READER_OUTPUT)" > "$(READER_BUILD)/elf.txt"

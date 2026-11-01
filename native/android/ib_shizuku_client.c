@@ -3,6 +3,7 @@
 #include "ib_shizuku_client.h"
 #include "ib_binder_flags.h"
 #include "ib_shizuku_worker.h"
+#include <android/log.h>
 
 #include <errno.h>
 #include <pthread.h>
@@ -799,6 +800,7 @@ static int user_service_rpc(JNIEnv *e, jobject server, jint code, jobject connec
     jmethodID read = method(e, "android/os/Parcel", "readInt", "()I");
     jint result = ok && read ? (*e)->CallIntMethod(e, reply, read) : -1;
     ok = ok && read && result == 0 && !(*e)->ExceptionCheck(e) && parcel_consumed(e, reply);
+    __android_log_print(ANDROID_LOG_INFO, "IBReader", "user-service RPC code=%d result=%d accepted=%d", code, result, ok);
     recycle(e, data, reply);
     return ok;
 }
@@ -855,6 +857,7 @@ Java_org_isomorphisms_ib_ShizukuWorkerConnection_onTransact(JNIEnv *e, jobject s
         pthread_mutex_unlock(&worker_connection.mutex);
     }
     if (global) (*e)->DeleteGlobalRef(e, global);
+    __android_log_print(ANDROID_LOG_INFO, "IBReader", "worker connection callback code=%d flags=%d uid=%d current=%d bytes=%d accepted=%d", code, flags, uid, current, bytes, ok);
     if ((*e)->ExceptionCheck(e)) (*e)->ExceptionClear(e);
     (*e)->PopLocalFrame(e, NULL);
     return ok ? JNI_TRUE : JNI_FALSE;
@@ -885,6 +888,7 @@ int ib_shizuku_worker_acquire(JNIEnv *e, jobject context, jobject ingress,
     worker_connection.dead = 0;
     pthread_mutex_unlock(&worker_connection.mutex);
     int registered = ok && user_service_rpc(e, server, 12, connection, options);
+    __android_log_print(ANDROID_LOG_INFO, "IBReader", "worker registration accepted=%d", registered);
     ok = registered;
     jobject service = NULL;
     if (ok) {
@@ -908,6 +912,7 @@ int ib_shizuku_worker_acquire(JNIEnv *e, jobject context, jobject ingress,
     jmethodID describe = method(e, "android/os/IBinder", "getInterfaceDescriptor", "()Ljava/lang/String;");
     jstring actual = ok && describe ? (*e)->CallObjectMethod(e, service, describe) : NULL;
     ok = ok && text_equals(e, actual, WORKER_DESCRIPTOR);
+    __android_log_print(ANDROID_LOG_INFO, "IBReader", "worker connection received=%d authenticated=%d", service != NULL, ok);
     jobject data = ok ? parcel(e) : NULL, reply = ok ? parcel(e) : NULL;
     jmethodID binder = method(e, "android/os/Parcel", "writeStrongBinder", "(Landroid/os/IBinder;)V");
     jmethodID name = method(e, "android/os/Parcel", "writeString", "(Ljava/lang/String;)V");
@@ -920,8 +925,10 @@ int ib_shizuku_worker_acquire(JNIEnv *e, jobject context, jobject ingress,
     jmethodID send = method(e, "android/os/IBinder", "transact", "(ILandroid/os/Parcel;Landroid/os/Parcel;I)Z");
     if (ok && !(*e)->ExceptionCheck(e)) ok = send && (*e)->CallBooleanMethod(e, service, send, 2, data, reply, 0);
     jmethodID read = method(e, "android/os/Parcel", "readInt", "()I");
-    ok = ok && read && !(*e)->ExceptionCheck(e) && (*e)->CallIntMethod(e, reply, read) == 0 &&
+    jint worker_result = ok && read && !(*e)->ExceptionCheck(e) ? (*e)->CallIntMethod(e, reply, read) : -1;
+    ok = ok && read && !(*e)->ExceptionCheck(e) && worker_result == 0 &&
         !(*e)->ExceptionCheck(e) && parcel_consumed(e, reply);
+    __android_log_print(ANDROID_LOG_INFO, "IBReader", "worker acquisition result=%d accepted=%d", worker_result, ok);
     recycle(e, data, reply);
     if ((*e)->ExceptionCheck(e)) (*e)->ExceptionClear(e);
     /* Detach the callback on every outcome. A late connection is permanently
@@ -934,7 +941,8 @@ int ib_shizuku_worker_acquire(JNIEnv *e, jobject context, jobject ingress,
     pthread_mutex_unlock(&worker_connection.mutex);
     if (held) (*e)->DeleteGlobalRef(e, held);
     if (global) (*e)->DeleteGlobalRef(e, global);
-    if (registered) (void)user_service_rpc(e, server, 13, connection, options);
+    if (registered && bundle_boolean(e, options, "shizuku:user-service-remove", JNI_TRUE))
+        (void)user_service_rpc(e, server, 13, connection, options);
     if ((*e)->ExceptionCheck(e)) { (*e)->ExceptionClear(e); ok = 0; }
     (*e)->PopLocalFrame(e, NULL);
     pthread_mutex_unlock(&worker_request_mutex);

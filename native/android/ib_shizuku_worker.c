@@ -3,6 +3,7 @@
 #include "ib_binder_flags.h"
 #include "ib_shizuku_ingress_runner.h"
 #include "ib_reader_pfd.h"
+#include <android/log.h>
 
 #include <android/asset_manager.h>
 #include <android/asset_manager_jni.h>
@@ -175,7 +176,8 @@ Java_org_isomorphisms_ib_ShizukuWorker_initialize(JNIEnv *e, jobject self, jobje
     jstring descriptor = ok && attach ? (*e)->NewStringUTF(e, DESCRIPTOR) : NULL;
     if (descriptor) (*e)->CallVoidMethod(e, self, attach, NULL, descriptor);
     ok = ok && descriptor && !(*e)->ExceptionCheck(e);
-    if (ok) { worker.app_uid = (uid_t)owner; worker.ready = 1; }
+    if (ok) { worker.app_uid = (uid_t)owner; worker.ready = 1;
+        __android_log_print(ANDROID_LOG_INFO, "IBReader", "worker initialized uid=%d app_uid=%d", (int)getuid(), owner); }
     else {
         cleanup();
         if (!(*e)->ExceptionCheck(e)) {
@@ -197,8 +199,22 @@ Java_org_isomorphisms_ib_ShizukuWorker_onTransact(JNIEnv *e, jobject self, jint 
                                                  jobject data, jobject reply, jint flags) {
     if ((*e)->PushLocalFrame(e, 64) != 0) return JNI_FALSE;
     uid_t caller = (uid_t)AIBinder_getCallingUid();
-    if (code == 16777115 && ib_binder_synchronous(flags) && worker.ready &&
+    if (code == 16777115 && ib_binder_oneway(flags) && worker.ready && data &&
         (caller == worker.app_uid || caller == 2000 || caller == 0)) {
+        jmethodID size = method(e, "android/os/Parcel", "dataSize", "()I");
+        jmethodID fds = method(e, "android/os/Parcel", "hasFileDescriptors", "()Z");
+        jmethodID enforce = method(e, "android/os/Parcel", "enforceInterface", "(Ljava/lang/String;)V");
+        jmethodID available = method(e, "android/os/Parcel", "dataAvail", "()I");
+        jint bytes = size ? (*e)->CallIntMethod(e, data, size) : -1;
+        int valid = fds && enforce && available && bytes > 0 && bytes <= 256 &&
+            !(*e)->CallBooleanMethod(e, data, fds) && !(*e)->ExceptionCheck(e);
+        jstring token = valid ? (*e)->NewStringUTF(e, DESCRIPTOR) : NULL;
+        if (token) (*e)->CallVoidMethod(e, data, enforce, token);
+        valid = valid && token && !(*e)->ExceptionCheck(e) && (*e)->CallIntMethod(e, data, available) == 0;
+        if (!valid || (*e)->ExceptionCheck(e)) {
+            if ((*e)->ExceptionCheck(e)) (*e)->ExceptionClear(e);
+            (*e)->PopLocalFrame(e, NULL); return JNI_FALSE;
+        }
         /* Shizuku's documented non-daemon destruction boundary. Parent death
          * wakes the Grease group trap before this process can lose authority. */
         cleanup();
@@ -238,6 +254,7 @@ Java_org_isomorphisms_ib_ShizukuWorker_onTransact(JNIEnv *e, jobject self, jint 
     char actual[sizeof(INGRESSTYPE)] = {0};
     ok = ok && ascii(e, actual_text, actual, sizeof(actual)) && !strcmp(actual, INGRESSTYPE);
     int locked = ok && pthread_mutex_trylock(&worker.busy) == 0;
+    __android_log_print(ANDROID_LOG_INFO, "IBReader", "worker request code=%d flags=%d uid=%d bytes=%d admitted=%d", code, flags, (int)caller, bytes, locked);
     int result = -1;
     if (locked) {
         jmethodID link = method(e, "android/os/IBinder", "linkToDeath", "(Landroid/os/IBinder$DeathRecipient;I)V");

@@ -197,3 +197,15 @@ jobs:
           name: ib-tabp10-reader-${{ github.event.pull_request.head.sha || github.sha }}
           path: ${{ runner.temp }}/ib-reader
           if-no-files-found: warn
+      - name: Preserve compact installed diagnostics for direct inspection
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: ib-installed-diagnostics-${{ github.event.pull_request.head.sha || github.sha }}
+          path: |
+            ${{ runner.temp }}/ib-reader/installed-api*/*.logcat.txt
+            ${{ runner.temp }}/ib-reader/installed-api*/*.ui.xml
+            ${{ runner.temp }}/ib-reader/installed-api*/*.screen.png
+            ${{ runner.temp }}/ib-reader/installed-api*/*.txt
+            ${{ runner.temp }}/ib-reader/installed-api*/*receipt.tsv
+          if-no-files-found: ignore
