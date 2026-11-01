@@ -260,8 +260,8 @@ html_item_block_position result position =
   let items = view_items result.information in
   if position >= length items then Nothing
   else let (base, _) = link_base result.evidence.resolved_url result.recovered
-           (prefix, _, _) = map_items result.evidence base (take position items) in
-       Just (length prefix)
+           (preceding_blocks, _, _) = map_items result.evidence base (take position items) in
+       Just (length preceding_blocks)
 
 public export
 convert_admitted_html : HtmlEvidence → String → Either String HtmlPrepaintResult

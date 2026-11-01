@@ -105,7 +105,7 @@ item_at _ [] = Nothing
 item_at 0 (item :: _) = Just item
 item_at (S later) (_ :: rest) = item_at later rest
 
--- Mapping the prefix through the maintained semantic owner preserves its
+-- Mapping the preceding_characters through the maintained semantic owner preserves its
 -- image/caption folding and block positions. It creates no parallel parser.
 -- Nontextual or absent targets refuse instead of inventing a source point.
 export
@@ -146,9 +146,9 @@ line_display_point original wanted displayed [] = Nothing
 line_display_point original wanted displayed (line :: rest) =
   if wanted < line.first_codepoint then Nothing
   else if wanted < line.after_last_codepoint || (wanted ≟ line.after_last_codepoint && null rest)
-    then let prefix = take (wanted `minus` line.first_codepoint)
+    then let preceding_characters = take (wanted `minus` line.first_codepoint)
                 (drop line.first_codepoint (unpack original))
-             visible_prefix = filter (not . hidden_character) prefix
+             visible_prefix = filter (not . hidden_character) preceding_characters
              advance = sum (map utf16_units visible_prefix) in
          Just (displayed + min advance (text_units line.visible_text))
     else line_display_point original wanted (displayed + S (text_units line.visible_text)) rest

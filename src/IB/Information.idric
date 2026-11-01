@@ -488,8 +488,8 @@ collect_information (LocateInformationAnchor element label identifier :: rest) s
               CaptureCell _ ⇒ False
               CaptureForm _ ⇒ False
               _ ⇒ True)
-          prefix = clean_text (pack (reverse chars) ++ "x")
-          point = length (unpack prefix) `minus` 1
+          preceding_text = clean_text (pack (reverse chars) ++ "x")
+          point = length (unpack preceding_text) `minus` 1
           anchor = LocatedInformationAnchor label identifier (length items) point supported in
       collect_information rest skip capture chars row title items (anchor :: anchors)
 
