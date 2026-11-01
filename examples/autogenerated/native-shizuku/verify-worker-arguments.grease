@@ -1,0 +1,36 @@
+#!/usr/bin/env grease
+# Exercise the actual worker's pre-acquisition argument guards. Missing input
+# files deliberately stop it before any Android program or network call.
+set -eu -o pipefail
+if (len(ARGV) !== 3) { echo 'usage: grease verify-worker-arguments.grease IB GREASE NEW_EVIDENCE' >&2; exit 2 }
+var repository = ARGV[0]
+var grease = ARGV[1]
+var evidence = ARGV[2]
+for path in "$repository" "$grease" "$evidence" {
+  if (len(path) === 0 or path[0] !== '/') { exit 2 }
+}
+if test -e "$evidence" { echo 'FAIL reused worker argument evidence' >&2; exit 2 }
+mkdir -p "$evidence/capture"
+var worker = "$repository/bin/ib_android_icu_frame.grease"
+proc refuses(label, url, expected) {
+  test ! -e "$evidence/absent.dex"
+  test ! -e "$evidence/absent.so"
+  try {
+    "$grease" "$worker" "$url" "$evidence/absent.dex" "$evidence/absent.so" "$evidence/capture" \
+      > "$evidence/$label.stdout" 2> "$evidence/$label.stderr"
+  }
+  var status = _error.code
+  printf '%s\n' "$status" > "$evidence/$label.exit"
+  if (status !== int(expected)) { cat "$evidence/$label.stderr" >&2; echo 'FAIL actual worker argument guard exit' >&2; exit 1 }
+  test ! -s "$evidence/$label.stdout"
+  test ! -e "$evidence/capture/body"
+  test ! -e "$evidence/capture/metadata"
+}
+refuses https-recognized https://example.com/ 1
+refuses http-recognized http://example.com/ 1
+refuses unsupported-scheme ssh://example.com/ 2
+refuses missing-scheme example.com/path 2
+refuses empty-address '' 2
+sha256sum "$worker" "$grease" > "$evidence/sha256.txt"
+printf 'schema\tib-actual-worker-argument-guards-v1\nhost_prefix_and_input_guards\tPASS\nAndroid_worker_script\tNOT_RUN\nICU_acquisition\tNOT_RUN\nprivate_Binder\tNOT_RUN\nphysical_TAB_P10\tNOT_RUN\n' > "$evidence/receipt.tsv"
+cat "$evidence/receipt.tsv"

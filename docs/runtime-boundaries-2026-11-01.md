@@ -57,3 +57,29 @@ This does not qualify future changed reader code. Reconstructed browser history
 remains separate pending work; exact copy, links, non-UTF-8 admission, SEARCH and
 the remaining recovery/fault acceptance are still required. No merge, permanent
 release, signer change or device installation is performed by this checkpoint.
+
+## Next actual execution at 175fdbf
+
+The retried run 41268776178 completed source/ELF/package production, host
+transport flag checks and the compiled old-mask rejection. Both real installed
+lanes then authenticated the worker and admitted its private request, including
+API 34's flags 18. Private diagnostics now expose the actual pre-acquisition
+failure: the worker calls `url.startswith`, which does not exist on Grease's
+builtin `Str`. The interpreter exited 3; no ICU process or response frame was
+produced. The previous broken-pipe signal had concealed this stderr diagnostic.
+The stream logs show no source bytes and matching navigation generations.
+
+Compact diagnostic artifact 13069250436 has SHA-256
+`04279438c77ee0c6ee1e2bb97030373584ec02360f2de702cd2a35c0f86e7d60`.
+The maintained worker is corrected to `startsWith`, as defined by the pinned
+native Grease runtime. No interpreter, shell, acquisition client or transport
+policy is substituted. A new host guard test executes the actual script:
+HTTP/HTTPS reach deliberate missing-file refusal (1), while invalid schemes
+and empty addresses refuse before acquisition (2). A missing method (3) cannot
+pass these expectations. These guards passed on the restored exact host Grease
+runtime. They neither launch Android nor qualify ICU or the private pipeline;
+the full installed test remains required on both APIs at the changed head.
+
+The replay checkpoint completed with separately retrievable host ICK pieces
+and Grease's generated modules. New reconstruction tests for the uncommitted
+browser history are independent work and do not qualify the reader here.
