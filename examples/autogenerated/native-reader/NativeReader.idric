@@ -182,6 +182,32 @@ is_search_request intent = do
   empty ← primIO (raw_text_is_empty action)
   if empty /= 0 then pure False else pure (action ≟ "android.intent.action.SEARCH")
 
+-- Keep the query validator shared by the real Activity and its independent
+-- SDK/ART observer. Exporting a URL/refusal result grants no acquisition.
+checked_query_address : Text → IO (Either Text Text)
+checked_query_address supplied_query = do
+  empty ← primIO (raw_text_is_empty supplied_query)
+  if empty /= 0 then pure (Left "Search refused: the query is empty.")
+    else do
+      units ← primIO (request_utf16_units supplied_query)
+      if units > 1024 then pure (Left "Search refused: the query exceeds 1024 UTF-16 units.")
+        else do
+          charset ← primIO (standard_request_charset "UTF-8")
+          encoder ← primIO (new_request_encoder charset)
+          valid_unicode ← primIO (query_has_valid_unicode encoder supplied_query)
+          if valid_unicode ≟ 0 then pure (Left "Search refused: the query contains invalid Unicode.")
+            else case google_icu_url supplied_query of
+              Nothing ⇒ pure (Left "Search refused: the query is unsupported or its encoded URL is too long.")
+              Just address ⇒ pure (Right address)
+
+%export "dex:checked_search_query"
+checked_search_query : Text → IO Text
+checked_search_query supplied_query = do
+  requested ← checked_query_address supplied_query
+  pure (case requested of
+    Left reason ⇒ reason
+    Right address ⇒ address)
+
 -- Android supplies this caller identity only for a fresh for-result handoff.
 -- Referrer extras and Binder's system-server caller are not sender identity.
 search_address_from_intent : ActivityReference → IntentReference → IO (Either Text Text)
@@ -199,19 +225,7 @@ search_address_from_intent activity intent = do
           then pure (Left "Search refused: the installed ChordReader signer does not match this reader.")
           else do
             supplied_query ← primIO (incoming_text intent "query")
-            empty ← primIO (raw_text_is_empty supplied_query)
-            if empty /= 0 then pure (Left "Search refused: the query is empty.")
-              else do
-                units ← primIO (request_utf16_units supplied_query)
-                if units > 1024 then pure (Left "Search refused: the query exceeds 1024 UTF-16 units.")
-                  else do
-                    charset ← primIO (standard_request_charset "UTF-8")
-                    encoder ← primIO (new_request_encoder charset)
-                    valid_unicode ← primIO (query_has_valid_unicode encoder supplied_query)
-                    if valid_unicode ≟ 0 then pure (Left "Search refused: the query contains invalid Unicode.")
-                      else case google_icu_url supplied_query of
-                        Nothing ⇒ pure (Left "Search refused: the query is unsupported or its encoded URL is too long.")
-                        Just address ⇒ pure (Right address)
+            checked_query_address supplied_query
 
 consume_initial_request : ActivityReference → IntentReference → IO ()
 consume_initial_request activity intent = do

@@ -43,3 +43,14 @@ durable duplicate-delivery proof.
 Prior head 0592dd8e passed independent installed navigation on API 29/34 in
 ai-ci run 41292339244. Those results do not qualify this source change. The
 integration ledger keeps physical acceptance BLOCKED and the campaign open.
+
+## Independent query controls
+
+The shared checked_query_address is also exposed as checked_search_query,
+which returns only a URL or refusal text and grants no acquisition. The
+reader-v5 profile invokes this actual Activity export with literal SDK/ART
+inputs, including an unpaired UTF-16 surrogate and both size bounds. Two
+compiled maintained-source variants remove the Unicode guard or raise the
+size limit; each must fail the designated independent assertion. These query
+controls are separate from actual caller authentication and ChordReader UI
+handoff acceptance. New exact-head execution is pending.

@@ -149,6 +149,22 @@ emit NativeReader activity-copy-mutant managed-exports "$evidence/activity-copy-
 if cmp -s "$evidence/activity/reader.dex" "$evidence/activity-copy-mutant/reader.dex" {
   echo 'FAIL actual Activity copy mutation emitted the positive candidate' >&2; exit 1
 }
+for mutation in limit unicode {
+  var changed = "$evidence/query-$mutation-source"
+  cp -R "$evidence/source" "$changed"
+  var original = "$evidence/source/NativeReader.idric"
+  var destination = "$changed/NativeReader.idric"
+  if (mutation === 'limit') {
+    sed 's/if units > 1024/if units > 4096/' "$original" > "$destination"
+  } else {
+    sed 's/if valid_unicode ≟ 0/if False/' "$original" > "$destination"
+  }
+  if cmp -s "$original" "$destination" { echo 'FAIL unchanged actual query mutation' >&2; exit 1 }
+  emit NativeReader "activity-query-$mutation-mutant" managed-exports "$changed"
+  if cmp -s "$evidence/activity/reader.dex" "$evidence/activity-query-$mutation-mutant/reader.dex" {
+    echo 'FAIL actual query mutation emitted positive DEX' >&2; exit 1
+  }
+}
 for mutation in gate mapping count carrier {
   var changed = "$evidence/decoding-$mutation-source"
   cp -R "$evidence/source" "$changed"
