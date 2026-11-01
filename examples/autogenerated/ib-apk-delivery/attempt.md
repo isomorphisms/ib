@@ -31,3 +31,10 @@ APK and receipt under candidates/ so the exact APK can have a durable direct
 download URL for review. Existing application compatibility on TAB_P10 remains
 BLOCKED until fresh Cat Food/installed-signer/ABI/SDK/storage observations exist.
 No installation instruction bypasses those checks.
+
+The first publication attempt41299060008 refused before any Git write because
+the observer expected the older sdkVersion label. Independent captured
+badging from that exact signed APK reports minSdkVersion:'29' and
+targetSdkVersion:'36'. The guard now checks the actual label while keeping
+both exact required values; signer, package and byte checks are unchanged.
+No candidate or packaging change was needed for this observer repair.
