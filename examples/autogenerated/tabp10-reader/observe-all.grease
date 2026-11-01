@@ -47,7 +47,7 @@ try {
   "$grease" "$acceptance/ib-source/shizuku/observe-installed.grease" \
     "$acceptance" "$input/native-client" "$input/oracles/smali.jar" "$sdk" \
     "$input/platform-inputs/public-test-keystore" "$input/platform-inputs/shizuku-official.apk" \
-    "$adb" emulator-5554 "$evidence/installed" reader
+    "$adb" emulator-5554 "$evidence/installed" reader-v2
 }
 var reader_status = _error.code
 if (reader_status !== 0) { setglobal failed = true }

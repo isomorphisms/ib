@@ -198,6 +198,43 @@ static int consume_platform_failure(JNIEnv *e) {
     return 1;
 }
 
+/* A dead authority can be observed by an in-flight RPC before binderDied
+ * runs. Distinguish that normal capability loss from a live broker's malformed
+ * response. Both paths revoke the same epoch; neither preserves authority. */
+static int consume_dead_object_failure(JNIEnv *e) {
+    jthrowable failure = (*e)->ExceptionOccurred(e);
+    if (!failure) return 0;
+    (*e)->ExceptionClear(e);
+    jclass type = (*e)->FindClass(e, "android/os/DeadObjectException");
+    int dead = type && !(*e)->ExceptionCheck(e) && (*e)->IsInstanceOf(e, failure, type);
+    if ((*e)->ExceptionCheck(e)) (*e)->ExceptionClear(e);
+    if (type) (*e)->DeleteLocalRef(e, type);
+    (*e)->DeleteLocalRef(e, failure);
+    return dead;
+}
+
+static ib_shizuku_capability_state refuse_failed_server_rpc(JNIEnv *e, jobject server,
+                                                           uint64_t before) {
+    int dead = consume_dead_object_failure(e);
+    if (!dead) {
+        jmethodID alive = method(e, "android/os/IBinder", "isBinderAlive", "()Z");
+        if (alive) {
+            jboolean observed = (*e)->CallBooleanMethod(e, server, alive);
+            if ((*e)->ExceptionCheck(e)) dead = consume_dead_object_failure(e);
+            else dead = observed == JNI_FALSE;
+        } else (void)consume_platform_failure(e);
+    }
+    ib_shizuku_capability_state rejected = dead ? IB_SHIZUKU_UNAVAILABLE : IB_SHIZUKU_PLATFORM_ERROR;
+    int invalidated = invalidate_at(e, rejected, 1, before);
+    /* A newer legitimate connection is never revoked by this stale failure.
+     * This call did not authenticate it or fill its UID/epoch output, either. */
+    if (!invalidated) return IB_SHIZUKU_UNAVAILABLE;
+    pthread_mutex_lock(&client.mutex);
+    ib_shizuku_capability_state observed = client.state;
+    pthread_mutex_unlock(&client.mutex);
+    return observed == IB_SHIZUKU_AUTHORIZED ? IB_SHIZUKU_UNAVAILABLE : observed;
+}
+
 static jobject parcel(JNIEnv *e) {
     if ((*e)->ExceptionCheck(e)) return NULL;
     jclass klass = (*e)->FindClass(e, "android/os/Parcel");
@@ -477,9 +514,7 @@ ib_shizuku_capability_state ib_shizuku_client_authorization(JNIEnv *e, uid_t *ui
     }
     jint allowed = 0;
     if (!rpc_integer(e, server, 16, &allowed) || (allowed != 0 && allowed != 1)) {
-        (void)consume_platform_failure(e);
-        (void)invalidate_at(e, IB_SHIZUKU_PLATFORM_ERROR, 1, before);
-        return IB_SHIZUKU_PLATFORM_ERROR;
+        return refuse_failed_server_rpc(e, server, before);
     }
     if (!allowed) {
         if (state != IB_SHIZUKU_PERMISSION_REQUIRED)
@@ -489,9 +524,7 @@ ib_shizuku_capability_state ib_shizuku_client_authorization(JNIEnv *e, uid_t *ui
     jint version = -1, observed_uid = -1;
     if (!rpc_integer(e, server, 3, &version) || version < 13 ||
         !rpc_integer(e, server, 4, &observed_uid)) {
-        (void)consume_platform_failure(e);
-        (void)invalidate_at(e, IB_SHIZUKU_PLATFORM_ERROR, 1, before);
-        return IB_SHIZUKU_PLATFORM_ERROR;
+        return refuse_failed_server_rpc(e, server, before);
     }
     pthread_mutex_lock(&client.mutex);
     int wrong_identity = before == client.epoch && observed_uid != (jint)client.sender_uid;
