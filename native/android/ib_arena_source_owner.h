@@ -23,7 +23,7 @@ typedef struct {
     char mime_type[64], charset[64], http_status[4];
     char redirect_chain[8193];
     /* Empty means absent in a retained legacy receipt, never inferred identity. */
-    char transfer_decoding[8];
+    char transfer_decoding[9];
     int utf8_valid, navigation_admitted;
 } ib_arena_source_observations;
 

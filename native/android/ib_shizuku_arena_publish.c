@@ -46,7 +46,7 @@ typedef struct {
     unsigned redirects;
     int has_redirect_chain;
     int has_transfer_decoding;
-    char transfer_decoding[8];
+    char transfer_decoding[9];
     char redirect_chain[IB_REDIRECT_OBSERVATION_CAP + 1U];
     int64_t declared_length;
     uint64_t received_length;

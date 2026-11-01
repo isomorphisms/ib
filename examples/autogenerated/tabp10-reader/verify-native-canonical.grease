@@ -29,8 +29,10 @@ mkdir -p "$evidence"
   "$repository/tests/test_shizuku_frame_canonical.c" -o "$evidence/frame-test"
 mkdir -m 700 "$evidence/frame-arena" "$evidence/frame-arena/receipts" "$evidence/frame-arena/locks" "$evidence/frame-arena/staging"
 "$evidence/appendfat-arena" create "$evidence/frame-arena/responses.arena" 16777216 > "$evidence/create-frame-arena.txt"
-"$evidence/frame-test" "$evidence/frame-arena" > "$evidence/frame.txt" 2>&1
+try { "$evidence/frame-test" "$evidence/frame-arena" > "$evidence/frame.txt" 2>&1 }
+var frame_status = _error.code
 cat "$evidence/frame.txt"
+if (frame_status !== 0) { exit "$frame_status" }
 rg -F 'PASS: ordered response-owner redirect chain' "$evidence/frame.txt"
 rg -F 'PASS: immutable receipt collision refuses replacement and preserves previous source' "$evidence/frame.txt"
 rg -F 'PASS: original non-UTF-8 canonical bytes and unchanged observations reach only the decoder input; corruption, duplicate charset and stale generations refuse' "$evidence/frame.txt"

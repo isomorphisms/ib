@@ -41,3 +41,14 @@ status/bytes while refusing original admission; 100/199/600/999/0200 are invalid
 The prior committed source is reopened after each response. These source edits
 remain NOT_RUN until the exact-head CI executes. Android HTTP failure input,
 the SDK decoder carrier and physical TAB_P10 are not inferred from host tests.
+
+
+The first exact-head run 41284806549 at 9c599c7 FAILS the identity-capture
+positive, before any new acceptance claim. Independent diagnostic run
+41285576560/job 124786062316 exposes the current_metadata_cases send_frame
+assertion. The introduced storage had eight bytes, but identity is eight
+characters and requires a ninth terminator byte; copied correctly refused it.
+Both producer/readback buffers now have nine bytes. The positive runs before
+the compiled erasure control, preserving this bounded-string regression.
+The runner now prints captured frame output even when the positive aborts.
+No count, status, metadata, publication or semantic expectation is relaxed.

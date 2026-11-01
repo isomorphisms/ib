@@ -26,6 +26,12 @@ publishes the extracted title into a visible stable-ID toolbar TextView and
 requires independent title plus actual paragraph observations. Fresh installed
 qualification is pending; no JavaScript output or links are invented.
 
+The first transfer/status host run at 9c599c7 (41284806549) FAILS on its
+identity capture: an introduced eight-byte buffer cannot hold identity plus
+its terminator. Independent diagnostics 41285576560 retain that assertion.
+Both observation buffers now have nine bytes; new exact-head qualification
+is required. The failed run is not counted as a pass.
+
 ## Requirements
 
 | Requirement | Status | Evidence or remaining work |
