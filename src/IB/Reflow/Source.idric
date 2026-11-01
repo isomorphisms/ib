@@ -10,6 +10,7 @@ import IB.Reflow.SourceBreaks
 -- a derived projection: paragraph controls are hidden, trailing display
 -- spaces are suppressed, and a chosen soft-hyphen cut adds a visible "-".
 -- This simple hyphen glyph is a policy, NOT locale-specific shaping.
+public export
 hidden_character : Char → Bool
 hidden_character char =
   let point = ord char in
@@ -33,6 +34,7 @@ display_break_mark : BreakKind → Text → Text
 display_break_mark DiscretionaryHyphen painted = painted ++ "-"
 display_break_mark _ painted = painted
 
+public export
 source_line : Text → Number → SourceBreak → SourceLine
 source_line source start (At finish kind) =
   let span = FromSource start finish "" kind in

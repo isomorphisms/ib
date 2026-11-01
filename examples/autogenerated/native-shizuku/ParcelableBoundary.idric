@@ -150,6 +150,10 @@ reader_bridge_plan = do
     , native "acknowledge" [ExistingValue TextValue, ExistingValue IntegerValue, ExistingValue TextValue]
         (ExistingValue IntegerValue)
     , native "metrics" [object "Landroid/app/Activity;"] (object "Lorg/isomorphisms/ib/ReaderMetrics;")
+    , native "presentText" [object "Landroid/app/Activity;", ExistingValue TextValue,
+        ExistingValue TextValue, ExistingValue TextValue] (ExistingValue IntegerValue)
+    , native "markText" [object "Landroid/app/Activity;", ExistingValue IntegerValue,
+        ExistingValue IntegerValue, ExistingValue IntegerValue] (ExistingValue IntegerValue)
     ] } base)
 
 reader_task_plan : Text → Either Text FilePlan
@@ -177,6 +181,42 @@ reader_layout_plan = framework_class_plan
     [Callback "onLayoutChange" "V" ["Landroid/view/View;", "I", "I", "I", "I", "I", "I", "I", "I"]])
   ["Landroid/view/View$OnLayoutChangeListener;"]
 
+reader_projection_plan : Either Text FilePlan
+reader_projection_plan = do
+  base ← framework_class_plan
+    (Subclass "Lorg/isomorphisms/ib/NativeTextProjection;" "Ljava/lang/Object;" Nothing []) []
+  Right ({ fields :=
+    [ MkFieldPlan "sourceText" (ExistingValue TextValue) 2
+    , MkFieldPlan "displayText" (ExistingValue TextValue) 2
+    , MkFieldPlan "coordinatesText" (ExistingValue TextValue) 2
+    ] } base)
+
+reader_text_plan : Either Text FilePlan
+reader_text_plan = do
+  base ← framework_class_plan
+    (Subclass "Lorg/isomorphisms/ib/NativeTextView;" "Landroid/widget/TextView;" (Just "ib_reader")
+      [ Callback "onTextContextMenuItem" "Z" ["I"]
+      , Callback "onTouchEvent" "Z" ["Landroid/view/MotionEvent;"]
+      ]) []
+  let contextual = MkBoundMethodPlan "native selectable text Context constructor" "<init>" 1
+        [object "Landroid/content/Context;"] VoidValue 2
+        [ InvokeMethod (Invoke InvokeDirect
+            (MkMethodReference (MkTypeReference "Landroid/widget/TextView;") "<init>"
+              [object "Landroid/content/Context;"] VoidValue) [MkRegister 0, MkRegister 1] Nothing)
+        , ReturnVoid ] ConstructorMethod
+  let inflated = MkBoundMethodPlan "native selectable text XML constructor" "<init>" 2
+        [object "Landroid/content/Context;", object "Landroid/util/AttributeSet;"] VoidValue 3
+        [ InvokeMethod (Invoke InvokeDirect
+            (MkMethodReference (MkTypeReference "Landroid/widget/TextView;") "<init>"
+              [object "Landroid/content/Context;", object "Landroid/util/AttributeSet;"] VoidValue)
+            [MkRegister 0, MkRegister 1, MkRegister 2] Nothing)
+        , ReturnVoid ] ConstructorMethod
+  Right ({ fields :=
+      [ MkFieldPlan "projection" (object "Lorg/isomorphisms/ib/NativeTextProjection;") 2
+      , MkFieldPlan "gestureStart" (object "Landroid/view/MotionEvent;") 2
+      ], methods := filter (\method => method.method_name /= "<init>") base.methods ++
+        [contextual, inflated] } base)
+
 client_bytes : Either Text (List Int)
 client_bytes = do
   container ← container_plan
@@ -193,8 +233,10 @@ client_bytes = do
   complete ← reader_task_plan "Lorg/isomorphisms/ib/ReaderCompletionTask;"
   metrics ← reader_metrics_plan
   layout ← reader_layout_plan
+  projection ← reader_projection_plan
+  text_view ← reader_text_plan
   encode_dex_classes [container, creator, provider, application, death, client, ingress, connection,
-    worker, reader, acquire, complete, metrics, layout]
+    worker, reader, acquire, complete, metrics, layout, projection, text_view]
 
 parcelable_bytes : Either Text (List Int)
 parcelable_bytes = do

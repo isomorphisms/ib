@@ -1,0 +1,315 @@
+module IB.Reader.Selection
+
+import Data.Text
+import Data.List1
+import Data.Maybe
+import IB.Strand
+import IB.Prepaint.Reflow
+import IB.Reader.Navigation
+import IB.Reflow.Source
+import IB.Reflow.SourceBreaks
+
+-- Android selection uses UTF-16 boundaries. Canonical block coordinates use
+-- decoded Unicode code points. Neither coordinate system identifies HTML
+-- bytes. This derived projection keeps the conversion explicit and checked.
+public export
+record DisplayRegion where
+  constructor Region
+  first_utf16 : Number
+  after_utf16 : Number
+  destination : Text
+  heading : Int32
+
+data RowKind = Ordinary | Hyphenated | Mandatory | Separator
+
+record DisplayRow where
+  constructor Row
+  first_display : Number
+  after_display : Number
+  first_source : Number
+  after_source : Number
+  kind : RowKind
+  target : Text
+
+export
+data SelectionProjection = Projected Text Text (List DisplayRow) (List DisplayRegion)
+
+utf16_units : Char → Number
+utf16_units character = if ord character > 65535 then 2 else 1
+
+text_units : Text → Number
+text_units text = sum (map utf16_units (unpack text))
+
+join_text : Text → List Text → Text
+join_text separator [] = ""
+join_text separator [value] = value
+join_text separator (value :: rest) = value ++ separator ++ join_text separator rest
+
+checked_target : InformationBlock → Text
+checked_target (Link _ reference) =
+  case navigation_request (link_reference_value reference) of
+    Left _ ⇒ ""
+    Right request ⇒ navigation_address request
+checked_target _ = ""
+
+heading_size : InformationBlock → Int32
+heading_size (Heading level _) = cast (heading_level_number level)
+heading_size _ = 0
+
+line_rows : Number → Number → Text → List SourceLine → List DisplayRow
+line_rows display_start source_start target [] = []
+line_rows display_start source_start target (line :: rest) =
+  let finish = S (display_start + text_units line.visible_text)
+      kind = case line.ending of
+        DiscretionaryHyphen ⇒ Hyphenated
+        MandatoryBreak ⇒ Mandatory
+        _ ⇒ Ordinary in
+  Row display_start finish (source_start + line.first_codepoint)
+    (source_start + line.after_last_codepoint) kind target ::
+    line_rows finish source_start target rest
+
+textual_blocks : List BlockReflow → List BlockReflow
+textual_blocks [] = []
+textual_blocks (block :: rest) = case block.decoded_text of
+  Nothing ⇒ textual_blocks rest
+  Just "" ⇒ textual_blocks rest
+  Just _ ⇒ block :: textual_blocks rest
+
+projection_parts : Number → Number → List BlockReflow →
+  (List Text, List Text, List DisplayRow, List DisplayRegion)
+projection_parts display_start source_start [] = ([], [], [], [])
+projection_parts display_start source_start (block :: rest) =
+  let source = fromMaybe "" block.decoded_text
+      displayed = concat (map (\line => line.visible_text ++ "\n") block.text_lines)
+      finish_display = display_start + text_units displayed
+      finish_source = source_start + length (unpack source)
+      destination = checked_target block.original_block
+      rows = line_rows display_start source_start destination block.text_lines
+      region = Region display_start (finish_display `minus` 1) destination (heading_size block.original_block) in
+  case rest of
+    [] ⇒ ([source], [displayed], rows, [region])
+    _ ⇒ let (sources, displays, later_rows, regions) =
+              projection_parts (S finish_display) (finish_source + 2) rest in
+         (source :: sources, displayed :: displays,
+          rows ++ [Row finish_display (S finish_display)
+            finish_source (finish_source + 2) Separator ""] ++ later_rows,
+          region :: regions)
+
+kind_text : RowKind → Text
+kind_text Ordinary = "L"
+kind_text Hyphenated = "H"
+kind_text Mandatory = "M"
+kind_text Separator = "S"
+
+row_text : DisplayRow → Text
+row_text row = cast row.first_display ++ "\t" ++ cast row.after_display ++ "\t" ++
+  cast row.first_source ++ "\t" ++ cast row.after_source ++ "\t" ++
+  kind_text row.kind ++ "\t" ++ row.target ++ "\n"
+
+export
+projected_source : SelectionProjection → Text
+projected_source (Projected source _ _ _) = source
+
+export
+projected_display : SelectionProjection → Text
+projected_display (Projected _ display _ _) = display
+
+export
+projected_coordinates : SelectionProjection → Text
+projected_coordinates (Projected _ _ rows _) = "IBP1\n" ++ concat (map row_text rows)
+
+export
+projected_regions : SelectionProjection → List DisplayRegion
+projected_regions (Projected _ _ _ regions) = regions
+
+canonical_number : Text → Maybe Number
+canonical_number "0" = Just 0
+canonical_number text = case unpack text of
+  [] ⇒ Nothing
+  '0' :: _ ⇒ Nothing
+  digits ⇒ if length digits <= 7 && all (\c => c >= '0' && c <= '9') digits
+      then let value : Number = cast text in
+           if value <= 4194304 then Just value else Nothing
+      else Nothing
+
+read_row : Text → Maybe DisplayRow
+read_row text = case forget (split (≟ '\t') text) of
+  [first, after, source_first, source_after, manner, target] ⇒ do
+    start ← canonical_number first
+    finish ← canonical_number after
+    original_start ← canonical_number source_first
+    original_finish ← canonical_number source_after
+    kind ← case manner of
+      "L" ⇒ Just Ordinary
+      "H" ⇒ Just Hyphenated
+      "M" ⇒ Just Mandatory
+      "S" ⇒ Just Separator
+      _ ⇒ Nothing
+    if finish < start || original_finish < original_start then Nothing
+      else if target ≟ "" then Just (Row start finish original_start original_finish kind "")
+      else case navigation_request target of
+        Left _ ⇒ Nothing
+        Right request ⇒ if navigation_address request ≟ target
+          then Just (Row start finish original_start original_finish kind target)
+          else Nothing
+  _ ⇒ Nothing
+
+read_rows : List Text → Maybe (List DisplayRow)
+read_rows [] = Just []
+read_rows (text :: rest) = do
+  row ← read_row text
+  rows ← read_rows rest
+  Just (row :: rows)
+
+consume : List Char → List Char → Maybe (List Char)
+consume [] remaining = Just remaining
+consume (_ :: _) [] = Nothing
+consume (expected :: rest) (actual :: remaining) =
+  if expected ≟ actual then consume rest remaining else Nothing
+
+terminal_count : List Char → Number
+terminal_count ('\n' :: '\r' :: _) = 2
+terminal_count (character :: _) =
+  let point = ord character in
+  if point ≟ 10 || point ≟ 13 || point ≟ 133 || point ≟ 8232 || point ≟ 8233 then 1 else 0
+terminal_count [] = 0
+
+row_spelling : DisplayRow → Text → Maybe Text
+row_spelling row source = case row.kind of
+  Separator ⇒ if source ≟ "\n\n" && row.target ≟ "" then Just "\n" else Nothing
+  Ordinary ⇒ Just ((source_line source 0 (At (length (unpack source)) SourceEnd)).visible_text ++ "\n")
+  Mandatory ⇒ if terminal_count (reverse (unpack source)) > 0
+    then Just ((source_line source 0 (At (length (unpack source)) MandatoryBreak)).visible_text ++ "\n")
+    else Nothing
+  Hyphenated ⇒ case reverse (unpack source) of
+    last :: _ ⇒ if ord last ≟ 173
+      then Just ((source_line source 0 (At (length (unpack source)) DiscretionaryHyphen)).visible_text ++ "\n")
+      else Nothing
+    [] ⇒ Nothing
+
+-- Walk both representations once. Every row consumes the next original
+-- range and exactly its maintained reflow spelling plus its displayed line
+-- ending. Rows are contiguous; paragraph separators consume real
+-- decoded-derivative separators. No wire coordinates grant source admission.
+verify_rows : Number → Number → List Char → List Char → List DisplayRow → Bool
+verify_rows source_position display_position source display [] = null source && null display
+verify_rows source_position display_position source display (row :: rest) =
+  if row.first_source /= source_position || row.first_display /= display_position
+    then False
+    else let original_count = row.after_source `minus` row.first_source
+             original = take original_count source in
+      if length original /= original_count then False
+      else case row_spelling row (pack original) of
+          Nothing ⇒ False
+          Just spelling ⇒
+            if text_units spelling /= (row.after_display `minus` row.first_display)
+              then False
+              else case consume (unpack spelling) display of
+                Nothing ⇒ False
+                Just later_display ⇒ verify_rows row.after_source row.after_display
+                  (drop original_count source) later_display rest
+
+read_projection : Text → Text → Text → Maybe (List DisplayRow)
+read_projection source displayed coordinates =
+  if length (unpack source) > 2097152 || text_units displayed > 4194304 ||
+      length (unpack coordinates) > 4194304 then Nothing
+  else case forget (split (≟ '\n') coordinates) of
+    "IBP1" :: lines ⇒ case reverse lines of
+      "" :: reversed ⇒ do
+        rows ← read_rows (reverse reversed)
+        let begins_at_zero = case rows of
+              [] ⇒ False
+              first :: _ ⇒ first.first_source ≟ 0 && first.first_display ≟ 0
+        if length rows > 65536 || not begins_at_zero ||
+            not (verify_rows 0 0 (unpack source) (unpack displayed) rows)
+          then Nothing else Just rows
+      _ ⇒ Nothing
+    _ ⇒ Nothing
+
+export
+selection_of_blocks : List BlockReflow → Either Text SelectionProjection
+selection_of_blocks blocks =
+  let (sources, displays, rows, regions) = projection_parts 0 0 (textual_blocks blocks)
+      source = join_text "\n\n" sources
+      displayed = join_text "\n" displays
+      result = Projected source displayed rows regions in
+  if displayed ≟ "" then Left "The admitted document has no selectable static text"
+    else case read_projection source displayed (projected_coordinates result) of
+      Nothing ⇒ Left "Reflow has no faithful native selection projection"
+      Just _ ⇒ Right result
+
+export
+selection_projection : PrepaintLayout → Either Text SelectionProjection
+selection_projection layout = selection_of_blocks layout.block_plans
+
+-- Invisible characters strictly inside a selection are retained. At an
+-- interior endpoint, start affinity skips them and end affinity stops before
+-- them. This lets copying an individual visible word exclude adjacent hidden
+-- controls while copying its enclosing source interval preserves them.
+-- Interior UTF-16 surrogate boundaries have no source code-point boundary.
+scan_boundary : Bool → Number → Number → List Char → Maybe Number
+scan_boundary start_affinity wanted position [] = if wanted ≟ 0 then Just position else Nothing
+scan_boundary start_affinity wanted position (character :: rest) =
+  if hidden_character character
+    then if wanted ≟ 0 && not start_affinity then Just position
+      else scan_boundary start_affinity wanted (S position) rest
+  else if wanted ≟ 0 then Just position
+  else let units = utf16_units character in
+    if wanted < units then Nothing else scan_boundary start_affinity (wanted `minus` units) (S position) rest
+
+visible_end : Number → Number → List Char → Number
+visible_end position selected [] = selected
+visible_end position selected (character :: rest) =
+  visible_end (S position)
+    (if not (hidden_character character) && character /= ' ' then S position else selected) rest
+
+row_boundary : Bool → Text → DisplayRow → Number → Maybe Number
+row_boundary start_affinity source row point =
+  let original = take (row.after_source `minus` row.first_source) (drop row.first_source (unpack source))
+      painted_end = visible_end row.first_source row.first_source original in
+  if point ≟ row.first_display then Just row.first_source
+  else if point ≟ row.after_display then Just row.after_source
+  else case row.kind of
+    Separator ⇒ Nothing -- Its sole displayed newline spans two derivative newlines.
+    Mandatory ⇒ if S point ≟ row.after_display
+      then Just painted_end
+      else scan_boundary start_affinity (point `minus` row.first_display) row.first_source original
+    Hyphenated ⇒ if S point ≟ row.after_display then Just row.after_source
+      else if point + 2 ≟ row.after_display
+        then Just (if start_affinity then row.after_source `minus` 1 else painted_end)
+      else scan_boundary start_affinity (point `minus` row.first_display) row.first_source original
+    Ordinary ⇒ if S point ≟ row.after_display then Just painted_end
+      else scan_boundary start_affinity (point `minus` row.first_display) row.first_source original
+
+source_boundary : Bool → Text → Number → List DisplayRow → Maybe Number
+source_boundary start_affinity source point [] = Nothing
+source_boundary start_affinity source point (row :: rest) =
+  if point < row.first_display then Nothing
+  else if point <= row.after_display then row_boundary start_affinity source row point
+    else source_boundary start_affinity source point rest
+
+export
+copy_source_selection : Text → Text → Text → Int32 → Int32 → Text
+copy_source_selection source displayed coordinates first after =
+  if first < 0 || after <= first then ""
+  else fromMaybe "" $ do
+    rows ← read_projection source displayed coordinates
+    start ← source_boundary True source (cast first) rows
+    finish ← source_boundary False source (cast after) rows
+    if finish <= start then Nothing
+      else Just (pack (take (finish `minus` start) (drop start (unpack source))))
+
+link_at : Number → List DisplayRow → Text
+link_at point [] = ""
+link_at point (row :: rest) =
+  if point >= row.first_display && S point < row.after_display
+    then row.target else link_at point rest
+
+export
+selection_link_at : Text → Text → Text → Int32 → Text
+selection_link_at source displayed coordinates point =
+  if point < 0 then ""
+  else fromMaybe "" $ do
+    rows ← read_projection source displayed coordinates
+    _ ← source_boundary True source (cast point) rows
+    Just (link_at (cast point) rows)

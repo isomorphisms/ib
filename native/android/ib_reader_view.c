@@ -1,0 +1,274 @@
+/* SDK storage, gestures, styling and clipboard only. Checked Idric owns the
+ * immutable source/display coordinates and every link/copy decision. */
+#include <jni.h>
+#include <math.h>
+#include <stdint.h>
+
+#define BODY_VIEW 2130903040
+#define ANDROID_COPY 16908321
+
+static jmethodID sdk_method(JNIEnv *e, const char *owner, const char *name, const char *signature) {
+    jclass type = (*e)->FindClass(e, owner);
+    return type ? (*e)->GetMethodID(e, type, name, signature) : NULL;
+}
+
+static jobject reader_body(JNIEnv *e, jobject activity) {
+    jmethodID find = sdk_method(e, "android/app/Activity", "findViewById", "(I)Landroid/view/View;");
+    jobject body = activity && find ? (*e)->CallObjectMethod(e, activity, find, BODY_VIEW) : NULL;
+    jclass type = body ? (*e)->FindClass(e, "org/isomorphisms/ib/NativeTextView") : NULL;
+    return type && (*e)->IsInstanceOf(e, body, type) && !(*e)->ExceptionCheck(e) ? body : NULL;
+}
+
+static jfieldID view_field(JNIEnv *e, jobject view, const char *name, const char *type) {
+    jclass owner = view ? (*e)->GetObjectClass(e, view) : NULL;
+    return owner ? (*e)->GetFieldID(e, owner, name, type) : NULL;
+}
+
+static jobject activity_context(JNIEnv *e, jobject view) {
+    jmethodID get = sdk_method(e, "android/view/View", "getContext", "()Landroid/content/Context;");
+    jobject context = get ? (*e)->CallObjectMethod(e, view, get) : NULL;
+    jclass type = context ? (*e)->FindClass(e, "android/app/Activity") : NULL;
+    return type && (*e)->IsInstanceOf(e, context, type) ? context : NULL;
+}
+
+static void report_refusal(JNIEnv *e, jobject view, const char *message) {
+    if ((*e)->ExceptionCheck(e)) (*e)->ExceptionClear(e);
+    jobject activity = activity_context(e, view);
+    jclass generated = activity ? (*e)->FindClass(e, "Idric/Generated") : NULL;
+    jmethodID report = generated ? (*e)->GetStaticMethodID(e, generated, "reader_acquisition_failed",
+        "(Landroid/app/Activity;Ljava/lang/String;)V") : NULL;
+    jstring reason = report ? (*e)->NewStringUTF(e, message) : NULL;
+    if (reason) (*e)->CallStaticVoidMethod(e, generated, report, activity, reason);
+    if ((*e)->ExceptionCheck(e)) (*e)->ExceptionClear(e);
+}
+
+static int projection_texts(JNIEnv *e, jobject view, jstring *source, jstring *display, jstring *coordinates) {
+    jfieldID field = view_field(e, view, "projection", "Lorg/isomorphisms/ib/NativeTextProjection;");
+    jobject projection = field ? (*e)->GetObjectField(e, view, field) : NULL;
+    jclass type = projection ? (*e)->GetObjectClass(e, projection) : NULL;
+    jfieldID original = type ? (*e)->GetFieldID(e, type, "sourceText", "Ljava/lang/String;") : NULL;
+    jfieldID painted = original ? (*e)->GetFieldID(e, type, "displayText", "Ljava/lang/String;") : NULL;
+    jfieldID mapping = painted ? (*e)->GetFieldID(e, type, "coordinatesText", "Ljava/lang/String;") : NULL;
+    if (!mapping || (*e)->ExceptionCheck(e)) return 0;
+    *source = (*e)->GetObjectField(e, projection, original);
+    *display = (*e)->GetObjectField(e, projection, painted);
+    *coordinates = (*e)->GetObjectField(e, projection, mapping);
+    return *source && *display && *coordinates && !(*e)->ExceptionCheck(e);
+}
+
+JNIEXPORT jint JNICALL
+Java_org_isomorphisms_ib_ReaderBridge_presentText(JNIEnv *e, jclass ignored, jobject activity,
+                                                 jstring displayed, jstring source, jstring coordinates) {
+    (void)ignored;
+    if ((*e)->PushLocalFrame(e, 32) != 0) return -1;
+    jobject view = reader_body(e, activity);
+    jclass type = view ? (*e)->FindClass(e, "org/isomorphisms/ib/NativeTextProjection") : NULL;
+    jmethodID constructor = type ? (*e)->GetMethodID(e, type, "<init>", "()V") : NULL;
+    jobject projection = constructor && displayed && source && coordinates ? (*e)->NewObject(e, type, constructor) : NULL;
+    jfieldID original = projection ? (*e)->GetFieldID(e, type, "sourceText", "Ljava/lang/String;") : NULL;
+    jfieldID painted = original ? (*e)->GetFieldID(e, type, "displayText", "Ljava/lang/String;") : NULL;
+    jfieldID mapping = painted ? (*e)->GetFieldID(e, type, "coordinatesText", "Ljava/lang/String;") : NULL;
+    jfieldID storage = mapping ? view_field(e, view, "projection", "Lorg/isomorphisms/ib/NativeTextProjection;") : NULL;
+    jclass span_type = storage ? (*e)->FindClass(e, "android/text/SpannableString") : NULL;
+    jmethodID span_constructor = span_type ? (*e)->GetMethodID(e, span_type, "<init>", "(Ljava/lang/CharSequence;)V") : NULL;
+    jobject styled = span_constructor ? (*e)->NewObject(e, span_type, span_constructor, displayed) : NULL;
+    jmethodID set = styled ? sdk_method(e, "android/widget/TextView", "setText", "(Ljava/lang/CharSequence;)V") : NULL;
+    int ok = set && !(*e)->ExceptionCheck(e);
+    if (ok) {
+        (*e)->SetObjectField(e, projection, original, source);
+        (*e)->SetObjectField(e, projection, painted, displayed);
+        (*e)->SetObjectField(e, projection, mapping, coordinates);
+        /* UI-thread invocation, after all source/projection preparation. The
+         * previous projection remains intact if the SDK rejects setText. */
+        (*e)->CallVoidMethod(e, view, set, styled);
+        ok = !(*e)->ExceptionCheck(e);
+        if (ok) (*e)->SetObjectField(e, view, storage, projection);
+        ok = ok && !(*e)->ExceptionCheck(e);
+    }
+    if ((*e)->ExceptionCheck(e)) (*e)->ExceptionClear(e);
+    (*e)->PopLocalFrame(e, NULL);
+    return ok ? 0 : -1;
+}
+
+JNIEXPORT jint JNICALL
+Java_org_isomorphisms_ib_ReaderBridge_markText(JNIEnv *e, jclass ignored, jobject activity,
+                                              jint first, jint after, jint style) {
+    (void)ignored;
+    if ((*e)->PushLocalFrame(e, 24) != 0) return -1;
+    jobject view = reader_body(e, activity);
+    jmethodID get = view ? sdk_method(e, "android/widget/TextView", "getText", "()Ljava/lang/CharSequence;") : NULL;
+    jobject text = get ? (*e)->CallObjectMethod(e, view, get) : NULL;
+    jclass span_type = text ? (*e)->FindClass(e, "android/text/Spannable") : NULL;
+    jmethodID length = span_type ? sdk_method(e, "java/lang/CharSequence", "length", "()I") : NULL;
+    jint count = length && text ? (*e)->CallIntMethod(e, text, length) : 0;
+    jmethodID set = span_type ? (*e)->GetMethodID(e, span_type, "setSpan", "(Ljava/lang/Object;III)V") : NULL;
+    int ok = span_type && (*e)->IsInstanceOf(e, text, span_type) && set &&
+        first >= 0 && first < after && after <= count && style >= 0 && style <= 6 && !(*e)->ExceptionCheck(e);
+    if (ok) {
+        jclass color_type = (*e)->FindClass(e, "android/text/style/ForegroundColorSpan");
+        jmethodID color_constructor = color_type ? (*e)->GetMethodID(e, color_type, "<init>", "(I)V") : NULL;
+        jobject color = color_constructor ? (*e)->NewObject(e, color_type, color_constructor,
+            style == 0 ? (jint)UINT32_C(0xff90caf9) : (jint)UINT32_C(0xffce93d8)) : NULL;
+        jclass underline_type = color ? (*e)->FindClass(e, "android/text/style/UnderlineSpan") : NULL;
+        jmethodID underline_constructor = underline_type ? (*e)->GetMethodID(e, underline_type, "<init>", "()V") : NULL;
+        jobject underline = underline_constructor ? (*e)->NewObject(e, underline_type, underline_constructor) : NULL;
+        ok = color && underline && !(*e)->ExceptionCheck(e);
+        if (ok) {
+            /* Color/underline preserve the Paint advance used by reflow. */
+            (*e)->CallVoidMethod(e, text, set, color, first, after, 33);
+            if (!(*e)->ExceptionCheck(e)) (*e)->CallVoidMethod(e, text, set, underline, first, after, 33);
+            ok = !(*e)->ExceptionCheck(e);
+        }
+    }
+    if ((*e)->ExceptionCheck(e)) (*e)->ExceptionClear(e);
+    (*e)->PopLocalFrame(e, NULL);
+    return ok ? 0 : -1;
+}
+
+JNIEXPORT jboolean JNICALL
+Java_org_isomorphisms_ib_NativeTextView_onTextContextMenuItem(JNIEnv *e, jobject self, jint action) {
+    jclass parent = (*e)->FindClass(e, "android/widget/TextView");
+    jmethodID delegate = parent ? (*e)->GetMethodID(e, parent, "onTextContextMenuItem", "(I)Z") : NULL;
+    if (action != ANDROID_COPY)
+        return delegate ? (*e)->CallNonvirtualBooleanMethod(e, self, parent, delegate, action) : JNI_FALSE;
+    if ((*e)->PushLocalFrame(e, 40) != 0) return JNI_FALSE;
+    jstring source = NULL, display = NULL, coordinates = NULL;
+    jmethodID start = sdk_method(e, "android/widget/TextView", "getSelectionStart", "()I");
+    jmethodID finish = start ? sdk_method(e, "android/widget/TextView", "getSelectionEnd", "()I") : NULL;
+    jint first = start ? (*e)->CallIntMethod(e, self, start) : -1;
+    jint after = finish ? (*e)->CallIntMethod(e, self, finish) : -1;
+    if (first > after) { jint temporary = first; first = after; after = temporary; }
+    int ok = first >= 0 && after > first && projection_texts(e, self, &source, &display, &coordinates);
+    jclass generated = ok ? (*e)->FindClass(e, "Idric/Generated") : NULL;
+    jmethodID copy = generated ? (*e)->GetStaticMethodID(e, generated, "copy_reader_selection",
+        "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;II)Ljava/lang/String;") : NULL;
+    jstring copied = copy ? (*e)->CallStaticObjectMethod(e, generated, copy, source, display, coordinates, first, after) : NULL;
+    ok = copied && !(*e)->ExceptionCheck(e) && (*e)->GetStringLength(e, copied) > 0;
+    jobject context = ok ? activity_context(e, self) : NULL;
+    jmethodID service = context ? sdk_method(e, "android/content/Context", "getSystemService", "(Ljava/lang/String;)Ljava/lang/Object;") : NULL;
+    jstring name = service ? (*e)->NewStringUTF(e, "clipboard") : NULL;
+    jobject clipboard = name ? (*e)->CallObjectMethod(e, context, service, name) : NULL;
+    jclass clip_type = clipboard ? (*e)->FindClass(e, "android/content/ClipData") : NULL;
+    jmethodID plain = clip_type ? (*e)->GetStaticMethodID(e, clip_type, "newPlainText",
+        "(Ljava/lang/CharSequence;Ljava/lang/CharSequence;)Landroid/content/ClipData;") : NULL;
+    jstring label = plain ? (*e)->NewStringUTF(e, "IB source selection") : NULL;
+    jobject clip = label ? (*e)->CallStaticObjectMethod(e, clip_type, plain, label, copied) : NULL;
+    jmethodID assign = clip ? sdk_method(e, "android/content/ClipboardManager", "setPrimaryClip", "(Landroid/content/ClipData;)V") : NULL;
+    if (assign && !(*e)->ExceptionCheck(e)) (*e)->CallVoidMethod(e, clipboard, assign, clip);
+    ok = assign && !(*e)->ExceptionCheck(e);
+    if (!ok) report_refusal(e, self, "This selection has no verified source coordinates; copy was refused.");
+    (*e)->PopLocalFrame(e, NULL);
+    return ok ? JNI_TRUE : JNI_FALSE;
+}
+
+static int has_selection(JNIEnv *e, jobject view) {
+    jmethodID first = sdk_method(e, "android/widget/TextView", "getSelectionStart", "()I");
+    jmethodID after = first ? sdk_method(e, "android/widget/TextView", "getSelectionEnd", "()I") : NULL;
+    jint start = first ? (*e)->CallIntMethod(e, view, first) : -1;
+    jint finish = after ? (*e)->CallIntMethod(e, view, after) : -1;
+    return !after || (*e)->ExceptionCheck(e) || (start >= 0 && finish >= 0 && start != finish);
+}
+
+static int follow_tap(JNIEnv *e, jobject view, jobject event) {
+    jmethodID x_method = sdk_method(e, "android/view/MotionEvent", "getX", "()F");
+    jmethodID y_method = x_method ? sdk_method(e, "android/view/MotionEvent", "getY", "()F") : NULL;
+    jfloat x = x_method ? (*e)->CallFloatMethod(e, event, x_method) : NAN;
+    jfloat y = y_method ? (*e)->CallFloatMethod(e, event, y_method) : NAN;
+    jmethodID layout_method = sdk_method(e, "android/widget/TextView", "getLayout", "()Landroid/text/Layout;");
+    jobject layout = layout_method ? (*e)->CallObjectMethod(e, view, layout_method) : NULL;
+    jmethodID padding_x = sdk_method(e, "android/widget/TextView", "getTotalPaddingLeft", "()I");
+    jmethodID padding_y = sdk_method(e, "android/widget/TextView", "getTotalPaddingTop", "()I");
+    jmethodID scroll_x = sdk_method(e, "android/view/View", "getScrollX", "()I");
+    jmethodID scroll_y = sdk_method(e, "android/view/View", "getScrollY", "()I");
+    jmethodID height_method = sdk_method(e, "android/text/Layout", "getHeight", "()I");
+    if (!layout || !padding_x || !padding_y || !scroll_x || !scroll_y || !height_method ||
+        !isfinite(x) || !isfinite(y) || (*e)->ExceptionCheck(e)) return 0;
+    jfloat text_x = x - (*e)->CallIntMethod(e, view, padding_x) + (*e)->CallIntMethod(e, view, scroll_x);
+    jfloat text_y = y - (*e)->CallIntMethod(e, view, padding_y) + (*e)->CallIntMethod(e, view, scroll_y);
+    jint height = (*e)->CallIntMethod(e, layout, height_method);
+    if (text_y < 0 || text_y >= height) return 0;
+    jmethodID line_method = sdk_method(e, "android/text/Layout", "getLineForVertical", "(I)I");
+    jmethodID left_method = sdk_method(e, "android/text/Layout", "getLineLeft", "(I)F");
+    jmethodID right_method = sdk_method(e, "android/text/Layout", "getLineRight", "(I)F");
+    jmethodID offset_method = sdk_method(e, "android/widget/TextView", "getOffsetForPosition", "(FF)I");
+    if (!line_method || !left_method || !right_method || !offset_method || (*e)->ExceptionCheck(e)) return 0;
+    jint line = (*e)->CallIntMethod(e, layout, line_method, (jint)text_y);
+    jfloat left = (*e)->CallFloatMethod(e, layout, left_method, line);
+    jfloat right = (*e)->CallFloatMethod(e, layout, right_method, line);
+    if (text_x < left || text_x >= right || (*e)->ExceptionCheck(e)) return 0;
+    jint point = (*e)->CallIntMethod(e, view, offset_method, x, y);
+    jstring source = NULL, display = NULL, coordinates = NULL;
+    if (!projection_texts(e, view, &source, &display, &coordinates)) return 0;
+    jclass generated = (*e)->FindClass(e, "Idric/Generated");
+    jmethodID link = generated ? (*e)->GetStaticMethodID(e, generated, "reader_link_at",
+        "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;I)Ljava/lang/String;") : NULL;
+    jstring url = link ? (*e)->CallStaticObjectMethod(e, generated, link, source, display, coordinates, point) : NULL;
+    if (!url || (*e)->ExceptionCheck(e) || (*e)->GetStringLength(e, url) == 0) return 0;
+    jobject activity = activity_context(e, view);
+    jmethodID follow = activity ? (*e)->GetStaticMethodID(e, generated, "reader_follow_link",
+        "(Landroid/app/Activity;Ljava/lang/String;)V") : NULL;
+    if (follow) (*e)->CallStaticVoidMethod(e, generated, follow, activity, url);
+    return follow && !(*e)->ExceptionCheck(e);
+}
+
+JNIEXPORT jboolean JNICALL
+Java_org_isomorphisms_ib_NativeTextView_onTouchEvent(JNIEnv *e, jobject self, jobject event) {
+    if ((*e)->PushLocalFrame(e, 64) != 0) return JNI_FALSE;
+    jclass parent = (*e)->FindClass(e, "android/widget/TextView");
+    jmethodID delegate = parent ? (*e)->GetMethodID(e, parent, "onTouchEvent", "(Landroid/view/MotionEvent;)Z") : NULL;
+    jmethodID action_method = sdk_method(e, "android/view/MotionEvent", "getActionMasked", "()I");
+    jmethodID points_method = sdk_method(e, "android/view/MotionEvent", "getPointerCount", "()I");
+    jfieldID storage = view_field(e, self, "gestureStart", "Landroid/view/MotionEvent;");
+    jint action = action_method ? (*e)->CallIntMethod(e, event, action_method) : -1;
+    jint points = points_method ? (*e)->CallIntMethod(e, event, points_method) : 0;
+    jobject initial = storage ? (*e)->GetObjectField(e, self, storage) : NULL;
+    jmethodID recycle = sdk_method(e, "android/view/MotionEvent", "recycle", "()V");
+    int tap = 0, eligible = 0;
+    if (action == 0 && storage && recycle && !(*e)->ExceptionCheck(e)) {
+        if (initial) (*e)->CallVoidMethod(e, initial, recycle);
+        (*e)->SetObjectField(e, self, storage, NULL);
+        if (points == 1 && !has_selection(e, self)) {
+            jclass motion = (*e)->FindClass(e, "android/view/MotionEvent");
+            jmethodID obtain = motion ? (*e)->GetStaticMethodID(e, motion, "obtain", "(Landroid/view/MotionEvent;)Landroid/view/MotionEvent;") : NULL;
+            jobject snapshot = obtain ? (*e)->CallStaticObjectMethod(e, motion, obtain, event) : NULL;
+            if (snapshot) (*e)->SetObjectField(e, self, storage, snapshot);
+        }
+    } else if ((action == 1 || action == 2) && initial && points == 1 && !has_selection(e, self)) {
+        jmethodID x_method = sdk_method(e, "android/view/MotionEvent", "getX", "()F");
+        jmethodID y_method = sdk_method(e, "android/view/MotionEvent", "getY", "()F");
+        jmethodID time_method = sdk_method(e, "android/view/MotionEvent", "getEventTime", "()J");
+        jclass configuration = (*e)->FindClass(e, "android/view/ViewConfiguration");
+        jmethodID timeout_method = configuration ? (*e)->GetStaticMethodID(e, configuration, "getLongPressTimeout", "()I") : NULL;
+        jmethodID get_configuration = configuration ? (*e)->GetStaticMethodID(e, configuration, "get", "(Landroid/content/Context;)Landroid/view/ViewConfiguration;") : NULL;
+        jobject context = activity_context(e, self);
+        jobject settings = get_configuration && context ? (*e)->CallStaticObjectMethod(e, configuration, get_configuration, context) : NULL;
+        jmethodID slop_method = settings ? sdk_method(e, "android/view/ViewConfiguration", "getScaledTouchSlop", "()I") : NULL;
+        if (x_method && y_method && time_method && timeout_method && slop_method && !(*e)->ExceptionCheck(e)) {
+            jfloat dx = (*e)->CallFloatMethod(e, event, x_method) - (*e)->CallFloatMethod(e, initial, x_method);
+            jfloat dy = (*e)->CallFloatMethod(e, event, y_method) - (*e)->CallFloatMethod(e, initial, y_method);
+            jlong duration = (*e)->CallLongMethod(e, event, time_method) - (*e)->CallLongMethod(e, initial, time_method);
+            jint limit = (*e)->CallStaticIntMethod(e, configuration, timeout_method);
+            jint slop = (*e)->CallIntMethod(e, settings, slop_method);
+            eligible = !(*e)->ExceptionCheck(e) && isfinite(dx) && isfinite(dy) && duration >= 0 &&
+                duration < limit && slop > 0 && dx * dx + dy * dy <= (jfloat)slop * slop;
+            tap = action == 1 && eligible;
+        }
+    }
+    /* Once a drag/selection/long press leaves the tap contract it cannot
+     * become a link click by returning to its initial position. */
+    if (action == 2 && initial && !eligible && storage && recycle && !(*e)->ExceptionCheck(e)) {
+        (*e)->CallVoidMethod(e, initial, recycle);
+        (*e)->SetObjectField(e, self, storage, NULL);
+        initial = NULL;
+    }
+    if ((action == 1 || action == 3 || points != 1) && storage && recycle && !(*e)->ExceptionCheck(e)) {
+        if (initial) (*e)->CallVoidMethod(e, initial, recycle);
+        (*e)->SetObjectField(e, self, storage, NULL);
+    }
+    jboolean handled = delegate && !(*e)->ExceptionCheck(e) ?
+        (*e)->CallNonvirtualBooleanMethod(e, self, parent, delegate, event) : JNI_FALSE;
+    if (tap && !(*e)->ExceptionCheck(e) && follow_tap(e, self, event)) handled = JNI_TRUE;
+    if ((*e)->ExceptionCheck(e)) report_refusal(e, self, "The source-linked native action failed; the document is retained.");
+    (*e)->PopLocalFrame(e, NULL);
+    return handled;
+}

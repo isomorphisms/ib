@@ -110,3 +110,47 @@ Checked browser history is now published at f7daf125d44e9d53280dec4305125fc14c49
 with fresh host fault/DEX checks and independent ai-ci 9ab044b92417f7ffd3eea54edb65367526e1503a
 observers. Its new Android/UI acceptance remains pending. The campaign remains
 INCOMPLETE; physical TAB_P10 acceptance remains BLOCKED.
+
+## Receipt publication localized at d893697
+
+The actual Android log from run 41273278580 reaches publisher stage 32 with
+errno 13 on both APIs: immutable receipt publication fails after the candidate's
+frame validation, canonical append/commit and reopened byte comparison. This
+localization is a candidate-internal trace, not independent source acceptance.
+Compact artifact 13070204978 has SHA-256
+`3b43cfec83d6fcee7962b0084eda7e2d7ebf1d5e40cae6c052833dfae57fdf00`.
+No committed readable native document is accepted by that failed run.
+
+The publisher replaces hard-link publication with `renameat2(RENAME_NOREPLACE)`.
+The staged receipt is still synced before publication and its directory after
+publication. An existing destination refuses atomically; unsupported syscalls
+or denied access refuse without an overwriting fallback. The selected source
+identity and previous receipts stay independent of temporary paths. More precise
+receipt-only numeric failure stages retain diagnostics without private data.
+Host canonical tests passed for immutable-target collisions and preserved prior
+readback. The compiled flag-zero mutation failed its exact no-replacement
+assertion. This is not yet Android qualification of the repair.
+
+Separately, f7daf125's maintained history semantics and all three compiled
+branch/cursor/generation mutants passed independent API 29/34 ART observations
+in run 41272370194. The independent assertion helper produced the required
+diagnostic plus status 137, while positives exited normally. The installed
+reader still failed at its first fetched document, so native history events and
+reopen/update/reboot remained NOT_RUN.
+
+The next integrated candidate consumes android-NDK 114a5481cd1cdc15ce02a7b134b798a3124f7ec7
+for checked export-alias saturation and ai-ci f3764fe8afbdc02956382cc618caab297a3b9f47
+for explicit reader-v3 source-selection observations. It adds a maintained-writer
+native TextView with checked Idriç copy/link coordinates and SDK gesture,
+clipboard and styling adapters. Host type/DEX/decode/determinism checks passed;
+independent ART, actual touch/clipboard/link events and the complete acquired
+document remain pending. This candidate does not imply physical acceptance or
+finish non-UTF-8 admission, fragment targets, SEARCH, background layout, all
+storage faults or remaining lifecycle work.
+
+The earlier alias-runtime attempt at 09289bf failed in its positive independent
+observer, before a valid result, with exit 137 and no assertion marker. That
+failure is retained. The observer now preserves its SDK counter's register type
+across failure branches and captures AndroidRuntime errors before exit. The
+compiler semantics are unchanged between the two alias qualification heads;
+fresh qualification is still required, including actual reader link effects.
