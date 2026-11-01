@@ -47,3 +47,13 @@ admission mutant.
 Status at authoring: source implementation only. New checked compilation,
 ART, installed-reader and physical acceptance remain NOT_RUN. Historical
 passes do not qualify these changes. The TAB_P10 connection remains BLOCKED.
+
+
+At a0130375d15a46d72f8e4262385315a12a005b03, run 41313390681 job
+124868283246, the host ingress/Arena controls pass, while the new reflow
+command has no DEX export and is explicitly refused: "No functions selected".
+The test command now declares dex:source_reflow_cases, as required by the
+maintained command entry contract. No candidate DEX was emitted at the
+refusal, and no ART or installed-reader pass is claimed. Browser-foundation
+run 41313390660 job 124868283446 passes; its separate live arXiv prepaint job
+124868283180 fails and is not represented as an Android failure or success.

@@ -163,6 +163,7 @@ advance_contract_cases =
   refused (reflow_source_advances (Requirements 4 streamingly) one_advance "abc") &&
   refused (reflow_source_advances (Requirements 4 typographically) one_advance "abc")
 
+%export "dex:source_reflow_cases"
 main : IO ()
 main = do
   let passed = run_cases && advance_contract_cases
