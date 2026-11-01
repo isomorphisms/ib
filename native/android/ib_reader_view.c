@@ -135,6 +135,24 @@ Java_org_isomorphisms_ib_ReaderBridge_scrollAnchor(JNIEnv *e, jclass ignored,
     return ok ? 0 : -1;
 }
 
+/* Explicit source navigation replaces the previous insertion point.
+ * TextView.onPreDraw otherwise brings its old selection back into view.
+ * A direct scrollTo also leaves an older smooth scroll alive; replace that
+ * animation with a zero-distance request at the measured final position. */
+static int settle_fragment_cursor(JNIEnv *e, jobject view, jobject parent, jint point, jint position) {
+    jmethodID get_text = sdk_method(e, "android/widget/TextView", "getText", "()Ljava/lang/CharSequence;");
+    jobject text = get_text ? (*e)->CallObjectMethod(e, view, get_text) : NULL;
+    jclass spannable = text ? (*e)->FindClass(e, "android/text/Spannable") : NULL;
+    jclass selection = spannable ? (*e)->FindClass(e, "android/text/Selection") : NULL;
+    jmethodID set = selection ? (*e)->GetStaticMethodID(e, selection, "setSelection",
+        "(Landroid/text/Spannable;I)V") : NULL;
+    jmethodID stop = set ? sdk_method(e, "android/widget/ScrollView", "smoothScrollTo", "(II)V") : NULL;
+    if (!stop || !(*e)->IsInstanceOf(e, text, spannable) || (*e)->ExceptionCheck(e)) return 0;
+    (*e)->CallStaticVoidMethod(e, selection, set, text, point);
+    if (!(*e)->ExceptionCheck(e)) (*e)->CallVoidMethod(e, parent, stop, 0, position);
+    return !(*e)->ExceptionCheck(e);
+}
+
 /* ScrollView.requestChildRectangleOnScreen computes its vertical window
  * without the parent's padding. With clipToPadding, it can put line zero
  * behind that padding. Use the actual direct ScrollView and measured Layout
@@ -181,6 +199,7 @@ static int position_fragment(JNIEnv *e, jobject view, jint point) {
     if (!(*e)->ExceptionCheck(e)) (*e)->CallVoidMethod(e, parent, scroll, 0, (jint)wanted);
     jint observed = !(*e)->ExceptionCheck(e) ? (*e)->CallIntMethod(e, parent, get_scroll) : -1;
     if ((*e)->ExceptionCheck(e) || observed < 0) return 0;
+    if (!settle_fragment_cursor(e, view, parent, point, observed)) return 0;
     int64_t visible_first = (int64_t)child_top + first - observed;
     int64_t visible_after = (int64_t)child_top + after - observed;
     __android_log_print(ANDROID_LOG_INFO, "IBReader",

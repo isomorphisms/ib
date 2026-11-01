@@ -38,7 +38,7 @@ test "$(cat "$input/native-client/observer-commit.txt")" = "$expected_observer"
 test "$(git -C "$repository/.tools/reader-acceptance" rev-parse HEAD)" = "$expected_observer"
 for name in ib-native-boundary.apk ib-native-uid-bypass.apk ib-native-death-noop.apk \
   ib-native-strict-flags.apk ib-native-stale-authorization.apk ib-native-anchor-zero.apk \
-  ib-native-resume-noop.apk ib-native-detach-any.apk {
+  ib-native-resume-noop.apk ib-native-detach-any.apk ib-native-anchor-reset.apk {
   var expected = $(awk -v name="$name" '{n=split($2,p,"/"); if(p[n]==name)print $1}' "$input/native-client/sha256.txt")
   printf '%s\n' "$expected" | rg -x '[0-9a-f]{64}'
   printf '%s  %s\n' "$expected" "$input/native-client/$name" | sha256sum -c -
