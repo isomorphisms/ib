@@ -489,6 +489,55 @@ static jstring source_text(JNIEnv *e, const unsigned char *bytes, size_t count, 
     return decoded && text && !(*e)->ExceptionCheck(e) ? (*e)->CallObjectMethod(e, decoded, text) : NULL;
 }
 
+/* Record only exception types and generated method names. Never log Throwable
+ * messages, source text, URLs or request/capability values. This diagnostic
+ * consumes the pending exception before the existing recoverable error path. */
+static void log_reader_exception(JNIEnv *e) {
+    jthrowable failure = (*e)->ExceptionOccurred(e);
+    if (!failure) return;
+    (*e)->ExceptionClear(e);
+    if ((*e)->PushLocalFrame(e, 24) != 0) {
+        (*e)->ExceptionClear(e);
+        (*e)->DeleteLocalRef(e, failure);
+        return;
+    }
+    jclass failure_type = (*e)->GetObjectClass(e, failure);
+    jclass class_type = (*e)->FindClass(e, "java/lang/Class");
+    jmethodID class_name = class_type ? (*e)->GetMethodID(e, class_type, "getName", "()Ljava/lang/String;") : NULL;
+    jstring name = class_name ? (*e)->CallObjectMethod(e, failure_type, class_name) : NULL;
+    const char *type = name && !(*e)->ExceptionCheck(e) ? (*e)->GetStringUTFChars(e, name, NULL) : NULL;
+    if (type) {
+        __android_log_print(ANDROID_LOG_ERROR, "IBReader", "checked renderer exception type=%.192s", type);
+        (*e)->ReleaseStringUTFChars(e, name, type);
+    }
+    if (!(*e)->ExceptionCheck(e)) {
+        jmethodID stack = method(e, "java/lang/Throwable", "getStackTrace", "()[Ljava/lang/StackTraceElement;");
+        jobjectArray frames = stack ? (*e)->CallObjectMethod(e, failure, stack) : NULL;
+        jmethodID owner = method(e, "java/lang/StackTraceElement", "getClassName", "()Ljava/lang/String;");
+        jmethodID member = method(e, "java/lang/StackTraceElement", "getMethodName", "()Ljava/lang/String;");
+        if (frames && owner && member && !(*e)->ExceptionCheck(e)) {
+            jsize count = (*e)->GetArrayLength(e, frames);
+            if (count > 12) count = 12;
+            for (jsize i = 0; i < count && !(*e)->ExceptionCheck(e); ++i) {
+                if ((*e)->PushLocalFrame(e, 8) != 0) break;
+                jobject frame = (*e)->GetObjectArrayElement(e, frames, i);
+                jstring owner_name = frame ? (*e)->CallObjectMethod(e, frame, owner) : NULL;
+                jstring member_name = frame && !(*e)->ExceptionCheck(e) ? (*e)->CallObjectMethod(e, frame, member) : NULL;
+                const char *owner_text = owner_name && !(*e)->ExceptionCheck(e) ? (*e)->GetStringUTFChars(e, owner_name, NULL) : NULL;
+                const char *member_text = member_name && !(*e)->ExceptionCheck(e) ? (*e)->GetStringUTFChars(e, member_name, NULL) : NULL;
+                if (owner_text && member_text)
+                    __android_log_print(ANDROID_LOG_ERROR, "IBReader", "checked renderer frame=%d %.192s.%.192s", i, owner_text, member_text);
+                if (member_text) (*e)->ReleaseStringUTFChars(e, member_name, member_text);
+                if (owner_text) (*e)->ReleaseStringUTFChars(e, owner_name, owner_text);
+                (*e)->PopLocalFrame(e, NULL);
+            }
+        }
+    }
+    if ((*e)->ExceptionCheck(e)) (*e)->ExceptionClear(e);
+    (*e)->PopLocalFrame(e, NULL);
+    (*e)->DeleteLocalRef(e, failure);
+}
+
 JNIEXPORT void JNICALL
 Java_org_isomorphisms_ib_ReaderCompletionTask_run(JNIEnv *e, jobject self) {
     if ((*e)->PushLocalFrame(e, 64) != 0) return;
@@ -521,7 +570,7 @@ Java_org_isomorphisms_ib_ReaderCompletionTask_run(JNIEnv *e, jobject self) {
             __android_log_print(ANDROID_LOG_INFO, "IBReader", "checked renderer callback returned exception=%d", (*e)->ExceptionCheck(e));
         }
         if (!journal || (*e)->ExceptionCheck(e)) {
-            if ((*e)->ExceptionCheck(e)) (*e)->ExceptionClear(e);
+            log_reader_exception(e);
             jstring reason = (*e)->NewStringUTF(e, "The checked renderer failed; the last committed readable state is retained.");
             if (reason) (*e)->CallStaticVoidMethod(e, application.generated, application.error_callback, activity, reason);
             if ((*e)->ExceptionCheck(e)) (*e)->ExceptionClear(e);
