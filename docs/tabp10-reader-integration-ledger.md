@@ -11,7 +11,7 @@ This is a source-publication snapshot. Fresh integration acceptance is required 
 | Distinct command, pure-export and framework Activity contracts | PASS | android-NDK986 full canonical/runtime/framework/callback/audio/packager suites |
 | Deterministic checked DEX, explicit refusal, no stale DEX, compiled mutations | PASS | android-NDK986, both runtime APIs and independent lifecycle oracle |
 | Real checked onResume/onDestroy framework dispatch and original Activity return | PASS | Compiler986, [runtime41337154317](https://github.com/isomorphisms/android-NDK/actions/runs/41337154317), jobs124939285521/124939285743; two compiled behavior mutants rejected |
-| Integrated reader Activity generation, stale destroy, queued completion retirement and last-good restoration | NOT_RUN | Implemented in this head; requires fresh installed reader and compiled C controls |
+| Integrated reader Activity generation, stale destroy, queued completion retirement and last-good restoration | PASS | Unchanged IB1a0, independent ai-ci8561 replay41343801337 API29/API34; resume-noop and detach-any mutants rejected, new acquisition and offline history pass. Changed padded-scroll candidate still requires its own runtime qualification |
 | App-owned private Binder, caller/provider authorization and Shizuku lifecycle | PASS | IB FB9 producer41324363104, both APIs; actual Binder transaction tests |
 | Real Grease-supervised ICU worker and private bounded PFD transfer | PASS | Same exact FB9 producer; no direct-network fallback |
 | Unauthorized/malformed/stale capability and unsafe descriptor refusals | PASS | Host/ART/native controls and compiled caller/flags/revocation variants |
@@ -28,9 +28,9 @@ This is a source-publication snapshot. Fresh integration acceptance is required 
 | Source/history/last-good reconstruction after process loss, update and reboot | PASS | FB9 installed profiles on both emulators, including checksummed semantic-journal fallback |
 | Removable storage migration | NOT_RUN | No migration performed; no SD presence/capacity/access assumption |
 | URL entry, actual title/headings/paragraphs/links and new acquisition | PASS | FB9 actual HTTPS and controlled native input/touch/navigation |
-| Absolute/root/query/base link acquisition as a complete installed shape-by-shape profile | NOT_RUN | Resolution is implemented; relative acquisition already passes. The new base/fragment native fixture and the remaining individual URL shapes need fresh installed qualification. |
+| Absolute/root/query/base link acquisition as a complete installed shape-by-shape profile | PASS | Unchanged IB1a0, independent ai-ci8561 replay41343801337, both APIs: six native destinations, exact original ranges/digests, forged request and changed-byte controls, offline retained history |
 | Unicode fragment decoding, semantic target and source/display projection | PASS | IB504 host and real ART with compiled offset/percent mutants |
-| Native fragment target viewport and retained fragment Back/Forward | NOT_RUN | IB504 fails actual viewport. E1 repair builds, but producer41336964699 cannot install either emulator image because host disk is full. Current workflow isolates required ART hosts with digest-verified exact inputs. |
+| Native fragment target viewport and retained fragment Back/Forward | FAIL | IB1a0 primary both APIs; independent8561 actual API34 screenshot/coordinates prove clipping behind ScrollView padding. Independent API29 fragment lane could not boot and is NOT_RUN. The measured padded-scroll repair in this head requires fresh runtime acceptance. |
 | Browser-owned Back/Forward and retained document identity without refetch | PASS | FB9 independent source/index and offline three-document profiles |
 | Scrolling, selectable source-linked Unicode text and exact clipboard | PASS | FB9 real SDK actions, surrogate/soft-hyphen coordinates and compiled semantic negatives |
 | Two visible reflow algorithms, measured width adaptation and incompatible-mode refusal | PASS | Greedy/Squared actual UI and checked source controls; complete-source modes explicitly refuse incompatible streaming modes |
@@ -55,6 +55,6 @@ This is a source-publication snapshot. Fresh integration acceptance is required 
 | Tablet genuine ChordReader SEARCH/results/click | BLOCKED | No physical access; public Google result flow also fails in current emulator responses |
 | Release decision / campaign completion | BLOCKED | Physical acceptance and successful search-results flow are missing; no merge or permanent release |
 
-The new compiler pin is android-NDK9861b303a7e6d989125d80cee552a46cb2503555. Independent acceptance is ai-ci210e6a013691986674a6259f91d1f786e68734de; its standalone lifecycle oracle is frozen atb8a9cf49. Other retained transport/storage/frontend/toolchain pins are recorded in the actual producer's commit and hash manifests. No credentials, authorization tokens, private user sources or sensitive URLs belong in public receipts.
+The new compiler pin is android-NDK9861b303a7e6d989125d80cee552a46cb2503555. Independent acceptance is ai-ci8561acf3f3e88baa6af59cf06f149e71b4038a14; its standalone lifecycle oracle is frozen atb8a9cf49. Other retained transport/storage/frontend/toolchain pins are recorded in the actual producer's commit and hash manifests. No credentials, authorization tokens, private user sources or sensitive URLs belong in public receipts.
 
 Integration review remains in the native-reader, reusable compiler, independent acceptance and exact-APK delivery pull requests. No automatic merge, permanent release, application-data deletion, factory reset, formatting, package-identity change, signing rotation or unobserved SD migration is performed.

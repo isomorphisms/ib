@@ -7,6 +7,7 @@ var artifact = ARGV[2]
 var digest = ARGV[3]
 var input = ARGV[4]
 var evidence = ARGV[5]
+var expected_observer = '8561acf3f3e88baa6af59cf06f149e71b4038a14'
 printf '%s\n' "$source" | rg -x '[0-9a-f]{40}'
 printf '%s\n' "$artifact" | rg -x '[1-9][0-9]{0,19}'
 if (digest.startsWith('sha256:')) { setvar digest = digest[7:] }
@@ -33,8 +34,8 @@ test "$(cat "$input/ib-commit.txt")" = "$source"
 test "$(cat "$input/native-client/ib-commit.txt")" = "$source"
 test "$(cat "$input/native-client/backend-commit.txt")" = 9861b303a7e6d989125d80cee552a46cb2503555
 test "$(cat "$input/native-client/frontend-commit.txt")" = 740bbf2b1d9e811fd00c719c3473eede17ceea3b
-test "$(cat "$input/native-client/observer-commit.txt")" = 210e6a013691986674a6259f91d1f786e68734de
-test "$(git -C "$repository/.tools/reader-acceptance" rev-parse HEAD)" = 210e6a013691986674a6259f91d1f786e68734de
+test "$(cat "$input/native-client/observer-commit.txt")" = "$expected_observer"
+test "$(git -C "$repository/.tools/reader-acceptance" rev-parse HEAD)" = "$expected_observer"
 for name in ib-native-boundary.apk ib-native-uid-bypass.apk ib-native-death-noop.apk \
   ib-native-strict-flags.apk ib-native-stale-authorization.apk ib-native-anchor-zero.apk \
   ib-native-resume-noop.apk ib-native-detach-any.apk {
