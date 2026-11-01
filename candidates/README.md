@@ -1,50 +1,44 @@
 # Native IB reader candidates
 
-The current candidate source is
-[966a613a79b2a5800c209298800678bd984d4966](https://github.com/isomorphisms/ib/tree/966a613a79b2a5800c209298800678bd984d4966).
-[Download the exact signed APK](https://raw.githubusercontent.com/isomorphisms/ib/bb90699ed284c37127e1747f3dff250ba98b8304/candidates/ib-reader-966a613a.apk)
-(10,233,767 bytes). SHA-256:
+The current publication target is checked source
+[fb9b34a92328551aa043137a4bba8b58084f2955](https://github.com/isomorphisms/ib/tree/fb9b34a92328551aa043137a4bba8b58084f2955).
+Its exact signed APK is being verified for direct publication. The publisher
+also requires source-bound independent API29/API34 decoding and handoff
+archives to identify the same APK bytes. It does not rebuild or re-sign.
+
+[Producer41324363104](https://github.com/isomorphisms/ib/actions/runs/41324363104)
+passes all required stages and both APIs: checked source emission, independent
+DEX decode/determinism/refusal and compiled mutations; actual HTTPS through
+private Binder/Shizuku/Grease/ICU; committed Arena readback; native text, link
+acquisition/history, exact Unicode/soft-hyphen copy and two reflows; offline,
+update/reboot and checksummed semantic-journal recovery. The dead-RPC repair
+passes with notification disabled and rejects a compiled stale-authority
+mutant. The concurrent Unicode optional-break repair is included.
+
+[Independent41328116370](https://github.com/isomorphisms/ai-ci/actions/runs/41328116370)
+passes API29/API34 decoding lanes, including actual windows-1252/Latin-1
+original-byte verification, source-faithful clipboard/reflow, TLS certificate
+refusal and recovery. Both genuine ChordReader caller/query/original-byte
+handoff subprofiles pass. Both stronger search lanes FAIL: Google supplies a
+redirect-only partial page rather than a visible public result. The provided
+first-party continuation is under actual native observation. Search success
+and a clicked public result remain unqualified.
+
+Package org.isomorphisms.ib.prepaint, versionCode3/versionName0.3.0,
+minimum API29/target36; x86_64, armeabi-v7a and arm64-v8a are packaged build
+facts. Existing public test signer:
+`de9b1d47c5a65e6d46a204b79dd9ee566b9d3c9832ba81ebc4213d3392e92ff9`.
+
+**Candidate only; insufficient for release.** Later fragment source and native
+viewport qualification are separate from these frozen bytes. Physical TAB_P10
+is BLOCKED/NOT_RUN: no authenticated tablet endpoint, installed signer/version
+or fresh ABI/SDK/storage/Shizuku inventory. Emulator replacement acceptance
+does not establish tablet update compatibility. MIRO A1/C67 remain historical.
+No merge, permanent release, uninstall, data deletion, signing rotation or
+removable-storage migration is performed.
+
+[The earlier966a APK](https://raw.githubusercontent.com/isomorphisms/ib/bb90699ed284c37127e1747f3dff250ba98b8304/candidates/ib-reader-966a613a.apk)
+is retained:10,233,767 bytes, SHA256
 `1abdd64d0ec69933e02c61106e23ca5d9539a327104da4a612f841abd0cafd9a`.
-[Publisher run41319796031](https://github.com/isomorphisms/ib/actions/runs/41319796031)
-verified and copied the producer's unchanged signed bytes.
-
-[Producer run 41315891303](https://github.com/isomorphisms/ib/actions/runs/41315891303)
-passes all required stages on API29/API34: actual checked source emission,
-independent DEX decode/determinism and compiled mutations; direct signed
-multi-ABI packaging; installed Example Domain HTTPS through Binder/Shizuku/
-Grease/ICU; committed Arena readback; actual link acquisition; Back/Forward;
-exact Unicode/soft-hyphen copy; Greedy/Squared reflow; offline/update/restart;
-and checksummed semantic-journal corruption recovery without refetching.
-
-The reusable recursive compiler and exact 84007-byte source consumer also
-pass both APIs in
-[android-NDK run 41315882527](https://github.com/isomorphisms/android-NDK/actions/runs/41315882527).
-That consumer result does not establish UI responsiveness for every body.
-
-Package org.isomorphisms.ib.prepaint, versionCode 3 / versionName 0.3.0,
-minimum Android API29, target API36. The build contains x86_64 / armeabi-v7a /
-arm64-v8a. Existing public test signer:
-de9b1d47c5a65e6d46a204b79dd9ee566b9d3c9832ba81ebc4213d3392e92ff9.
-Publication copies the exact existing signed bytes and checks both DEX files
-and all three native libraries. It does not rebuild, repackage or re-sign.
-
-**Acceptance remains insufficient for release.** Independent
-[run41319549929](https://github.com/isomorphisms/ai-ci/actions/runs/41319549929)
-passes native Google partial-static presentation and genuine ChordReader
-handoff on API29/API34, including committed original-byte readback, TLS
-certificate refusal and semantic-journal recovery. The API29 legacy-decoding
-profile passes. The API34 decoding profile fails actual Binder-death state;
-[run41324114821](https://github.com/isomorphisms/ai-ci/actions/runs/41324114821)
-reproduces that older-APK race on both APIs before stronger result-click checks.
-IB fb9b34a9 repairs dead-RPC classification and preserves the concurrent
-Unicode-break repair; its fresh qualification is pending. This APK predates
-both changes. Native search-result click/retention remains unqualified. Physical TAB_P10 is BLOCKED:
-there is no authenticated tablet endpoint or fresh installed signer/version,
-ABI/SDK/storage/Shizuku inventory. Packaged ABIs are build facts, and emulator
-update acceptance does not establish physical update compatibility. No merge,
-permanent release, uninstall, data deletion, signing rotation or SD migration
-is performed.
-
-The [older A734 APK](https://raw.githubusercontent.com/isomorphisms/ib/2ffb9b2bf357a36763e874b71d9571abba860433/candidates/ib-reader-a7349efc.apk)
-is retained as historical evidence. It has the known Google original-octet
-traversal stack overflow and does not qualify the current source.
+It predates the Unicode/dead-RPC repairs. The older A734 APK is historical and
+has the diagnosed original-octet traversal stack overflow on Google bodies.
