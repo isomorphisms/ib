@@ -1,0 +1,91 @@
+#!/usr/bin/env grease
+# Retain a reviewed-source APK candidate; never merge or create a release.
+set -eu -o pipefail
+if (len(ARGV) !== 3) { echo 'usage: grease publish.grease SDK EXPECTED_DELIVERY_HEAD NEW_EVIDENCE' >&2; exit 2 }
+var sdk = ARGV[0]
+var expected_head = ARGV[1]
+var evidence = ARGV[2]
+var branch = 'delivery/ib-reader-a7349efc'
+if (ENV.DELIVERY_BRANCH !== branch) { echo 'FAIL unexpected publication branch' >&2; exit 2 }
+for path in "$sdk" "$evidence" {
+  if (len(path) === 0 or path[0] !== '/') { exit 2 }
+}
+if test -e "$evidence" { echo 'FAIL reused delivery evidence' >&2; exit 2 }
+mkdir -p "$evidence/input"
+printf '%s\n' "$expected_head" > "$evidence/expected-head"
+rg -x '[0-9a-f]{40}' "$evidence/expected-head"
+var live_head = $(gh api "repos/isomorphisms/ib/git/ref/heads/$branch" --jq .object.sha)
+if (live_head !== expected_head) { echo 'FAIL delivery branch advanced before publication' >&2; exit 1 }
+var authorization = ENV.GH_TOKEN
+var archive = "$evidence/source-bound-candidate.zip"
+curl --fail --location --silent --show-error --max-time 300 \
+  --header "Authorization: Bearer $authorization" \
+  https://api.github.com/repos/isomorphisms/ib/actions/artifacts/13079411952/zip --output "$archive"
+test "$(wc -c < "$archive")" = 823903202
+printf '35422ddc46f92292d28917cf57386f86a17f7fbc2e72a844eede5da7f0dac6d2  %s\n' "$archive" | sha256sum -c -
+unzip -q "$archive" -d "$evidence/input"
+var input = "$evidence/input"
+test "$(cat "$input/ib-commit.txt")" = a7349efc8041b4c41ff158afca7f13079c8df1c2
+test "$(cat "$input/native-client/ib-commit.txt")" = a7349efc8041b4c41ff158afca7f13079c8df1c2
+var apk = "$input/native-client/ib-native-boundary.apk"
+var tools = "$sdk/build-tools/35.0.0"
+"$tools/apksigner" verify --verbose --print-certs "$apk" > "$evidence/signature.txt" 2>&1
+rg -x -F 'Signer #1 certificate SHA-256 digest: de9b1d47c5a65e6d46a204b79dd9ee566b9d3c9832ba81ebc4213d3392e92ff9' "$evidence/signature.txt"
+"$tools/aapt2" dump badging "$apk" > "$evidence/badging.txt"
+rg -F "package: name='org.isomorphisms.ib.prepaint' versionCode='3' versionName='0.3.0'" "$evidence/badging.txt"
+rg -x -F "sdkVersion:'29'" "$evidence/badging.txt"
+rg -x -F "targetSdkVersion:'36'" "$evidence/badging.txt"
+unzip -Z1 "$apk" > "$evidence/entries.txt"
+for abi in x86_64 armeabi-v7a arm64-v8a {
+  rg -x -F "lib/$abi/libib_reader.so" "$evidence/entries.txt"
+  unzip -p "$apk" "lib/$abi/libib_reader.so" > "$evidence/$abi.so"
+  cmp "$input/native-client/payload/lib/$abi/libib_reader.so" "$evidence/$abi.so"
+}
+unzip -p "$apk" classes.dex > "$evidence/classes.dex"
+unzip -p "$apk" classes2.dex > "$evidence/classes2.dex"
+cmp "$input/native-client/activity.dex" "$evidence/classes.dex"
+cmp "$input/native-client/platform.dex" "$evidence/classes2.dex"
+var digest = $(sha256sum "$apk" | cut -d ' ' -f 1)
+var original_digest = $(awk '$2~/\/ib-native-boundary[.]apk$/ {print $1}' "$input/native-client/sha256.txt")
+if (digest !== original_digest) { echo 'FAIL candidate APK differs from the source-bound build receipt' >&2; exit 1 }
+var size = $(wc -c < "$apk")
+var receipt = "$evidence/ib-reader-a7349efc.receipt.tsv"
+printf 'schema\tib-reviewable-apk-candidate-v1\nsource\ta7349efc8041b4c41ff158afca7f13079c8df1c2\nsource_run\t41294413498\nsource_artifact\t13079411952\nsource_archive_sha256\t35422ddc46f92292d28917cf57386f86a17f7fbc2e72a844eede5da7f0dac6d2\npackage\torg.isomorphisms.ib.prepaint\nversion_code\t3\nversion_name\t0.3.0\nminimum_API\t29\ntarget_API\t36\npackaged_ABIs\tx86_64,armeabi-v7a,arm64-v8a\nsigner_sha256\tde9b1d47c5a65e6d46a204b79dd9ee566b9d3c9832ba81ebc4213d3392e92ff9\nAPK_byte_count\t%s\nAPK_sha256\t%s\nmain_reader_API29_API34\tPASS\nactual_ChordReader_SEARCH\tNOT_RUN\nGoogle_results_and_clicked_result\tNOT_RUN\nphysical_TAB_P10\tBLOCKED\nphysical_signer_ABI_SDK_inventory\tNOT_RUN\nrelease_decision\tINSUFFICIENT\n' "$size" "$digest" > "$receipt"
+# The GitHub API requires JSON. Fixed paths and validated hashes only are
+# inserted into these bodies; credentials and source contents never become
+# shell syntax or public receipt fields.
+printf '{"encoding":"base64","content":"' > "$evidence/apk-blob.json"
+base64 -w0 "$apk" >> "$evidence/apk-blob.json"
+printf '"}\n' >> "$evidence/apk-blob.json"
+var apk_blob = $(gh api --method POST repos/isomorphisms/ib/git/blobs \
+  --input "$evidence/apk-blob.json" --jq .sha)
+var receipt_blob = $(gh api --method POST repos/isomorphisms/ib/git/blobs \
+  --field "content=@$receipt" --raw-field encoding=utf-8 --jq .sha)
+var base_tree = $(gh api "repos/isomorphisms/ib/git/commits/$expected_head" --jq .tree.sha)
+for hash in "$apk_blob" "$receipt_blob" "$base_tree" {
+  printf '%s\n' "$hash" > "$evidence/API-hash"
+  rg -x '[0-9a-f]{40}' "$evidence/API-hash"
+}
+printf '{"base_tree":"%s","tree":[{"path":"candidates/ib-reader-a7349efc.apk","mode":"100644","type":"blob","sha":"%s"},{"path":"candidates/ib-reader-a7349efc.receipt.tsv","mode":"100644","type":"blob","sha":"%s"}]}\n' \
+  "$base_tree" "$apk_blob" "$receipt_blob" > "$evidence/tree.json"
+var tree = $(gh api --method POST repos/isomorphisms/ib/git/trees --input "$evidence/tree.json" --jq .sha)
+printf '%s\n' "$tree" > "$evidence/tree-sha"
+rg -x '[0-9a-f]{40}' "$evidence/tree-sha"
+printf '{"message":"Retain the exact independently exercised native IB APK candidate","tree":"%s","parents":["%s"]}\n' \
+  "$tree" "$expected_head" > "$evidence/commit.json"
+var published = $(gh api --method POST repos/isomorphisms/ib/git/commits --input "$evidence/commit.json" --jq .sha)
+printf '%s\n' "$published" > "$evidence/published-sha"
+rg -x '[0-9a-f]{40}' "$evidence/published-sha"
+var before_update = $(gh api "repos/isomorphisms/ib/git/ref/heads/$branch" --jq .object.sha)
+if (before_update !== expected_head) { echo 'FAIL delivery branch advanced; candidate objects remain unreferenced' >&2; exit 1 }
+# A non-forced fast-forward to our direct child also rejects a concurrent
+# branch change occurring after the read above. No application/source branch
+# or release reference is writable through this fixed target.
+gh api --method PATCH "repos/isomorphisms/ib/git/refs/heads/$branch" \
+  --raw-field "sha=$published" --field force=false --jq .object.sha > "$evidence/updated-head"
+var updated = $(cat "$evidence/updated-head")
+if (updated !== published) { echo 'FAIL unexpected delivery reference result' >&2; exit 1 }
+printf 'https://raw.githubusercontent.com/isomorphisms/ib/%s/candidates/ib-reader-a7349efc.apk\n' "$published" > "$evidence/direct-APK-URL.txt"
+cat "$receipt"
+printf 'candidate_commit\t%s\n' "$published"
+cat "$evidence/direct-APK-URL.txt"
