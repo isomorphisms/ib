@@ -135,49 +135,61 @@ Java_org_isomorphisms_ib_ReaderBridge_scrollAnchor(JNIEnv *e, jclass ignored,
     return ok ? 0 : -1;
 }
 
-/* View.requestRectangleOnScreen takes content coordinates and is available
- * on API 29. TextView.bringPointIntoView(int) only asks its parent to scroll
- * while focused; navigating a URL normally leaves focus in the input field. */
+/* ScrollView.requestChildRectangleOnScreen computes its vertical window
+ * without the parent's padding. With clipToPadding, it can put line zero
+ * behind that padding. Use the actual direct ScrollView and measured Layout
+ * coordinates; neither focus nor an assumed toolbar/display size is needed. */
 static int position_fragment(JNIEnv *e, jobject view, jint point) {
     jmethodID get_layout = sdk_method(e, "android/widget/TextView", "getLayout", "()Landroid/text/Layout;");
     jobject layout = get_layout ? (*e)->CallObjectMethod(e, view, get_layout) : NULL;
     jmethodID for_offset = layout ? sdk_method(e, "android/text/Layout", "getLineForOffset", "(I)I") : NULL;
     jmethodID line_top = for_offset ? sdk_method(e, "android/text/Layout", "getLineTop", "(I)I") : NULL;
     jmethodID line_bottom = line_top ? sdk_method(e, "android/text/Layout", "getLineBottom", "(I)I") : NULL;
-    jmethodID horizontal = line_bottom ? sdk_method(e, "android/text/Layout", "getPrimaryHorizontal", "(I)F") : NULL;
-    jmethodID padding_top = horizontal ? sdk_method(e, "android/widget/TextView", "getTotalPaddingTop", "()I") : NULL;
-    jmethodID padding_left = padding_top ? sdk_method(e, "android/widget/TextView", "getCompoundPaddingLeft", "()I") : NULL;
-    jmethodID get_width = padding_left ? sdk_method(e, "android/view/View", "getWidth", "()I") : NULL;
-    jmethodID get_height = get_width ? sdk_method(e, "android/view/View", "getHeight", "()I") : NULL;
-    if (!get_height || (*e)->ExceptionCheck(e)) return 0;
+    jmethodID padding_top = line_bottom ? sdk_method(e, "android/widget/TextView", "getTotalPaddingTop", "()I") : NULL;
+    jmethodID get_height = padding_top ? sdk_method(e, "android/view/View", "getHeight", "()I") : NULL;
+    jmethodID get_parent = get_height ? sdk_method(e, "android/view/View", "getParent", "()Landroid/view/ViewParent;") : NULL;
+    jobject parent = get_parent ? (*e)->CallObjectMethod(e, view, get_parent) : NULL;
+    jclass scroll_type = parent ? (*e)->FindClass(e, "android/widget/ScrollView") : NULL;
+    if (!scroll_type || !(*e)->IsInstanceOf(e, parent, scroll_type) || (*e)->ExceptionCheck(e)) return 0;
+    jmethodID get_top = sdk_method(e, "android/view/View", "getTop", "()I");
+    jmethodID parent_top = get_top ? sdk_method(e, "android/view/View", "getPaddingTop", "()I") : NULL;
+    jmethodID parent_bottom = parent_top ? sdk_method(e, "android/view/View", "getPaddingBottom", "()I") : NULL;
+    jmethodID scroll = parent_bottom ? sdk_method(e, "android/view/View", "scrollTo", "(II)V") : NULL;
+    jmethodID get_scroll = scroll ? sdk_method(e, "android/view/View", "getScrollY", "()I") : NULL;
+    if (!get_scroll || (*e)->ExceptionCheck(e)) return 0;
     jint line = (*e)->CallIntMethod(e, layout, for_offset, point);
     if (line < 0 || (*e)->ExceptionCheck(e)) return 0;
     jint top = (*e)->CallIntMethod(e, layout, line_top, line);
     jint bottom = (*e)->CallIntMethod(e, layout, line_bottom, line);
-    jfloat horizontal_point = (*e)->CallFloatMethod(e, layout, horizontal, point);
     jint above = (*e)->CallIntMethod(e, view, padding_top);
-    jint left_padding = (*e)->CallIntMethod(e, view, padding_left);
-    jint width = (*e)->CallIntMethod(e, view, get_width);
     jint height = (*e)->CallIntMethod(e, view, get_height);
-    if ((*e)->ExceptionCheck(e) || !isfinite(horizontal_point) || top < 0 ||
-        bottom <= top || above < 0 || left_padding < 0 || width < 1 || height < 1) return 0;
+    jint child_top = (*e)->CallIntMethod(e, view, get_top);
+    jint viewport = (*e)->CallIntMethod(e, parent, get_height);
+    jint before = (*e)->CallIntMethod(e, parent, parent_top);
+    jint after_padding = (*e)->CallIntMethod(e, parent, parent_bottom);
+    if ((*e)->ExceptionCheck(e) || top < 0 || bottom <= top || above < 0 ||
+        height < 1 || child_top < 0 || before < 0 || after_padding < 0 ||
+        (int64_t)before + after_padding >= viewport) return 0;
     int64_t first = (int64_t)top + above, after = (int64_t)bottom + above;
-    if (first < 0 || after <= first || after > height) return 0;
-    double horizontal_content = floor((double)horizontal_point + left_padding);
-    jint x = horizontal_content < 0 ? 0 : horizontal_content >= width ? width - 1 : (jint)horizontal_content;
-    jint left = x > 0 ? x - 1 : 0;
-    jint right = (int64_t)x + 2 > width ? width : x + 2;
-    jclass rectangle_type = (*e)->FindClass(e, "android/graphics/Rect");
-    jmethodID construct = rectangle_type ? (*e)->GetMethodID(e, rectangle_type, "<init>", "(IIII)V") : NULL;
-    jobject rectangle = construct ? (*e)->NewObject(e, rectangle_type, construct, left, (jint)first, right, (jint)after) : NULL;
-    jmethodID request = rectangle ? sdk_method(e, "android/view/View", "requestRectangleOnScreen", "(Landroid/graphics/Rect;Z)Z") : NULL;
-    if (!request || (*e)->ExceptionCheck(e)) return 0;
-    jboolean changed = (*e)->CallBooleanMethod(e, view, request, rectangle, JNI_TRUE);
-    if ((*e)->ExceptionCheck(e)) return 0;
-    __android_log_print(ANDROID_LOG_INFO, "IBReader", "fragment viewport point=%d line=%d parent_scrolled=%d", point, line, changed);
-    /* False means no parent needed to scroll. Independent SDK observations,
-     * rather than this request's return value, qualify actual visibility. */
-    return 1;
+    if (after <= first || after > height || after - first > (int64_t)viewport - before - after_padding) return 0;
+    int64_t wanted = (int64_t)child_top + first - before;
+    if (wanted < 0) wanted = 0;
+    if (wanted > INT32_MAX) return 0;
+    /* TextView selection can have its own scroll. The checked source point
+     * names Layout coordinates, so normalize that local scroll first. */
+    (*e)->CallVoidMethod(e, view, scroll, 0, 0);
+    if (!(*e)->ExceptionCheck(e)) (*e)->CallVoidMethod(e, parent, scroll, 0, (jint)wanted);
+    jint observed = !(*e)->ExceptionCheck(e) ? (*e)->CallIntMethod(e, parent, get_scroll) : -1;
+    if ((*e)->ExceptionCheck(e) || observed < 0) return 0;
+    int64_t visible_first = (int64_t)child_top + first - observed;
+    int64_t visible_after = (int64_t)child_top + after - observed;
+    __android_log_print(ANDROID_LOG_INFO, "IBReader",
+        "fragment viewport point=%d line=%d parent_scroll=%d padding=%d,%d",
+        point, line, observed, before, after_padding);
+    /* scrollTo clamps at the real child extent. Require the complete target
+     * line inside the padded viewport; the SDK oracle independently observes
+     * its rendered screen position and rejects the compiled zero-point APK. */
+    return visible_first >= before && visible_after <= (int64_t)viewport - after_padding;
 }
 
 JNIEXPORT jboolean JNICALL
