@@ -12,6 +12,7 @@
 
 #include <android/binder_ibinder_jni.h>
 #include <android/binder_status.h>
+#include <android/log.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <inttypes.h>
@@ -421,10 +422,12 @@ Java_org_isomorphisms_ib_ReaderAcquireTask_run(JNIEnv *e, jobject self) {
             if (capability) ib_ingress_capability_release(capability);
         }
     }
-    int fd = -1;
-    if (acquired && ib_arena_source_owner_open_observed(&application.sources, job->id,
-        job->source_generation, job->navigation, &job->ticket, &job->observations, &fd) == 0) {
-        job->result = ib_reader_source_accept_fd(&job->source, &job->ticket, fd) == IB_READER_PFD_ACCEPTED ? 0 : -1;
+    int fd = -1, open_status = -1, stream_status = -1;
+    if (acquired) open_status = ib_arena_source_owner_open_observed(&application.sources, job->id,
+        job->source_generation, job->navigation, &job->ticket, &job->observations, &fd);
+    if (open_status == 0) {
+        stream_status = ib_reader_source_accept_fd(&job->source, &job->ticket, fd);
+        job->result = stream_status == IB_READER_PFD_ACCEPTED ? 0 : -1;
         close(fd);
     }
     if (job->retained == 1 && job->result != 0 && last_source(job, 1) == 0 &&
@@ -434,6 +437,8 @@ Java_org_isomorphisms_ib_ReaderAcquireTask_run(JNIEnv *e, jobject self) {
         close(fd);
     }
     if ((*e)->ExceptionCheck(e)) { (*e)->ExceptionClear(e); job->result = -1; }
+    __android_log_print(ANDROID_LOG_INFO, "IBReader", "committed source acquired=%d open=%d stream=%d result=%d bytes=%zu navigation=%u source_generation=%u",
+        acquired, open_status, stream_status, job->result, job->source.byte_count, job->navigation, job->source_generation);
     jobject completion = task(e, job, application.completion_task);
     pthread_mutex_lock(&application.mutex);
     jobject activity = application.activity ? (*e)->NewLocalRef(e, application.activity) : NULL;
@@ -441,6 +446,7 @@ Java_org_isomorphisms_ib_ReaderAcquireTask_run(JNIEnv *e, jobject self) {
     jmethodID post = method(e, "android/app/Activity", "runOnUiThread", "(Ljava/lang/Runnable;)V");
     int posted = activity && completion && post;
     if (posted) (*e)->CallVoidMethod(e, activity, post, completion);
+    __android_log_print(ANDROID_LOG_INFO, "IBReader", "source completion posted=%d exception=%d", posted, (*e)->ExceptionCheck(e));
     if (!posted || (*e)->ExceptionCheck(e)) {
         if ((*e)->ExceptionCheck(e)) (*e)->ExceptionClear(e);
         pthread_mutex_lock(&application.mutex);
@@ -474,6 +480,8 @@ Java_org_isomorphisms_ib_ReaderCompletionTask_run(JNIEnv *e, jobject self) {
     int current = job && application.active == job && application.navigation == job->navigation;
     jobject activity = current && application.activity ? (*e)->NewLocalRef(e, application.activity) : NULL;
     pthread_mutex_unlock(&application.mutex);
+    __android_log_print(ANDROID_LOG_INFO, "IBReader", "source completion current=%d activity=%d result=%d bytes=%zu",
+        current, activity != NULL, job ? job->result : -1, job ? job->source.byte_count : 0U);
     if (current && activity && job->result == 0) {
         char fields[5000], observed[65];
         ib_reader_sha256_hex(job->source.bytes, job->source.byte_count, observed);
@@ -485,8 +493,18 @@ Java_org_isomorphisms_ib_ReaderCompletionTask_run(JNIEnv *e, jobject self) {
         jstring body = evidence ? utf8_text(e, job->source.bytes, job->source.byte_count) : NULL;
         jstring id = body ? (*e)->NewStringUTF(e, job->id) : NULL;
         jstring journal = id ? (*e)->NewStringUTF(e, job->index.journal) : NULL;
-        if (journal) (*e)->CallStaticVoidMethod(e, application.generated, application.ready_callback,
-            activity, evidence, body, id, (jint)job->navigation, journal, (jint)job->retained);
+        if (journal) {
+            __android_log_print(ANDROID_LOG_INFO, "IBReader", "checked renderer callback begin navigation=%u source_generation=%u", job->navigation, job->source_generation);
+            (*e)->CallStaticVoidMethod(e, application.generated, application.ready_callback,
+                activity, evidence, body, id, (jint)job->navigation, journal, (jint)job->retained);
+            __android_log_print(ANDROID_LOG_INFO, "IBReader", "checked renderer callback returned exception=%d", (*e)->ExceptionCheck(e));
+        }
+        if (!journal || (*e)->ExceptionCheck(e)) {
+            if ((*e)->ExceptionCheck(e)) (*e)->ExceptionClear(e);
+            jstring reason = (*e)->NewStringUTF(e, "The checked renderer failed; the last committed readable state is retained.");
+            if (reason) (*e)->CallStaticVoidMethod(e, application.generated, application.error_callback, activity, reason);
+            if ((*e)->ExceptionCheck(e)) (*e)->ExceptionClear(e);
+        }
     } else if (current && activity) {
         jstring reason = (*e)->NewStringUTF(e, "Acquisition or verified source readback failed. The previous document is retained.");
         if (reason) (*e)->CallStaticVoidMethod(e, application.generated, application.error_callback, activity, reason);

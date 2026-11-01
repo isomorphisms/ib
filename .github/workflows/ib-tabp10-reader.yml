@@ -20,7 +20,7 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           repository: isomorphisms/android-NDK
-          ref: 114a5481cd1cdc15ce02a7b134b798a3124f7ec7
+          ref: d5c4cbe99735c13793621a5cdb45ecb154a37a1e
           path: .tools/android-NDK
           persist-credentials: false
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
@@ -40,7 +40,7 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           repository: isomorphisms/ai-ci
-          ref: f3764fe8afbdc02956382cc618caab297a3b9f47
+          ref: eee9433db43ed70e2eab654e05f7b862a5b5b979
           path: .tools/reader-acceptance
           persist-credentials: false
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683

@@ -1,5 +1,29 @@
 # Actual installed reader failures and next repair
 
+## Current end-to-end limit
+
+At 0003f7187e1a0f9f1b70693e2780bf0c27388932, run 41275673178,
+both installed emulator lanes complete the actual Grease/ICU acquisition and
+canonical Arena publication: worker exit 0, publication 0, accepted 1. The
+first fetched native document still fails its independent 60-second display
+expectation on API 29 and 34. Later offline, update and reboot checks are
+NOT_RUN. Physical TAB_P10 acceptance remains BLOCKED by missing access.
+
+Compact artifact 13071424309 is 1,752,662 bytes, SHA-256
+`d75927a18e0f8c607a3f413cdd2f2b00eb9d26f3adbd9d9032a8f524a9e573af`.
+It does not yet distinguish a source-owner refusal from a stalled checked
+renderer. The new traces expose only stage/status/count/generation values;
+the independent instrumentation captures at most 24 main-thread stack frames
+at an assertion failure, without source text or requested URLs. A failed JNI
+renderer callback now reports a recoverable error instead of silently clearing
+its exception. These changes require fresh installed execution.
+
+The source-linked TextView and its checked selection/link exports are present
+in 394ac8156eee7ab20fc398550fdddf2f7e88bd0d. Host checked emission, independent
+decode, deterministic output, literal selection expectations and compiled
+source mutations passed. Its new ART and installed results are pending; this
+is not a claim of working on-screen selection or link navigation.
+
 Campaign status is **INCOMPLETE**. The source-bound installed reader test at
 `8eb2a1eff42cef1371b8ff064cd2c23d1da89ca9`, IB run 41266041447, failed on
 both Android APIs. Neither the native worker's successful construction nor
