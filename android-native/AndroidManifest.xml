@@ -4,7 +4,10 @@
     <uses-sdk android:minSdkVersion="29" android:targetSdkVersion="36" />
     <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
     <uses-permission android:name="moe.shizuku.manager.permission.API_V23" />
-    <queries><package android:name="moe.shizuku.privileged.api" /></queries>
+    <queries>
+        <package android:name="moe.shizuku.privileged.api" />
+        <package android:name="org.isomorphisms.chordreader.dev" />
+    </queries>
     <application android:allowBackup="false" android:label="IB Prepaint"
         android:supportsRtl="true" android:theme="@style/Theme.IBNative"
         android:usesCleartextTraffic="false" android:extractNativeLibs="true">
@@ -17,6 +20,10 @@
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEARCH" />
+                <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />

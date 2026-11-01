@@ -1,6 +1,7 @@
 module NativeReader
 
 import Data.Text
+import Data.List
 import IB.Reader.Document
 import IB.Reader.Navigation
 import IB.Reader.Selection
@@ -9,6 +10,7 @@ import IB.Prepaint.Reflow
 import IB.Prepaint
 import IB.Reflow
 import IB.Reflow.SourceBreaks
+import IB.WebSearch
 
 -- These domains belong to the Android adapter; none represents a browser task.
 data ActivityReference : Type where [external]
@@ -17,6 +19,12 @@ data ViewReference : Type where [external]
 data TextViewReference : Type where [external]
 data CharacterSequenceReference : Type where [external]
 data MetricsReference : Type where [external]
+data SavedStateReference : Type where [external]
+data ObjectReference : Type where [external]
+data ContextReference : Type where [external]
+data PackageManagerReference : Type where [external]
+data CharsetReference : Type where [external]
+data EncoderReference : Type where [external]
 
 %foreign "dex:virtual:Landroid/app/Activity;:setContentView:(I)V"
 apply_reader_layout : ActivityReference → Int32 → PrimIO ()
@@ -28,6 +36,39 @@ incoming_intent : ActivityReference → PrimIO IntentReference
 incoming_text : IntentReference → Text → PrimIO Text
 %foreign "dex:static:Landroid/text/TextUtils;:isEmpty:(Ljava/lang/CharSequence;)Z"
 raw_text_is_empty : Text → PrimIO Int32
+%foreign "dex:virtual:Landroid/content/Intent;:getAction:()Ljava/lang/String;"
+incoming_action : IntentReference → PrimIO Text
+%foreign "dex:virtual:Landroid/content/Intent;:setAction:(Ljava/lang/String;)Landroid/content/Intent;"
+set_request_action : IntentReference → Text → PrimIO IntentReference
+%foreign "dex:virtual:Landroid/content/Intent;:removeExtra:(Ljava/lang/String;)V"
+remove_request_extra : IntentReference → Text → PrimIO ()
+%foreign "dex:virtual:Landroid/app/Activity;:setIntent:(Landroid/content/Intent;)V"
+retain_request_intent : ActivityReference → IntentReference → PrimIO ()
+%foreign "dex:virtual:Landroid/app/Activity;:getCallingPackage:()Ljava/lang/String;"
+framework_calling_package : ActivityReference → PrimIO Text
+%foreign "dex:virtual:Landroid/app/Activity;:getPackageName:()Ljava/lang/String;"
+reader_package_name : ActivityReference → PrimIO Text
+%foreign "dex:virtual:Landroid/app/Activity;:getPackageManager:()Landroid/content/pm/PackageManager;"
+reader_package_manager : ActivityReference → PrimIO PackageManagerReference
+%foreign "dex:virtual:Landroid/content/pm/PackageManager;:checkSignatures:(Ljava/lang/String;Ljava/lang/String;)I"
+compare_package_signers : PackageManagerReference → Text → Text → PrimIO Int32
+%foreign "dex:interface:Ljava/lang/CharSequence;:length:()I"
+request_utf16_units : Text → PrimIO Int32
+%foreign "dex:static:Ljava/nio/charset/Charset;:forName:(Ljava/lang/String;)Ljava/nio/charset/Charset;"
+standard_request_charset : Text → PrimIO CharsetReference
+%foreign "dex:virtual:Ljava/nio/charset/Charset;:newEncoder:()Ljava/nio/charset/CharsetEncoder;"
+new_request_encoder : CharsetReference → PrimIO EncoderReference
+%foreign "dex:virtual:Ljava/nio/charset/CharsetEncoder;:canEncode:(Ljava/lang/CharSequence;)Z"
+query_has_valid_unicode : EncoderReference → Text → PrimIO Int32
+%foreign "dex:cast:Landroid/os/Bundle;:Ljava/lang/Object;"
+saved_state_object : SavedStateReference → PrimIO ObjectReference
+%foreign "dex:static:Ljava/util/Objects;:isNull:(Ljava/lang/Object;)Z"
+saved_state_is_absent : ObjectReference → PrimIO Int32
+%foreign "dex:virtual:Landroid/view/View;:getContext:()Landroid/content/Context;"
+action_view_context : ViewReference → PrimIO ContextReference
+%foreign "dex:cast:Landroid/content/Context;:Landroid/app/Activity;"
+context_as_reader_activity : ContextReference → PrimIO ActivityReference
+
 %foreign "dex:cast:Landroid/view/View;:Landroid/widget/TextView;"
 as_text_view : ViewReference → PrimIO TextViewReference
 %foreign "dex:virtual:Landroid/widget/TextView;:setText:(Ljava/lang/CharSequence;)V"
@@ -135,9 +176,67 @@ present_source_text activity text = do
   text_view ← primIO (as_text_view view)
   primIO (write_reader_text text_view text)
 
+is_search_request : IntentReference → IO Bool
+is_search_request intent = do
+  action ← primIO (incoming_action intent)
+  empty ← primIO (raw_text_is_empty action)
+  if empty /= 0 then pure False else pure (action ≟ "android.intent.action.SEARCH")
+
+-- Android supplies this caller identity only for a fresh for-result handoff.
+-- Referrer extras and Binder's system-server caller are not sender identity.
+search_address_from_intent : ActivityReference → IntentReference → IO (Either Text Text)
+search_address_from_intent activity intent = do
+  caller_package ← primIO (framework_calling_package activity)
+  caller_empty ← primIO (raw_text_is_empty caller_package)
+  if caller_empty /= 0 then pure (Left "Search refused: a fresh authenticated ChordReader handoff is required.")
+    else if caller_package /= "org.isomorphisms.chordreader.dev"
+      then pure (Left "Search refused: the sender is not ChordReader.")
+      else do
+        packages ← primIO (reader_package_manager activity)
+        reader_package ← primIO (reader_package_name activity)
+        signer_match ← primIO (compare_package_signers packages caller_package reader_package)
+        if signer_match /= 0
+          then pure (Left "Search refused: the installed ChordReader signer does not match this reader.")
+          else do
+            supplied_query ← primIO (incoming_text intent "query")
+            empty ← primIO (raw_text_is_empty supplied_query)
+            if empty /= 0 then pure (Left "Search refused: the query is empty.")
+              else do
+                units ← primIO (request_utf16_units supplied_query)
+                if units > 1024 then pure (Left "Search refused: the query exceeds 1024 UTF-16 units.")
+                  else do
+                    charset ← primIO (standard_request_charset "UTF-8")
+                    encoder ← primIO (new_request_encoder charset)
+                    valid_unicode ← primIO (query_has_valid_unicode encoder supplied_query)
+                    if valid_unicode ≟ 0 then pure (Left "Search refused: the query contains invalid Unicode.")
+                      else case google_icu_url supplied_query of
+                        Nothing ⇒ pure (Left "Search refused: the query is unsupported or its encoded URL is too long.")
+                        Just address ⇒ pure (Right address)
+
+consume_initial_request : ActivityReference → IntentReference → IO ()
+consume_initial_request activity intent = do
+  _ ← primIO (set_request_action intent "android.intent.action.MAIN")
+  primIO (remove_request_extra intent "query")
+  primIO (remove_request_extra intent "android.intent.extra.TEXT")
+  primIO (retain_request_intent activity intent)
+
+pending_search_refusal : ActivityReference → IO (Maybe Text)
+pending_search_refusal activity = do
+  intent ← primIO (incoming_intent activity)
+  pending ← is_search_request intent
+  if not pending then pure Nothing else do
+    requested ← search_address_from_intent activity intent
+    case requested of
+      Left reason ⇒ pure (Just reason)
+      Right _ ⇒ pure Nothing
+
 %export "dex:reader_acquisition_failed"
 reader_acquisition_failed : ActivityReference → Text → IO ()
-reader_acquisition_failed activity reason = write_view_text activity reader_status reason
+reader_acquisition_failed activity reason = do
+  refusal ← pending_search_refusal activity
+  write_view_text activity reader_status (case refusal of
+    Just message ⇒ message
+    Nothing ⇒ reason)
 
 line_text : SourceLine → Text
 line_text line = line.visible_text ++ "\n"
@@ -197,6 +296,25 @@ show_history_controls activity history = do
   enable_history_control activity back_button (available (history_back history))
   enable_history_control activity forward_button (available (history_forward history))
 
+has_address_prefix : Text → Text → Bool
+has_address_prefix prefix address =
+  take (length (unpack prefix)) (unpack address) ≟ unpack prefix
+
+is_google_search_address : Text → Bool
+is_google_search_address requested =
+  has_address_prefix "https://google.com/search?" requested ||
+  has_address_prefix "https://www.google.com/search?" requested
+
+search_response_refusal : HtmlEvidence → Maybe Text
+search_response_refusal evidence =
+  if not (is_google_search_address evidence.requested_url) then Nothing
+    else if has_address_prefix "https://consent.google.com/" evidence.resolved_url
+      then Just "Google redirected this search to its consent service; native results are unavailable."
+      else if has_address_prefix "https://google.com/sorry" evidence.resolved_url ||
+              has_address_prefix "https://www.google.com/sorry" evidence.resolved_url
+        then Just "Google redirected this search to verification; native results are unavailable."
+        else Nothing
+
 document_refusal_message : Text → Text → Text
 document_refusal_message observations reason =
   if reason /= "unadmitted-http-status" then "Document refused: " ++ reason
@@ -215,6 +333,9 @@ reader_acquisition_ready activity observations html source_id generation planned
   let prepared = if width <= 0 then Left "Native viewport is not measured yet"
         else do
           evidence ← read_committed_evidence observations
+          case search_response_refusal evidence of
+            Just reason ⇒ Left reason
+            Nothing ⇒ Right ()
           source ← retained_source source_id evidence.source_generation
           history ← presented_history source kind current_history
           document ← prepare_committed_document evidence html (Requirements (cast width) manner)
@@ -246,10 +367,18 @@ reader_acquisition_ready activity observations html source_id generation planned
           write_view_text activity reader_status
             (if saved /= 0 then "Document displayed; saving its last-good source index failed."
              else if not styled then "Static HTML loaded; native link/heading styling failed."
-             else "Static HTML — scripts and forms are unavailable.")
+             else if is_google_search_address document.source_result.evidence.requested_url
+               then "Google response — partial static HTML. Results requiring scripts cannot be shown."
+               else "Static HTML — scripts and forms are unavailable.")
+          refusal ← pending_search_refusal activity
+          case refusal of
+            Just message ⇒ write_view_text activity reader_status message
+            Nothing ⇒ pure ()
 
 navigate_to : ActivityReference → Text → IO ()
-navigate_to activity text =
+navigate_to activity text = do
+  intent ← primIO (incoming_intent activity)
+  consume_initial_request activity intent
   case navigation_request text of
     Left reason ⇒ reader_acquisition_failed activity reason
     Right request ⇒ do
@@ -267,6 +396,8 @@ reader_follow_link = navigate_to
 
 move_history : ActivityReference → Bool → IO ()
 move_history activity backward = do
+  intent ← primIO (incoming_intent activity)
+  consume_initial_request activity intent
   text ← primIO retained_history_text
   case existing_history text of
     Left reason ⇒ reader_acquisition_failed activity ("History refused: " ++ reason)
@@ -283,20 +414,48 @@ move_history activity backward = do
                 then write_view_text activity reader_status "Reopening a verified retained source…"
                 else reader_acquisition_failed activity "Retained navigation is busy or unavailable."
 
+process_fresh_reader_request : ActivityReference → IntentReference → IO ()
+process_fresh_reader_request activity intent = do
+  search ← is_search_request intent
+  if search
+    then do
+      requested ← search_address_from_intent activity intent
+      case requested of
+        Left reason ⇒ reader_acquisition_failed activity reason
+        Right address ⇒ do
+          write_view_text activity reader_input address
+          navigate_to activity address
+    else do
+      raw_text ← primIO (incoming_text intent "android.intent.extra.TEXT")
+      empty ← primIO (raw_text_is_empty raw_text)
+      if empty ≟ 0 then navigate_to activity raw_text
+        else present_source_text activity "Open Sources, enter an HTTP(S) URL, and select Read. Retained documents reopen after layout."
+
 %export "dex:create_reader"
-create_reader : ActivityReference → IO ()
-create_reader activity = do
+create_reader : ActivityReference → SavedStateReference → IO ()
+create_reader activity saved_state = do
   primIO (apply_reader_layout activity reader_layout)
   refresh_acquisition_capability activity
   attached ← primIO (attach_reader_host activity)
   if attached ≟ 0 then pure ()
     else reader_acquisition_failed activity "Private source storage or the native reader adapter is unavailable."
   intent ← primIO (incoming_intent activity)
-  raw_text ← primIO (incoming_text intent "android.intent.extra.TEXT")
-  empty ← primIO (raw_text_is_empty raw_text)
-  if empty ≟ 0
-    then navigate_to activity raw_text
-    else present_source_text activity "Open Sources, enter an HTTP(S) URL, and select Read. Retained documents reopen after layout."
+  state_object ← primIO (saved_state_object saved_state)
+  fresh ← primIO (saved_state_is_absent state_object)
+  if fresh ≟ 0
+    then do
+      consume_initial_request activity intent
+      present_source_text activity "Reopening the last committed readable document…"
+    else process_fresh_reader_request activity intent
+
+%export "dex:receive_reader_new_intent"
+receive_reader_new_intent : ActivityReference → IntentReference → IO ()
+receive_reader_new_intent activity delivered = do
+  current ← primIO (incoming_intent activity)
+  consume_initial_request activity current
+  -- API 29/34 does not authenticate a new warm sender through the original
+  -- Activity.getCallingPackage. Require the maintained fresh caller route.
+  write_view_text activity reader_status "Search refused: start a fresh ChordReader handoff or enter a URL in Sources."
 
 %export "dex:receive_reader_action"
 receive_reader_action : ActivityReference → ViewReference → IO ()
@@ -318,6 +477,8 @@ receive_reader_action activity clicked = do
           refresh_acquisition_capability activity
         else if identity ≟ reflow_button
           then do
+            intent ← primIO (incoming_intent activity)
+            consume_initial_request activity intent
             selected ← read_view_text activity reflow_button
             write_view_text activity reflow_button
               (if selected ≟ "Reflow: Greedy" then "Reflow: Squared" else "Reflow: Greedy")
@@ -328,7 +489,17 @@ receive_reader_action activity clicked = do
             else if identity ≟ forward_button then move_history activity False
               else pure ()
 
-%cg dex activity create_reader receive_reader_action
+%export "dex:receive_reader_view_action"
+receive_reader_view_action : ViewReference → IO ()
+receive_reader_view_action clicked = do
+  context ← primIO (action_view_context clicked)
+  activity ← primIO (context_as_reader_activity context)
+  receive_reader_action activity clicked
+
+%cg dex extends Landroid/app/Activity;
+%cg dex override onCreate (Landroid/os/Bundle;)V create_reader
+%cg dex override onNewIntent (Landroid/content/Intent;)V receive_reader_new_intent
+%cg dex callback Landroid/view/View$OnClickListener; onClick (Landroid/view/View;)V receive_reader_view_action
 
 main : IO ()
 main = pure ()

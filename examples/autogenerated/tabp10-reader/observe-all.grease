@@ -7,13 +7,14 @@ var sdk = ARGV[2]
 var api = ARGV[3]
 var evidence = ARGV[4]
 var grease = ENV.IB_GREASE
+var compiler = ENV.AICI_FIXTURE_ICK
 if (api !== '29' and api !== '34') { exit 2 }
 if (api !== ENV.AICI_EXPECTED_ANDROID_API) { exit 2 }
 if test -e "$evidence" { echo 'FAIL reused observation evidence' >&2; exit 2 }
 mkdir -p "$evidence"
 var adb = "$sdk/platform-tools/adb"
 var acceptance = "$repository/.tools/reader-acceptance"
-# Keep all three observers required. A semantic refusal/ART crash must not
+# Keep the component, parcel, installed-reader and navigation observers required. A semantic refusal/ART crash must not
 # suppress independent diagnostics of the installed application's real path.
 var failed = false
 try {
@@ -37,6 +38,16 @@ try {
 }
 var reader_status = _error.code
 if (reader_status !== 0) { setglobal failed = true }
-printf 'schema\tib-required-observers-v1\napi\t%s\ncore_exit\t%s\nparcelable_exit\t%s\ninstalled_exit\t%s\n' \
-  "$api" "$core_status" "$parcel_status" "$reader_status" > "$evidence/required.tsv"
+var navigation_status = 125
+if (reader_status === 0) {
+  try {
+    "$grease" "$acceptance/ib-source/shizuku/observe-navigation.grease" \
+      "$acceptance" "$input" "$sdk" "$compiler" "$adb" emulator-5554 \
+      "$evidence/installed" "$evidence/navigation"
+  }
+  setvar navigation_status = _error.code
+}
+if (navigation_status !== 0) { setglobal failed = true }
+printf 'schema\tib-required-observers-v2\napi\t%s\ncore_exit\t%s\nparcelable_exit\t%s\ninstalled_exit\t%s\nnavigation_exit\t%s\n' \
+  "$api" "$core_status" "$parcel_status" "$reader_status" "$navigation_status" > "$evidence/required.tsv"
 if (failed) { exit 1 }
