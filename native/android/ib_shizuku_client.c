@@ -1,6 +1,7 @@
 /* Shizuku API 13 platform wire, pinned at a27f6e4151. This adapter authenticates
  * SDK delivery and authorization. It owns no browser state or network client. */
 #include "ib_shizuku_client.h"
+#include "ib_binder_flags.h"
 
 #include <pthread.h>
 #include <string.h>
@@ -624,7 +625,7 @@ Java_org_isomorphisms_ib_ShizukuApplicationCallback_onTransact(JNIEnv *e, jobjec
     uint64_t before = client.epoch;
     pthread_mutex_unlock(&client.mutex);
     int known_callback = code == 2 || code == 3;
-    int ok = current && data && known_callback && flags == 1;
+    int ok = current && data && known_callback && ib_binder_oneway(flags);
     jmethodID size = method(e, "android/os/Parcel", "dataSize", "()I");
     jmethodID available = method(e, "android/os/Parcel", "dataAvail", "()I");
     jmethodID enforce = method(e, "android/os/Parcel", "enforceInterface", "(Ljava/lang/String;)V");
