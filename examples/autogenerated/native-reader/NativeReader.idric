@@ -41,6 +41,8 @@ clicked_view_identity : ViewReference → PrimIO Int32
 reader_view_visibility : ViewReference → PrimIO Int32
 %foreign "dex:virtual:Landroid/view/View;:setVisibility:(I)V"
 set_reader_view_visibility : ViewReference → Int32 → PrimIO ()
+%foreign "dex:virtual:Landroid/view/View;:setEnabled:(Z)V"
+set_reader_control_enabled : ViewReference → Int32 → PrimIO ()
 %foreign "dex:static:Lorg/isomorphisms/ib/ShizukuClient;:state:()I"
 current_acquisition_capability : PrimIO Int32
 %foreign "dex:static:Lorg/isomorphisms/ib/ShizukuClient;:requestPermission:()I"
@@ -51,8 +53,12 @@ attach_reader_host : ActivityReference → PrimIO Int32
 acquire_navigation : Text → PrimIO Int32
 %foreign "dex:static:Lorg/isomorphisms/ib/ReaderBridge;:restore:()I"
 restore_committed_source : PrimIO Int32
-%foreign "dex:static:Lorg/isomorphisms/ib/ReaderBridge;:acknowledge:(Ljava/lang/String;I)I"
-acknowledge_presented_source : Text → Int32 → PrimIO Int32
+%foreign "dex:static:Lorg/isomorphisms/ib/ReaderBridge;:history:()Ljava/lang/String;"
+retained_history_text : PrimIO Text
+%foreign "dex:static:Lorg/isomorphisms/ib/ReaderBridge;:openRetained:(Ljava/lang/String;ILjava/lang/String;)I"
+open_history_source : Text → Int32 → Text → PrimIO Int32
+%foreign "dex:static:Lorg/isomorphisms/ib/ReaderBridge;:acknowledge:(Ljava/lang/String;ILjava/lang/String;)I"
+acknowledge_presented_source : Text → Int32 → Text → PrimIO Int32
 %foreign "dex:static:Lorg/isomorphisms/ib/ReaderBridge;:metrics:(Landroid/app/Activity;)Lorg/isomorphisms/ib/ReaderMetrics;"
 snapshot_reader_metrics : ActivityReference → PrimIO MetricsReference
 -- The handle contains a private immutable copy of the current Paint and its
@@ -83,6 +89,10 @@ permission_button : Int32
 permission_button = 2130903046
 reflow_button : Int32
 reflow_button = 2130903047
+back_button : Int32
+back_button = 2130903048
+forward_button : Int32
+forward_button = 2130903049
 
 read_view_text : ActivityReference → Int32 → IO Text
 read_view_text activity identity = do
@@ -129,28 +139,68 @@ block_text : BlockReflow → Text
 block_text block = concat (map line_text block.text_lines) ++
   (if null block.text_lines then "" else "\n")
 
+existing_history : Text → Either Text BrowserHistory
+existing_history "" = Right empty_history -- Explicit pre-journal index migration.
+existing_history text = read_history text
+
+presented_history : RetainedSource → Int32 → Text → Either Text BrowserHistory
+presented_history source kind text = do
+  history ← existing_history text
+  if kind ≟ 0 then Right (history_arrive source history)
+    else if kind ≟ 1 || kind ≟ 2 then
+      case history_current history of
+        Just selected ⇒ if same_retained_source source selected
+          then Right history else Left "Retained history selected another source generation"
+        Nothing ⇒ if kind ≟ 1 && text ≟ ""
+          then Right (history_arrive source empty_history)
+          else Left "Retained navigation has no selected source"
+      else Left "Unknown browser navigation occurrence"
+
+enable_history_control : ActivityReference → Int32 → Bool → IO ()
+enable_history_control activity identity enabled = do
+  view ← primIO (find_reader_view activity identity)
+  primIO (set_reader_control_enabled view (if enabled then 1 else 0))
+
+available : Maybe value → Bool
+available Nothing = False
+available (Just _) = True
+
+show_history_controls : ActivityReference → BrowserHistory → IO ()
+show_history_controls activity history = do
+  enable_history_control activity back_button (available (history_back history))
+  enable_history_control activity forward_button (available (history_forward history))
+
 %export "dex:reader_acquisition_ready"
-reader_acquisition_ready : ActivityReference → Text → Text → Text → Int32 → IO ()
-reader_acquisition_ready activity observations html source_id generation = do
+reader_acquisition_ready : ActivityReference → Text → Text → Text → Int32 → Text → Int32 → IO ()
+reader_acquisition_ready activity observations html source_id generation planned_history kind = do
   metric ← primIO (snapshot_reader_metrics activity)
   selected ← read_view_text activity reflow_button
+  current_history ← if kind ≟ 0 then primIO retained_history_text else pure planned_history
   let width = metric_width metric
   let manner = if selected ≟ "Reflow: Squared" then evenly else promptly
   let prepared = if width <= 0 then Left "Native viewport is not measured yet"
         else do
           evidence ← read_committed_evidence observations
-          prepare_committed_document evidence html (Requirements (cast width) manner)
+          source ← retained_source source_id evidence.source_generation
+          history ← presented_history source kind current_history
+          document ← prepare_committed_document evidence html (Requirements (cast width) manner)
             "android-Paint-snapshot-pixels-times-64-v1" (cast . metric_measure metric)
+          Right (document, history)
   case prepared of
     Left reason ⇒ reader_acquisition_failed activity ("Document refused: " ++ reason)
-    Right document ⇒ do
+    Right (document, history) ⇒ do
       let title = case document.source_result.revision.title of
             Nothing ⇒ "IB"
             Just value ⇒ value
       let displayed = concat (map block_text document.revision_layout.block_plans)
       present_source_text activity displayed
       primIO (set_document_title activity title)
-      saved ← primIO (acknowledge_presented_source source_id generation)
+      write_view_text activity reader_input document.source_result.evidence.requested_url
+      saved ← primIO (acknowledge_presented_source source_id generation (history_text history))
+      if saved ≟ 0 then show_history_controls activity history
+        else do
+          enable_history_control activity back_button False
+          enable_history_control activity forward_button False
       write_view_text activity reader_status
         (if saved ≟ 0 then "Static HTML — scripts and forms are unavailable."
          else "Document displayed; saving its last-good source index failed.")
@@ -167,6 +217,24 @@ navigate_to activity text =
           panel ← primIO (find_reader_view activity sources_panel)
           primIO (set_reader_view_visibility panel 8)
         else reader_acquisition_failed activity "Acquisition is busy or unavailable. Retry after authorizing Shizuku."
+
+move_history : ActivityReference → Bool → IO ()
+move_history activity backward = do
+  text ← primIO retained_history_text
+  case existing_history text of
+    Left reason ⇒ reader_acquisition_failed activity ("History refused: " ++ reason)
+    Right history ⇒
+      case (if backward then history_back history else history_forward history) of
+        Nothing ⇒ reader_acquisition_failed activity "No retained document in that direction."
+        Just selected ⇒
+          case history_current selected of
+            Nothing ⇒ reader_acquisition_failed activity "History has no selected source."
+            Just source ⇒ do
+              accepted ← primIO (open_history_source (retained_identity source)
+                (cast (retained_generation source)) (history_text selected))
+              if accepted ≟ 0
+                then write_view_text activity reader_status "Reopening a verified retained source…"
+                else reader_acquisition_failed activity "Retained navigation is busy or unavailable."
 
 %export "dex:create_reader"
 create_reader : ActivityReference → IO ()
@@ -207,9 +275,11 @@ receive_reader_action activity clicked = do
             write_view_text activity reflow_button
               (if selected ≟ "Reflow: Greedy" then "Reflow: Squared" else "Reflow: Greedy")
             restored ← primIO restore_committed_source
-            if restored ≟ 0 then pure ()
+            if restored ≟ 0 then write_view_text activity reader_status "Reflowing the retained document…"
               else reader_acquisition_failed activity "No retained readable document is ready for reflow."
-          else pure ()
+          else if identity ≟ back_button then move_history activity True
+            else if identity ≟ forward_button then move_history activity False
+              else pure ()
 
 %cg dex activity create_reader receive_reader_action
 

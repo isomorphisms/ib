@@ -1,6 +1,7 @@
 module IB.Reader.Navigation
 
 import Data.Text
+import Data.List1
 import IB.Information
 
 export
@@ -22,3 +23,129 @@ navigation_request input =
 export
 navigation_address : NavigationRequest → Text
 navigation_address (CheckedHttpAddress address) = address
+
+-- A retained occurrence is an identity and immutable source generation. It
+-- grants no source admission: the source owner must reopen its Arena receipt
+-- and independently check the bytes before the occurrence can be displayed.
+export
+data RetainedSource = SourceOccurrence Text Text
+
+export
+data BrowserHistory = RetainedVisits (List RetainedSource) Number
+
+ascii_digit : Char → Bool
+ascii_digit character = character >= '0' && character <= '9'
+
+safe_identity_character : Char → Bool
+safe_identity_character character =
+  (character >= 'a' && character <= 'z') ||
+  (character >= 'A' && character <= 'Z') || ascii_digit character ||
+  character ≟ '.' || character ≟ '_' || character ≟ '-'
+
+positive_generation : Text → Bool
+positive_generation text = case unpack text of
+  [] ⇒ False
+  '0' :: _ ⇒ False
+  digits ⇒ all ascii_digit digits &&
+    (length digits < 10 || (length digits ≟ 10 && text <= "2147483647"))
+
+export
+retained_source : Text → Text → Either Text RetainedSource
+retained_source identity generation =
+  if identity ≟ "" || length (unpack identity) > 64 || identity ≟ "." || identity ≟ ".." ||
+      not (all safe_identity_character (unpack identity))
+    then Left "Invalid retained source identity"
+  else if not (positive_generation generation)
+    then Left "Invalid retained source generation"
+  else Right (SourceOccurrence identity generation)
+
+export
+retained_identity : RetainedSource → Text
+retained_identity (SourceOccurrence identity _) = identity
+
+export
+retained_generation : RetainedSource → Text
+retained_generation (SourceOccurrence _ generation) = generation
+
+export
+same_retained_source : RetainedSource → RetainedSource → Bool
+same_retained_source (SourceOccurrence left_identity left_generation)
+                     (SourceOccurrence right_identity right_generation) =
+  left_identity ≟ right_identity && left_generation ≟ right_generation
+
+export
+empty_history : BrowserHistory
+empty_history = RetainedVisits [] 0
+
+selected_source : Number → List RetainedSource → Maybe RetainedSource
+selected_source _ [] = Nothing
+selected_source 0 (source :: _) = Just source
+selected_source (S later) (_ :: rest) = selected_source later rest
+
+export
+history_current : BrowserHistory → Maybe RetainedSource
+history_current (RetainedVisits visits cursor) = selected_source cursor visits
+
+export
+history_arrive : RetainedSource → BrowserHistory → BrowserHistory
+history_arrive source (RetainedVisits visits cursor) =
+  let retained = take (S cursor) visits ++ [source]
+      bounded = if length retained > 128 then drop 1 retained else retained in
+  RetainedVisits bounded (length bounded `minus` 1)
+
+export
+history_back : BrowserHistory → Maybe BrowserHistory
+history_back (RetainedVisits _ 0) = Nothing
+history_back (RetainedVisits visits (S previous)) = Just (RetainedVisits visits previous)
+
+export
+history_forward : BrowserHistory → Maybe BrowserHistory
+history_forward (RetainedVisits visits cursor) =
+  if S cursor < length visits then Just (RetainedVisits visits (S cursor)) else Nothing
+
+source_line : RetainedSource → Text
+source_line (SourceOccurrence identity generation) = identity ++ "\t" ++ generation ++ "\n"
+
+export
+history_text : BrowserHistory → Text
+history_text (RetainedVisits visits cursor) =
+  "IBH1\n" ++ cast cursor ++ "\n" ++ concat (map source_line visits)
+
+read_source_line : Text → Either Text RetainedSource
+read_source_line line = case forget (split (≟ '\t') line) of
+  [identity, generation] ⇒ retained_source identity generation
+  _ ⇒ Left "Malformed retained source occurrence"
+
+read_source_lines : List Text → Either Text (List RetainedSource)
+read_source_lines [] = Right []
+read_source_lines (line :: rest) = do
+  source ← read_source_line line
+  sources ← read_source_lines rest
+  Right (source :: sources)
+
+canonical_cursor : Text → Bool
+canonical_cursor "0" = True
+canonical_cursor text = case unpack text of
+  [] ⇒ False
+  '0' :: _ ⇒ False
+  digits ⇒ length digits <= 3 && all ascii_digit digits
+
+export
+read_history : Text → Either Text BrowserHistory
+read_history text =
+  if length (unpack text) > 12288 then Left "Retained history exceeds the metadata limit"
+  else case forget (split (≟ '\n') text) of
+    "IBH1" :: cursor_text :: lines ⇒
+      if not (canonical_cursor cursor_text) then Left "Invalid retained history cursor"
+      else case reverse lines of
+        "" :: reversed ⇒
+          let entries = reverse reversed in
+          if length entries > 128 then Left "Too many retained history occurrences"
+          else do
+            visits ← read_source_lines entries
+            let cursor : Number = cast cursor_text
+            if (null visits && cursor ≟ 0) || cursor < length visits
+              then Right (RetainedVisits visits cursor)
+              else Left "Retained history cursor has no source"
+        _ ⇒ Left "Incomplete retained history"
+    _ ⇒ Left "Unknown retained history format"

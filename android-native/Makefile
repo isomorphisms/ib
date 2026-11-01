@@ -15,7 +15,7 @@ READER_NDK_CC = $(NDK_BIN)/$(NDK_TARGET_$(ABI))29-clang
 # silently invoke another C frontend. Preserve that failed build as evidence.
 READER_OPT_arm64-v8a = -fno-tree-vectorize
 READER_FLAGS = $(ICK_NDK_BASE_FLAGS) -D__ANDROID_API__=29 -D__ANDROID_MIN_SDK_VERSION__=29 -std=c11 -O2 $(READER_OPT_$(ABI)) -fPIC -fstack-protector-strong -Wall -Wextra -Wpedantic -Werror -I"$(APPENDFAT)/lib" -I"$(IB_ROOT)/native/android"
-READER_C_NAMES = ib_shizuku_parcelable ib_shizuku_client ib_shizuku_worker ib_shizuku_ingress_binder ib_shizuku_ingress_runner ib_shizuku_arena_ingress ib_shizuku_arena_publish ib_reader_pfd ib_arena_pfd_provider ib_arena_source_owner ib_reader_activity
+READER_C_NAMES = ib_shizuku_parcelable ib_shizuku_client ib_shizuku_worker ib_shizuku_ingress_binder ib_shizuku_ingress_runner ib_shizuku_arena_ingress ib_shizuku_arena_publish ib_reader_pfd ib_arena_pfd_provider ib_arena_source_owner ib_reader_index ib_reader_activity
 READER_OBJECTS = $(addprefix $(READER_BUILD)/,$(addsuffix .o,$(READER_C_NAMES))) $(READER_BUILD)/appendfat_arena.o
 READER_EXTRA_LIBS_armeabi-v7a = -latomic
 

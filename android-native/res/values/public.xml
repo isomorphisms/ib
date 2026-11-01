@@ -10,4 +10,6 @@
     <public type="id" name="reader_status" id="0x7f030005" />
     <public type="id" name="permission_button" id="0x7f030006" />
     <public type="id" name="reflow_button" id="0x7f030007" />
+    <public type="id" name="back_button" id="0x7f030008" />
+    <public type="id" name="forward_button" id="0x7f030009" />
 </resources>

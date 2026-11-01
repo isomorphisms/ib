@@ -10,6 +10,6 @@ var observed = $("$adb" -s emulator-5554 shell getprop ro.build.version.sdk | tr
 if (observed !== ENV.AICI_EXPECTED_ANDROID_API) { echo 'FAIL emulator API differs from declared acceptance target' >&2; exit 1 }
 "$grease" "$repository/.tools/reader-acceptance/ib-source/reader/observe-art.grease" \
   "$repository/.tools/reader-acceptance" "$input" "$input/oracles/smali.jar" \
-  "$adb" emulator-5554 "$evidence"
+  "$adb" emulator-5554 "$evidence" history-v2
 # The emulator-runner owns this lane's lifetime. Further independent observers
 # run on the same declared API before its normal termination step.

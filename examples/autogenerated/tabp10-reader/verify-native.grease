@@ -27,6 +27,28 @@ if (_error.code !== 134) { echo 'FAIL AppOps flag mutant missed its intended ass
 rg -x -F 'STAGE framework AppOps synchronous flag' "$evidence/old-flags.txt"
 rg -F 'Assertion' "$evidence/old-flags.txt" | rg -F 'ib_binder_synchronous(2)'
 "$compiler" -fno-link-libatomic -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror -pthread \
+  -I "$repository/native/android" "$repository/native/android/ib_reader_pfd.c" \
+  "$repository/native/android/ib_reader_index.c" "$repository/tests/test_reader_index.c" \
+  -Wl,--wrap=write -Wl,--wrap=fsync -Wl,--wrap=renameat -o "$evidence/index-test"
+"$evidence/index-test" > "$evidence/index.txt" 2>&1
+cat "$evidence/index.txt"
+rg -x -F 'PASS actual reader index durability faults and previous-head recovery' "$evidence/index.txt"
+sed 's/if (memcmp(actual, bytes + prefix, 64)) return -1;/if (memcmp(actual, bytes + prefix, 64)) (void)0;/' \
+  "$repository/native/android/ib_reader_index.c" > "$evidence/index-digest-mutant.c"
+if cmp -s "$repository/native/android/ib_reader_index.c" "$evidence/index-digest-mutant.c" {
+  echo 'FAIL unchanged index digest mutation' >&2; exit 1
+}
+"$compiler" -fno-link-libatomic -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror -pthread \
+  -I "$repository/native/android" \
+  "$repository/native/android/ib_reader_pfd.c" "$evidence/index-digest-mutant.c" \
+  "$repository/tests/test_reader_index.c" -Wl,--wrap=write -Wl,--wrap=fsync -Wl,--wrap=renameat \
+  -o "$evidence/index-digest-mutant"
+ulimit -c 0
+try { "$evidence/index-digest-mutant" > "$evidence/index-digest-mutant.txt" 2>&1 }
+if (_error.code !== 134) { echo 'FAIL index digest mutant missed its intended assertion' >&2; exit 1 }
+rg -x -F 'STAGE index digest refusal and previous recovery' "$evidence/index-digest-mutant.txt"
+rg -F 'Assertion' "$evidence/index-digest-mutant.txt" | rg -F 'observed.previous'
+"$compiler" -fno-link-libatomic -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror -pthread \
   "$repository/native/android/ib_reader_pfd.c" \
   "$repository/native/android/ib_shizuku_arena_ingress.c" \
   "$repository/tests/test_shizuku_arena_ingress_host.c" -o "$evidence/ingress-test"
@@ -75,5 +97,5 @@ try {
 if (_error.code !== 134) { echo 'FAIL generation-confusion mutant was not rejected by its intended assertion' >&2; exit 1 }
 rg -x -F 'STAGE retained source generation 1 at navigation generation 3' "$evidence/wrong-generation.txt"
 rg -F 'Assertion' "$evidence/wrong-generation.txt" | rg -F 'ib_arena_source_owner_open_retained'
-sha256sum "$compiler" "$repository/native/android/ib_binder_flags.h" "$repository/tests/test_binder_flags.c" "$evidence/flags-test" "$evidence/old-flags-test" "$evidence/ingress-test" "$evidence/revivable-ingress-test" "$evidence/source-owner-test" "$evidence/wrong-generation-test" > "$evidence/native.sha256"
-printf 'host_framework_transport_flags\tPASS\ncompiled_AppOps_flag_mutant\tREJECTED\nhost_private_stream\tPASS\nhost_irrevocable_capability\tPASS\ncompiled_revocation_mutant\tREJECTED\nhost_retained_source_readback\tPASS\ncompiled_generation_mutant\tREJECTED\ncanonical_publication\tNOT_RUN\nAndroid_Binder\tNOT_RUN\nphysical_Shizuku\tNOT_RUN\n' > "$evidence/stages.tsv"
+sha256sum "$compiler" "$repository/native/android/ib_binder_flags.h" "$repository/tests/test_binder_flags.c" "$evidence/flags-test" "$evidence/old-flags-test" "$repository/native/android/ib_reader_index.c" "$repository/tests/test_reader_index.c" "$evidence/index-test" "$evidence/index-digest-mutant" "$evidence/ingress-test" "$evidence/revivable-ingress-test" "$evidence/source-owner-test" "$evidence/wrong-generation-test" > "$evidence/native.sha256"
+printf 'host_framework_transport_flags\tPASS\ncompiled_AppOps_flag_mutant\tREJECTED\nhost_history_index_faults\tPASS\ncompiled_index_digest_mutant\tREJECTED\nhost_private_stream\tPASS\nhost_irrevocable_capability\tPASS\ncompiled_revocation_mutant\tREJECTED\nhost_retained_source_readback\tPASS\ncompiled_generation_mutant\tREJECTED\ncanonical_publication\tNOT_RUN\nAndroid_Binder\tNOT_RUN\nphysical_Shizuku\tNOT_RUN\n' > "$evidence/stages.tsv"

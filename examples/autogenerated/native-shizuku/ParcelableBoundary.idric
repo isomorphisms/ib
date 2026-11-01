@@ -144,7 +144,10 @@ reader_bridge_plan = do
     [ native "attach" [object "Landroid/app/Activity;"] (ExistingValue IntegerValue)
     , native "navigate" [ExistingValue TextValue] (ExistingValue IntegerValue)
     , native "restore" [] (ExistingValue IntegerValue)
-    , native "acknowledge" [ExistingValue TextValue, ExistingValue IntegerValue]
+    , native "history" [] (ExistingValue TextValue)
+    , native "openRetained" [ExistingValue TextValue, ExistingValue IntegerValue, ExistingValue TextValue]
+        (ExistingValue IntegerValue)
+    , native "acknowledge" [ExistingValue TextValue, ExistingValue IntegerValue, ExistingValue TextValue]
         (ExistingValue IntegerValue)
     , native "metrics" [object "Landroid/app/Activity;"] (object "Lorg/isomorphisms/ib/ReaderMetrics;")
     ] } base)

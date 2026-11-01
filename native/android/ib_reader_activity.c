@@ -8,6 +8,7 @@
 #include "ib_shizuku_arena_publish.h"
 #include "ib_arena_source_owner.h"
 #include "appendfat_arena.h"
+#include "ib_reader_index.h"
 
 #include <android/binder_ibinder_jni.h>
 #include <android/binder_status.h>
@@ -37,6 +38,7 @@ typedef struct {
     uint64_t epoch;
     int retained, result;
     char id[IB_READER_REQUEST_ID_CAP + 1U], url[2049];
+    ib_reader_index index;
     ib_reader_source source;
     ib_reader_source_ticket ticket;
     ib_arena_source_observations observations;
@@ -78,17 +80,6 @@ static int ascii(JNIEnv *e, jstring text, char *out, size_t capacity) {
     (*e)->ReleaseStringChars(e, text, units);
     if (ok) out[size] = 0;
     return ok;
-}
-
-static int all_bytes(int fd, const unsigned char *bytes, size_t count) {
-    size_t done = 0;
-    while (done < count) {
-        ssize_t n = write(fd, bytes + done, count - done);
-        if (n < 0 && errno == EINTR) continue;
-        if (n <= 0) return -1;
-        done += (size_t)n;
-    }
-    return 0;
 }
 
 static int random_identity(char out[IB_READER_REQUEST_ID_CAP + 1U]) {
@@ -221,97 +212,79 @@ static int start_job(JNIEnv *e, reader_job *job) {
     return thread && start && !(*e)->ExceptionCheck(e) ? 0 : -1;
 }
 
-/* The last-good source index contains no document bytes and is not a second
- * source store. Arena receipts and independent readback remain authoritative. */
+/* The index stores opaque Idriç history references only; Arena owns source
+ * identity, admission and all original bytes. */
 static int last_source(reader_job *job, unsigned first) {
     int root = open(application.root, O_RDONLY | O_CLOEXEC | O_DIRECTORY | O_NOFOLLOW);
-    if (!private_directory(root)) { if (root >= 0) close(root); return -1; }
-    int result = -1;
-    const char *names[] = {"last-source", "last-source.previous"};
-    for (unsigned i = first; i < 2 && result != 0; ++i) {
-        int fd = openat(root, names[i], O_RDONLY | O_CLOEXEC | O_NOFOLLOW);
-        struct stat info;
-        char text[256] = {0}, id[65] = {0}, claimed[65] = {0}, actual[65], generation_text[11] = {0};
-        ssize_t count = fd >= 0 ? read(fd, text, sizeof(text) - 1U) : -1;
-        int ok = fd >= 0 && fstat(fd, &info) == 0 && S_ISREG(info.st_mode) && info.st_uid == geteuid() &&
-            info.st_nlink == 1 && info.st_size == count && count > 0 && count < (ssize_t)sizeof(text) - 1 &&
-            memchr(text, 0, (size_t)count) == NULL;
-        if (fd >= 0) close(fd);
-        int used = 0;
-        ok = ok && sscanf(text, "IBLAST1\n%64[0-9a-f]\n%10[0-9]\n%64[0-9a-f]\n%n", id, generation_text, claimed, &used) == 3 &&
-            strlen(id) == 48 && strlen(claimed) == 64 && used == count;
-        errno = 0;
-        char *generation_end = NULL;
-        unsigned long generation = ok ? strtoul(generation_text, &generation_end, 10) : 0;
-        ok = ok && errno == 0 && generation_end && *generation_end == 0 && generation > 0 && generation <= INT32_MAX;
-        char *hash_line = ok ? strstr(text + 8, "\n") : NULL;
-        hash_line = hash_line ? strchr(hash_line + 1, '\n') : NULL;
-        if (hash_line) {
-            size_t prefix = (size_t)(hash_line + 1 - text);
-            ib_reader_sha256_hex((unsigned char *)text, prefix, actual);
-            ok = !strcmp(actual, claimed);
-        } else ok = 0;
-        if (ok) { memcpy(job->id, id, strlen(id) + 1U); job->source_generation = generation; result = 0; }
+    int result = root >= 0 ? ib_reader_index_read(root, first, &job->index) : -1;
+    if (root >= 0) close(root);
+    if (result == 0) {
+        strcpy(job->id, job->index.source_id);
+        job->source_generation = job->index.source_generation;
     }
-    close(root);
     return result;
 }
 
-static int atomic_index(int root, const char *name, const char *bytes, size_t count) {
-    char identity[65], temporary[128];
-    if (random_identity(identity) != 0) return -1;
-    int n = snprintf(temporary, sizeof(temporary), "%s.new.%s", name, identity);
-    if (n < 1 || (size_t)n >= sizeof(temporary)) return -1;
-    int fd = openat(root, temporary, O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC | O_NOFOLLOW, 0600);
-    if (fd < 0) return -1;
-    int ok = all_bytes(fd, (const unsigned char *)bytes, count) == 0 && fsync(fd) == 0;
-    if (close(fd) != 0) ok = 0;
-    if (ok) ok = renameat(root, temporary, root, name) == 0 && fsync(root) == 0;
-    if (!ok) (void)unlinkat(root, temporary, 0); /* Exact leaf minted above. */
-    return ok ? 0 : -1;
+static int journal_text(JNIEnv *e, jstring text, char out[IB_READER_JOURNAL_CAP + 1U]) {
+    if (!text || (*e)->ExceptionCheck(e)) return 0;
+    jsize size = (*e)->GetStringLength(e, text);
+    if (size < 1 || (size_t)size > IB_READER_JOURNAL_CAP) return 0;
+    const jchar *units = (*e)->GetStringChars(e, text, NULL);
+    if (!units) return 0;
+    int valid = 1;
+    for (jsize i = 0; i < size; ++i) {
+        if (units[i] != '\t' && units[i] != '\n' && (units[i] < 32 || units[i] > 126)) { valid = 0; break; }
+        out[i] = (char)units[i];
+    }
+    (*e)->ReleaseStringChars(e, text, units);
+    if (valid) out[size] = 0;
+    return valid;
+}
+
+JNIEXPORT jstring JNICALL
+Java_org_isomorphisms_ib_ReaderBridge_history(JNIEnv *e, jclass type) {
+    (void)type;
+    ib_reader_index index;
+    int root = open(application.root, O_RDONLY | O_CLOEXEC | O_DIRECTORY | O_NOFOLLOW);
+    int result = root >= 0 ? ib_reader_index_read(root, 0, &index) : -1;
+    if (root >= 0) close(root);
+    return (*e)->NewStringUTF(e, result == 0 ? index.journal : result == 1 ? "" : "INVALID\n");
 }
 
 JNIEXPORT jint JNICALL
-Java_org_isomorphisms_ib_ReaderBridge_acknowledge(JNIEnv *e, jclass type, jstring id_text, jint navigation) {
+Java_org_isomorphisms_ib_ReaderBridge_acknowledge(JNIEnv *e, jclass type, jstring id_text,
+                                                 jint navigation, jstring journal) {
     (void)type;
     char id[65] = {0};
-    if (!ascii(e, id_text, id, sizeof(id))) return -1;
+    ib_reader_index index = {0};
+    if (!ascii(e, id_text, id, sizeof(id)) || !journal_text(e, journal, index.journal)) return -1;
     pthread_mutex_lock(&application.mutex);
     reader_job *job = application.active;
     int ok = job && job->result == 0 && job->navigation == (uint32_t)navigation && !strcmp(job->id, id) &&
         application.navigation == job->navigation;
-    char text[256], digest[65];
-    int count = ok ? snprintf(text, sizeof(text), "IBLAST1\n%s\n%u\n", job->id, job->source_generation) : -1;
-    if (count < 1 || (size_t)count >= sizeof(text) - 65U) ok = 0;
     if (ok) {
-        ib_reader_sha256_hex((unsigned char *)text, (size_t)count, digest);
-        memcpy(text + count, digest, 64); text[count + 64] = '\n'; count += 65;
+        strcpy(index.source_id, job->id);
+        index.source_generation = job->source_generation;
+        index.previous = job->index.previous;
         int root = open(application.root, O_RDONLY | O_CLOEXEC | O_DIRECTORY | O_NOFOLLOW);
-        ok = private_directory(root);
-        int old = ok && !job->retained ? openat(root, "last-source", O_RDONLY | O_CLOEXEC | O_NOFOLLOW) : -1;
-        if (old >= 0) {
-            char previous[256];
-            struct stat info;
-            ssize_t amount = read(old, previous, sizeof(previous));
-            ok = fstat(old, &info) == 0 && S_ISREG(info.st_mode) && info.st_uid == geteuid() &&
-                info.st_nlink == 1 && amount > 0 && amount < (ssize_t)sizeof(previous) && amount == info.st_size &&
-                atomic_index(root, "last-source.previous", previous, (size_t)amount) == 0;
-            close(old);
-        } else if (ok && !job->retained && errno != ENOENT) ok = 0;
-        if (ok) ok = atomic_index(root, "last-source", text, (size_t)count) == 0;
+        ok = root >= 0 && ib_reader_index_publish(root, &index) == 0;
         if (root >= 0) close(root);
     }
     pthread_mutex_unlock(&application.mutex);
     return ok ? 0 : -1;
 }
 
-static int enqueue(JNIEnv *e, jstring url_text, int retained) {
+static int enqueue(JNIEnv *e, jstring url_text, int retained, jstring id, jint generation, jstring journal) {
     reader_job *job = calloc(1, sizeof(*job));
     if (!job) return -1;
     atomic_init(&job->references, 1);
     ib_reader_source_init(&job->source);
     job->retained = retained;
-    int ok = retained ? last_source(job, 0) == 0 : ascii(e, url_text, job->url, sizeof(job->url)) && random_identity(job->id) == 0;
+    int ok = retained == 1 ? last_source(job, 0) == 0 : retained == 2 ?
+        generation > 0 && ascii(e, id, job->id, sizeof(job->id)) &&
+        journal_text(e, journal, job->index.journal) :
+        ascii(e, url_text, job->url, sizeof(job->url)) && random_identity(job->id) == 0;
+    if (retained == 2) job->source_generation = (uint32_t)generation;
     pthread_mutex_lock(&application.mutex);
     ok = ok && application.ready && !application.active && application.navigation < INT32_MAX;
     if (ok) {
@@ -333,11 +306,17 @@ static int enqueue(JNIEnv *e, jstring url_text, int retained) {
 
 JNIEXPORT jint JNICALL
 Java_org_isomorphisms_ib_ReaderBridge_navigate(JNIEnv *e, jclass type, jstring url) {
-    (void)type; return enqueue(e, url, 0);
+    (void)type; return enqueue(e, url, 0, NULL, 0, NULL);
 }
 JNIEXPORT jint JNICALL
 Java_org_isomorphisms_ib_ReaderBridge_restore(JNIEnv *e, jclass type) {
-    (void)type; return enqueue(e, NULL, 1);
+    (void)type; return enqueue(e, NULL, 1, NULL, 0, NULL);
+}
+
+JNIEXPORT jint JNICALL
+Java_org_isomorphisms_ib_ReaderBridge_openRetained(JNIEnv *e, jclass type, jstring id,
+                                                  jint generation, jstring journal) {
+    (void)type; return enqueue(e, NULL, 2, id, generation, journal);
 }
 
 JNIEXPORT jint JNICALL
@@ -363,7 +342,7 @@ Java_org_isomorphisms_ib_ReaderBridge_attach(JNIEnv *e, jclass type, jobject act
         jclass acquire = generated ? (*e)->FindClass(e, "org/isomorphisms/ib/ReaderAcquireTask") : NULL;
         jclass completion = acquire ? (*e)->FindClass(e, "org/isomorphisms/ib/ReaderCompletionTask") : NULL;
         application.ready_callback = completion ? (*e)->GetStaticMethodID(e, generated, "reader_acquisition_ready",
-            "(Landroid/app/Activity;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;I)V") : NULL;
+            "(Landroid/app/Activity;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ILjava/lang/String;I)V") : NULL;
         application.error_callback = application.ready_callback ? (*e)->GetStaticMethodID(e, generated, "reader_acquisition_failed",
             "(Landroid/app/Activity;Ljava/lang/String;)V") : NULL;
         ok = ok && application.error_callback && !(*e)->ExceptionCheck(e);
@@ -409,7 +388,7 @@ Java_org_isomorphisms_ib_ReaderLayoutListener_onLayoutChange(JNIEnv *e, jobject 
     pthread_mutex_lock(&application.mutex);
     int current = activity && application.activity && (*e)->IsSameObject(e, activity, application.activity) && !application.active;
     pthread_mutex_unlock(&application.mutex);
-    if (current) (void)enqueue(e, NULL, 1);
+    if (current) (void)enqueue(e, NULL, 1, NULL, 0, NULL);
 }
 
 JNIEXPORT void JNICALL
@@ -448,7 +427,7 @@ Java_org_isomorphisms_ib_ReaderAcquireTask_run(JNIEnv *e, jobject self) {
         job->result = ib_reader_source_accept_fd(&job->source, &job->ticket, fd) == IB_READER_PFD_ACCEPTED ? 0 : -1;
         close(fd);
     }
-    if (job->retained && job->result != 0 && last_source(job, 1) == 0 &&
+    if (job->retained == 1 && job->result != 0 && last_source(job, 1) == 0 &&
         ib_arena_source_owner_open_observed(&application.sources, job->id,
             job->source_generation, job->navigation, &job->ticket, &job->observations, &fd) == 0) {
         job->result = ib_reader_source_accept_fd(&job->source, &job->ticket, fd) == IB_READER_PFD_ACCEPTED ? 0 : -1;
@@ -505,8 +484,9 @@ Java_org_isomorphisms_ib_ReaderCompletionTask_run(JNIEnv *e, jobject self) {
         jstring evidence = count > 0 && (size_t)count < sizeof(fields) ? (*e)->NewStringUTF(e, fields) : NULL;
         jstring body = evidence ? utf8_text(e, job->source.bytes, job->source.byte_count) : NULL;
         jstring id = body ? (*e)->NewStringUTF(e, job->id) : NULL;
-        if (id) (*e)->CallStaticVoidMethod(e, application.generated, application.ready_callback,
-            activity, evidence, body, id, (jint)job->navigation);
+        jstring journal = id ? (*e)->NewStringUTF(e, job->index.journal) : NULL;
+        if (journal) (*e)->CallStaticVoidMethod(e, application.generated, application.ready_callback,
+            activity, evidence, body, id, (jint)job->navigation, journal, (jint)job->retained);
     } else if (current && activity) {
         jstring reason = (*e)->NewStringUTF(e, "Acquisition or verified source readback failed. The previous document is retained.");
         if (reason) (*e)->CallStaticVoidMethod(e, application.generated, application.error_callback, activity, reason);
