@@ -43,7 +43,7 @@ if (reader_status === 0) {
   try {
     "$grease" "$acceptance/ib-source/shizuku/observe-navigation.grease" \
       "$acceptance" "$input" "$sdk" "$compiler" "$adb" emulator-5554 \
-      "$evidence/installed" "$evidence/navigation"
+      "$evidence/installed" "$evidence/navigation" reader-v2
   }
   setvar navigation_status = _error.code
 }
