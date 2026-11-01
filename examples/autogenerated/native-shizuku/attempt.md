@@ -65,3 +65,9 @@ prerequisite until the 60-minute job deadline. No compiler cache/build was
 entered and no Android receipt was produced. The next workflow pins ai-ci's
 bounded signed-HTTPS Ubuntu provisioning, selects the SDK's required JDK 17,
 and allows 90 minutes for the actual multi-stage build and two emulators.
+
+Run 41254550229 at 10c83b0d passes that bootstrap and backend preparation. Its
+next prerequisite install used the runner's default apt source rather than the
+bounded archive and could not find ripgrep. The continuation routes downstream
+test packages through ai-ci's same signed source. That failed run still has no
+installed Shizuku or Android execution evidence.

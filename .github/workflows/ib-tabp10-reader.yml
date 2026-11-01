@@ -40,7 +40,7 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           repository: isomorphisms/ai-ci
-          ref: 2383379394a7af5a8808abbe2d7b159a55328a83
+          ref: b1eebfe933dfbbc174d082b12721614d86cad559
           path: .tools/reader-acceptance
           persist-credentials: false
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
@@ -109,7 +109,7 @@ jobs:
       - name: Qualify the maintained ICU path repair against its original source
         shell: sh
         run: |
-          .tools/runtime/.build/grease/bin/grease -c 'sudo apt-get install -y ripgrep libssl-dev'
+          make -f .tools/reader-acceptance/ick-host/Makefile extra-packages ICK_BUILD="$RUNNER_TEMP/ick-host-build" PACKAGES='ripgrep libssl-dev'
           .tools/runtime/.build/grease/bin/grease .tools/icu/tests/verify-search-path.grease "$GITHUB_WORKSPACE/.tools/icu" "${{ steps.ick.outputs.compiler }}" "$RUNNER_TEMP/ib-reader/icu-native"
       - name: Exercise the maintained native ingress boundary
         shell: sh
