@@ -7,8 +7,9 @@
         <Button android:id="@id/sources_button" android:layout_width="56dp"
             android:layout_height="48dp" android:text="☰" android:contentDescription="Sources"
             android:textColor="#ECECEC" android:backgroundTint="#292929" android:onClick="onClick" />
-        <TextView android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content"
-            android:text="IB" android:textSize="21sp" android:textColor="#ECECEC" android:paddingStart="16dp" />
+        <TextView android:id="@id/reader_title" android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content"
+            android:text="IB" android:textSize="21sp" android:textColor="#ECECEC" android:paddingStart="16dp"
+            android:maxLines="1" android:ellipsize="end" />
         <Button android:id="@id/reflow_button" android:layout_width="140dp"
             android:layout_height="48dp" android:text="Reflow: Greedy" android:onClick="onClick"
             android:textColor="#ECECEC" android:backgroundTint="#292929" />

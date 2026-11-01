@@ -178,3 +178,33 @@ failure is retained. The observer now preserves its SDK counter's register type
 across failure branches and captures AndroidRuntime errors before exit. The
 compiler semantics are unchanged between the two alias qualification heads;
 fresh qualification is still required, including actual reader link effects.
+
+
+## Original HTML, visible title and current decoder qualification
+
+Independent retained-source inspection of fabac08a (run 41279724988; diagnostic
+run 41282950909) establishes that the 577-byte response has an Example Domain
+title and a static paragraph, but no static heading or link. Acquisition,
+publication, source readback and the checked renderer return succeeded; the
+status is the explicit static-HTML limitation and IBLAST2 was acknowledged.
+The earlier body-title assertion cannot represent this original HTML. The
+native no-action-bar header also kept its literal IB label. The checked
+Activity now writes the extracted title into reader_title (0x7f03000a) after
+successful presentation, while maintaining Activity.setTitle. Independent
+acceptance requires that visible title and the actual static paragraph. No
+heading, link or dynamic output is inserted into the document.
+
+The corrected external decoder observer at ai-ci e3c1da56 passes unchanged
+fabac08a reader-v4 output on API 29 and 34 in run 41283288967, with all four
+compiled decoding mutants rejected at their designated semantic assertions.
+The earlier VerifyError was an observer descriptor defect, not a candidate
+semantic failure or a valid mutation rejection. Installed non-UTF-8 HTTP/SDK
+carrier and physical tablet observations are still NOT_RUN.
+
+android-NDK 8177a183 runtime lanes pass both APIs (run 41281031262). This
+integration consumes that exact compiler and ai-ci 4f685735; its own changed
+Activity and native APK still require fresh installed qualification. No
+physical device facts, signer compatibility, release readiness or SEARCH
+completion are inferred. The local execution environment is unavailable;
+these edits use exact remote source parents with leased ref publication and
+will be compiled and exercised by the existing source-bound CI.

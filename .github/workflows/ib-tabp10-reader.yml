@@ -20,7 +20,7 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           repository: isomorphisms/android-NDK
-          ref: b5f673062bb5681c29f70a9ee7c5412b4e8b785c
+          ref: 8177a1830c1e8c6d77fab203d018989137d3653f
           path: .tools/android-NDK
           persist-credentials: false
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
@@ -40,7 +40,7 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           repository: isomorphisms/ai-ci
-          ref: dc0d85babeca5b437275578e9ba54021218cfbc6
+          ref: 4f6857352e4644ca27dd2aa81ded8595e7bb35e6
           path: .tools/reader-acceptance
           persist-credentials: false
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
@@ -168,6 +168,7 @@ jobs:
           api-level: 29
           target: default
           arch: x86_64
+          disk-size: 2048M
           avd-name: ib-reader-api29
           emulator-options: -no-window -no-audio -no-snapshot -no-boot-anim -memory 2048 -gpu swiftshader_indirect
           disable-animations: true
@@ -181,6 +182,7 @@ jobs:
           api-level: 34
           target: google_apis
           arch: x86_64
+          disk-size: 2048M
           avd-name: ib-reader-api34
           emulator-options: -no-window -no-audio -no-snapshot -no-boot-anim -memory 2048 -gpu swiftshader_indirect
           disable-animations: true

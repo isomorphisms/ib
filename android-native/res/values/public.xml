@@ -12,4 +12,5 @@
     <public type="id" name="reflow_button" id="0x7f030007" />
     <public type="id" name="back_button" id="0x7f030008" />
     <public type="id" name="forward_button" id="0x7f030009" />
+    <public type="id" name="reader_title" id="0x7f03000a" />
 </resources>

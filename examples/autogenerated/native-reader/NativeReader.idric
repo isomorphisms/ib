@@ -98,6 +98,8 @@ back_button : Int32
 back_button = 2130903048
 forward_button : Int32
 forward_button = 2130903049
+reader_title : Int32
+reader_title = 2130903050
 
 read_view_text : ActivityReference → Int32 → IO Text
 read_view_text activity identity = do
@@ -227,6 +229,7 @@ reader_acquisition_ready activity observations html source_id generation planned
         else do
           styled ← style_regions activity (projected_regions projection)
           primIO (set_document_title activity title)
+          write_view_text activity reader_title title
           write_view_text activity reader_input document.source_result.evidence.requested_url
           saved ← primIO (acknowledge_presented_source source_id generation (history_text history))
           if saved ≟ 0 then show_history_controls activity history

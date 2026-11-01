@@ -10,4 +10,5 @@
     <item type="id" name="reflow_button" />
     <item type="id" name="back_button" />
     <item type="id" name="forward_button" />
+    <item type="id" name="reader_title" />
 </resources>
