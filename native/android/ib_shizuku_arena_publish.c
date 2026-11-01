@@ -45,6 +45,8 @@ typedef struct {
     int utf8_valid;
     unsigned redirects;
     int has_redirect_chain;
+    int has_transfer_decoding;
+    char transfer_decoding[8];
     char redirect_chain[IB_REDIRECT_OBSERVATION_CAP + 1U];
     int64_t declared_length;
     uint64_t received_length;
@@ -202,7 +204,8 @@ static int frame_response(const unsigned char *frame, size_t length,
          (strcmp(fields[9], "identity") != 0 &&
           strcmp(fields[9], "chunked") != 0))) return refused_stage(10);
     uint64_t status, received, redirects, declared = 0;
-    if (decimal(fields[0], &status) != 0 || status < 200U || status > 299U ||
+    if (strlen(fields[0]) != 3U || decimal(fields[0], &status) != 0 ||
+        status < 200U || status > 599U ||
         decimal(fields[4], &received) != 0 || received != source_length ||
         decimal(fields[7], &redirects) != 0 || redirects > 8U ||
         (strcmp(fields[3], "-1") != 0 &&
@@ -223,6 +226,11 @@ static int frame_response(const unsigned char *frame, size_t length,
     response->received_length = received;
     response->declared_length = strcmp(fields[3], "-1") == 0 ? -1 : (int64_t)declared;
     response->redirects = (unsigned)redirects;
+    if (fields[9]) {
+        if (copied(response->transfer_decoding, sizeof(response->transfer_decoding), fields[9]) != 0)
+            return refused_stage(16);
+        response->has_transfer_decoding = 1;
+    }
     if (fields[10]) {
         if (!fields[8] ||
             !ib_redirect_chain_valid(fields[10], requested_url,
@@ -330,7 +338,7 @@ static int receipt_publish(int receipts_dir, const char *id,
                      "arena_name\tresponses.arena\narena_offset\t%" PRIu64 "\n"
                      "arena_end\t%" PRIu64 "\nbyte_count\t%zu\nsha256\t%s\n"
                      "reopen_check\tMATCH\nacquisition_complete\tYES\n"
-                     "navigation_admitted\t%s\n%s%s%s",
+                     "navigation_admitted\t%s\n%s%s%s%s%s%s",
                      id, id, generation, url, response->resolved_url, response->status,
                      response->mime_type, response->charset, response->content_encoding,
                      response->utf8_valid ? "valid" : "invalid", response->redirects,
@@ -339,7 +347,10 @@ static int receipt_publish(int receipts_dir, const char *id,
                      response->admitted ? "YES" : "NO",
                      response->has_redirect_chain ? "redirect_chain\t" : "",
                      response->has_redirect_chain ? response->redirect_chain : "",
-                     response->has_redirect_chain ? "\n" : "");
+                     response->has_redirect_chain ? "\n" : "",
+                     response->has_transfer_decoding ? "transfer_decoding\t" : "",
+                     response->has_transfer_decoding ? response->transfer_decoding : "",
+                     response->has_transfer_decoding ? "\n" : "");
     } else n = snprintf(content, sizeof(content),
                  "schema\tib-icu-arena-v1\n"
                  "request_id\t%s\n"

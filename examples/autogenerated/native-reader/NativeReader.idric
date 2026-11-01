@@ -197,6 +197,13 @@ show_history_controls activity history = do
   enable_history_control activity back_button (available (history_back history))
   enable_history_control activity forward_button (available (history_forward history))
 
+document_refusal_message : Text → Text → Text
+document_refusal_message observations reason =
+  if reason /= "unadmitted-http-status" then "Document refused: " ++ reason
+    else case read_committed_evidence observations of
+      Right evidence ⇒ "HTTP " ++ evidence.http_status ++ " did not admit a readable document."
+      Left _ ⇒ "Document refused: malformed committed response observations."
+
 %export "dex:reader_acquisition_ready"
 reader_acquisition_ready : ActivityReference → Text → Text → Text → Int32 → Text → Int32 → IO ()
 reader_acquisition_ready activity observations html source_id generation planned_history kind = do
@@ -218,7 +225,7 @@ reader_acquisition_ready activity observations html source_id generation planned
               projection ← selection_projection document.revision_layout
               Right (document, history, projection)
   case prepared of
-    Left reason ⇒ reader_acquisition_failed activity ("Document refused: " ++ reason)
+    Left reason ⇒ reader_acquisition_failed activity (document_refusal_message observations reason)
     Right (document, history, projection) ⇒ do
       let title = case document.source_result.revision.title of
             Nothing ⇒ "IB"

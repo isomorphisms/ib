@@ -27,12 +27,44 @@ mkdir -p "$evidence"
   "$repository/native/android/ib_shizuku_arena_publish.c" \
   "$repository/native/android/ib_arena_source_owner.c" \
   "$repository/tests/test_shizuku_frame_canonical.c" -o "$evidence/frame-test"
-env IB_APPEND_ARENA="$evidence/appendfat-arena" IB_INGRESS_CANONICAL_TEST="$evidence/frame-test" \
-  sh "$repository/tests/test_shizuku_ingress_canonical.sh" > "$evidence/frame.txt" 2>&1
+mkdir -m 700 "$evidence/frame-arena" "$evidence/frame-arena/receipts" "$evidence/frame-arena/locks" "$evidence/frame-arena/staging"
+"$evidence/appendfat-arena" create "$evidence/frame-arena/responses.arena" 16777216 > "$evidence/create-frame-arena.txt"
+"$evidence/frame-test" "$evidence/frame-arena" > "$evidence/frame.txt" 2>&1
 cat "$evidence/frame.txt"
 rg -F 'PASS: ordered response-owner redirect chain' "$evidence/frame.txt"
 rg -F 'PASS: immutable receipt collision refuses replacement and preserves previous source' "$evidence/frame.txt"
 rg -F 'PASS: original non-UTF-8 canonical bytes and unchanged observations reach only the decoder input; corruption, duplicate charset and stale generations refuse' "$evidence/frame.txt"
+rg -F 'PASS: complete HTTP error bytes and exact status retained without admission; malformed status and prior-source controls' "$evidence/frame.txt"
+"$repository/.tools/runtime/.build/grease/bin/grease" \
+  "$repository/.tools/reader-acceptance/ib-source/reader/verify-transfer.grease" \
+  "$repository/.tools/reader-acceptance" "$evidence/frame-arena" "$evidence/independent-transfer"
+proc reject_response_mutation(label, source, stage, assertion) {
+  "$compiler" -fno-link-libatomic -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror -pthread \
+    -I "$appendfat/lib" -I "$repository/native/android" "$appendfat/lib/appendfat_arena.c" \
+    "$repository/native/android/ib_reader_pfd.c" "$repository/native/android/ib_shizuku_arena_ingress.c" \
+    "$source" "$repository/native/android/ib_arena_source_owner.c" \
+    "$repository/tests/test_shizuku_frame_canonical.c" -o "$evidence/$label"
+  try {
+    env IB_APPEND_ARENA="$evidence/appendfat-arena" IB_INGRESS_CANONICAL_TEST="$evidence/$label" \
+      sh "$repository/tests/test_shizuku_ingress_canonical.sh" > "$evidence/$label.txt" 2>&1
+  }
+  var result = _error.code
+  printf '%s\n' "$result" > "$evidence/$label.exit"
+  if (result !== 134) { echo 'FAIL response mutation missed its intended semantic assertion' >&2; exit 1 }
+  rg -x -F "$stage" "$evidence/$label.txt"
+  rg -F Assertion "$evidence/$label.txt" | rg -F "$assertion"
+}
+sed 's/response->has_transfer_decoding = 1;/response->has_transfer_decoding = 0;/' \
+  "$repository/native/android/ib_shizuku_arena_publish.c" > "$evidence/transfer-erasure.c"
+if cmp -s "$repository/native/android/ib_shizuku_arena_publish.c" "$evidence/transfer-erasure.c" { exit 1 }
+ulimit -c 0
+reject_response_mutation transfer-erasure "$evidence/transfer-erasure.c" \
+  'STAGE retained transfer-decoding observation' 'strcmp(observed.transfer_decoding, valid[i]) == 0'
+sed 's/response->admitted = status == 200U/response->admitted = status >= 200U/' \
+  "$repository/native/android/ib_shizuku_arena_publish.c" > "$evidence/http-admission-bypass.c"
+if cmp -s "$repository/native/android/ib_shizuku_arena_publish.c" "$evidence/http-admission-bypass.c" { exit 1 }
+reject_response_mutation http-admission-bypass "$evidence/http-admission-bypass.c" \
+  'STAGE complete HTTP error remains reader-ineligible' 'observed.navigation_admitted == 0'
 sed 's/#define IB_RECEIPT_NOREPLACE 1U/#define IB_RECEIPT_NOREPLACE 0U/' \
   "$repository/native/android/ib_shizuku_arena_publish.c" > "$evidence/receipt-replace-mutant.c"
 if cmp -s "$repository/native/android/ib_shizuku_arena_publish.c" "$evidence/receipt-replace-mutant.c" {
@@ -71,5 +103,5 @@ rg -F 'Assertion' "$evidence/wrong-generation.txt" | rg -F 'ib_arena_source_owne
 git -C "$appendfat" rev-parse HEAD > "$evidence/appendfat-commit.txt"
 sha256sum "$compiler" "$evidence/appendfat-arena" "$evidence/arena-slice" \
   "$repository/native/android/ib_shizuku_arena_publish.c" "$repository/tests/test_shizuku_frame_canonical.c" \
-  "$evidence/frame-test" "$evidence/receipt-replace-mutant" "$native/source-owner-test" "$native/wrong-generation-test" > "$evidence/sha256.txt"
-printf 'host_canonical_userspace_append\tPASS\nhost_redirect_chain_boundary\tPASS\nimmutable_receipt_no_replace\tPASS\ncompiled_receipt_replacement_mutant\tREJECTED\nindependent_source_oracle\tPASS\nretained_source_readback\tPASS\ncompiled_generation_mutant\tREJECTED\nreal_response_metadata\tNOT_RUN\nAndroid_Binder\tNOT_RUN\nphysical_TAB_P10\tNOT_RUN\n' > "$evidence/stages.tsv"
+  "$evidence/frame-test" "$evidence/receipt-replace-mutant" "$evidence/transfer-erasure" "$evidence/http-admission-bypass" "$native/source-owner-test" "$native/wrong-generation-test" > "$evidence/sha256.txt"
+printf 'host_canonical_userspace_append\tPASS\nhost_redirect_chain_boundary\tPASS\nretained_transfer_decoding\tPASS\nindependent_transfer_oracle\tPASS\ncompiled_transfer_erasure\tREJECTED\nHTTP_error_retained_without_admission\tPASS\ncompiled_HTTP_admission_bypass\tREJECTED\nimmutable_receipt_no_replace\tPASS\ncompiled_receipt_replacement_mutant\tREJECTED\nindependent_source_oracle\tPASS\nretained_source_readback\tPASS\ncompiled_generation_mutant\tREJECTED\nreal_response_metadata\tNOT_RUN\nAndroid_Binder\tNOT_RUN\nphysical_TAB_P10\tNOT_RUN\n' > "$evidence/stages.tsv"

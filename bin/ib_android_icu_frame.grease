@@ -43,7 +43,10 @@ var icu_pid = $!
 # a foreground external command can defer a shell's pending trap until exit.
 try { wait "$icu_pid" }
 var result = _error.code
-if (result !== 0) { exit "$result" }
+# ICU owns status 10: complete framed HTTP rejection, with original metadata
+# and body. Other nonzero results remain transport failures and emit no frame.
+printf 'icu_transport_exit\t%s\n' "$result" >&2
+if (result !== 0 and result !== 10) { exit "$result" }
 test -f "$capture_directory/body"
 test ! -L "$capture_directory/body"
 test -f "$capture_directory/metadata"

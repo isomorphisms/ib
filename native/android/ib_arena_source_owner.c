@@ -30,7 +30,8 @@ enum receipt_key {
     RK_CONTENT_ENCODING, RK_UTF8, RK_REDIRECT_COUNT,
     RK_DECLARED_LENGTH, RK_RECEIVED_LENGTH, RK_TRANSPORT,
     RK_ARENA, RK_OFFSET, RK_END, RK_LENGTH, RK_SHA256,
-    RK_REOPEN, RK_ACQUISITION, RK_NAVIGATION, RK_REDIRECT_CHAIN, RK_COUNT
+    RK_REOPEN, RK_ACQUISITION, RK_NAVIGATION, RK_REDIRECT_CHAIN,
+    RK_TRANSFER_DECODING, RK_COUNT
 };
 static const char *const receipt_names[RK_COUNT] = {
     "schema", "request_id", "source_key", "source_generation",
@@ -39,7 +40,7 @@ static const char *const receipt_names[RK_COUNT] = {
     "declared_length", "received_length", "transport",
     "arena_name", "arena_offset", "arena_end", "byte_count",
     "sha256", "reopen_check", "acquisition_complete",
-    "navigation_admitted", "redirect_chain"
+    "navigation_admitted", "redirect_chain", "transfer_decoding"
 };
 #define RECEIPT_MAX_BYTES 16384U
 #define SOURCE_WRITER_DEADLINE_MS 5000
@@ -148,7 +149,8 @@ static int parse_receipt(char *text, size_t size, const char *request_id,
      * and cannot authorize reader publication even with a valid byte hash. */
     for (size_t i = 0; i < RK_REDIRECT_CHAIN; ++i)
         if (!fields[i]) return -1;
-    if ((found != RK_REDIRECT_CHAIN && found != RK_COUNT) ||
+    if (found != (size_t)RK_REDIRECT_CHAIN + (fields[RK_REDIRECT_CHAIN] != NULL) +
+            (fields[RK_TRANSFER_DECODING] != NULL) ||
         strcmp(fields[RK_SCHEMA], "ib-icu-arena-v2") != 0 ||
         strcmp(fields[RK_REQUEST], request_id) != 0 ||
         strcmp(fields[RK_TRANSPORT], "icu-app-process-via-binder-shizuku") != 0 ||
@@ -163,6 +165,10 @@ static int parse_receipt(char *text, size_t size, const char *request_id,
         !allowed_url(fields[RK_REQUESTED_URL]) ||
         !allowed_url(fields[RK_RESOLVED_URL]))
         return -1;
+
+    if (fields[RK_TRANSFER_DECODING] &&
+        strcmp(fields[RK_TRANSFER_DECODING], "identity") != 0 &&
+        strcmp(fields[RK_TRANSFER_DECODING], "chunked") != 0) return -1;
 
     /* The raw snapshot has no representation authority. Reject malformed or
      * unbounded metadata before copying it; leave encoding/MIME/status policy
@@ -242,6 +248,9 @@ static int parse_receipt(char *text, size_t size, const char *request_id,
         memcpy(observations->mime_type, fields[RK_MIME], strlen(fields[RK_MIME]) + 1U);
         memcpy(observations->charset, fields[RK_CHARSET], strlen(fields[RK_CHARSET]) + 1U);
         memcpy(observations->http_status, fields[RK_STATUS], strlen(fields[RK_STATUS]) + 1U);
+        if (fields[RK_TRANSFER_DECODING])
+            memcpy(observations->transfer_decoding, fields[RK_TRANSFER_DECODING],
+                   strlen(fields[RK_TRANSFER_DECODING]) + 1U);
         if (fields[RK_REDIRECT_CHAIN]) {
             size_t chain_bytes = strlen(fields[RK_REDIRECT_CHAIN]);
             if (chain_bytes >= sizeof(observations->redirect_chain)) return -1;

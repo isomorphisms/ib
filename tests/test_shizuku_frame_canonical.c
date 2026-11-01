@@ -145,6 +145,23 @@ static void current_metadata_cases(ib_ingress_arena *publisher, const char *root
         size_t count = frame(packet, sizeof(packet), fields, html, sizeof(html)-1U);
         assert(send_frame(publisher, identities[i], packet, count, 0, 0) == 0);
         assert(reopen(root, identities[i], 19) == 0);
+        ib_arena_source_owner owner;
+        assert(ib_arena_source_owner_init(&owner, root) == 0);
+        ib_arena_source_owner_want(&owner, 19);
+        ib_reader_source_ticket ticket;
+        ib_arena_source_observations observed;
+        int fd = -1;
+        assert(ib_arena_source_owner_open_observed(&owner, identities[i], 19, 19,
+            &ticket, &observed, &fd) == 0 && fd >= 0);
+        puts("STAGE retained transfer-decoding observation");
+        assert(fflush(stdout) == 0);
+        assert(strcmp(observed.transfer_decoding, valid[i]) == 0);
+        ib_reader_source source;
+        ib_reader_source_init(&source);
+        ib_reader_source_want(&source, 19);
+        assert(ib_reader_source_accept_fd(&source, &ticket, fd) == IB_READER_PFD_ACCEPTED);
+        assert(close(fd) == 0);
+        ib_reader_source_clear(&source);
     }
     const char *invalid[] = {
         "content_range\tabsent\n",
@@ -163,6 +180,58 @@ static void current_metadata_cases(ib_ingress_arena *publisher, const char *root
         reject(publisher, root, identity, packet, count);
     }
     puts("PASS: current ICU ten-field identity/chunked captures and paired-field/range/decoder/duplicate refusals");
+}
+
+static void http_failure_cases(ib_ingress_arena *publisher, const char *root) {
+    char base[4096], fields[8193], identity[64];
+    unsigned char packet[16384];
+    metadata(base, sizeof(base), "text/html; charset=utf-8", url, 0,
+             "valid", sizeof(html)-1U);
+    const char *statuses[] = {"300", "400", "404", "429", "500", "599"};
+    for (size_t i = 0; i < sizeof(statuses)/sizeof(statuses[0]); ++i) {
+        int n = snprintf(identity, sizeof(identity), "http-error-%s", statuses[i]);
+        assert(n > 0 && (size_t)n < sizeof(identity));
+        n = snprintf(fields, sizeof(fields), "http_status\t%s\n%s",
+                     statuses[i], strchr(base, '\n') + 1);
+        assert(n > 0 && (size_t)n < sizeof(fields));
+        size_t count = frame(packet, sizeof(packet), fields, html, sizeof(html)-1U);
+        uint64_t before = committed(root);
+        assert(send_frame(publisher, identity, packet, count, 0, 0) == 0);
+        assert(committed(root) == before + sizeof(html)-1U);
+        assert(reopen(root, identity, 19) != 0);
+        ib_arena_source_owner owner;
+        assert(ib_arena_source_owner_init(&owner, root) == 0);
+        ib_arena_source_owner_want(&owner, 20);
+        ib_reader_source_ticket ticket;
+        ib_arena_source_observations observed;
+        int fd = -1;
+        assert(ib_arena_source_owner_open_decode_input(&owner, identity, 19, 20,
+            &ticket, &observed, &fd) == 0 && fd >= 0);
+        puts("STAGE complete HTTP error remains reader-ineligible");
+        assert(fflush(stdout) == 0);
+        assert(observed.navigation_admitted == 0);
+        assert(strcmp(observed.http_status, statuses[i]) == 0);
+        ib_reader_source source;
+        ib_reader_source_init(&source);
+        ib_reader_source_want(&source, 20);
+        assert(ib_reader_source_accept_fd(&source, &ticket, fd) == IB_READER_PFD_ACCEPTED);
+        assert(close(fd) == 0);
+        assert(source.byte_count == sizeof(html)-1U &&
+               memcmp(source.bytes, html, sizeof(html)-1U) == 0);
+        ib_reader_source_clear(&source);
+        assert(reopen(root, "observed", 19) == 0);
+    }
+    const char *invalid[] = {"100", "199", "600", "999", "0200"};
+    for (size_t i = 0; i < sizeof(invalid)/sizeof(invalid[0]); ++i) {
+        int n = snprintf(identity, sizeof(identity), "invalid-status-%zu", i);
+        assert(n > 0 && (size_t)n < sizeof(identity));
+        n = snprintf(fields, sizeof(fields), "http_status\t%s\n%s",
+                     invalid[i], strchr(base, '\n') + 1);
+        assert(n > 0 && (size_t)n < sizeof(fields));
+        size_t count = frame(packet, sizeof(packet), fields, html, sizeof(html)-1U);
+        reject(publisher, root, identity, packet, count);
+    }
+    puts("PASS: complete HTTP error bytes and exact status retained without admission; malformed status and prior-source controls");
 }
 
 static void redirect_observation_cases(ib_ingress_arena *publisher, const char *root) {
@@ -417,6 +486,7 @@ int main(int argc, char **argv) {
     current_metadata_cases(&publisher, root);
     redirect_observation_cases(&publisher, root);
     decoded_input_case(&publisher, root);
+    http_failure_cases(&publisher, root);
     if (argc == 5) retain_live_observation(&publisher, root, argv[2], argv[3], argv[4]);
     puts("PASS: paired ICU frame through private ingress into real canonical Arena v2 and exact reopened reader bytes");
     puts("PASS: body-only, partial, trailing, header, size, metadata, UTF-8, credentials, digest, worker and stale refusals preserve prior content");
