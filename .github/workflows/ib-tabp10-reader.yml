@@ -40,7 +40,7 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           repository: isomorphisms/ai-ci
-          ref: d62e6fe89f944585052cfc626e9c51dd1133034c
+          ref: 22b98438ad065b1b0140917fda1916bb121c6d56
           path: .tools/reader-acceptance
           persist-credentials: false
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
@@ -226,8 +226,29 @@ jobs:
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: always()
         with:
-          name: ib-ick-host-checkpoint-${{ github.event.pull_request.head.sha || github.sha }}
-          path: ${{ runner.temp }}/ib-checkpoint/ick-host
+          name: ib-ick-host-checkpoint-aa-${{ github.event.pull_request.head.sha || github.sha }}
+          path: |
+            ${{ runner.temp }}/ib-checkpoint/ick-host/part-aa
+            ${{ runner.temp }}/ib-checkpoint/ick-host/compiler.sha256
+            ${{ runner.temp }}/ib-checkpoint/ick-host/parts.sha256
+          if-no-files-found: warn
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: ib-ick-host-checkpoint-ab-${{ github.event.pull_request.head.sha || github.sha }}
+          path: |
+            ${{ runner.temp }}/ib-checkpoint/ick-host/part-ab
+            ${{ runner.temp }}/ib-checkpoint/ick-host/compiler.sha256
+            ${{ runner.temp }}/ib-checkpoint/ick-host/parts.sha256
+          if-no-files-found: warn
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: ib-ick-host-checkpoint-ac-${{ github.event.pull_request.head.sha || github.sha }}
+          path: |
+            ${{ runner.temp }}/ib-checkpoint/ick-host/part-ac
+            ${{ runner.temp }}/ib-checkpoint/ick-host/compiler.sha256
+            ${{ runner.temp }}/ib-checkpoint/ick-host/parts.sha256
           if-no-files-found: warn
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: always()

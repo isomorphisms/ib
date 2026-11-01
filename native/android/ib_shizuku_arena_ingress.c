@@ -11,6 +11,9 @@
 #include <sys/stat.h>
 #include <time.h>
 #include <unistd.h>
+#ifdef __ANDROID__
+#include <android/log.h>
+#endif
 
 #define INGEST_POLL_SLICE_MS 250
 #define INGEST_BUFFER_CAP (IB_INGRESS_STREAM_MAX_BYTES + 1U)
@@ -119,6 +122,12 @@ static void *consume_pipe(void *opaque) {
     }
 
 done:
+#ifdef __ANDROID__
+    __android_log_print(ANDROID_LOG_INFO, "IBReader", "private ingress EOF complete=%d bytes=%zu cancelled=%d wanted=%llu requested=%llu",
+        complete, count, atomic_load(&session->cancelled),
+        (unsigned long long)atomic_load(&session->wanted_navigation_generation),
+        (unsigned long long)session->request_generation);
+#endif
     close(fd);
     session->source_fd = -1;
     if (!complete) {

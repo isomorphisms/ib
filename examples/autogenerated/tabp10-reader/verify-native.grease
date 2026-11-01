@@ -9,7 +9,23 @@ for path in "$repository" "$compiler" "$evidence" {
 }
 test -x "$compiler"
 if test -e "$evidence" { echo 'FAIL reused native output' >&2; exit 2 }
-mkdir -p "$evidence"
+mkdir -p "$evidence/old-flags"
+"$compiler" -fno-link-libatomic -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror \
+  -I "$repository/native/android" "$repository/tests/test_binder_flags.c" -o "$evidence/flags-test"
+"$evidence/flags-test" > "$evidence/flags.txt" 2>&1
+cat "$evidence/flags.txt"
+rg -x -F 'PASS exact Binder direction and framework transport flag controls' "$evidence/flags.txt"
+sed 's/flags \& ~0x12/flags \& ~0x10/' "$repository/native/android/ib_binder_flags.h" > "$evidence/old-flags/ib_binder_flags.h"
+if cmp -s "$repository/native/android/ib_binder_flags.h" "$evidence/old-flags/ib_binder_flags.h" {
+  echo 'FAIL unchanged AppOps transport mutation' >&2; exit 1
+}
+"$compiler" -fno-link-libatomic -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror \
+  -I "$evidence/old-flags" "$repository/tests/test_binder_flags.c" -o "$evidence/old-flags-test"
+ulimit -c 0
+try { "$evidence/old-flags-test" > "$evidence/old-flags.txt" 2>&1 }
+if (_error.code !== 134) { echo 'FAIL AppOps flag mutant missed its intended assertion' >&2; exit 1 }
+rg -x -F 'STAGE framework AppOps synchronous flag' "$evidence/old-flags.txt"
+rg -F 'Assertion' "$evidence/old-flags.txt" | rg -F 'ib_binder_synchronous(2)'
 "$compiler" -fno-link-libatomic -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror -pthread \
   "$repository/native/android/ib_reader_pfd.c" \
   "$repository/native/android/ib_shizuku_arena_ingress.c" \
@@ -59,5 +75,5 @@ try {
 if (_error.code !== 134) { echo 'FAIL generation-confusion mutant was not rejected by its intended assertion' >&2; exit 1 }
 rg -x -F 'STAGE retained source generation 1 at navigation generation 3' "$evidence/wrong-generation.txt"
 rg -F 'Assertion' "$evidence/wrong-generation.txt" | rg -F 'ib_arena_source_owner_open_retained'
-sha256sum "$compiler" "$evidence/ingress-test" "$evidence/revivable-ingress-test" "$evidence/source-owner-test" "$evidence/wrong-generation-test" > "$evidence/native.sha256"
-printf 'host_private_stream\tPASS\nhost_irrevocable_capability\tPASS\ncompiled_revocation_mutant\tREJECTED\nhost_retained_source_readback\tPASS\ncompiled_generation_mutant\tREJECTED\ncanonical_publication\tNOT_RUN\nAndroid_Binder\tNOT_RUN\nphysical_Shizuku\tNOT_RUN\n' > "$evidence/stages.tsv"
+sha256sum "$compiler" "$repository/native/android/ib_binder_flags.h" "$repository/tests/test_binder_flags.c" "$evidence/flags-test" "$evidence/old-flags-test" "$evidence/ingress-test" "$evidence/revivable-ingress-test" "$evidence/source-owner-test" "$evidence/wrong-generation-test" > "$evidence/native.sha256"
+printf 'host_framework_transport_flags\tPASS\ncompiled_AppOps_flag_mutant\tREJECTED\nhost_private_stream\tPASS\nhost_irrevocable_capability\tPASS\ncompiled_revocation_mutant\tREJECTED\nhost_retained_source_readback\tPASS\ncompiled_generation_mutant\tREJECTED\ncanonical_publication\tNOT_RUN\nAndroid_Binder\tNOT_RUN\nphysical_Shizuku\tNOT_RUN\n' > "$evidence/stages.tsv"

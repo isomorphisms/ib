@@ -6,9 +6,14 @@
  * authorization to carry descriptors in this request. Each owner separately
  * checks Parcel.hasFileDescriptors and the exact private request schema.
  * AOSP frameworks/native e59fde00320dcb3a8c927eaa84ab5d9fed003164,
- * libs/binder/IPCThreadState.cpp. Reject all other unexpected flag bits. */
+ * libs/binder/IPCThreadState.cpp. Android's BinderProxy also adds
+ * FLAG_COLLECT_NOTED_APP_OPS (0x02) to synchronous calls when listening for
+ * noted operations; it does not change RPC direction or descriptor authority.
+ * AOSP frameworks/base 5d412489475694286e3b3c43e74f42ef21ebc4de,
+ * core/java/android/os/{BinderProxy,IBinder}.java. It is not added to oneway
+ * calls. Reject all other unexpected flag bits. */
 static inline int ib_binder_synchronous(int flags) {
-    return (flags & ~0x10) == 0;
+    return (flags & ~0x12) == 0;
 }
 
 static inline int ib_binder_oneway(int flags) {
