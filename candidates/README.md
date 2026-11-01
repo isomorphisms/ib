@@ -1,10 +1,14 @@
 # Native IB reader candidates
 
-The current publication target is checked source
+[Download ib-reader-fb9b34a9.apk](https://raw.githubusercontent.com/isomorphisms/ib/a21dc951438b4433f685b5db102198fe0cc3dec4/candidates/ib-reader-fb9b34a9.apk)
+
+The published candidate contains checked source
 [fb9b34a92328551aa043137a4bba8b58084f2955](https://github.com/isomorphisms/ib/tree/fb9b34a92328551aa043137a4bba8b58084f2955).
-Its exact signed APK is being verified for direct publication. The publisher
-also requires source-bound independent API29/API34 decoding and handoff
-archives to identify the same APK bytes. It does not rebuild or re-sign.
+It is 10,233,767 bytes, SHA256
+`f72a15e672d119d693b9e1dff63c65ceefc0ad675f180c2c96f846c1fa864a10`.
+[Publication41332962289](https://github.com/isomorphisms/ib/actions/runs/41332962289)
+verified source-bound independent API29/API34 decoding and handoff archives
+against these same APK bytes. It did not rebuild or re-sign.
 
 [Producer41324363104](https://github.com/isomorphisms/ib/actions/runs/41324363104)
 passes all required stages and both APIs: checked source emission, independent
@@ -20,9 +24,12 @@ passes API29/API34 decoding lanes, including actual windows-1252/Latin-1
 original-byte verification, source-faithful clipboard/reflow, TLS certificate
 refusal and recovery. Both genuine ChordReader caller/query/original-byte
 handoff subprofiles pass. Both stronger search lanes FAIL: Google supplies a
-redirect-only partial page rather than a visible public result. The provided
-first-party continuation is under actual native observation. Search success
-and a clicked public result remain unqualified.
+redirect-only partial page rather than a visible public result. [Continuation41333859970](https://github.com/isomorphisms/ai-ci/actions/runs/41333859970)
+actually touches the provided first-party link on both APIs and independently
+verifies its committed original bytes. The resulting native page gives
+instructions for enabling JavaScript. Both decoding lanes pass again; public
+search results and a clicked public result remain unqualified and the strong
+search lanes remain FAIL.
 
 Package org.isomorphisms.ib.prepaint, versionCode3/versionName0.3.0,
 minimum API29/target36; x86_64, armeabi-v7a and arm64-v8a are packaged build
