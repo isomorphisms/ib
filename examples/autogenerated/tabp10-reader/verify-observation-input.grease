@@ -7,7 +7,7 @@ var artifact = ARGV[2]
 var digest = ARGV[3]
 var input = ARGV[4]
 var evidence = ARGV[5]
-var expected_observer = '8561acf3f3e88baa6af59cf06f149e71b4038a14'
+var expected_observer = '5de6e5f786b99aa074027941d19bc0e7705e37ce'
 printf '%s\n' "$source" | rg -x '[0-9a-f]{40}'
 printf '%s\n' "$artifact" | rg -x '[1-9][0-9]{0,19}'
 if (digest.startsWith('sha256:')) { setvar digest = digest[7:] }
@@ -38,7 +38,7 @@ test "$(cat "$input/native-client/observer-commit.txt")" = "$expected_observer"
 test "$(git -C "$repository/.tools/reader-acceptance" rev-parse HEAD)" = "$expected_observer"
 for name in ib-native-boundary.apk ib-native-uid-bypass.apk ib-native-death-noop.apk \
   ib-native-strict-flags.apk ib-native-stale-authorization.apk ib-native-anchor-zero.apk \
-  ib-native-resume-noop.apk ib-native-detach-any.apk ib-native-anchor-reset.apk {
+  ib-native-resume-noop.apk ib-native-detach-any.apk ib-native-anchor-reset.apk ib-native-single-scroll.apk {
   var expected = $(awk -v name="$name" '{n=split($2,p,"/"); if(p[n]==name)print $1}' "$input/native-client/sha256.txt")
   printf '%s\n' "$expected" | rg -x '[0-9a-f]{64}'
   printf '%s  %s\n' "$expected" "$input/native-client/$name" | sha256sum -c -

@@ -149,7 +149,13 @@ static int settle_fragment_cursor(JNIEnv *e, jobject view, jobject parent, jint 
     jmethodID stop = set ? sdk_method(e, "android/widget/ScrollView", "smoothScrollTo", "(II)V") : NULL;
     if (!stop || !(*e)->IsInstanceOf(e, text, spannable) || (*e)->ExceptionCheck(e)) return 0;
     (*e)->CallStaticVoidMethod(e, selection, set, text, point);
-    if (!(*e)->ExceptionCheck(e)) (*e)->CallVoidMethod(e, parent, stop, 0, position);
+    /* On API 29/34 a first smoothScrollTo after an idle gap starts an active
+     * zero-distance OverScroller. That still intercepts the next ACTION_DOWN.
+     * Both calls run in the same pre-draw animation clock: the rapid second
+     * public call aborts that scroller and keeps the measured position. */
+    for (unsigned cancellation_pass = 0;
+         cancellation_pass < 2 && !(*e)->ExceptionCheck(e); ++cancellation_pass)
+        (*e)->CallVoidMethod(e, parent, stop, 0, position);
     return !(*e)->ExceptionCheck(e);
 }
 
