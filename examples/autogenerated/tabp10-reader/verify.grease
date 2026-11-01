@@ -57,7 +57,7 @@ proc emit(module, lane, mode, source) {
 emit SourceReflowSmoke source-reflow command "$evidence/source"
 emit SourceReflowSmoke source-reflow-repeat command "$evidence/source"
 cmp "$evidence/source-reflow/reader.dex" "$evidence/source-reflow-repeat/reader.dex"
-for mutation in boundary pruning coordinates {
+for mutation in boundary generation pruning coordinates {
   var changed = "$evidence/source-reflow-$mutation-source"
   cp -R "$evidence/source" "$changed"
   var original = "$evidence/source/IB/Reflow/Source.idric"
@@ -66,6 +66,10 @@ for mutation in boundary pruning coordinates {
     setvar original = "$evidence/source/IB/Reflow/SourceBreaks.idric"
     setvar destination = "$changed/IB/Reflow/SourceBreaks.idric"
     sed 's/else not (hard_line_end previous rest) \&\&/else True \&\&/' "$original" > "$destination"
+  } elif (mutation === 'generation') {
+    setvar original = "$evidence/source/IB/Reflow/SourceBreaks.idric"
+    setvar destination = "$changed/IB/Reflow/SourceBreaks.idric"
+    sed 's/if safe_boundary value rest kind/if True/' "$original" > "$destination"
   } elif (mutation === 'pruning') {
     sed 's/if terminal candidate.cut.break_kind || base_advance start candidate > width/if True/' "$original" > "$destination"
   } else {

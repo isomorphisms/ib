@@ -69,23 +69,6 @@ is_empty : List Char → Bool
 is_empty [] = True
 is_empty (_ :: _) = False
 
-scan_breaks : Number → List Char → List SourceBreak
-scan_breaks offset [] = [At offset SourceEnd]
-scan_breaks offset (value :: rest) =
-  let later = scan_breaks (S offset) rest in
-  case classify value rest of
-    Nothing ⇒ later
-    Just kind ⇒
-      if is_empty rest
-        then case kind of
-          MandatoryBreak ⇒ [At (S offset) MandatoryBreak]
-          _ ⇒ later
-        else At (S offset) kind :: later
-
-public export
-source_breaks : Text → List SourceBreak
-source_breaks text = scan_breaks 0 (unpack text)
-
 -- Checks do not establish all of UAX #14/#29. They *do* fail closed on
 -- malformed ranges, duplicate/reordered cuts, missing mandatory breaks, cuts
 -- inside CRLF or after ZWJ/word joiner, and cuts before common combining marks.
@@ -114,6 +97,28 @@ safe_boundary previous (next :: rest) kind =
   (case kind of
     MandatoryBreak ⇒ True
     _ ⇒ not (hard_line_end next []))
+
+scan_breaks : Number → List Char → List SourceBreak
+scan_breaks offset [] = [At offset SourceEnd]
+scan_breaks offset (value :: rest) =
+  let later = scan_breaks (S offset) rest in
+  case classify value rest of
+    Nothing ⇒ later
+    Just kind ⇒
+      if is_empty rest
+        then case kind of
+          MandatoryBreak ⇒ [At (S offset) MandatoryBreak]
+          _ ⇒ later
+        else case kind of
+          -- A mandatory ending cannot be silently omitted. The validator
+          -- still refuses it if the source has an unsupported boundary.
+          MandatoryBreak ⇒ At (S offset) kind :: later
+          _ ⇒ if safe_boundary value rest kind
+            then At (S offset) kind :: later else later
+
+public export
+source_breaks : Text → List SourceBreak
+source_breaks text = scan_breaks 0 (unpack text)
 
 sound_boundary : Char → List Char → BreakKind → Bool
 sound_boundary previous rest MandatoryBreak = hard_line_end previous rest

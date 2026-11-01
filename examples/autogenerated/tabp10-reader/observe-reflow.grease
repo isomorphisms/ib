@@ -13,7 +13,7 @@ var digest = $(sha256sum "$input/source-reflow/reader.dex" | cut -d ' ' -f 1)
 var remote = "/data/local/tmp/ib-reflow-$digest"
 "$adb" -s "$serial" shell test ! -e "$remote"
 "$adb" -s "$serial" shell mkdir "$remote"
-for lane in source-reflow source-reflow-boundary-mutant source-reflow-pruning-mutant source-reflow-coordinates-mutant {
+for lane in source-reflow source-reflow-boundary-mutant source-reflow-generation-mutant source-reflow-pruning-mutant source-reflow-coordinates-mutant {
   "$adb" -s "$serial" push "$input/$lane/reader.dex" "$remote/$lane.dex"
   "$adb" -s "$serial" shell chmod 444 "$remote/$lane.dex"
   "$adb" -s "$serial" pull "$remote/$lane.dex" "$evidence/$lane.received.dex"
@@ -32,5 +32,5 @@ for lane in source-reflow source-reflow-boundary-mutant source-reflow-pruning-mu
   }
   cmp "$evidence/expected.txt" "$evidence/$lane.actual"
 }
-printf 'schema\tib-source-reflow-advances-v1\napi\t%s\nexhaustive_equivalence\tPASS\nthree_compiled_mutants\tREJECTED\nphysical_TAB_P10\tNOT_RUN\n' "$api" > "$evidence/receipt.tsv"
+printf 'schema\tib-source-reflow-advances-v2\napi\t%s\nexhaustive_equivalence\tPASS\nunsafe_optional_generated_cuts\tREJECTED\nfour_compiled_mutants\tREJECTED\nphysical_TAB_P10\tNOT_RUN\n' "$api" > "$evidence/receipt.tsv"
 cat "$evidence/receipt.tsv"

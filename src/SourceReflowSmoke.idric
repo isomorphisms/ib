@@ -68,6 +68,26 @@ some_breaks_are_refused =
   not (valid_source_breaks "éx" [At 1 PossibleBreak, At 3 SourceEnd]) &&
   not (valid_source_breaks "👩‍💻x" [At 2 PossibleBreak, At 4 SourceEnd])
 
+-- An unsafe optional opportunity is omitted; it must not make an otherwise
+-- readable paragraph fail validation, even when no wrapping is necessary.
+combining_boundary_case : Text → Text → Number → BreakKind → Bool
+combining_boundary_case source painted offset kind =
+  let cuts = source_breaks source in
+  let request = Requirements 64 promptly in
+  valid_source_breaks source cuts && not (has_cut offset kind cuts) &&
+  not (valid_source_breaks source [At offset kind, At (length (unpack source)) SourceEnd]) &&
+  matches [painted] (reflow_source request codepoint_width source) &&
+  matches [painted] (reflow_source_advances request (const 1) source) &&
+  source_unchanged source (reflow_source request codepoint_width source) &&
+  source_unchanged source (reflow_source_advances request (const 1) source)
+
+combining_boundary_cases : Bool
+combining_boundary_cases =
+  combining_boundary_case "a ́b" "a ́b" 2 PossibleBreak &&
+  combining_boundary_case "ab­́cd" "ab́cd" 3 DiscretionaryHyphen &&
+  combining_boundary_case "ab​́cd" "ab́cd" 3 ZeroWidthBreak &&
+  combining_boundary_case "ab­⁠cd" "ab⁠cd" 3 DiscretionaryHyphen
+
 all_modes_preserve : Text → List reflow_adverb → Bool
 all_modes_preserve source [] = True
 all_modes_preserve source (mode :: rest) =
@@ -196,6 +216,6 @@ arithmetic_contract_cases =
 %export "dex:source_reflow_cases"
 main : IO ()
 main = do
-  let passed = run_cases && advance_contract_cases && arithmetic_contract_cases
+  let passed = combining_boundary_cases && run_cases && advance_contract_cases && arithmetic_contract_cases
   putStrLn ("source-reflow-unicode-offset-cases=" ++ show passed)
   if passed then pure () else exitFailure
