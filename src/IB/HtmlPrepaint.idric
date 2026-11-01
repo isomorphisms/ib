@@ -1,5 +1,6 @@
 module IB.HtmlPrepaint
 
+import Data.List
 import IB.Information
 import IB.RecoveredInformation
 import IB.Strand

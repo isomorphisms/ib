@@ -1,6 +1,7 @@
 module IB.HtmlAnchors
 
 import Data.Text
+import Data.List
 import Data.Maybe
 import IB.Information
 import IB.RecoveredInformation

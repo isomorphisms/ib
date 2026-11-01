@@ -8,6 +8,7 @@ include $(AICI_ROOT)/ick-android/Makefile
 READER_BUILD ?= $(IB_ROOT)/build/reader-native-$(ABI)
 READER_OUTPUT ?= $(READER_BUILD)/libib_reader.so
 READER_CLIENT_SOURCE ?= $(IB_ROOT)/native/android/ib_shizuku_client.c
+READER_VIEW_SOURCE ?= $(IB_ROOT)/native/android/ib_reader_view.c
 READER_NDK_CC = $(NDK_BIN)/$(NDK_TARGET_$(ABI))29-clang
 # The pinned ARM64 producer prints sign-extended byte MOVI immediates for an
 # auto-vectorized validator, which the pinned NDK assembler correctly refuses.
@@ -36,6 +37,9 @@ $(READER_BUILD)/%.s: $(IB_ROOT)/native/android/%.c FORCE | reader-preflight
 	"$(ICK_COMPILER)" $(ICK_EXTRA_FLAGS) $(READER_FLAGS) -S "$<" -o "$@"
 
 $(READER_BUILD)/ib_shizuku_client.s: $(READER_CLIENT_SOURCE) FORCE | reader-preflight
+	"$(ICK_COMPILER)" $(ICK_EXTRA_FLAGS) $(READER_FLAGS) -S "$<" -o "$@"
+
+$(READER_BUILD)/ib_reader_view.s: $(READER_VIEW_SOURCE) FORCE | reader-preflight
 	"$(ICK_COMPILER)" $(ICK_EXTRA_FLAGS) $(READER_FLAGS) -S "$<" -o "$@"
 
 $(READER_BUILD)/%.o: $(READER_BUILD)/%.s
