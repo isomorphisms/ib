@@ -7,7 +7,7 @@ var artifact = ARGV[2]
 var digest = ARGV[3]
 var input = ARGV[4]
 var evidence = ARGV[5]
-var expected_observer = '5de6e5f786b99aa074027941d19bc0e7705e37ce'
+var expected_observer = 'cef5ae8eb891c97dba81cd7bfc6f36edebb44c53'
 printf '%s\n' "$source" | rg -x '[0-9a-f]{40}'
 printf '%s\n' "$artifact" | rg -x '[1-9][0-9]{0,19}'
 if (digest.startsWith('sha256:')) { setvar digest = digest[7:] }
@@ -32,7 +32,7 @@ unzip -q "$evidence/candidate.zip" -d "$input"
 test "$(git -C "$repository" rev-parse HEAD)" = "$source"
 test "$(cat "$input/ib-commit.txt")" = "$source"
 test "$(cat "$input/native-client/ib-commit.txt")" = "$source"
-test "$(cat "$input/native-client/backend-commit.txt")" = 9861b303a7e6d989125d80cee552a46cb2503555
+test "$(cat "$input/native-client/backend-commit.txt")" = 153e7fc8053ba4072954a5e77d4efa3609d829e4
 test "$(cat "$input/native-client/frontend-commit.txt")" = 740bbf2b1d9e811fd00c719c3473eede17ceea3b
 test "$(cat "$input/native-client/observer-commit.txt")" = "$expected_observer"
 test "$(git -C "$repository/.tools/reader-acceptance" rev-parse HEAD)" = "$expected_observer"
