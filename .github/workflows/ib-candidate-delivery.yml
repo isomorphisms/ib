@@ -7,6 +7,7 @@ on:
   workflow_dispatch:
 permissions:
   contents: write
+  actions: read
 concurrency:
   group: ib-apk-candidate-delivery
   cancel-in-progress: false
@@ -71,9 +72,16 @@ jobs:
         with:
           name: ib-direct-APK-publication-${{ github.event.pull_request.head.sha || github.sha }}
           path: |
+            ${{ runner.temp }}/ib-direct-APK/primary-jobs.tsv
+            ${{ runner.temp }}/ib-direct-APK/search-decoder-jobs.tsv
+            ${{ runner.temp }}/ib-direct-APK/verified-observations.tsv
+            ${{ runner.temp }}/ib-direct-APK/packaging-tool-sha256.txt
+            ${{ runner.temp }}/ib-direct-APK/aapt2-version.txt
+            ${{ runner.temp }}/ib-direct-APK/apksigner-version.txt
+            ${{ runner.temp }}/ib-direct-APK/input/native-client/ndk.properties
             ${{ runner.temp }}/ib-direct-APK/signature.txt
             ${{ runner.temp }}/ib-direct-APK/badging.txt
-            ${{ runner.temp }}/ib-direct-APK/ib-reader-fb9b34a9.receipt.tsv
+            ${{ runner.temp }}/ib-direct-APK/ib-reader-f43af998.receipt.tsv
             ${{ runner.temp }}/ib-direct-APK/published-sha
             ${{ runner.temp }}/ib-direct-APK/direct-APK-URL.txt
           if-no-files-found: warn
