@@ -359,8 +359,8 @@ sed 's/^/actual_DEX_compiler_binary\t/' "$input/compiler.sha256" >> "$receipt"
 sed 's/^/actual_frontend_version\t/' "$input/frontend-version.txt" >> "$receipt"
 sed 's/^/actual_build_Grease_version\t/' "$input/grease-version.txt" >> "$receipt"
 for abi in x86_64 armeabi-v7a arm64-v8a {
-  sed "s/^/actual_ICK_application_build_$abi\t/" "$input/native-client/native-$abi/receipt.tsv" >> "$receipt"
-  sed "s/^/actual_ICK_application_tool_hash_$abi\t/" "$input/native-client/native-$abi/sha256.txt" >> "$receipt"
+  awk -v abi="$abi" 'BEGIN {OFS="\t"} {print "actual_ICK_application_build_" abi,$0}' "$input/native-client/native-$abi/receipt.tsv" >> "$receipt"
+  awk -v abi="$abi" 'BEGIN {OFS="\t"} {print "actual_ICK_application_tool_hash_" abi,$0}' "$input/native-client/native-$abi/sha256.txt" >> "$receipt"
 }
 sed 's/^/application_reproduction\t/' "$input/native-client/reproduction.tsv" >> "$receipt"
 sed 's/^/application_reproduction_hash\t/' "$input/native-client/reproduction.sha256" >> "$receipt"
