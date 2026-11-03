@@ -156,3 +156,13 @@ viewport assertion. ib-google-title-overflow-after-2 passes43 producer checks,
 including both reflow modes and exact selection copying. Independent weighted
 measurement, protected-boundary and compiled fallback-disabled controls are
 required separately. These synthetic counterexamples do not qualify Android.
+
+The preceding d19e6423 required Android jobs both stop before ART: a new
+diagnostic `if test "$(cat ...)"` guard violates Grease strict_errexit even
+though parsing succeeds. The guard is now a separate read-only Grease helper
+whose command results are assigned before conditional comparison. Type/boundary
+sketch: `build-observer file + actual Git checkout + immutable SHA → checked
+identity outcome`. observer-pin-runtime-controls-1 actually executes a matching
+case and two mismatches; both mismatches exit1 at their named assertion. The
+producer repeats those runtime controls before expensive compilation. No
+application, worker, source admission, or signed-candidate assertion changes.

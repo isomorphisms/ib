@@ -114,6 +114,14 @@ and followed by the changed application. This ledger is not release acceptance.
   semantic mutants in google-weighted-layout-independent-2. The source workflow
   and strict archive verifier both pin ai-ci19e533f832d5bef530529ba366830eef884483fb.
   Actual native Google acceptance remains pending.
+- d19e6423's checked build and signed reproduction complete successfully, but
+  both required Android jobs stop before ART at a Grease strict_errexit
+  violation in the new observer diagnostic condition. The read-only guard
+  now assigns command results before comparing, with actual matching and two
+  mismatch runtime controls executed locally and required in the producer.
+  This harness correction changes no application/worker source or build input.
+  The independent Google transaction remains bound to the unchanged257e3adc
+  candidate while a fresh producer qualifies the repaired required-test path.
 
 The first changed IB producer41571281718 failed at the result fold's `else`
 layout. That failed source remains in history; the current tree repairs the
