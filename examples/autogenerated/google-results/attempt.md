@@ -29,3 +29,10 @@ admission require a separate adapter; no browser content is relabeled as an ICU
 body. Compilation, semantic controls, Android and live Google acceptance are
 PENDING until actually executed. The first concrete language/runtime failure
 must be recorded here without selecting another backend.
+
+First producer41571281718 at source3e2938ee failed before DEX emission:
+`IB.WebSearch.Results:229` reported `Expected 'else'`. The continuation inside
+the `do` block needed deeper layout indentation. The existing source was
+preserved in the failed commit; the current tree repairs that layout and
+qualifies the pure semantics with independent compiled controls before the
+larger DEX suite. This is a source correction, not a backend gap or acceptance.

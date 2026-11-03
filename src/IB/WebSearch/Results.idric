@@ -160,16 +160,21 @@ finished evidence candidate results = case candidate_result evidence candidate o
 
 -- Fold the maintained recovered log; this is result semantics, not another
 -- HTML parser. Skip noncontent elements and browser/navigation controls.
-collect : HtmlEvidence → Number → Maybe Text → Maybe AnchorCandidate →
+collect : HtmlEvidence → Number → Maybe (Text, Number) → Maybe AnchorCandidate →
   List GoogleResult → List DocumentEvent → List GoogleResult
 collect evidence position skipped candidate results [] = reverse (finished evidence candidate results)
-collect evidence position (Just skipped) candidate results (EndTag name :: rest) =
-  collect evidence (S position) (if name ≟ skipped then Nothing else Just skipped) candidate results rest
+collect evidence position (Just (skipped, depth)) candidate results (StartTag name _ :: rest) =
+  collect evidence (S position) (Just (skipped, if name ≟ skipped then S depth else depth)) candidate results rest
+collect evidence position (Just (skipped, depth)) candidate results (EndTag name :: rest) =
+  let next = if name /= skipped then Just (skipped, depth) else case depth of
+        0 ⇒ Nothing
+        S remaining ⇒ Just (skipped, remaining) in
+  collect evidence (S position) next candidate results rest
 collect evidence position (Just skipped) candidate results (_ :: rest) =
   collect evidence (S position) (Just skipped) candidate results rest
 collect evidence position Nothing candidate results (StartTag name tag :: rest) =
   if elem name ["script", "style", "template", "svg", "canvas", "nav", "header", "footer"]
-    then collect evidence (S position) (Just name) candidate results rest
+    then collect evidence (S position) (Just (name, 0)) candidate results rest
   else if name ≟ "a" then
     let updated = finished evidence candidate results in
     case attribute_value "href" tag of
@@ -226,8 +231,8 @@ google_results_from_source source =
     query ← query_from_request source.evidence.requested_url
     let results = collect source.evidence 0 Nothing Nothing [] (document_log_events source.recovered)
     if null results then Left "Google returned no verified titled public results; this response may require JavaScript"
-    else if length results > 64 then Left "Google result budget exceeded"
-    else Right (Just (SourceBackedGoogleResults query source.evidence.requested_url source.evidence.resolved_url results))
+      else if length results > 64 then Left "Google result budget exceeded"
+        else Right (Just (SourceBackedGoogleResults query source.evidence.requested_url source.evidence.resolved_url results))
 
 result_blocks : GoogleResult → List InformationBlock
 result_blocks result = case link_reference result.destination of

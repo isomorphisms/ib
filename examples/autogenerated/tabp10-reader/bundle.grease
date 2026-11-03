@@ -16,3 +16,13 @@ tar -czf "$evidence/frontend-replay.tar.gz" -C "$frontend" \
 tar -czf "$evidence/backend-replay.tar.gz" -C "$backend" dex/idric/build
 sha256sum "$evidence/frontend-replay.tar.gz" "$evidence/backend-replay.tar.gz" \
   > "$evidence/replay-bundles.sha256"
+# A download boundary truncated large archives during the Google campaign.
+# Small independently hashed pieces allow exact reconstruction; no partial
+# archive or unverified compiler is accepted as a runtime.
+mkdir -p "$evidence/frontend-parts"
+split -b 32m "$evidence/frontend-replay.tar.gz" "$evidence/frontend-parts/part-"
+test ! -e "$evidence/frontend-parts/part-af"
+printf '' > "$evidence/frontend-parts/parts.sha256"
+for part in @(rg --files "$evidence/frontend-parts" -g 'part-*' | sort) {
+  sha256sum "$part" >> "$evidence/frontend-parts/parts.sha256"
+}

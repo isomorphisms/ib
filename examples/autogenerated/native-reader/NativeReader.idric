@@ -556,23 +556,23 @@ receive_reader_action activity clicked = do
           case requested of
             Left reason ⇒ reader_acquisition_failed activity reason
             Right address ⇒ navigate_to activity address
-      else if identity ≟ permission_button
-        then do
-          _ ← primIO request_acquisition_permission
-          refresh_acquisition_capability activity
-        else if identity ≟ reflow_button
+        else if identity ≟ permission_button
           then do
-            intent ← primIO (incoming_intent activity)
-            consume_initial_request activity intent
-            selected ← read_view_text activity reflow_button
-            write_view_text activity reflow_button
-              (if selected ≟ "Reflow: Greedy" then "Reflow: Squared" else "Reflow: Greedy")
-            restored ← primIO restore_committed_source
-            if restored ≟ 0 then write_view_text activity reader_status "Reflowing the retained document…"
-              else reader_acquisition_failed activity "No retained readable document is ready for reflow."
-          else if identity ≟ back_button then move_history activity True
-            else if identity ≟ forward_button then move_history activity False
-              else pure ()
+            _ ← primIO request_acquisition_permission
+            refresh_acquisition_capability activity
+          else if identity ≟ reflow_button
+            then do
+              intent ← primIO (incoming_intent activity)
+              consume_initial_request activity intent
+              selected ← read_view_text activity reflow_button
+              write_view_text activity reflow_button
+                (if selected ≟ "Reflow: Greedy" then "Reflow: Squared" else "Reflow: Greedy")
+              restored ← primIO restore_committed_source
+              if restored ≟ 0 then write_view_text activity reader_status "Reflowing the retained document…"
+                else reader_acquisition_failed activity "No retained readable document is ready for reflow."
+            else if identity ≟ back_button then move_history activity True
+              else if identity ≟ forward_button then move_history activity False
+                else pure ()
 
 %export "dex:receive_reader_view_action"
 receive_reader_view_action : ViewReference → IO ()

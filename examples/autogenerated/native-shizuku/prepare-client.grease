@@ -25,7 +25,7 @@ for path in "$repository" "$backend" "$frontend" "$ndk" "$sdk" "$keystore" "$bak
 if test -e "$evidence" { echo 'FAIL reused Shizuku client evidence' >&2; exit 2 }
 var declared = $(git -C "$repository" ls-tree HEAD vendor/android-NDK | cut -f 1 | cut -d ' ' -f 3)
 if (declared !== $(git -C "$backend" rev-parse HEAD)) { echo 'FAIL native client compiler differs from dependency pin' >&2; exit 1 }
-test "$(git -C "$icu" rev-parse HEAD)" = 5b0ab280c3f2613ab933ed230b5cc50f50b9613f
+test "$(git -C "$icu" rev-parse HEAD)" = 4f36574be653eba6a603c4d0d79b02a7250d5154
 test "$(git -C "$net" rev-parse HEAD)" = b21801b72acb8ab835c297bbe298af8599550134
 test "$(git -C "$openssl" rev-parse HEAD)" = f4dc4d58b48d346a8270183f89acf826d459b0ca
 rg -x -F 'Pkg.Revision = 27.2.12479018' "$ndk/source.properties"
