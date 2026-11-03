@@ -122,6 +122,24 @@ and followed by the changed application. This ledger is not release acceptance.
   This harness correction changes no application/worker source or build input.
   The independent Google transaction remains bound to the unchanged257e3adc
   candidate while a fresh producer qualifies the repaired required-test path.
+- Actual257e3adc pilot41614178129 now displays native Google result text on
+  both APIs, with three retained public ICU targets each. API34 performs exact
+  SDK source copying but fails the immediate visible-point setup; API29 fails
+  the observer's negative clear-selection sentinel. Full Google E2E remains
+  FAIL. Private archives13223991245/API34 and13222859060/API29 retain actual
+  canonical Arena. Independent readback passes both legacy parent originals
+  and all six UTF8 public target originals. Host-private directory/staging
+  preparation changes no original Arena or metadata bytes.
+- The current semantic correction uses the actual h3/role-heading title,
+  excluding adjacent site/address labels. It refuses ambiguous headings and
+  admits only browser results with a corresponding retained ICU target.
+  Local47 producer assertions,27 independent assertions and eight separately
+  compiled semantic counterexamples pass. The actual retained probe still
+  supplies ten candidates/four snippet groups. Final checked Activity,
+  projection and framework DEX independently disassemble. The producer and
+  strict input guard now both pin ai-cifc65cf0911f38d8955158e70fcf7379b299aab0f,
+  including the valid SDK collapse and bounded same-source touch preparation.
+  Changed-source actual Android qualification remains pending.
 
 The first changed IB producer41571281718 failed at the result fold's `else`
 layout. That failed source remains in history; the current tree repairs the

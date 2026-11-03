@@ -166,3 +166,35 @@ identity outcome`. observer-pin-runtime-controls-1 actually executes a matching
 case and two mismatches; both mismatches exit1 at their named assertion. The
 producer repeats those runtime controls before expensive compilation. No
 application, worker, source admission, or signed-candidate assertion changes.
+
+The257e3adc actual pilot41614178129 reaches original acquisition and native
+result text on both APIs, but not the complete transaction. API34
+copies the source and then fails the visible touch-point setup; API29 fails
+the observer's negative selection-clear precondition. The independent observer
+now uses a verified valid0,0 collapse and bounded same-source viewport
+settlement before actual DOWN/UP. Capture now retains real canonical sources;
+independent strict readback passes both parent originals and all six actual
+public target originals after preparing private host/verifier directories.
+These are source/presentation advances, not an accepted result click.
+
+The retained DOM's anchor includes site/address labels outside its one heading.
+`AnchorCandidate` now retains a heading count and complete heading scope, and
+candidate_title returns only that heading's normalized decoded text. Multiple
+or nested distinct headings refuse. The same helper owns readiness, original
+ICU result semantics and verified browser projection. Browser DOM records now
+require their own corresponding retained ICU destination; unresolved direct
+DOM references cannot be displayed under an ICU-verified result status.
+Original ICU HTML result policy and all original bytes remain unchanged.
+
+Type sketch: `source-bound anchor + one complete heading → Maybe Text`;
+`DOM candidate + verified original ICU target → Maybe GoogleResult`.
+The first producer title test mistakenly treated the fixture's admitted HTML
+result as an optional Google result; the checker refused it and the test now
+explicitly invokes the maintained Google fold. No fallback language is used.
+ib-heading-scope-fortyseven-2 passes47 producer assertions. Independent
+google-heading-eight-controls-1 passes27 assertions and rejects eight compiled
+semantic mutants. The unchanged385173-byte actual probe still yields ten
+acquisition candidates and four snippet groups. A first replay used a wrong
+requested query and correctly refused; the next uses retained requested-url.txt.
+ib-heading-scope-dex-2 compiles the final Activity/projection/callback DEX and
+independently disassembles it. None of these host checks is ART acceptance.

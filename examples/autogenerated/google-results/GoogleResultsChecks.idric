@@ -52,6 +52,22 @@ main = do
         _ ⇒ False
       _ ⇒ False
     _ ⇒ False)
+  check "a result title contains its heading rather than adjacent site labels"
+    (case fixture "<a href=\"https://example.org/music\"><span>example.orghttps://example.org/music</span><h3>Music <em>&amp; sound</em></h3><span>Unrelated badge</span></a>" of
+      Right source ⇒ case google_results_from_source source of
+        Right (Just search) ⇒ map (\result ⇒ result.title) search.results ≟ ["Music & sound"]
+        _ ⇒ False
+      _ ⇒ False)
+  check "role heading title excludes following anchor metadata"
+    (case fixture "<a href=\"https://example.org/music\"><div role=\"heading\">Music <em>theory</em></div><span>Metadata</span></a>" of
+      Right source ⇒ case google_results_from_source source of
+        Right (Just search) ⇒ map (\result ⇒ result.title) search.results ≟ ["Music theory"]
+        _ ⇒ False
+      _ ⇒ False)
+  check "several heading titles cannot become one fabricated result title"
+    (refuses "<a href=\"https://example.org/music\"><h3>First</h3><h3>Second</h3></a>")
+  check "nested distinct heading nodes remain ambiguous"
+    (refuses "<a href=\"https://example.org/music\"><h3>Outer<span role=\"heading\">Inner</span></h3></a>")
   check "arbitrary anchors are not Google results"
     (refuses "<html><body><a href=\"https://en.wikipedia.org/wiki/Music\">Music</a></body></html>")
   check "retry headings are not public results"

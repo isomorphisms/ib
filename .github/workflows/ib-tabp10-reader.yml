@@ -43,13 +43,13 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           repository: isomorphisms/ai-ci
-          ref: 19e533f832d5bef530529ba366830eef884483fb
+          ref: fc65cf0911f38d8955158e70fcf7379b299aab0f
           path: .tools/reader-acceptance
           persist-credentials: false
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           repository: isomorphisms/ai-ci
-          ref: 19e533f832d5bef530529ba366830eef884483fb
+          ref: fc65cf0911f38d8955158e70fcf7379b299aab0f
           path: .tools/google-result-acceptance
           persist-credentials: false
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
@@ -325,7 +325,7 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           repository: isomorphisms/ai-ci
-          ref: 19e533f832d5bef530529ba366830eef884483fb
+          ref: fc65cf0911f38d8955158e70fcf7379b299aab0f
           path: .tools/reader-acceptance
           persist-credentials: false
       - id: ick

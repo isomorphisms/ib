@@ -159,15 +159,45 @@ record AnchorCandidate where
   constructor Candidate
   occurrence : Number
   href : Text
-  heading_seen : Bool
+  heading_count : Number
+  heading_path : List Text
   characters : List Char
+
+-- A result title belongs to one complete heading inside its anchor. Site
+-- labels, displayed addresses and badges outside that heading remain source
+-- content, but cannot be silently concatenated into the result title.
+candidate_title : AnchorCandidate → Maybe Text
+candidate_title candidate =
+  let title = unwords (words (decode_html_entities (pack (reverse candidate.characters)))) in
+  if candidate.heading_count /= 1 || not (null candidate.heading_path) ||
+     title ≟ "" || length (unpack title) > 1024 then Nothing else Just title
+
+void_element : Text → Bool
+void_element name = elem name
+  ["area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source", "track", "wbr"]
+
+enter_heading_scope : Text → Text → AnchorCandidate → AnchorCandidate
+enter_heading_scope name tag candidate =
+  let heading = name ≟ "h3" || attribute_value "role" tag ≟ Just "heading"
+      active = heading || not (null candidate.heading_path) in
+  { heading_count := if heading then S candidate.heading_count else candidate.heading_count,
+    heading_path := if active && not (void_element name)
+      then name :: candidate.heading_path else candidate.heading_path } candidate
+
+leave_heading_scope : Text → AnchorCandidate → AnchorCandidate
+leave_heading_scope name candidate = case candidate.heading_path of
+  opened :: remaining ⇒ if name ≟ opened then { heading_path := remaining } candidate else candidate
+  [] ⇒ candidate
+
+heading_text : Text → AnchorCandidate → AnchorCandidate
+heading_text text value = if null value.heading_path then value
+  else { characters := reverse (unpack text) ++ value.characters } value
 
 candidate_result : HtmlSourceIdentity → Maybe AnchorCandidate → Maybe GoogleResult
 candidate_result evidence Nothing = Nothing
-candidate_result evidence (Just candidate) =
-  let title = unwords (words (decode_html_entities (pack (reverse candidate.characters)))) in
-  if not candidate.heading_seen || title ≟ "" || length (unpack title) > 1024 then Nothing
-  else case public_google_destination evidence.resolved_url candidate.href of
+candidate_result evidence (Just candidate) = do
+  title ← candidate_title candidate
+  case public_google_destination evidence.resolved_url candidate.href of
     Left _ ⇒ Nothing
     Right destination ⇒
       let identity = evidence.source_key ++ ";generation=" ++ evidence.source_generation ++
@@ -202,18 +232,19 @@ collect position Nothing candidate results (StartTag name tag :: rest) =
     case attribute_value "href" tag of
       Nothing ⇒ collect (S position) Nothing Nothing updated rest
       Just href ⇒ collect (S position) Nothing
-        (Just (Candidate position href False [])) updated rest
-  else if name ≟ "h3" || attribute_value "role" tag ≟ Just "heading" then
-    collect (S position) Nothing
-      (map (\value ⇒ { heading_seen := True } value) candidate) results rest
-  else collect (S position) Nothing candidate results rest
+        (Just (Candidate position href 0 [] [])) updated rest
+  else collect (S position) Nothing (map (enter_heading_scope name tag) candidate) results rest
 collect position Nothing candidate results (EndTag "a" :: rest) =
   collect (S position) Nothing Nothing (finished candidate results) rest
 collect position Nothing candidate results (ImpliedEndTag "a" :: rest) =
   collect (S position) Nothing Nothing (finished candidate results) rest
+collect position Nothing candidate results (EndTag name :: rest) =
+  collect (S position) Nothing (map (leave_heading_scope name) candidate) results rest
+collect position Nothing candidate results (ImpliedEndTag name :: rest) =
+  collect (S position) Nothing (map (leave_heading_scope name) candidate) results rest
 collect position Nothing candidate results (TextEvent text :: rest) =
   collect (S position) Nothing
-    (map (\value ⇒ { characters := reverse (unpack text) ++ value.characters } value) candidate) results rest
+    (map (heading_text text) candidate) results rest
 collect position Nothing candidate results (_ :: rest) =
   collect (S position) Nothing candidate results rest
 
@@ -300,10 +331,9 @@ acquisition_reference resolved href = case public_google_destination resolved hr
     Right (navigation_address request)
 
 acquisition_candidate : Text → AnchorCandidate → Maybe GoogleAcquisitionCandidate
-acquisition_candidate resolved candidate =
-  let title = unwords (words (decode_html_entities (pack (reverse candidate.characters)))) in
-  if not candidate.heading_seen || title ≟ "" || length (unpack title) > 1024 ||
-     length (unpack candidate.href) > 2048 ||
+acquisition_candidate resolved candidate = do
+  title ← candidate_title candidate
+  if length (unpack candidate.href) > 2048 ||
      not (all (\character ⇒ ord character >= 33 && ord character <= 126) (unpack candidate.href))
     then Nothing else case acquisition_reference resolved candidate.href of
       Left _ ⇒ Nothing
@@ -380,18 +410,23 @@ unique_with_destinations retained (first :: rest) =
 unique_results : List GoogleResult → List GoogleResult
 unique_results = unique_with_destinations []
 
+unresolved_candidate_result : HtmlSourceIdentity → AnchorCandidate → Maybe GoogleResult
+unresolved_candidate_result evidence candidate = case evidence.provenance of
+  OriginalIcuResponse _ ⇒ candidate_result evidence (Just candidate)
+  RenderedBrowserDom _ ⇒ Nothing
+
 mapped_result : HtmlSourceIdentity → List GoogleVerifiedDestination → AnchorCandidate → Maybe GoogleResult
-mapped_result evidence verified candidate =
+mapped_result evidence verified candidate = do
+  title ← candidate_title candidate
   case filter (\target ⇒ target.anchor_occurrence ≟ candidate.occurrence && target.original_href ≟ candidate.href) verified of
     [target] ⇒
-      let title = unwords (words (decode_html_entities (pack (reverse candidate.characters))))
-          retained = target.retained_destination
+      let retained = target.retained_destination
           identity = evidence.source_key ++ ";generation=" ++ evidence.source_generation ++
             ";sha256=" ++ evidence.claimed_sha256 ++ ";anchor=" ++ cast candidate.occurrence ++
             ";destination-source=" ++ retained.source_key ++ ";destination-sha256=" ++ retained.claimed_sha256 in
       Just (SourceBackedGoogleResult evidence.source_key evidence.source_generation evidence.claimed_sha256
         evidence.provenance candidate.occurrence candidate.href title retained.resolved_url (Just retained) Nothing identity)
-    _ ⇒ candidate_result evidence (Just candidate)
+    _ ⇒ unresolved_candidate_result evidence candidate
 
 with_snippet : Text → List Number → List GoogleSnippet → GoogleResult → GoogleResult
 with_snippet source eligible snippets result =
