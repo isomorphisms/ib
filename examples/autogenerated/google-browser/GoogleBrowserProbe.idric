@@ -1,0 +1,50 @@
+module GoogleBrowserProbe
+
+import Data.Text
+import Data.List
+
+-- Qualification equipment for the separately identified framework adapter.
+-- This does not admit a DOM as an ICU HTTP body or create browser history.
+data ActivityReference : Type where [external]
+data SavedStateReference : Type where [external]
+data ObjectReference : Type where [external]
+
+%foreign "dex:cast:Landroid/os/Bundle;:Ljava/lang/Object;"
+saved_state_object : SavedStateReference → PrimIO ObjectReference
+
+%foreign "dex:static:Lorg/isomorphisms/ib/googleprobe/Bridge;:start:(Landroid/app/Activity;Ljava/lang/String;)V"
+start_probe : ActivityReference → Text → PrimIO ()
+%foreign "dex:static:Lorg/isomorphisms/ib/googleprobe/Bridge;:stop:()V"
+stop_probe : PrimIO ()
+
+starts : Text → Text → Bool
+starts prefix value = take (length (unpack prefix)) (unpack value) ≟ unpack prefix
+
+%export "dex:probe_google_url"
+probe_google_url : Text → Int32
+probe_google_url address =
+  if length (unpack address) <= 4096 &&
+     all (\character ⇒ ord character >= 33 && ord character <= 126) (unpack address) &&
+     any (\prefix ⇒ starts prefix address)
+       [ "https://google.com/search?", "https://www.google.com/search?"
+       , "https://google.com/httpservice/retry/enablejs?"
+       , "https://www.google.com/httpservice/retry/enablejs?" ]
+    then 1 else 0
+
+%export "dex:create_probe"
+create_probe : ActivityReference → SavedStateReference → IO ()
+create_probe activity saved = do
+  _ ← primIO (saved_state_object saved)
+  primIO (start_probe activity
+    "https://google.com/search?q=open+source+guitar+chord+transposition")
+
+%export "dex:destroy_probe"
+destroy_probe : ActivityReference → IO ()
+destroy_probe activity = primIO stop_probe
+
+%cg dex extends Landroid/app/Activity;
+%cg dex override onCreate (Landroid/os/Bundle;)V create_probe
+%cg dex override onDestroy ()V destroy_probe
+
+main : IO ()
+main = pure ()

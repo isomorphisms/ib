@@ -1,0 +1,47 @@
+#!/usr/bin/env grease
+set -eu -o pipefail
+if (len(ARGV) !== 6) { echo 'usage: grease observe.grease AICI GREASE APK SDK API NEW_EVIDENCE' >&2; exit 2 }
+var independent = ARGV[0]
+var grease = ARGV[1]
+var apk = ARGV[2]
+var sdk = ARGV[3]
+var api = ARGV[4]
+var evidence = ARGV[5]
+if test -e "$evidence" { echo 'FAIL reused probe observation' >&2; exit 2 }
+mkdir -p "$evidence"
+var adb = "$sdk/platform-tools/adb"
+"$adb" shell getprop ro.build.version.sdk > "$evidence/SDK.txt"
+rg -x -F "$api" "$evidence/SDK.txt"
+"$adb" shell getprop ro.product.cpu.abi > "$evidence/ABI.txt"
+rg -x -F x86_64 "$evidence/ABI.txt"
+"$adb" shell dumpsys webviewupdate > "$evidence/webview-provider.txt"
+"$adb" install -r "$apk" > "$evidence/install.txt"
+rg -x -F Success "$evidence/install.txt"
+"$adb" shell dumpsys package org.isomorphisms.ib.googleprobe > "$evidence/installed-package.txt"
+"$adb" shell am start -W -n org.isomorphisms.ib.googleprobe/Idric.Generated > "$evidence/start.txt"
+# A bounded observation interval; it grants no success based on elapsed time.
+sleep 35
+"$adb" logcat -d > "$evidence/private-runtime-log.txt"
+"$adb" exec-out run-as org.isomorphisms.ib.googleprobe tar -C files -cf - browser-probe > "$evidence/private-dom.tar"
+tar -xf "$evidence/private-dom.tar" -C "$evidence"
+sha256sum "$apk" "$evidence/private-dom.tar" > "$evidence/artifact.sha256"
+"$adb" install -r "$apk" > "$evidence/replacement-install.txt"
+rg -x -F Success "$evidence/replacement-install.txt"
+var positives = 0
+for number in @(seq -w 1 30) {
+  var snapshot = "$evidence/browser-probe/snapshot-$number.dom.html"
+  if test -f "$snapshot" {
+    var origin = "$evidence/browser-probe/snapshot-$number.url.txt"
+    test -s "$origin"
+    sha256sum "$snapshot" "$origin" >> "$evidence/snapshot.sha256"
+    try { "$grease" "$independent/ib-source/reader/classify-google.grease" "$snapshot" "$evidence/semantic-$number" > "$evidence/semantic-$number.txt" 2>&1 }
+    var semantic_status = _error.code
+    printf '%s\t%s\n' "$number" "$semantic_status" >> "$evidence/semantic-exits.tsv"
+    if (semantic_status === 0) { setvar positives += 1 }
+  }
+}
+printf 'browser_rendered_positive_snapshots\t%s\nICU_only_results\tFAIL\nproduction_integration\tNOT_RUN\nphysical_ARM\tNOT_RUN\n' "$positives" > "$evidence/receipt.tsv"
+cat "$evidence/receipt.tsv"
+test -s "$evidence/browser-probe/terminal.txt"
+# Characterization may complete with zero public results. Do not reinterpret
+# the job's successful execution as Google result or production acceptance.

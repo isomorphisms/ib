@@ -1,0 +1,54 @@
+module GoogleBrowserBoundary
+
+import Backend.DEX.Encode
+import Backend.DEX.FrameworkClasses
+import Backend.DEX.IR
+import Data.Text
+import System
+
+%default covering
+
+reference : Text → FrameworkValueType
+reference = ReferenceValue . MkTypeReference
+
+boundary : Either Text FilePlan
+boundary = do
+  base ← framework_class_plan
+    (Subclass "Lorg/isomorphisms/ib/googleprobe/Bridge;" "Ljava/lang/Object;"
+      (Just "google_probe") []) []
+  Right ({ methods := base.methods ++
+    [ MkBoundMethodPlan "bounded SDK acquisition probe" "start" 2
+        [reference "Landroid/app/Activity;", ExistingValue TextValue] VoidValue 0 [] NativeStaticMethod
+    , MkBoundMethodPlan "release SDK probe" "stop" 0 [] VoidValue 0 [] NativeStaticMethod
+    ] } base)
+
+client : Either Text FilePlan
+client = framework_class_plan
+  (Subclass "Lorg/isomorphisms/ib/googleprobe/Client;" "Landroid/webkit/WebViewClient;"
+    (Just "google_probe")
+    [ Callback "shouldOverrideUrlLoading" "Z" ["Landroid/webkit/WebView;", "Landroid/webkit/WebResourceRequest;"]
+    , Callback "onPageStarted" "V" ["Landroid/webkit/WebView;", "Ljava/lang/String;", "Landroid/graphics/Bitmap;"]
+    ]) []
+
+callback : Text → Text → List Text → List Text → Either Text FilePlan
+callback name method arguments interfaces = framework_class_plan
+  (Subclass ("Lorg/isomorphisms/ib/googleprobe/" ++ name ++ ";") "Ljava/lang/Object;"
+    (Just "google_probe") [Callback method "V" arguments]) interfaces
+
+main : IO ()
+main = do
+  arguments ← getArgs
+  case arguments of
+    [_, output] ⇒ case (do
+      bridge ← boundary
+      browser_client ← client
+      snapshot ← callback "Snapshot" "onReceiveValue" ["Ljava/lang/Object;"] ["Landroid/webkit/ValueCallback;"]
+      tick ← callback "Tick" "run" [] ["Ljava/lang/Runnable;"]
+      encode_dex_classes [bridge, browser_client, snapshot, tick]) of
+        Left reason ⇒ do putStrLn reason; exitFailure
+        Right bytes ⇒ do
+          result ← write_dex output bytes
+          case result of
+            Left reason ⇒ do putStrLn reason; exitFailure
+            Right () ⇒ putStrLn "PASS checked framework probe declarations"
+    _ ⇒ exitFailure
