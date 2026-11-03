@@ -1,0 +1,22 @@
+# Native IB reader candidates
+
+**Campaign incomplete; candidate only. Physical SVITOO TAB_P10 acceptance is BLOCKED and public Google results FAIL. Release evidence is insufficient.**
+
+Download [ib-reader-f43af998.apk](https://raw.githubusercontent.com/isomorphisms/ib/2be942b984b0965115791b1ae06c81ba68859d13/candidates/ib-reader-f43af998.apk) — 10,257,959 bytes; SHA256 `7b629cc3da6b1c18e72e4af46e33d675373447a0c02e3e36629965660e1bd7c9`. [Source-bound receipt](https://raw.githubusercontent.com/isomorphisms/ib/2be942b984b0965115791b1ae06c81ba68859d13/candidates/ib-reader-f43af998.receipt.tsv) · [Requirement ledger](https://raw.githubusercontent.com/isomorphisms/ib/2be942b984b0965115791b1ae06c81ba68859d13/candidates/ib-reader-f43af998.ledger.md) · [Publication verification](https://github.com/isomorphisms/ib/actions/runs/41381766968).
+
+These are the original signed candidate bytes from [f43af99856a8ad4161114863e681c118e38c2218](https://github.com/isomorphisms/ib/tree/f43af99856a8ad4161114863e681c118e38c2218), retained without rebuilding or re-signing at immutable candidate commit `2be942b984b0965115791b1ae06c81ba68859d13`. The receipt binds sixteen producer/runtime/packaging archives, nine backend qualification artifacts, actual DEX/ELF/APK identities and source observations; the ledger records every requirement as PASS, FAIL, BLOCKED or NOT_RUN.
+
+[Producer 41370466399](https://github.com/isomorphisms/ib/actions/runs/41370466399) passes checked source, independent deterministic DEX/refusals/compiled controls, native packaging and both required actual ART API 29/API 34 jobs. The native Activity acquires HTTPS through its own private Binder capability, official authorized Shizuku, Grease and ICU; canonical userspace Arena verifies original source and restores history/last-good state. Native fetched text, link acquisition, Back/Forward, Unicode exact copy, Greedy/Squared reflow and offline/update/reboot recovery are checked with independent SDK observations. The fragment repair passes actual native touch and retained Forward; its compiled controls remove cursor/animation settlement and restore the active single-call zero scroll. A frame-timed first-touch regression requires actual child DOWN/UP delivery and a newly acquired document.
+
+The source build also repeats checked Activity/platform/ICU DEX, recompiles all three application native libraries into fresh directories and compares signed APK bytes. Native ICU/Grease dependencies are unchanged hashed inputs; this does not claim a second toolchain/dependency build. Independent packaging acceptance rejects the old timestamp counterexample and verifies caller contents/modes/mtimes remain unchanged.
+
+The publication receipt names independent observer ecea325a and the frozen runtime and packaging archives. All eight full/fragment/lifecycle/link API29/API34 jobs and both decoder lanes pass with these exact signed APK bytes. Genuine managed ChordReader version 1002 handoff, query and original-byte readback are separate from Google public-results acceptance. A first-party JavaScript-enabling continuation is an explicit failure to obtain public results; no browser or DDG fallback.
+
+Package org.isomorphisms.ib.prepaint; versionCode 3/versionName 0.3.0; minimum API 29/target 36. Packaged x86_64, armeabi-v7a and arm64-v8a are build facts. Actual qualified runtime scope is x86_64 ART 29/34. Existing public test signer SHA256:
+`de9b1d47c5a65e6d46a204b79dd9ee566b9d3c9832ba81ebc4213d3392e92ff9`.
+
+No authenticated tablet transport or fresh installed signer/version, ABI/SDK, storage or Shizuku inventory is available. Tablet replacement compatibility and physical acceptance remain blocked. Damaged MIRO A1/C67 observations remain historical. No merge, permanent release, uninstall, app-data deletion, signing rotation or removable-storage migration.
+
+The previous [FB9 APK](https://raw.githubusercontent.com/isomorphisms/ib/a21dc951438b4433f685b5db102198fe0cc3dec4/candidates/ib-reader-fb9b34a9.apk) is retained as historical: 10,233,767 bytes; SHA256 `f72a15e672d119d693b9e1dff63c65ceefc0ad675f180c2c96f846c1fa864a10`. It predates the current fragment/lifecycle qualification. Older 966a/A734 files remain historical; A734 has the diagnosed source-octet traversal defect.
+
+Review: [IB167](https://github.com/isomorphisms/ib/pull/167), [compiler41](https://github.com/isomorphisms/android-NDK/pull/41), [independent331](https://github.com/isomorphisms/ai-ci/pull/331), [delivery168](https://github.com/isomorphisms/ib/pull/168). Trackers 151/164 remain open.
