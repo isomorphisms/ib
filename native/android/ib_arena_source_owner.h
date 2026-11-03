@@ -86,6 +86,20 @@ int ib_arena_source_owner_open_decode_input(ib_arena_source_owner *owner,
                                        ib_arena_source_observations *observations,
                                        int *read_fd);
 
+/* Input for a separately admitted immutable representation, not HTTP reader
+ * admission. Its representation owner must verify its own typed receipt. The
+ * canonical range is independently reopened, bounded and hashed here, then
+ * copied into the same bounded read-only FIFO capability. ICU APIs above keep their exact
+ * existing receipt/status/MIME/charset gates and never dispatch through this
+ * entrypoint. No Binder transaction exposes arbitrary range parameters. */
+int ib_arena_source_owner_open_representation_range(ib_arena_source_owner *owner,
+                                       const char *request_id,
+                                       uint64_t navigation_generation,
+                                       uint64_t offset, uint32_t length,
+                                       const char expected_sha256[65],
+                                       ib_reader_source_ticket *ticket,
+                                       int *read_fd);
+
 /* Adapter for ib_arena_pfd_provider.open_verified_fd. */
 int ib_arena_source_owner_open_binder(void *owner, const char *request_id,
                                       uint64_t navigation_generation,

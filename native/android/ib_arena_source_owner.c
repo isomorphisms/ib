@@ -16,6 +16,7 @@
 #include <string.h>
 #include <sys/file.h>
 #include <sys/stat.h>
+#include <sys/syscall.h>
 #include <sys/types.h>
 #include <time.h>
 #include <unistd.h>
@@ -394,6 +395,67 @@ void ib_arena_source_owner_want(ib_arena_source_owner *owner,
     if (owner)
         atomic_store(&owner->wanted_navigation_generation,
                      navigation_generation);
+}
+
+int ib_arena_source_owner_open_representation_range(ib_arena_source_owner *owner,
+                                       const char *request_id,
+                                       uint64_t navigation_generation,
+                                       uint64_t offset, uint32_t length,
+                                       const char expected_sha256[65],
+                                       ib_reader_source_ticket *ticket,
+                                       int *read_fd) {
+    if (read_fd) *read_fd = -1;
+    if (!owner || !ticket || !read_fd || !safe_request_id(request_id) ||
+        !navigation_generation || !length || length > IB_READER_SOURCE_MAX_BYTES ||
+        !expected_sha256 || strnlen(expected_sha256, 65U) != 64U ||
+        navigation_generation != atomic_load(&owner->wanted_navigation_generation)) return -1;
+    int root = -1, descriptor[2] = {-1, -1}, result = -1;
+    unsigned char *bytes = NULL;
+    struct stat info;
+    root = open(owner->private_root, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
+    if (root < 0 || fstat(root, &info) != 0 || !S_ISDIR(info.st_mode) ||
+        info.st_uid != geteuid() || (info.st_mode & 077U) != 0) goto done;
+    bytes = malloc(length);
+    if (!bytes || read_committed_bytes(root, offset, length, bytes) != 0) goto done;
+    char observed[65];
+    ib_reader_sha256_hex(bytes, length, observed);
+    if (strcmp(expected_sha256, observed) != 0 || navigation_generation !=
+        atomic_load(&owner->wanted_navigation_generation)) goto done;
+    /* Preserve the reader's finite, read-only FIFO contract. A sealed memfd
+     * would be a different capability and is deliberately not admitted. */
+    if (atomic_fetch_add(&source_writers, 1U) >= SOURCE_MAX_CONCURRENT_WRITERS) {
+        atomic_fetch_sub(&source_writers, 1U); goto done;
+    }
+    if (pipe2(descriptor, O_CLOEXEC | O_NONBLOCK) != 0) {
+        atomic_fetch_sub(&source_writers, 1U); goto done;
+    }
+    int flags = fcntl(descriptor[0], F_GETFL);
+    if (flags < 0 || fcntl(descriptor[0], F_SETFL, flags & ~O_NONBLOCK) != 0) {
+        atomic_fetch_sub(&source_writers, 1U); goto done;
+    }
+    source_writer *writer = calloc(1, sizeof(*writer));
+    if (!writer) { atomic_fetch_sub(&source_writers, 1U); goto done; }
+    writer->bytes = bytes; writer->length = length; writer->writer_fd = descriptor[1];
+    pthread_t thread;
+    if (pthread_create(&thread, NULL, write_source, writer) != 0) {
+        free(writer); atomic_fetch_sub(&source_writers, 1U); goto done;
+    }
+    (void)pthread_detach(thread);
+    bytes = NULL; descriptor[1] = -1;
+    memset(ticket, 0, sizeof(*ticket));
+    memcpy(ticket->request_id, request_id, strlen(request_id) + 1U);
+    ticket->navigation_generation = navigation_generation;
+    ticket->byte_count = length;
+    memcpy(ticket->sha256_hex, observed, sizeof(observed));
+    *read_fd = descriptor[0];
+    descriptor[0] = -1;
+    result = 0;
+done:
+    if (descriptor[0] >= 0) close(descriptor[0]);
+    if (descriptor[1] >= 0) close(descriptor[1]);
+    if (root >= 0) close(root);
+    free(bytes);
+    return result;
 }
 
 static int open_source_snapshot(ib_arena_source_owner *owner,

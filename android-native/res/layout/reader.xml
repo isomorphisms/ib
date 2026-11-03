@@ -25,6 +25,9 @@
         <Button android:id="@id/forward_button" android:layout_width="wrap_content" android:layout_height="48dp"
             android:text="Forward" android:enabled="false" android:onClick="onClick"
             android:textColor="#ECECEC" android:backgroundTint="#292929" />
+        <Button android:id="@id/cancel_button" android:layout_width="wrap_content" android:layout_height="48dp"
+            android:text="Cancel" android:onClick="onClick"
+            android:textColor="#ECECEC" android:backgroundTint="#292929" />
     </LinearLayout>
     <LinearLayout android:id="@id/sources_panel" android:layout_width="match_parent"
         android:layout_height="wrap_content" android:orientation="vertical"
@@ -45,7 +48,9 @@
             android:layout_height="48dp" android:text="Authorize Shizuku" android:onClick="onClick"
             android:textColor="#ECECEC" android:backgroundTint="#292929" />
     </LinearLayout>
-    <ScrollView android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1"
+    <FrameLayout android:id="@id/google_acquisition_panel" android:layout_width="match_parent"
+        android:layout_height="0dp" android:layout_weight="1" android:visibility="gone" />
+    <ScrollView android:id="@id/reader_scroll" android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1"
         android:fillViewport="true" android:padding="20dp">
         <org.isomorphisms.ib.NativeTextView android:id="@id/reader_body" android:layout_width="match_parent"
             android:layout_height="wrap_content" android:textSize="18sp" android:lineSpacingExtra="5dp"

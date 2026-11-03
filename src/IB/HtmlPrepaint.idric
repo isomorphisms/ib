@@ -1,6 +1,7 @@
 module IB.HtmlPrepaint
 
 import Data.List
+import Data.Text
 import IB.Information
 import IB.RecoveredInformation
 import IB.Strand
@@ -32,6 +33,57 @@ record HtmlEvidence where
   utf8_decoded : Bool
   fully_acquired : Bool
 
+-- A browser serialization is its own immutable source. These observations
+-- describe the UTF-8 DOM serialization, never a browser HTTP response body.
+public export
+record BrowserDomEvidence where
+  constructor BrowserDomSourceEvidence
+  source_key : Text
+  source_generation : Text
+  claimed_sha256 : Text
+  reopened_sha256 : Text
+  claimed_bytes : Integer
+  reopened_bytes : Integer
+  requested_url : Text
+  resolved_url : Text
+  parent_source_key : Text
+  parent_source_generation : Text
+  parent_source_sha256 : Text
+  provider_package : Text
+  provider_version : Text
+  serialization : Text
+  utf8_verified : Bool
+  fully_serialized : Bool
+
+public export
+data HtmlSourceProvenance
+  = OriginalIcuResponse HtmlEvidence
+  | RenderedBrowserDom BrowserDomEvidence
+
+-- Extraction and view preparation need source identity and provenance. HTTP
+-- observations remain in their original receipt; DOM sources have no invented
+-- HTTP status, MIME response, original network offsets or redirect chain.
+public export
+record HtmlSourceIdentity where
+  constructor VerifiedHtmlSourceIdentity
+  source_key : Text
+  source_generation : Text
+  claimed_sha256 : Text
+  reopened_sha256 : Text
+  requested_url : Text
+  resolved_url : Text
+  provenance : HtmlSourceProvenance
+
+original_identity : HtmlEvidence → HtmlSourceIdentity
+original_identity evidence = VerifiedHtmlSourceIdentity evidence.source_key
+  evidence.source_generation evidence.claimed_sha256 evidence.reopened_sha256
+  evidence.requested_url evidence.resolved_url (OriginalIcuResponse evidence)
+
+dom_identity : BrowserDomEvidence → HtmlSourceIdentity
+dom_identity evidence = VerifiedHtmlSourceIdentity evidence.source_key
+  evidence.source_generation evidence.claimed_sha256 evidence.reopened_sha256
+  evidence.requested_url evidence.resolved_url (RenderedBrowserDom evidence)
+
 public export
 record PendingImage where
   constructor NeedImageAcquisition
@@ -43,7 +95,7 @@ record PendingImage where
 public export
 record HtmlPrepaintResult where
   constructor MadeHtmlPrepaint
-  evidence : HtmlEvidence
+  evidence : HtmlSourceIdentity
   recovered : RecoveredDocumentLog
   information : InformationView
   strand : Strand
@@ -137,7 +189,7 @@ checked_link base label href =
         Nothing ⇒ ([IB.Strand.TextBlock label], ["empty-link"])
         Just ref ⇒ ([IB.Strand.Link label ref], [])
 
-request_image : HtmlEvidence → String → String → String → String → List PendingImage
+request_image : HtmlSourceIdentity → String → String → String → String → List PendingImage
 request_image evidence base address alternate caption =
   case resolve_html_reference base address of
     Nothing ⇒ []
@@ -153,7 +205,7 @@ image_navigation : String → String → String →
 image_navigation base label "" = ([], [])
 image_navigation base label target = checked_link base label target
 
-map_item : HtmlEvidence → String → InformationItem →
+map_item : HtmlSourceIdentity → String → InformationItem →
   (List InformationBlock, List PendingImage, List String)
 map_item e base (IB.Information.Heading text) =
   ([IB.Strand.Heading Heading1 text], [], ["legacy-heading-level-unknown"])
@@ -185,7 +237,7 @@ map_item e base (IB.Information.Image url alt caption destination) =
   (IB.Strand.TextBlock ("Image pending acquisition: " ++ label) :: linked,
    pending, image_notes ++ link_notes)
 
-map_items : HtmlEvidence → String → List InformationItem →
+map_items : HtmlSourceIdentity → String → List InformationItem →
   (List InformationBlock, List PendingImage, List String)
 map_items e base [] = ([], [], [])
 map_items e base
@@ -212,12 +264,14 @@ unsupported_events [] = []
 unsupported_events (event :: rest) =
   unsupported_event event ++ unsupported_events rest
 
-source_reference_text : HtmlEvidence → String
+source_reference_text : HtmlSourceIdentity → String
 source_reference_text evidence =
   evidence.source_key ++ ";generation=" ++ evidence.source_generation ++
-  ";sha256=" ++ evidence.claimed_sha256
+  ";sha256=" ++ evidence.claimed_sha256 ++ case evidence.provenance of
+    OriginalIcuResponse _ ⇒ ""
+    RenderedBrowserDom _ ⇒ ";representation=browser-rendered-dom"
 
-make_html_strand : HtmlEvidence → Maybe HtmlDecodedText → InformationView →
+make_html_strand : HtmlSourceIdentity → Maybe HtmlDecodedText → InformationView →
   List InformationBlock → Maybe Strand
 make_html_strand evidence decoding view blocks = do
   let representation = case decoding of
@@ -226,15 +280,17 @@ make_html_strand evidence decoding view blocks = do
   source_id ← nonempty_text (source_reference_text evidence ++ representation)
   requested ← requested_address evidence.requested_url
   resolved ← resolved_address evidence.resolved_url
-  let origin = case decoding of
-        Nothing ⇒ HtmlSource
-        Just _ ⇒ DerivedSource
+  let origin = case evidence.provenance of
+        RenderedBrowserDom _ ⇒ DerivedSource
+        OriginalIcuResponse _ ⇒ case decoding of
+          Nothing ⇒ HtmlSource
+          Just _ ⇒ DerivedSource
   let source = Source source_id origin CompleteSource
   let heading_title = if view_title view == "" then Nothing else Just (view_title view)
   pure (MakeStrand source requested resolved heading_title blocks)
 
-extract_verified_html : HtmlEvidence → Maybe HtmlDecodedText → String → Either String HtmlPrepaintResult
-extract_verified_html admission decoding html =
+extract_verified_source : HtmlSourceIdentity → Maybe HtmlDecodedText → String → Either String HtmlPrepaintResult
+extract_verified_source admission decoding html =
       let log = recover_document_log admission.source_key html in
       let view = information_from_log admission.requested_url admission.resolved_url log in
       let (base, base_notes) = link_base admission.resolved_url log in
@@ -269,7 +325,7 @@ convert_admitted_html : HtmlEvidence → String → Either String HtmlPrepaintRe
 convert_admitted_html admission html =
   case source_admission_reason admission of
     Just refusal ⇒ Left refusal
-    Nothing ⇒ extract_verified_html admission Nothing html
+    Nothing ⇒ extract_verified_source (original_identity admission) Nothing html
 
 -- The original receipt remains unchanged. A decoded derivative can enter
 -- Prepaint only after every source/HTTP/completeness check and the maintained
@@ -283,4 +339,82 @@ convert_committed_html_octets admission octets = do
   decoded ← decode_html_bytes admission.charset octets
   if cast decoded.original_byte_count /= admission.reopened_bytes
     then Left "decoded-original-byte-count-mismatch"
-    else extract_verified_html admission (Just decoded) decoded.decoded_text
+    else extract_verified_source (original_identity admission) (Just decoded) decoded.decoded_text
+
+dom_generation : Text → Bool
+dom_generation value = value /= "" && value /= "0" &&
+  all (\character ⇒ character >= '0' && character <= '9') (unpack value) &&
+  take 1 (unpack value) /= ['0'] &&
+  (length (unpack value) < 10 || (length (unpack value) ≟ 10 && value <= "2147483647"))
+
+source_prefix : Text → Text → Bool
+source_prefix prefix value = take (length (unpack prefix)) (unpack value) ≟ unpack prefix
+
+dom_scalar : Char → Bool
+dom_scalar character = ord character < 0xD800 ||
+  (ord character > 0xDFFF && ord character <= 0x10FFFF)
+
+scalar_utf8_bytes : Char → Number
+scalar_utf8_bytes character = if ord character < 128 then 1
+  else if ord character < 2048 then 2 else if ord character < 65536 then 3 else 4
+
+export
+browser_dom_admission_reason : BrowserDomEvidence → Text → Maybe Text
+browser_dom_admission_reason evidence dom =
+  if not (metadata_safe evidence.source_key) || not (source_prefix "arena-dom:" evidence.source_key) ||
+     not (metadata_safe evidence.parent_source_key) || not (source_prefix "arena:" evidence.parent_source_key) ||
+     not (dom_generation evidence.source_generation) ||
+     evidence.source_generation /= evidence.parent_source_generation
+    then Just "bad-rendered-source-identity"
+  else if not (is_digest evidence.claimed_sha256) || evidence.claimed_sha256 /= evidence.reopened_sha256 ||
+          not (is_digest evidence.parent_source_sha256)
+    then Just "rendered-source-digest-mismatch"
+  else if evidence.claimed_bytes <= 0 || evidence.claimed_bytes > 2097152 ||
+          evidence.claimed_bytes /= evidence.reopened_bytes ||
+          cast (sum (map scalar_utf8_bytes (unpack dom))) /= evidence.reopened_bytes
+    then Just "rendered-source-byte-count-mismatch"
+  else if not evidence.utf8_verified || not (all dom_scalar (unpack dom)) ||
+          not evidence.fully_serialized || evidence.serialization /= "webview-outerHTML-utf8-v1"
+    then Just "incomplete-or-unsupported-DOM-serialization"
+  else if not (metadata_safe evidence.provider_package) || not (metadata_safe evidence.provider_version) ||
+          not (cheap_http_url evidence.requested_url) || not (cheap_http_url evidence.resolved_url)
+    then Just "unobserved-DOM-provider-or-address"
+  else Nothing
+
+export
+convert_committed_browser_dom : BrowserDomEvidence → Text → Either Text HtmlPrepaintResult
+convert_committed_browser_dom evidence dom = case browser_dom_admission_reason evidence dom of
+  Just reason ⇒ Left reason
+  Nothing ⇒ extract_verified_source (dom_identity evidence) Nothing dom
+
+verified_utf8_identity : HtmlEvidence → Text → Either Text HtmlSourceIdentity
+verified_utf8_identity evidence carrier = do
+  case source_admission_reason evidence of
+    Just reason ⇒ Left reason
+    Nothing ⇒ Right ()
+  if not (all dom_scalar (unpack carrier)) ||
+     cast (sum (map scalar_utf8_bytes (unpack carrier))) /= evidence.reopened_bytes
+    then Left "decoded-original-byte-count-mismatch"
+    else Right (original_identity evidence)
+
+verified_legacy_identity : HtmlEvidence → Text → Either Text HtmlSourceIdentity
+verified_legacy_identity evidence carrier = do
+  octets ← source_octet_carrier carrier
+  decoded ← decode_html_bytes evidence.charset octets
+  if cast decoded.original_byte_count /= evidence.reopened_bytes
+    then Left "decoded-original-byte-count-mismatch"
+    else Right (original_identity evidence)
+
+-- Verify a retained HTTP representation without building another view. This
+-- keeps Google link resolution bound to actual ICU bytes and the same status,
+-- MIME, charset, completeness and digest checks used by the ordinary reader.
+export
+verify_committed_html_representation : HtmlEvidence → Text → Either Text HtmlSourceIdentity
+verify_committed_html_representation evidence carrier = do
+  case source_identity_reason evidence of
+    Just reason ⇒ Left reason
+    Nothing ⇒ Right ()
+  if evidence.charset ≟ "utf-8" || evidence.charset ≟ "UTF-8"
+    then verified_utf8_identity evidence carrier
+    else if not (windows_1252_label evidence.charset) then Left "unsupported-charset"
+      else verified_legacy_identity evidence carrier

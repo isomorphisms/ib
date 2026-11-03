@@ -14,4 +14,7 @@
     <public type="id" name="forward_button" id="0x7f030009" />
     <public type="id" name="reader_title" id="0x7f03000a" />
     <public type="id" name="search_button" id="0x7f03000b" />
+    <public type="id" name="google_acquisition_panel" id="0x7f03000c" />
+    <public type="id" name="cancel_button" id="0x7f03000d" />
+    <public type="id" name="reader_scroll" id="0x7f03000e" />
 </resources>

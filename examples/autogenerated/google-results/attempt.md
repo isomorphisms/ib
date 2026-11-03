@@ -24,11 +24,13 @@ Effects remain in the existing Android adapter and acquisition worker. The
 checked result model and projection are pure. Native UI search uses the same
 query validator and existing background navigation path as ChordReader.
 
-This slice is not browser-assisted acquisition. Rendered DOM provenance and
-admission require a separate adapter; no browser content is relabeled as an ICU
-body. Compilation, semantic controls, Android and live Google acceptance are
-PENDING until actually executed. The first concrete language/runtime failure
-must be recorded here without selecting another backend.
+The initial slice did not provide browser-assisted acquisition. The current
+integration adds a separately identified Google WebView adapter and immutable
+DOM receipt. No browser serialization is relabeled as an ICU body. The checked
+model is `BrowserDomEvidence → Text → Either Text HtmlPrepaintResult`; an opaque
+redirect becomes a result only after its original anchor and retained ICU
+response qualify through `verify_google_destination`. Ordinary destinations
+still use the existing ICU/Binder/Shizuku path and canonical Arena.
 
 First producer41571281718 at source3e2938ee failed before DEX emission:
 `IB.WebSearch.Results:229` reported `Expected 'else'`. The continuation inside
@@ -51,3 +53,31 @@ ISO-8859-1 HTML entity, but the independent classifier found zero qualifying
 public results. The HTTP/1.1 entity is92433 bytes, chunked, with one301 redirect
 to www.google.com. All six semantic outcomes are JAVASCRIPT_REQUIRED. A
 successful matrix job means characterization completed, not search success.
+
+The independent resolver41580675104 at ai-ci410974fd followed three exact
+opaque Google hrefs from retained API29 browser DOM. ICU observed302 redirects
+to real public HTTPS HTML destinations. This supports browser-assisted
+integration, while ICU-only Google result acceptance remains incomplete.
+
+Local host replay now passes the original ten result assertions and sixteen
+browser-source/destination controls. The first browser-wire assertion assumed
+anchor occurrence0; the maintained recovery log numbers events, so the check
+now retains the actual recovered occurrence. The first attempt is preserved in
+scratch receipt ib-local-dom-model-6; ib-local-dom-model-7 passes. This repairs
+the observer's assumption without changing producer extraction or admission.
+
+The checked native Activity and typed WebView callback declarations compile
+through the pinned DEX backend and independently disassemble in
+ib-local-dom-activity-3. This is no ART, native C, network or view acceptance.
+The new native platform adapter, canonical DOM owner and full integrated
+Google transaction remain PENDING until their hosted qualification executes.
+The C FD boundary preserves the existing bounded read-only FIFO; an initial
+sealed-memfd proposal was rejected during source review because the maintained
+reader deliberately admits only that FIFO contract. Its admission was not
+weakened. Native C continues to require ICK and the maintained NDK linker.
+
+`verify-activity.grease` reproduces local checked Activity/typed callback DEX
+and independent disassembly without needing an SDK or pretending to run ART.
+No Java/Kotlin, candidate smali, second network implementation or parallel
+history store is introduced. Snippets remain absent until source-backed
+association is implemented; titles and verified destinations are retained.

@@ -19,8 +19,19 @@ rg -x -F x86_64 "$evidence/ABI.txt"
 rg -x -F Success "$evidence/install.txt"
 "$adb" shell dumpsys package org.isomorphisms.ib.googleprobe > "$evidence/installed-package.txt"
 "$adb" shell am start -W -n org.isomorphisms.ib.googleprobe/Idric.Generated > "$evidence/start.txt"
-# A bounded observation interval; it grants no success based on elapsed time.
-sleep 35
+# Require the adapter's actual terminal observation. Thirty asynchronous polls
+# can take more than35 seconds on a busy renderer; retain a60-second wall-clock
+# budget rather than equating a fixed sleep with completion.
+var started = $(date +%s)
+var deadline = int(started) + 60
+var current_time = started
+var terminal = false
+while (int(current_time) < deadline) {
+  try { "$adb" shell run-as org.isomorphisms.ib.googleprobe test -s files/browser-probe/terminal.txt }
+  if (_error.code === 0) { setvar terminal = true; break }
+  sleep 1
+  setvar current_time = $(date +%s)
+}
 "$adb" logcat -d > "$evidence/private-runtime-log.txt"
 "$adb" exec-out run-as org.isomorphisms.ib.googleprobe tar -C files -cf - browser-probe > "$evidence/private-dom.tar"
 tar -xf "$evidence/private-dom.tar" -C "$evidence"
@@ -43,5 +54,6 @@ for number in @(seq -w 1 30) {
 printf 'browser_rendered_positive_snapshots\t%s\nICU_only_results\tFAIL\nproduction_integration\tNOT_RUN\nphysical_ARM\tNOT_RUN\n' "$positives" > "$evidence/receipt.tsv"
 cat "$evidence/receipt.tsv"
 test -s "$evidence/browser-probe/terminal.txt"
+if (not terminal) { echo 'FAIL browser adapter did not terminate within the observation deadline' >&2; exit 1 }
 # Characterization may complete with zero public results. Do not reinterpret
 # the job's successful execution as Google result or production acceptance.

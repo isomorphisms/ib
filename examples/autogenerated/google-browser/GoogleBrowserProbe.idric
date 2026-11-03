@@ -28,6 +28,8 @@ data CounterReference : Type where [external]
 data JsonReference : Type where [external]
 data CharsetReference : Type where [external]
 data EncoderReference : Type where [external]
+data CharactersReference : Type where [external]
+data EncodedReference : Type where [external]
 
 %foreign "dex:cast:Landroid/os/Bundle;:Ljava/lang/Object;"
 saved_state_object : SavedStateReference → PrimIO ObjectReference
@@ -114,6 +116,12 @@ standard_charset : Text → PrimIO CharsetReference
 new_encoder : CharsetReference → PrimIO EncoderReference
 %foreign "dex:virtual:Ljava/nio/charset/CharsetEncoder;:canEncode:(Ljava/lang/CharSequence;)Z"
 valid_unicode : EncoderReference → Text → PrimIO Int32
+%foreign "dex:static:Ljava/nio/CharBuffer;:wrap:(Ljava/lang/CharSequence;)Ljava/nio/CharBuffer;"
+character_buffer : Text → PrimIO CharactersReference
+%foreign "dex:virtual:Ljava/nio/charset/CharsetEncoder;:encode:(Ljava/nio/CharBuffer;)Ljava/nio/ByteBuffer;"
+encoded_buffer : EncoderReference → CharactersReference → PrimIO EncodedReference
+%foreign "dex:virtual:Ljava/nio/ByteBuffer;:remaining:()I"
+encoded_size : EncodedReference → PrimIO Int32
 %foreign "dex:construct:Ljava/util/concurrent/atomic/AtomicInteger;:<init>:(I)V"
 new_counter : Int32 → PrimIO CounterReference
 %foreign "dex:virtual:Ljava/util/concurrent/atomic/AtomicInteger;:get:()I"
@@ -157,16 +165,20 @@ write_probe_file name text = do
   charset ← primIO (standard_charset "UTF-8")
   encoder ← primIO (new_encoder charset)
   valid ← primIO (valid_unicode encoder text)
-  if units <= 0 || units > 524288 || valid ≟ 0 then pure () else do
-    directory ← primIO retained_directory
-    file ← primIO (child_file directory name)
-    created ← primIO (claim_file file)
-    if created ≟ 0 then pure () else do
-      stream ← primIO (open_output file)
-      output ← primIO (output_stream stream)
-      writer ← primIO (new_writer output "UTF-8")
-      primIO (write_text writer text)
-      primIO (close_writer writer)
+  if units <= 0 || units > 2097152 || valid ≟ 0 then pure () else do
+    characters ← primIO (character_buffer text)
+    encoded ← primIO (encoded_buffer encoder characters)
+    bytes ← primIO (encoded_size encoded)
+    if bytes <= 0 || bytes > 2097152 then pure () else do
+      directory ← primIO retained_directory
+      file ← primIO (child_file directory name)
+      created ← primIO (claim_file file)
+      if created ≟ 0 then pure () else do
+        stream ← primIO (open_output file)
+        output ← primIO (output_stream stream)
+        writer ← primIO (new_writer output "UTF-8")
+        primIO (write_text writer text)
+        primIO (close_writer writer)
 
 browser_present : WebViewReference → IO Bool
 browser_present view = do

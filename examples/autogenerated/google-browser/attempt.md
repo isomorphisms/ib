@@ -71,3 +71,12 @@ No partial archive, unverified compiler or different NDK was selected. The
 official r27c length is663987688 and release-table SHA1 is
 090e8083a715fdb1a3e402d0763c388abb03fb4e. That failed helper is not in the build
 path and does not provide Google or SDK acceptance.
+
+The API34 observation reached real DOM callbacks but missed the original
+35-second host sleep's terminal-file assertion. The observer now waits for the
+actual terminal marker under a60-second wall-clock budget; it still fails if
+that marker is missing. The DOM writer separately measures actual strict UTF-8
+encoding through the SDK's ByteBuffer instead of rejecting every DOM above
+524288 UTF-16 units. The2MiB serialized-byte limit remains enforced, and
+malformed UTF-16 remains rejected. No result/public-destination assertion is
+relaxed by either repair.

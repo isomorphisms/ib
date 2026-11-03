@@ -145,6 +145,11 @@ reader_bridge_plan = do
     , native "resume" [object "Landroid/app/Activity;"] (ExistingValue IntegerValue)
     , native "detach" [object "Landroid/app/Activity;"] VoidValue
     , native "navigate" [ExistingValue TextValue] (ExistingValue IntegerValue)
+    , native "cancel" [object "Landroid/app/Activity;"] (ExistingValue IntegerValue)
+    , native "googleTargetCount" [ExistingValue TextValue, ExistingValue IntegerValue] (ExistingValue IntegerValue)
+    , native "googleTargetReference" [ExistingValue TextValue, ExistingValue IntegerValue, ExistingValue IntegerValue] (ExistingValue TextValue)
+    , native "googleTargetEvidence" [ExistingValue TextValue, ExistingValue IntegerValue, ExistingValue IntegerValue] (ExistingValue TextValue)
+    , native "googleTargetBody" [ExistingValue TextValue, ExistingValue IntegerValue, ExistingValue IntegerValue] (ExistingValue TextValue)
     , native "restore" [] (ExistingValue IntegerValue)
     , native "history" [] (ExistingValue TextValue)
     , native "openRetained" [ExistingValue TextValue, ExistingValue IntegerValue, ExistingValue TextValue]
@@ -165,6 +170,26 @@ reader_task_plan name = do
   base ← framework_class_plan
     (Subclass name "Ljava/lang/Object;" (Just "ib_reader") [Callback "run" "V" []])
     ["Ljava/lang/Runnable;"]
+  Right ({ fields := [MkFieldPlan "storageAnchor" (object "Landroid/os/IBinder;") 2] } base)
+
+google_client_plan : Either Text FilePlan
+google_client_plan = do
+  base ← framework_class_plan
+    (Subclass "Lorg/isomorphisms/ib/GoogleAcquisitionClient;" "Landroid/webkit/WebViewClient;"
+      (Just "ib_reader")
+      [ Callback "onPageStarted" "V" ["Landroid/webkit/WebView;", "Ljava/lang/String;", "Landroid/graphics/Bitmap;"]
+      , Callback "shouldOverrideUrlLoading" "Z" ["Landroid/webkit/WebView;", "Landroid/webkit/WebResourceRequest;"]
+      , Callback "onReceivedError" "V" ["Landroid/webkit/WebView;", "Landroid/webkit/WebResourceRequest;", "Landroid/webkit/WebResourceError;"]
+      , Callback "onRenderProcessGone" "Z" ["Landroid/webkit/WebView;", "Landroid/webkit/RenderProcessGoneDetail;"]
+      ]) []
+  Right ({ fields := [MkFieldPlan "storageAnchor" (object "Landroid/os/IBinder;") 2] } base)
+
+google_dom_plan : Either Text FilePlan
+google_dom_plan = do
+  base ← framework_class_plan
+    (Subclass "Lorg/isomorphisms/ib/GoogleDomCallback;" "Ljava/lang/Object;"
+      (Just "ib_reader") [Callback "onReceiveValue" "V" ["Ljava/lang/Object;"]])
+    ["Landroid/webkit/ValueCallback;"]
   Right ({ fields := [MkFieldPlan "storageAnchor" (object "Landroid/os/IBinder;") 2] } base)
 
 reader_metrics_plan : Either Text FilePlan
@@ -247,13 +272,17 @@ client_bytes = do
   reader ← reader_bridge_plan
   acquire ← reader_task_plan "Lorg/isomorphisms/ib/ReaderAcquireTask;"
   complete ← reader_task_plan "Lorg/isomorphisms/ib/ReaderCompletionTask;"
+  google_client ← google_client_plan
+  google_dom ← google_dom_plan
+  google_poll ← reader_task_plan "Lorg/isomorphisms/ib/GooglePollTask;"
   metrics ← reader_metrics_plan
   layout ← reader_layout_plan
   anchor ← reader_anchor_plan
   projection ← reader_projection_plan
   text_view ← reader_text_plan
   encode_dex_classes [container, creator, provider, application, death, client, ingress, connection,
-    worker, reader, acquire, complete, metrics, layout, anchor, projection, text_view]
+    worker, reader, acquire, complete, google_client, google_dom, google_poll,
+    metrics, layout, anchor, projection, text_view]
 
 parcelable_bytes : Either Text (List Int)
 parcelable_bytes = do

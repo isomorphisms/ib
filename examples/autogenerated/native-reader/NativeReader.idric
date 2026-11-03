@@ -2,6 +2,7 @@ module NativeReader
 
 import Data.Text
 import Data.List
+import Data.List1
 import IB.Reader.Document
 import IB.Reader.Navigation
 import IB.Reader.Selection
@@ -12,6 +13,7 @@ import IB.Prepaint
 import IB.Reflow
 import IB.Reflow.SourceBreaks
 import IB.WebSearch
+import IB.WebSearch.Results
 
 -- These domains belong to the Android adapter; none represents a browser task.
 data ActivityReference : Type where [external]
@@ -98,6 +100,16 @@ resume_reader_host : ActivityReference → PrimIO Int32
 detach_reader_host : ActivityReference → PrimIO ()
 %foreign "dex:static:Lorg/isomorphisms/ib/ReaderBridge;:navigate:(Ljava/lang/String;)I"
 acquire_navigation : Text → PrimIO Int32
+%foreign "dex:static:Lorg/isomorphisms/ib/ReaderBridge;:cancel:(Landroid/app/Activity;)I"
+cancel_acquisition : ActivityReference → PrimIO Int32
+%foreign "dex:static:Lorg/isomorphisms/ib/ReaderBridge;:googleTargetCount:(Ljava/lang/String;I)I"
+google_target_count : Text → Int32 → PrimIO Int32
+%foreign "dex:static:Lorg/isomorphisms/ib/ReaderBridge;:googleTargetReference:(Ljava/lang/String;II)Ljava/lang/String;"
+google_target_reference : Text → Int32 → Int32 → PrimIO Text
+%foreign "dex:static:Lorg/isomorphisms/ib/ReaderBridge;:googleTargetEvidence:(Ljava/lang/String;II)Ljava/lang/String;"
+google_target_evidence : Text → Int32 → Int32 → PrimIO Text
+%foreign "dex:static:Lorg/isomorphisms/ib/ReaderBridge;:googleTargetBody:(Ljava/lang/String;II)Ljava/lang/String;"
+google_target_body : Text → Int32 → Int32 → PrimIO Text
 %foreign "dex:static:Lorg/isomorphisms/ib/ReaderBridge;:restore:()I"
 restore_committed_source : PrimIO Int32
 %foreign "dex:static:Lorg/isomorphisms/ib/ReaderBridge;:history:()Ljava/lang/String;"
@@ -150,6 +162,8 @@ reader_title : Int32
 reader_title = 2130903050
 search_button : Int32
 search_button = 2130903051
+cancel_button : Int32
+cancel_button = 2130903053
 
 read_view_text : ActivityReference → Int32 → IO Text
 read_view_text activity identity = do
@@ -356,6 +370,123 @@ document_refusal_message observations reason =
       Right evidence ⇒ "HTTP " ++ evidence.http_status ++ " did not admit a readable document."
       Left _ ⇒ "Document refused: malformed committed response observations."
 
+%export "dex:reader_acquisition_progress"
+reader_acquisition_progress : ActivityReference → Text → IO ()
+reader_acquisition_progress activity message = write_view_text activity reader_status message
+
+%export "dex:reader_browser_url_allowed"
+reader_browser_url_allowed : Text → Text → Int32
+reader_browser_url_allowed requested actual = if google_browser_location requested actual then 1 else 0
+
+%export "dex:reader_google_snapshot_ready"
+reader_google_snapshot_ready : Text → Text → Text → Int32
+reader_google_snapshot_ready = google_snapshot_candidate_count
+
+%export "dex:reader_google_browser_needed"
+reader_google_browser_needed : Text → Text → Int32
+reader_google_browser_needed observations carrier =
+  case (do
+    evidence ← read_committed_evidence observations
+    source ← decode_committed_html_source evidence carrier
+    candidates ← google_acquisition_candidates source
+    Right source) of
+      Left _ ⇒ 0
+      Right source ⇒ case google_results_from_source source of
+        Right (Just _) ⇒ 0
+        Right Nothing ⇒ 0
+        Left _ ⇒ 1
+
+%export "dex:reader_google_candidate_wire"
+reader_google_candidate_wire : Text → Text → Text
+reader_google_candidate_wire observations dom =
+  case (do
+    evidence ← read_committed_dom_evidence observations
+    source ← convert_committed_browser_dom evidence dom
+    google_candidate_request_wire source) of
+      Left _ ⇒ "ERROR\n"
+      Right wire ⇒ wire
+
+%export "dex:reader_google_target_admitted"
+reader_google_target_admitted : Text → Text → Int32
+reader_google_target_admitted observations carrier =
+  case (do
+    evidence ← read_committed_evidence observations
+    identity ← verify_committed_html_representation evidence carrier
+    public_google_destination "https://www.google.com/" identity.resolved_url) of
+      Left _ ⇒ 0
+      Right _ ⇒ 1
+
+target_reference : Text → Either Text (Number, Text)
+target_reference fields = case forget (split (≟ '\t') fields) of
+  [number, href] ⇒
+    if number ≟ "" || length (unpack number) > 7 ||
+       not (all (\character ⇒ character >= '0' && character <= '9') (unpack number))
+      then Left "Invalid resolved-anchor occurrence"
+      else let occurrence : Number = cast number in
+        if cast occurrence /= number then Left "Noncanonical resolved-anchor occurrence"
+          else Right (occurrence, href)
+  _ ⇒ Left "Malformed resolved-anchor reference"
+
+load_google_targets : HtmlPrepaintResult → Text → Int32 → Number → Number →
+  IO (Either Text (List GoogleVerifiedDestination))
+load_google_targets source identity navigation index 0 = pure (Right [])
+load_google_targets source identity navigation index (S remaining) = do
+  reference ← primIO (google_target_reference identity navigation (cast index))
+  observations ← primIO (google_target_evidence identity navigation (cast index))
+  carrier ← primIO (google_target_body identity navigation (cast index))
+  let verified : Either Text GoogleVerifiedDestination = do
+        (occurrence, href) ← target_reference reference
+        evidence ← read_committed_evidence observations
+        verify_google_destination source occurrence href evidence carrier
+  case verified of
+    Left reason ⇒ pure (Left reason)
+    Right target ⇒ do
+      later ← load_google_targets source identity navigation (S index) remaining
+      pure (map (target ::) later)
+
+present_prepared_document : ActivityReference → HtmlPrepaintLayout → BrowserHistory →
+  SelectionProjection → Int32 → Text → Int32 → IO ()
+present_prepared_document activity document history projection target source_id generation = do
+  let title = case document.source_result.revision.title of
+        Nothing ⇒ "IB"
+        Just value ⇒ value
+  shown ← primIO (present_projected_text activity (projected_display projection)
+    (projected_source projection) (projected_coordinates projection))
+  if shown /= 0 then reader_acquisition_failed activity "Native source-linked presentation failed."
+    else do
+      styled ← style_regions activity (projected_regions projection)
+      primIO (set_document_title activity title)
+      write_view_text activity reader_title title
+      let requested = document.source_result.evidence.requested_url
+      let input = if is_google_search_address requested then
+            case original_google_query requested of
+              Right query ⇒ query
+              Left _ ⇒ requested
+            else requested
+      write_view_text activity reader_input input
+      positioned ← primIO (scroll_fragment_target activity target)
+      saved ← if positioned ≟ 0
+        then primIO (acknowledge_presented_source source_id generation (history_text history))
+        else pure (-1)
+      if saved ≟ 0 then show_history_controls activity history
+        else do
+          enable_history_control activity back_button False
+          enable_history_control activity forward_button False
+      let acquired = case document.source_result.evidence.provenance of
+            RenderedBrowserDom _ ⇒ "Google results — browser rendered; links verified through ICU."
+            OriginalIcuResponse _ ⇒ if is_google_search_address requested
+              then "Google results — retained ICU response."
+              else "Static HTML — scripts and forms are unavailable."
+      write_view_text activity reader_status
+        (if positioned /= 0 then "Document displayed; its fragment position could not be applied."
+         else if saved /= 0 then "Document displayed; saving its last-good source index failed."
+         else if not styled then "Static HTML loaded; native link/heading styling failed."
+         else acquired)
+      refusal ← pending_search_refusal activity
+      case refusal of
+        Just message ⇒ write_view_text activity reader_status message
+        Nothing ⇒ pure ()
+
 %export "dex:reader_acquisition_ready"
 reader_acquisition_ready : ActivityReference → Text → Text → Text → Int32 → Text → Int32 → IO ()
 reader_acquisition_ready activity observations html source_id generation planned_history kind = do
@@ -388,37 +519,43 @@ reader_acquisition_ready activity observations html source_id generation planned
               Right (document, history, projection, target)
   case prepared of
     Left reason ⇒ reader_acquisition_failed activity (document_refusal_message observations reason)
-    Right (document, history, projection, target) ⇒ do
-      let title = case document.source_result.revision.title of
-            Nothing ⇒ "IB"
-            Just value ⇒ value
-      shown ← primIO (present_projected_text activity (projected_display projection)
-        (projected_source projection) (projected_coordinates projection))
-      if shown /= 0 then reader_acquisition_failed activity "Native source-linked presentation failed."
-        else do
-          styled ← style_regions activity (projected_regions projection)
-          primIO (set_document_title activity title)
-          write_view_text activity reader_title title
-          write_view_text activity reader_input document.source_result.evidence.requested_url
-          positioned ← primIO (scroll_fragment_target activity target)
-          saved ← if positioned ≟ 0
-            then primIO (acknowledge_presented_source source_id generation (history_text history))
-            else pure (-1)
-          if saved ≟ 0 then show_history_controls activity history
-            else do
-              enable_history_control activity back_button False
-              enable_history_control activity forward_button False
-          write_view_text activity reader_status
-            (if positioned /= 0 then "Document displayed; its fragment position could not be applied."
-             else if saved /= 0 then "Document displayed; saving its last-good source index failed."
-             else if not styled then "Static HTML loaded; native link/heading styling failed."
-             else if is_google_search_address document.source_result.evidence.requested_url
-               then "Google results — retained ICU response."
-               else "Static HTML — scripts and forms are unavailable.")
-          refusal ← pending_search_refusal activity
-          case refusal of
-            Just message ⇒ write_view_text activity reader_status message
-            Nothing ⇒ pure ()
+    Right (document, history, projection, target) ⇒
+      present_prepared_document activity document history projection target source_id generation
+
+%export "dex:reader_dom_acquisition_ready"
+reader_dom_acquisition_ready : ActivityReference → Text → Text → Text → Int32 → Text → Int32 → IO ()
+reader_dom_acquisition_ready activity observations dom source_id generation planned_history kind = do
+  metric ← primIO (snapshot_reader_metrics activity)
+  selected ← read_view_text activity reflow_button
+  current_history ← if kind ≟ 0 then primIO retained_history_text else pure planned_history
+  count ← primIO (google_target_count source_id generation)
+  let admitted = do
+        evidence ← read_committed_dom_evidence observations
+        convert_committed_browser_dom evidence dom
+  case admitted of
+    Left reason ⇒ reader_acquisition_failed activity ("Google rendered source refused: " ++ reason)
+    Right source ⇒ do
+      destinations ← if count > 0 && count <= 3
+        then load_google_targets source source_id generation 0 (cast count)
+        else pure (Left "Google result destination count is invalid")
+      let width = metric_width metric
+      let manner = if selected ≟ "Reflow: Squared" then evenly else promptly
+      let prepared : Either Text (HtmlPrepaintLayout, BrowserHistory, SelectionProjection) = do
+            if width <= 0 then Left "Native viewport is not measured yet" else Right ()
+            verified ← destinations
+            retained ← retained_source source_id source.evidence.source_generation
+            history ← presented_history retained kind current_history
+            document ← prepare_committed_dom_advances source verified (Requirements (cast width) manner)
+              "android-Paint-codepoint-advances-pixels-times-64-v1"
+              (\character ⇒ cast (metric_measure metric (pack [character])))
+            if not (layout_fits metric width document.revision_layout)
+              then Left "An unbreakable source run exceeds the native viewport" else Right ()
+            projection ← selection_projection document.revision_layout
+            Right (document, history, projection)
+      case prepared of
+        Left reason ⇒ reader_acquisition_failed activity ("Google results refused: " ++ reason)
+        Right (document, history, projection) ⇒
+          present_prepared_document activity document history projection 0 source_id generation
 
 -- Independent ART observers execute this same source/admission/fragment owner
 -- with a declared unit-advance provider. It grants no navigation capability.
@@ -572,7 +709,12 @@ receive_reader_action activity clicked = do
                 else reader_acquisition_failed activity "No retained readable document is ready for reflow."
             else if identity ≟ back_button then move_history activity True
               else if identity ≟ forward_button then move_history activity False
-                else pure ()
+                else if identity ≟ cancel_button then do
+                  cancelled ← primIO (cancel_acquisition activity)
+                  write_view_text activity reader_status
+                    (if cancelled ≟ 1 then "Search cancelled; the previous document is retained."
+                     else "No acquisition is running.")
+                  else pure ()
 
 %export "dex:receive_reader_view_action"
 receive_reader_view_action : ViewReference → IO ()
