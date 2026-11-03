@@ -282,7 +282,11 @@ acquisition_reference resolved href = case public_google_destination resolved hr
     absolute ← case resolve_html_reference resolved (decode_html_entities href) of
       Nothing ⇒ Left "Unsupported result acquisition reference"
       Just value ⇒ Right value
-    if not (starts "https://google.com/url?" absolute || starts "https://www.google.com/url?" absolute)
+    -- Both forms are observed in retained first-party WebView captures:
+    -- API29 /url?q= and API34 /goto?url=. They remain opaque acquisition
+    -- references until the unchanged ICU response verifies a public target.
+    if not (starts "https://google.com/url?" absolute || starts "https://www.google.com/url?" absolute ||
+            starts "https://google.com/goto?" absolute || starts "https://www.google.com/goto?" absolute)
       then Left "Not an observed Google result redirect" else Right ()
     opaque ← case filter (\entry ⇒ fst entry ≟ "q" || fst entry ≟ "url") (query_parameters absolute) of
       [(_, encoded)] ⇒ decode_query_value encoded

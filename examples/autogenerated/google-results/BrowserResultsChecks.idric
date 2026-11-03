@@ -74,6 +74,12 @@ main = do
   check "browser location refuses consent and changed query"
     (not (google_browser_location query "https://consent.google.com/") &&
      not (google_browser_location query "https://www.google.com/search?q=other"))
+  check "observed API34 goto remains an acquisition candidate"
+    (google_snapshot_candidate_count query query
+      "<a href=\"/goto?url=CAESDobserved_token\"><h3>Music</h3></a>" ≟ 1)
+  check "unobserved first-party support path is not an acquisition candidate"
+    (google_snapshot_candidate_count query query
+      "<a href=\"/support?url=CAESDobserved_token\"><h3>Music</h3></a>" ≟ 0)
   case convert_committed_browser_dom dom_evidence html of
     Left _ ⇒ check "rendered source admission" False
     Right source ⇒ do

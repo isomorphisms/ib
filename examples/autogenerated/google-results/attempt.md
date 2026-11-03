@@ -122,3 +122,16 @@ network permission. The current source adds that permission, records bounded
 numeric WebView errors, and moves initial checked Google classification off
 the UI thread. Non-search responses no longer incur a second HTML extraction.
 These repairs remain pending actual ART execution.
+
+The independent retained-content replay found an actual interoperability
+gap: the newer API34 source uses `/goto?url=` opaque references, while the
+initial model admitted only the observed API29 `/url?q=` form. Independent
+actual ICU run41602013852 resolves the first three exact API34 references to
+real public HTTPS200 documents, preserving originals and redirects privately.
+The candidate fold now admits that observed opaque form for ICU acquisition,
+never for direct public display. An unsupported support path and ambiguous
+redirect parameters remain refused. ib-local-observed-goto-1 passes39 checks;
+the independent observer passes18 assertions and rejects four compiled
+generation/request/parent/snippet controls. A replay of the same actual DOM
+now counts ten acquisition candidates and four bounded source snippet groups.
+No replay receipt claims canonical admission, public verification or ART.

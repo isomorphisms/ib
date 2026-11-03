@@ -74,6 +74,18 @@ and followed by the changed application. This ledger is not release acceptance.
   Actual checked Activity/projection and typed callback DEX compile and
   independently disassemble in ib-local-snippets-dex-2. The producer pins ai-ci
   `33be99d91d5c917c3e55f11d806b4cbfda935a1f` unchanged for the next qualification.
+- The retained API34 content DOM has ten titled opaque `/goto?url=` anchors.
+  Independent actual ICU run41602013852 at ai-ci aafb9cd2 follows the first
+  three exact references to public HTTPS200 HTML: transposechord.com116966
+  bytes, chordchanger.com10109 and github.com/barrettj12/chord-transposer218707.
+  Private artifact13214568524 is249378 bytes, ZIP SHA256
+  `3365317a0938327cc996bb2d93a898164b50012097b3387df7a15f0af53840e2`.
+  The maintained candidate fold now recognizes this observed redirect form;
+  it still requires a separately verified public ICU final response before
+  display. Replay of the unchanged385173-byte derivative changes from zero
+  to ten candidates and four bounded snippet groups. Independent18 model
+  assertions and all four compiled semantic controls pass locally. The next
+  producer pins ai-ci977feb3a9980a364a1ac894b584a66894eb24dac unchanged.
 
 The first changed IB producer41571281718 failed at the result fold's `else`
 layout. That failed source remains in history; the current tree repairs the
