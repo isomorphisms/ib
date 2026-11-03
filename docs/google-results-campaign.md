@@ -86,6 +86,14 @@ and followed by the changed application. This ledger is not release acceptance.
   to ten candidates and four bounded snippet groups. Independent18 model
   assertions and all four compiled semantic controls pass locally. The next
   producer pins ai-ci977feb3a9980a364a1ac894b584a66894eb24dac unchanged.
+- IB50b84a3c producer41600049519 passes its complete checked source, all
+  compiled producer/independent controls and signed three-ABI reproduction.
+  API29's required job then stops before Android: the archive verifier still
+  expected the older cef5ae8 observer after the workflow pinned33be99d. The
+  current verifier now strictly requires977feb3a, matching the current source
+  workflow and built observer metadata. No APK hash, source identity or
+  admission assertion is removed. The separate independent Google lane can
+  still qualify unchanged IBbd4f0478 bytes through its own exact input gate.
 
 The first changed IB producer41571281718 failed at the result fold's `else`
 layout. That failed source remains in history; the current tree repairs the
