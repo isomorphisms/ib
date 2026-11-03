@@ -17,18 +17,18 @@
     <TextView android:id="@id/reader_status" android:layout_width="match_parent" android:layout_height="wrap_content"
         android:textSize="14sp" android:textColor="#ACACAC" android:paddingHorizontal="16dp"
         android:paddingBottom="8dp" android:maxLines="3" android:ellipsize="end" />
-    <LinearLayout android:layout_width="match_parent" android:layout_height="48dp"
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
         android:orientation="horizontal" android:paddingHorizontal="12dp">
-        <Button android:id="@id/back_button" android:layout_width="wrap_content" android:layout_height="48dp"
+        <Button android:id="@id/back_button" android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content"
             android:text="Back" android:enabled="false" android:onClick="onClick"
             android:textColor="#ECECEC" android:backgroundTint="#292929" />
-        <Button android:id="@id/forward_button" android:layout_width="wrap_content" android:layout_height="48dp"
+        <Button android:id="@id/forward_button" android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content"
             android:text="Forward" android:enabled="false" android:onClick="onClick"
             android:textColor="#ECECEC" android:backgroundTint="#292929" />
-        <Button android:id="@id/cancel_button" android:layout_width="wrap_content" android:layout_height="48dp"
+        <Button android:id="@id/cancel_button" android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content"
             android:text="Cancel" android:onClick="onClick"
             android:textColor="#ECECEC" android:backgroundTint="#292929" />
-        <Button android:id="@id/workbench_button" android:layout_width="wrap_content" android:layout_height="48dp"
+        <Button android:id="@id/workbench_button" android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content"
             android:text="History" android:contentDescription="Retained workbench history" android:onClick="onClick" />
     </LinearLayout>
     <LinearLayout android:id="@id/sources_panel" android:layout_width="match_parent"
