@@ -8,6 +8,7 @@ import IB.Reflow
 import IB.Reflow.Source
 import IB.Reflow.SourceBreaks
 import IB.Reflow.Address
+import IB.Reflow.Emergency
 
 -- This is a derived plan over an immutable revision. The position identifies
 -- a block occurrence only within that retained revision. It is not a new
@@ -93,7 +94,7 @@ reflow_prepaint_advances request@(Requirements width manner) metric advance revi
       else do
         prepared ← prepare_blocks (\text ⇒ if is_address_text text
           then reflow_address_advances request advance text
-          else reflow_source_advances request advance text) 0 revision.blocks
+          else reflow_emergency_advances request advance text) 0 revision.blocks
         Right (PreparedRevision revision request metric prepared)
 
 public export

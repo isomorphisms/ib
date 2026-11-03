@@ -7,7 +7,7 @@ var artifact = ARGV[2]
 var digest = ARGV[3]
 var input = ARGV[4]
 var evidence = ARGV[5]
-var expected_observer = '977feb3a9980a364a1ac894b584a66894eb24dac'
+var expected_observer = '19e533f832d5bef530529ba366830eef884483fb'
 printf '%s\n' "$source" | rg -x '[0-9a-f]{40}'
 printf '%s\n' "$artifact" | rg -x '[1-9][0-9]{0,19}'
 if (digest.startsWith('sha256:')) { setvar digest = digest[7:] }

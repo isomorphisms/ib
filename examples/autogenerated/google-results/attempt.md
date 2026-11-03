@@ -135,3 +135,24 @@ the independent observer passes18 assertions and rejects four compiled
 generation/request/parent/snippet controls. A replay of the same actual DOM
 now counts ten acquisition candidates and four bounded source snippet groups.
 No replay receipt claims canonical admission, public verification or ART.
+
+Actual independent run41607144917 against IBbd4f0478 reaches a complete
+browser-derived canonical source and retained public ICU targets on both
+API29 and API34. The checked renderer then refuses an unbreakable source run
+exceeding its native measured viewport. Neither native results nor a touch is
+accepted. The first retained probe's titled anchor has a53-character printable
+ASCII run. A whole-address-only wrapping policy does not cover mixed labels.
+
+`IB.Reflow.Emergency` supplies additional source cuts only within measured
+overlong printable ASCII runs. It preserves percent triplets and protected
+non-ASCII boundaries and uses the unchanged source-cut validator and solver.
+Type sketch: `viewport Number + (Char → Number) + immutable Text → Either
+Text (List SourceLine)`. The first attempted lambda used the reserved word
+`total`; the parser rejected it and the ordinary accumulator name corrects
+the checked source. There is no partiality escape or replacement language.
+
+ib-google-title-overflow-before compiles and fails the named mixed-title
+viewport assertion. ib-google-title-overflow-after-2 passes43 producer checks,
+including both reflow modes and exact selection copying. Independent weighted
+measurement, protected-boundary and compiled fallback-disabled controls are
+required separately. These synthetic counterexamples do not qualify Android.

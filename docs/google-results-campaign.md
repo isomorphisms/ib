@@ -94,6 +94,26 @@ and followed by the changed application. This ledger is not release acceptance.
   workflow and built observer metadata. No APK hash, source identity or
   admission assertion is removed. The separate independent Google lane can
   still qualify unchanged IBbd4f0478 bytes through its own exact input gate.
+- Independent41607144917 against IBbd4f0478 reaches a complete browser DOM
+  source and public ICU targets on both actual Android APIs. API29 reports
+  three targets, API34 two; the checked native renderer then explicitly
+  refuses an unbreakable source run exceeding the measured viewport. This is
+  an acquisition advance and a native presentation failure, not E2E success.
+  Its failure collector used run-as against the non-debuggable package, so
+  those failed tar files contain only a diagnostic, not current original
+  sources. The independent observer is repaired to use its verified emulator
+  root snapshot; no APK debuggability or source admission is changed.
+- The mixed-title counterexample fails before the new bounded emergency
+  source-cut provider and passes after it, with exact copying in both reflow
+  modes (ib-google-title-overflow-after-2,43 producer assertions). A retained
+  probe has a53-character printable ASCII run inside a titled anchor, which
+  is outside the previous whole-address-only policy. The fallback changes
+  only measured overlong ASCII runs, keeps percent triplets and protected
+  Unicode boundaries, and preserves fitting prose line choices. Independent
+  unequal-width/selection tests pass25 assertions and reject all five compiled
+  semantic mutants in google-weighted-layout-independent-2. The source workflow
+  and strict archive verifier both pin ai-ci19e533f832d5bef530529ba366830eef884483fb.
+  Actual native Google acceptance remains pending.
 
 The first changed IB producer41571281718 failed at the result fold's `else`
 layout. That failed source remains in history; the current tree repairs the
@@ -115,14 +135,14 @@ acceptance failed. Those successes do not qualify the changed reader.
 | ICU authenticated HTTPS acquisition | PASS on hosted host | Actual maintained command in matrix41573122647; changed Android pending |
 | Independent original bytes and metadata | PASS on hosted host | Six original entity captures and metadata; ZIP independently verified |
 | Genuine ICU-only Google public results | FAIL | All six fresh profiles require JavaScript and supply no qualifying results |
-| Native result records, titles, URLs and available snippets | PENDING ART | Local checked model, source-correspondence controls and DEX compile pass; live native view pending |
+| Native result records, titles, URLs and available snippets | FAIL atbd4f0478 | Both Android APIs explicitly refuse an overlong native source run; current bounded wrapping repair pending ART |
 | Actual destination touch and acquisition | NOT_RUN | A real Google result in the installed application |
 | History, exact copy, reflow and recovery | PENDING | Existing582500a4 regression passes; new DOM/result navigation pending |
 | Independent compiled controls | PASS on checked host | Eleven positives; three compiled mutants execute and fail designated assertions; ART pending |
-| API29/API34 end-to-end | FAIL at9f04600a | Real transaction41597023103 fails browser acquisition; current permission/worker repair pending |
-| Reproducible signed three-ABI APK | PASS at9f04600a, current pending | App DEX/ELF and signed APK repeated identically; ICU/Grease dependencies reused unchanged and hashed |
+| API29/API34 end-to-end | FAIL atbd4f0478 | Real transaction41607144917 reaches public targets but native presentation refuses; no actual result touch yet |
+| Reproducible signed three-ABI APK | PASS atbd4f0478, current pending | App DEX/ELF and signed APK repeated identically; ICU/Grease dependencies reused unchanged and hashed |
 | Physical C67 or SVITOO TAB_P10 | BLOCKED | Authenticated channel and fresh instance/ABI/SDK/signer/version/storage/Shizuku observations |
-| Browser-assisted Google acquisition | IMPLEMENTED, PENDING ART | Actual captured hrefs independently resolve through ICU; integrated native transaction pending |
+| Browser-assisted Google acquisition | ART source completion reported atbd4f0478 | Both APIs reach canonical completion with public ICU targets; independent current source readback and native result transaction still pending |
 
 ## Source behavior under qualification
 

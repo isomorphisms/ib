@@ -58,3 +58,23 @@ main = do
         Right projection ⇒ projected_source projection ≟ ordinary
         _ ⇒ False
       _ ⇒ False)
+  let title = "TransposeChordhttps://transposechord.com/transpose-online"
+  let mixed = "<a href=\"https://transposechord.com/\"><h3>" ++ title ++ "</h3></a>"
+  let mixed_evidence = { claimed_bytes := cast (length (unpack mixed)),
+                         reopened_bytes := cast (length (unpack mixed)) } evidence
+  for_ [promptly, evenly] $ \mode ⇒
+    case prepare_committed_document_advances mixed_evidence mixed (Requirements 16 mode)
+        "independent-unit-advance-fixture" (\_ ⇒ 1) of
+      Left _ ⇒ check "mixed result title layout admission" False
+      Right document ⇒ do
+        check "overlong result title wraps without a whole-address assumption"
+          (all (\block ⇒ all (\line ⇒ length (unpack line.visible_text) <= 16) block.text_lines)
+            document.revision_layout.block_plans)
+        case selection_projection document.revision_layout of
+          Left _ ⇒ check "mixed title selection admission" False
+          Right projection ⇒ do
+            let expected = "chords\n\n" ++ title ++ "\n\nhttps://transposechord.com/"
+            check "emergency title wrapping preserves every source character"
+              (projected_source projection ≟ expected &&
+               copy_source_selection (projected_source projection) (projected_display projection)
+                 (projected_coordinates projection) 0 (cast (length (unpack (projected_display projection)))) ≟ expected)
