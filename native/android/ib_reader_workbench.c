@@ -98,5 +98,6 @@ Java_org_isomorphisms_ib_ReaderBridge_workbenchVisible(JNIEnv *e, jclass ignored
     jobject button ← workbench_view(e, activity, WB_BUTTON);
     jstring label ← (*e)->NewStringUTF(e, visible ? "Reader" : "History");
     (*e)->CallVoidMethod(e, button, m3_method(e, button, "setText", "(Ljava/lang/CharSequence;)V"), label);
+    m3_describe(e, button, visible ? "Return to document reader" : "Open retained source history");
     (*e)->DeleteLocalRef(e, label);
 }
