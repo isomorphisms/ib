@@ -1,0 +1,45 @@
+module IB.Reflow.Address
+
+import Data.Text
+import IB.Information
+import IB.Reflow
+import IB.Reflow.Source
+import IB.Reflow.SourceBreaks
+
+-- A bounded tailoring provider for an entire encoded HTTP(S) address. It
+-- supplies source cuts to the existing solver and changes no address text.
+-- Percent triplets stay together. All other ASCII boundaries are safe scalar
+-- boundaries; this is not Unicode word/grapheme segmentation for prose.
+export
+is_address_text : Text → Bool
+is_address_text text = cheap_http_url text && length (unpack text) <= 2048 &&
+  all (\character ⇒ ord character >= 33 && ord character <= 126) (unpack text)
+
+hexadecimal : Char → Bool
+hexadecimal character = (character >= '0' && character <= '9') ||
+  (character >= 'a' && character <= 'f') || (character >= 'A' && character <= 'F')
+
+prepend_cut : Number → List Char → Either Text (List SourceBreak) → Either Text (List SourceBreak)
+prepend_cut position [] later = Right [At position SourceEnd]
+prepend_cut position (_ :: _) later = map (At position PossibleBreak ::) later
+
+scan_address : Number → List Char → Either Text (List SourceBreak)
+scan_address position [] = Right [At position SourceEnd]
+scan_address position ('%' :: first :: second :: rest) =
+  if hexadecimal first && hexadecimal second then
+    prepend_cut (position + 3) rest (scan_address (position + 3) rest)
+    else Left "Malformed percent triplet in displayed address"
+scan_address position ('%' :: _) = Left "Incomplete percent triplet in displayed address"
+scan_address position (_ :: rest) =
+  prepend_cut (S position) rest (scan_address (S position) rest)
+
+export
+address_source_breaks : Text → Either Text (List SourceBreak)
+address_source_breaks text = if not (is_address_text text) then Left "Not an encoded HTTP address"
+  else scan_address 0 (unpack text)
+
+export
+reflow_address_advances : ReflowRequirements → (Char → Number) → Text → Either Text (List SourceLine)
+reflow_address_advances request advance text = do
+  cuts ← address_source_breaks text
+  reflow_at_breaks_advances request advance text cuts

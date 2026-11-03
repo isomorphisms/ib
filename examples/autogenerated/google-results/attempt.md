@@ -81,3 +81,17 @@ and independent disassembly without needing an SDK or pretending to run ART.
 No Java/Kotlin, candidate smali, second network implementation or parallel
 history store is introduced. Snippets remain absent until source-backed
 association is implemented; titles and verified destinations are retained.
+
+An explicit native-layout counterexample in `ib-local-url-layout-before`
+compiled and failed `complete result URL wraps within the native viewport`.
+The normal prose break provider supplies no cut inside an entire destination
+URL. `IB.Reflow.Address` now supplies bounded ASCII source cuts, preserving
+percent triplets and every original address character, to the same advance
+solver through `reflow_at_breaks_advances`. Prose's default break rules remain
+unchanged. Both Greedy and Squared pass exact-copy and viewport assertions in
+`ib-local-url-layout-after-1`. The fixture is not a live result.
+
+Source review also found the existing ReaderProjection helper still expected
+HTTP charset/UTF-8 fields on the new common identity. It now reads those fields
+from its already parsed original HtmlEvidence, preserving the prior observer
+wire without manufacturing HTTP observations for a DOM source.

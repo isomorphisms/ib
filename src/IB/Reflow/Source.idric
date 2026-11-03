@@ -345,12 +345,11 @@ suffix_advances mode width hyphen source_end (cut :: later) =
 -- shared with the general solver. Only the explicit additive provider permits
 -- stopping once every later candidate has a width greater than the viewport.
 public export
-reflow_source_advances : ReflowRequirements → (Char → Number) → Text →
-  Either Text (List SourceLine)
-reflow_source_advances (Requirements Z _) advance source =
+reflow_at_breaks_advances : ReflowRequirements → (Char → Number) → Text →
+  List SourceBreak → Either Text (List SourceLine)
+reflow_at_breaks_advances (Requirements Z _) advance source cuts =
   Left "Reflow width must be positive"
-reflow_source_advances request@(Requirements width mode) advance source =
-  let cuts = source_breaks source in
+reflow_at_breaks_advances request@(Requirements width mode) advance source cuts =
   if not (valid_source_breaks source cuts)
     then Left "Invalid, unsafe or incomplete source break opportunities"
     else case mode of
@@ -369,3 +368,9 @@ reflow_source_advances request@(Requirements width mode) advance source =
               let (PlannedSource _ _ lines) =
                     plan_advances mode width hyphen source_end 0 0 characters measured tails in
               Right lines
+
+public export
+reflow_source_advances : ReflowRequirements → (Char → Number) → Text →
+  Either Text (List SourceLine)
+reflow_source_advances request advance source =
+  reflow_at_breaks_advances request advance source (source_breaks source)

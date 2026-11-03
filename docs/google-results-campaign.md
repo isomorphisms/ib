@@ -35,7 +35,23 @@ and followed by the changed application. This ledger is not release acceptance.
   `a19a928d70e92e0975ff0198dc16445d6d416ef853927017192254c87cd62112`.
   HTTP/1.1 follows one observed301 to www.google.com, decodes chunked framing
   into92433 identity-encoded ISO-8859-1 entity bytes. Wire/TLS octets are not
-  claimed as captured. Browser-assisted acquisition remains unimplemented.
+  claimed as captured. These captures remain ICU-only failures.
+- The separate browser probe at IB07c463f0 retained actual API29 WebView DOM
+  with titled Google anchors and opaque first-party redirect references.
+  Independent ICU resolver41580675104 at ai-ci410974fd followed three exact
+  captured hrefs, observing302 and complete public HTTPS HTML responses at
+  transposechord.com, chordchanger.com and github.com/barrettj12/chord-transposer.
+  Artifact13205951878 is257152 bytes, ZIP SHA256
+  `9df4833313f6ff8816e6bf69c8834e866834ea581e589fe568766167bd32a785`.
+  This proves a browser-assisted mechanism, not native result presentation.
+- IB582500a4, producer41579083669, passed the full existing reader build and
+  regression on actual x86_64 API29/API34 ART, including compiled controls.
+  Those tests did not include the new complete Google transaction.
+- IBf563fb1f integrates the separate Google DOM adapter, canonical DOM receipt,
+  actual ICU redirect resolution and native result projection. Its hosted
+  run41587539251 is qualification in progress. The current follow-up repairs
+  the HTTP projection helper's use of the newly separated identity and adds
+  exact-copy-preserving URL wrapping. No new live native Google PASS is claimed.
 
 The first changed IB producer41571281718 failed at the result fold's `else`
 layout. That failed source remains in history; the current tree repairs the
@@ -57,14 +73,14 @@ acceptance failed. Those successes do not qualify the changed reader.
 | ICU authenticated HTTPS acquisition | PASS on hosted host | Actual maintained command in matrix41573122647; changed Android pending |
 | Independent original bytes and metadata | PASS on hosted host | Six original entity captures and metadata; ZIP independently verified |
 | Genuine ICU-only Google public results | FAIL | All six fresh profiles require JavaScript and supply no qualifying results |
-| Native result records, titles and URLs | PENDING | Checked compilation, runtime and live results |
+| Native result records, titles and URLs | PENDING ART | Local checked model, source-correspondence controls and DEX compile pass; live native view pending |
 | Actual destination touch and acquisition | NOT_RUN | A real Google result in the installed application |
-| History, exact copy, reflow and recovery | PENDING | Changed-head complete regression and result navigation |
+| History, exact copy, reflow and recovery | PENDING | Existing582500a4 regression passes; new DOM/result navigation pending |
 | Independent compiled controls | PASS on checked host | Eleven positives; three compiled mutants execute and fail designated assertions; ART pending |
 | API29/API34 end-to-end | NOT_RUN | Signed changed APK and full real transaction |
 | Reproducible signed three-ABI APK | NOT_RUN | Changed-head build, identity, signer and byte-reproduction receipts |
 | Physical C67 or SVITOO TAB_P10 | BLOCKED | Authenticated channel and fresh instance/ABI/SDK/signer/version/storage/Shizuku observations |
-| Browser-assisted Google acquisition | NOT_IMPLEMENTED | Separate adapter and explicit rendered-DOM provenance if the frontend requires execution |
+| Browser-assisted Google acquisition | IMPLEMENTED, PENDING ART | Actual captured hrefs independently resolve through ICU; integrated native transaction pending |
 
 ## Source behavior under qualification
 
@@ -75,6 +91,31 @@ occurrence. These occurrences are not original byte offsets. Redirect query
 values and HTML entities are decoded once. Snippets remain absent until an
 association can be verified. The native result view is a derived title/URL
 projection reconstructed from retained source, including offline history.
+
+When verified ICU Google HTML has no public result, the explicitly identified
+first-party WebView adapter may serialize the same query's rendered DOM.
+The adapter retains the actual provider package/version and parent ICU source
+identity. DOM bytes are separately committed and independently read back from
+canonical Arena. No HTTP status, browser network body or original network
+offset is manufactured for that serialization. Only source-backed titled
+anchors become acquisition candidates; an opaque Google target is followed
+normally by ICU and is not locally decoded into an invented public URL.
+One or more independently reopened public ICU destinations are required
+before a complete immutable DOM receipt can be sealed and a native result
+projected. Back/Forward and process-death restoration reopen the same DOM,
+parent and destination sources through the existing opaque history journal.
+
+Acquisition is off the UI thread, bounded to30 DOM observations, three source
+targets and120 seconds. Consent, challenge, unsupported navigation, TLS errors,
+stale ownership and cancellation retain the last-good reader state. The
+temporary WebView does not own document navigation or history. Destination
+touches use the existing private Binder/Shizuku/ICU source acquisition.
+
+`ib-local-url-layout-before` reproduced a complete destination URL exceeding
+a16-unit viewport. `ib-local-url-layout-after-1` verifies the source-backed
+address break provider with both Greedy and Squared, including exact copying
+of the unchanged once-encoded address. It supplies legal source cuts to the
+existing solver without inserting address characters or changing prose rules.
 
 No-result, consent and verification responses cannot overwrite the last-good
 readable state. A native Search Google action shares ChordReader's checked

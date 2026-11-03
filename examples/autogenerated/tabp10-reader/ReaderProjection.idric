@@ -61,8 +61,8 @@ project_committed_representation fields carrier =
                     Nothing ⇒ "original-utf-8"
                     Just decoded ⇒ decoder_identity ++ ":" ++ decoded.selected_encoding in
               original.source_key ++ "\n" ++ original.source_generation ++ "\n" ++
-              original.claimed_sha256 ++ "\n" ++ original.charset ++ "\n" ++
-              (if original.utf8_decoded then "original-valid-utf8" else "original-invalid-utf8") ++ "\n" ++
+              original.claimed_sha256 ++ "\n" ++ evidence.charset ++ "\n" ++
+              (if evidence.utf8_decoded then "original-valid-utf8" else "original-invalid-utf8") ++ "\n" ++
               decoding ++ "\n" ++
               nonempty_text_value prepared.source_result.strand.source.reference ++ "\n" ++
               projected_source projection
