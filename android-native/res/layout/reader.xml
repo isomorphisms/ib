@@ -28,6 +28,8 @@
         <Button android:id="@id/cancel_button" android:layout_width="wrap_content" android:layout_height="48dp"
             android:text="Cancel" android:onClick="onClick"
             android:textColor="#ECECEC" android:backgroundTint="#292929" />
+        <Button android:id="@id/workbench_button" android:layout_width="wrap_content" android:layout_height="48dp"
+            android:text="History" android:contentDescription="Retained workbench history" android:onClick="onClick" />
     </LinearLayout>
     <LinearLayout android:id="@id/sources_panel" android:layout_width="match_parent"
         android:layout_height="wrap_content" android:orientation="vertical"
@@ -50,6 +52,12 @@
     </LinearLayout>
     <FrameLayout android:id="@id/google_acquisition_panel" android:layout_width="match_parent"
         android:layout_height="0dp" android:layout_weight="1" android:visibility="gone" />
+    <ScrollView android:id="@id/workbench_scroll" android:layout_width="match_parent"
+        android:layout_height="0dp" android:layout_weight="1" android:visibility="gone"
+        android:fillViewport="true" android:padding="16dp">
+        <LinearLayout android:id="@id/workbench_entries" android:layout_width="match_parent"
+            android:layout_height="wrap_content" android:orientation="vertical" />
+    </ScrollView>
     <ScrollView android:id="@id/reader_scroll" android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1"
         android:fillViewport="true" android:padding="20dp">
         <org.isomorphisms.ib.NativeTextView android:id="@id/reader_body" android:layout_width="match_parent"

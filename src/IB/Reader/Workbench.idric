@@ -1,0 +1,17 @@
+module IB.Reader.Workbench
+
+import Data.Text
+import IB.Reader.Navigation
+
+-- A projected occurrence has authority only while its exact browser-owned
+-- metadata revision is current. Labels and Android view identities carry no
+-- source authority. The source owner still verifies the reopened receipt.
+export
+select_projected_source : Text → Text → Int32 → Either Text BrowserHistory
+select_projected_source expected current position = do
+  if not (expected ≟ current) then Left "History changed. Reopen History before selecting a source." else Right ()
+  history ← read_history current
+  if position < 0 || position >= 128 then Left "Invalid retained occurrence position" else Right ()
+  case history_select (cast position) history of
+    Nothing ⇒ Left "That retained occurrence is unavailable."
+    Just selected ⇒ Right selected

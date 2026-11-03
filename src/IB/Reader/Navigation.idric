@@ -86,6 +86,16 @@ export
 history_current : BrowserHistory → Maybe RetainedSource
 history_current (RetainedVisits visits cursor) = selected_source cursor visits
 
+-- Frontends project the browser-owned sequence. Selection is not a new visit.
+export
+history_sources : BrowserHistory → List RetainedSource
+history_sources (RetainedVisits visits _) = visits
+
+export
+history_select : Number → BrowserHistory → Maybe BrowserHistory
+history_select position (RetainedVisits visits _) =
+  if position < length visits then Just (RetainedVisits visits position) else Nothing
+
 export
 history_arrive : RetainedSource → BrowserHistory → BrowserHistory
 history_arrive source (RetainedVisits visits cursor) =

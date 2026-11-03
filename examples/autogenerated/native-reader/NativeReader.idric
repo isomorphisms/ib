@@ -5,6 +5,7 @@ import Data.List
 import Data.List1
 import IB.Reader.Document
 import IB.Reader.Navigation
+import IB.Reader.Workbench
 import IB.Reader.Selection
 import IB.HtmlPrepaint
 import IB.HtmlAnchors
@@ -28,6 +29,17 @@ data ContextReference : Type where [external]
 data PackageManagerReference : Type where [external]
 data CharsetReference : Type where [external]
 data EncoderReference : Type where [external]
+
+%foreign "dex:static:Lorg/isomorphisms/ib/ReaderBridge;:style:(Landroid/app/Activity;)V"
+apply_native_theme : ActivityReference → PrimIO ()
+%foreign "dex:static:Lorg/isomorphisms/ib/ReaderBridge;:workbenchBegin:(Landroid/app/Activity;Ljava/lang/String;)V"
+begin_workbench_projection : ActivityReference → Text → PrimIO ()
+%foreign "dex:static:Lorg/isomorphisms/ib/ReaderBridge;:workbenchItem:(Landroid/app/Activity;ILjava/lang/String;)V"
+present_workbench_source : ActivityReference → Int32 → Text → PrimIO ()
+%foreign "dex:static:Lorg/isomorphisms/ib/ReaderBridge;:workbenchRevision:(Landroid/app/Activity;)Ljava/lang/String;"
+workbench_projection_revision : ActivityReference → PrimIO Text
+%foreign "dex:static:Lorg/isomorphisms/ib/ReaderBridge;:workbenchVisible:(Landroid/app/Activity;I)V"
+show_workbench_projection : ActivityReference → Int32 → PrimIO ()
 
 %foreign "dex:virtual:Landroid/app/Activity;:setContentView:(I)V"
 apply_reader_layout : ActivityReference → Int32 → PrimIO ()
@@ -637,6 +649,7 @@ process_fresh_reader_request activity intent = do
 create_reader : ActivityReference → SavedStateReference → IO ()
 create_reader activity saved_state = do
   primIO (apply_reader_layout activity reader_layout)
+  primIO (apply_native_theme activity)
   refresh_acquisition_capability activity
   attached ← primIO (attach_reader_host activity)
   if attached ≟ 0 then pure ()
@@ -653,6 +666,7 @@ create_reader activity saved_state = do
 %export "dex:resume_reader"
 resume_reader : ActivityReference → IO ()
 resume_reader activity = do
+  primIO (apply_native_theme activity)
   resumed ← primIO (resume_reader_host activity)
   if resumed ≟ 0 then pure ()
     else if resumed ≟ 1
@@ -674,11 +688,49 @@ receive_reader_new_intent activity delivered = do
   -- Activity.getCallingPackage. Require the maintained fresh caller route.
   write_view_text activity reader_status "Search refused: start a fresh ChordReader handoff or enter a URL in Sources."
 
+present_workbench_sources : ActivityReference → Int32 → List RetainedSource → IO ()
+present_workbench_sources _ _ [] = pure ()
+present_workbench_sources activity position (source :: rest) = do
+  primIO (present_workbench_source activity position
+    ("Read source " ++ retained_identity source ++ "\nGeneration " ++ retained_generation source))
+  present_workbench_sources activity (position + 1) rest
+
+open_workbench : ActivityReference → IO ()
+open_workbench activity = do
+  wire ← primIO retained_history_text
+  case existing_history wire of
+    Left reason ⇒ reader_acquisition_failed activity ("History refused: " ++ reason)
+    Right history ⇒ do
+      primIO (begin_workbench_projection activity wire)
+      present_workbench_sources activity 0 (history_sources history)
+      primIO (show_workbench_projection activity 1)
+
+open_workbench_source : ActivityReference → Int32 → IO ()
+open_workbench_source activity position = do
+  expected ← primIO (workbench_projection_revision activity)
+  current ← primIO retained_history_text
+  case select_projected_source expected current position of
+    Left reason ⇒ reader_acquisition_failed activity reason
+    Right selected ⇒ case history_current selected of
+          Nothing ⇒ reader_acquisition_failed activity "That retained occurrence has no source."
+          Just source ⇒ do
+            accepted ← primIO (open_history_source (retained_identity source)
+              (cast (retained_generation source)) (history_text selected))
+            if accepted ≟ 0 then primIO (show_workbench_projection activity 0)
+              else reader_acquisition_failed activity "Retained source is busy or unavailable."
+
 %export "dex:receive_reader_action"
 receive_reader_action : ActivityReference → ViewReference → IO ()
 receive_reader_action activity clicked = do
   identity ← primIO (clicked_view_identity clicked)
-  if identity ≟ sources_button
+  if identity >= 15794176 && identity < 15794304
+    then open_workbench_source activity (identity - 15794176)
+    else if identity ≟ 2130903055
+      then do
+        label ← read_view_text activity 2130903055
+        if label ≟ "Reader" then primIO (show_workbench_projection activity 0)
+          else open_workbench activity
+    else if identity ≟ sources_button
     then do
       refresh_acquisition_capability activity
       panel ← primIO (find_reader_view activity sources_panel)
