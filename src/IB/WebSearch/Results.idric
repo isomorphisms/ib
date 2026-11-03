@@ -5,6 +5,7 @@ import Data.List
 import Data.List1
 import Data.Maybe
 import IB.WebSearch
+import IB.WebSearch.Snippets
 import IB.HtmlLinks
 import IB.HtmlAnchors
 import IB.HtmlPrepaint
@@ -388,6 +389,10 @@ mapped_result evidence verified candidate =
         evidence.provenance candidate.occurrence candidate.href title retained.resolved_url (Just retained) Nothing identity)
     _ ⇒ candidate_result evidence (Just candidate)
 
+with_snippet : Text → List Number → List GoogleSnippet → GoogleResult → GoogleResult
+with_snippet source eligible snippets result =
+  { snippet := google_result_snippet source eligible result.anchor_occurrence snippets } result
+
 export
 google_results_with_destinations : HtmlPrepaintResult → List GoogleVerifiedDestination → Either Text (Maybe GoogleResults)
 google_results_with_destinations source verified = do
@@ -401,7 +406,11 @@ google_results_with_destinations source verified = do
         length (filter (\other ⇒ other.anchor_occurrence ≟ target.anchor_occurrence) verified) /= 1 ||
         not (any (\anchor ⇒ anchor.occurrence ≟ target.anchor_occurrence && anchor.href ≟ target.original_href) anchors)) verified
         then Left "Google resolution source or anchor identity mismatch" else Right ()
-      let results = unique_results (mapMaybe (mapped_result source.evidence verified) anchors)
+      let eligible = map (\candidate ⇒ candidate.anchor_occurrence)
+            (mapMaybe (acquisition_candidate source.evidence.resolved_url) anchors)
+      let snippets = google_dom_snippets source.recovered
+      let results = unique_results (map (with_snippet source.evidence.source_key eligible snippets)
+            (mapMaybe (mapped_result source.evidence verified) anchors))
       if null results then Left "Google returned no verified titled public results; this response may require JavaScript"
         else if length results > 64 then Left "Google result budget exceeded"
           else Right (Just (SourceBackedGoogleResults query source.evidence.requested_url source.evidence.resolved_url results))
@@ -413,7 +422,10 @@ google_results_from_source source = google_results_with_destinations source []
 result_blocks : GoogleResult → List InformationBlock
 result_blocks result = case link_reference result.destination of
   Nothing ⇒ []
-  Just link ⇒ [IB.Strand.Link result.title link, IB.Strand.TextBlock result.destination]
+  Just link ⇒ [IB.Strand.Link result.title link, IB.Strand.TextBlock result.destination] ++
+    (case result.snippet of
+      Nothing ⇒ []
+      Just text ⇒ [IB.Strand.TextBlock text])
 
 -- Displayed URLs are decoded semantic derivatives, not claimed original body
 -- byte ranges. The original HtmlEvidence, recovery log and Arena stay intact.

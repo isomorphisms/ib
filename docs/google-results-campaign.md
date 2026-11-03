@@ -49,9 +49,31 @@ and followed by the changed application. This ledger is not release acceptance.
   Those tests did not include the new complete Google transaction.
 - IBf563fb1f integrates the separate Google DOM adapter, canonical DOM receipt,
   actual ICU redirect resolution and native result projection. Its hosted
-  run41587539251 is qualification in progress. The current follow-up repairs
+  run41587539251 fails in the old HTTP projection helper. The follow-up repairs
   the HTTP projection helper's use of the newly separated identity and adds
   exact-copy-preserving URL wrapping. No new live native Google PASS is claimed.
+- IB9f04600a producer41591963814 passes checked source/DEX, independent model
+  and canonical-owner controls, and repeated signed application packaging for
+  ARM32/ARM64/x86_64. APK SHA256
+  `77bd85a68be0fcbcc9ccd0ab6fe51b297366b787dcb6ccf92b826a325f30ecdb`.
+  This candidate is not Google-qualified. Required API34 regression fails
+  before launch because the runner exhausts disk. API29 reports fragment and
+  subsequent lifecycle failures; other transport/navigation controls execute.
+  The next job reclaims only its own compiler build intermediates and checks
+  unchanged qualified ICK before Android.
+- Independent real Google transaction41597023103 at ai-ci18ac06ab reaches the
+  real ChordReader Search and retained original ICU response on both API29/34,
+  then fails WebView main-frame acquisition before any admitted native result.
+  The app manifest lacked INTERNET because the earlier ICU transport used the
+  shell UID. The current source adds that normal permission and moves initial
+  checked Google classification off the UI thread, avoiding duplicate HTML
+  extraction for non-search documents. Actual ART requalification is pending.
+- Available snippets now use a conservative MjjYud/data-sncf association over
+  the maintained recovered log. Local37 producer assertions and16 independent
+  assertions pass; four independently compiled semantic mutants are rejected.
+  Actual checked Activity/projection and typed callback DEX compile and
+  independently disassemble in ib-local-snippets-dex-2. The producer pins ai-ci
+  `33be99d91d5c917c3e55f11d806b4cbfda935a1f` unchanged for the next qualification.
 
 The first changed IB producer41571281718 failed at the result fold's `else`
 layout. That failed source remains in history; the current tree repairs the
@@ -73,12 +95,12 @@ acceptance failed. Those successes do not qualify the changed reader.
 | ICU authenticated HTTPS acquisition | PASS on hosted host | Actual maintained command in matrix41573122647; changed Android pending |
 | Independent original bytes and metadata | PASS on hosted host | Six original entity captures and metadata; ZIP independently verified |
 | Genuine ICU-only Google public results | FAIL | All six fresh profiles require JavaScript and supply no qualifying results |
-| Native result records, titles and URLs | PENDING ART | Local checked model, source-correspondence controls and DEX compile pass; live native view pending |
+| Native result records, titles, URLs and available snippets | PENDING ART | Local checked model, source-correspondence controls and DEX compile pass; live native view pending |
 | Actual destination touch and acquisition | NOT_RUN | A real Google result in the installed application |
 | History, exact copy, reflow and recovery | PENDING | Existing582500a4 regression passes; new DOM/result navigation pending |
 | Independent compiled controls | PASS on checked host | Eleven positives; three compiled mutants execute and fail designated assertions; ART pending |
-| API29/API34 end-to-end | NOT_RUN | Signed changed APK and full real transaction |
-| Reproducible signed three-ABI APK | NOT_RUN | Changed-head build, identity, signer and byte-reproduction receipts |
+| API29/API34 end-to-end | FAIL at9f04600a | Real transaction41597023103 fails browser acquisition; current permission/worker repair pending |
+| Reproducible signed three-ABI APK | PASS at9f04600a, current pending | App DEX/ELF and signed APK repeated identically; ICU/Grease dependencies reused unchanged and hashed |
 | Physical C67 or SVITOO TAB_P10 | BLOCKED | Authenticated channel and fresh instance/ABI/SDK/signer/version/storage/Shizuku observations |
 | Browser-assisted Google acquisition | IMPLEMENTED, PENDING ART | Actual captured hrefs independently resolve through ICU; integrated native transaction pending |
 
@@ -88,8 +110,9 @@ The checked result fold consumes the maintained recovered HTML log after the
 unchanged source/admission gate. It requires a titled external destination and
 retains source identity, generation, digest, original href and recovered anchor
 occurrence. These occurrences are not original byte offsets. Redirect query
-values and HTML entities are decoded once. Snippets remain absent until an
-association can be verified. The native result view is a derived title/URL
+values and HTML entities are decoded once. Available snippets require one
+eligible heading and one bounded snippet in the nearest closed source group.
+Ambiguous or unrelated text is omitted. The native result view is a derived title/URL/snippet
 projection reconstructed from retained source, including offline history.
 
 When verified ICU Google HTML has no public result, the explicitly identified

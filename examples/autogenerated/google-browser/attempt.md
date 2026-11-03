@@ -100,3 +100,12 @@ extraction and independent refusal. No result heading or destination is
 manufactured in JavaScript. Original ICU bytes and receipts remain unchanged.
 `verify-checked.grease` compiles and independently disassembles this narrow SDK
 repair; its receipt does not claim ART or live results.
+
+At9f04600a, the API34 probe completes under ART in run41591963659. API29's
+host poll fails with the observed message `run-as: exec failed for test:
+Permission denied`; its retained artifact still contains the real terminal
+marker. The poll now reads the actual terminal bytes through the already
+supported run-as cat interface, rather than trying to execute test as the app
+UID. Its deadline and accepted terminal values are unchanged. API29's lack
+of admitted DOM snapshots remains an acquisition observation, not public-result
+success; the full independently owned application transaction must decide it.

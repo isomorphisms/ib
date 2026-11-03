@@ -53,7 +53,7 @@ typedef struct {
     ib_reader_source source;
     ib_reader_source_ticket ticket;
     ib_arena_source_observations observations;
-    int cancelled, is_dom, browser_started, browser_pending, browser_checking, browser_committing, browser_error;
+    int cancelled, is_dom, needs_browser, browser_started, browser_pending, browser_checking, browser_committing, browser_error;
     unsigned browser_polls;
     int64_t browser_deadline;
     unsigned char *pending_dom;
@@ -712,6 +712,15 @@ Java_org_isomorphisms_ib_ReaderAcquireTask_run(JNIEnv *e, jobject self) {
     if (job->retained == 1 && job->result != 0 && !job->index.previous && last_source(job, 1) == 0 &&
         checked_retained_history(e, job->id, job->source_generation, job->index.journal) && open_job_source(e, job))
         job->result = 0;
+    /* Source admission and Google classification can traverse a real response.
+     * Run this pure checked decision on the acquisition thread. The UI only
+     * creates framework views after the current job is checked again. */
+    if (job->result == 0 && !job->retained && !job->is_dom && !job->browser_started) {
+        jstring fields = http_source_fields(e, &job->ticket, &job->observations, &job->source);
+        jstring body = fields ? http_source_body(e, &job->observations, &job->source) : NULL;
+        job->needs_browser = body && !(*e)->ExceptionCheck(e) ?
+            (*e)->CallStaticIntMethod(e, application.generated, application.browser_needed, fields, body) : 0;
+    }
     if ((*e)->ExceptionCheck(e)) { (*e)->ExceptionClear(e); job->result = -1; }
     __android_log_print(ANDROID_LOG_INFO, "IBReader", "committed source acquired=%d result=%d bytes=%zu navigation=%u source_generation=%u rendered_dom=%d",
         acquired, job->result, job->source.byte_count, job->navigation, job->source_generation, job->is_dom);
@@ -816,10 +825,7 @@ Java_org_isomorphisms_ib_ReaderCompletionTask_run(JNIEnv *e, jobject self) {
             http_source_fields(e, &job->ticket, &job->observations, &job->source);
         jstring body = evidence ? (job->is_dom ? source_text(e, job->source.bytes, job->source.byte_count, 1) :
             http_source_body(e, &job->observations, &job->source)) : NULL;
-        jint needs_browser = !job->retained && !job->is_dom && !job->browser_started && body &&
-            !(*e)->ExceptionCheck(e) ? (*e)->CallStaticIntMethod(e, application.generated,
-                application.browser_needed, evidence, body) : 0;
-        if (needs_browser == 1 && !(*e)->ExceptionCheck(e) && browser_begin(e, job, activity) == 0) {
+        if (job->needs_browser == 1 && !job->browser_started && !(*e)->ExceptionCheck(e) && browser_begin(e, job, activity) == 0) {
             if (anchor) AIBinder_decStrong(anchor);
             (*e)->PopLocalFrame(e, NULL);
             return;
@@ -1115,13 +1121,18 @@ Java_org_isomorphisms_ib_GoogleAcquisitionClient_shouldOverrideUrlLoading(JNIEnv
 JNIEXPORT void JNICALL
 Java_org_isomorphisms_ib_GoogleAcquisitionClient_onReceivedError(JNIEnv *e, jobject self,
     jobject web, jobject request, jobject error) {
-    (void)web; (void)error;
+    (void)web;
     if ((*e)->PushLocalFrame(e, 16) != 0) return;
     AIBinder *anchor = task_anchor(e, self);
     reader_job *job = anchor ? AIBinder_getUserData(anchor) : NULL;
     jmethodID main_frame = method(e, "android/webkit/WebResourceRequest", "isForMainFrame", "()Z");
-    if (job && browser_current(job) && request && main_frame && (*e)->CallBooleanMethod(e, request, main_frame))
+    if (job && browser_current(job) && request && main_frame && (*e)->CallBooleanMethod(e, request, main_frame)) {
+        jmethodID get_code = method(e, "android/webkit/WebResourceError", "getErrorCode", "()I");
+        jint code = error && get_code ? (*e)->CallIntMethod(e, error, get_code) : 0;
+        if (!(*e)->ExceptionCheck(e))
+            __android_log_print(ANDROID_LOG_WARN, "IBReader", "Google main-frame network error code=%d", code);
         browser_abort(e, job, "Google browser acquisition failed. The previous document is retained.");
+    }
     if ((*e)->ExceptionCheck(e)) (*e)->ExceptionClear(e);
     if (anchor) AIBinder_decStrong(anchor);
     (*e)->PopLocalFrame(e, NULL);

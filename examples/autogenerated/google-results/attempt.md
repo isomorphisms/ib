@@ -17,8 +17,8 @@ coordinates. Reflow and Back/Forward reconstruct it from the original source.
 The request query is decoded once from IB's retained, canonical request URL.
 Google redirect wrappers are independently decoded once as query values. The
 existing strict UTF-8 percent decoder is reused. No provider endpoint, result,
-snippet or missing original-byte range is invented. Snippets remain absent
-unless a source association is implemented and verified.
+snippet or missing original-byte range is invented. Available snippets use the
+source association described below; ambiguous associations remain absent.
 
 Effects remain in the existing Android adapter and acquisition worker. The
 checked result model and projection are pure. Native UI search uses the same
@@ -79,8 +79,8 @@ weakened. Native C continues to require ICK and the maintained NDK linker.
 `verify-activity.grease` reproduces local checked Activity/typed callback DEX
 and independent disassembly without needing an SDK or pretending to run ART.
 No Java/Kotlin, candidate smali, second network implementation or parallel
-history store is introduced. Snippets remain absent until source-backed
-association is implemented; titles and verified destinations are retained.
+history store is introduced. Titles, verified destinations and conservatively
+associated available snippets are retained.
 
 An explicit native-layout counterexample in `ib-local-url-layout-before`
 compiled and failed `complete result URL wraps within the native viewport`.
@@ -95,3 +95,30 @@ Source review also found the existing ReaderProjection helper still expected
 HTTP charset/UTF-8 fields on the new common identity. It now reads those fields
 from its already parsed original HtmlEvidence, preserving the prior observer
 wire without manufacturing HTTP observations for a DOM source.
+
+The retained API34 content DOM at9f04600a contains seven MjjYud groups with
+one titled anchor and a data-sncf snippet. `IB.WebSearch.Snippets` folds the
+maintained recovered event log, preserving the source key and event occurrence.
+A closed nearest group needs exactly one eligible titled candidate and one
+bounded snippet root. Unrelated paragraphs, ambiguous groups, duplicate roots
+and script content do not become snippets. Entities are decoded once. This
+is an observed source association, not a new HTML parser or a nearby-text guess.
+
+Local ib-local-snippets-4 passes37 result, browser and layout assertions;
+ib-local-snippets-dex-1 compiles the actual checked Activity/projection and
+typed framework callbacks and independently disassembles them. ai-ci's separate
+google-snippet-independent-1 passes16 assertions and rejects all four compiled
+generation/request/parent/ambiguous-snippet mutants at their semantic assertion.
+The first two local source attempts failed on Number inference and a multiline
+record-update lambda; both were corrected before DEX qualification. None of
+these host receipts asserts live Google or Android acceptance.
+
+Independent run41597023103 executes the genuine ChordReader transaction on
+API29/34 against9f04600a and retains the real original ICU response, but the
+WebView main-frame acquisition fails before a DOM source qualifies. Source
+inspection finds the app manifest lacked INTERNET: the previous HTTP path ran
+under shell/Shizuku, while the separate WebView needs the app's own normal
+network permission. The current source adds that permission, records bounded
+numeric WebView errors, and moves initial checked Google classification off
+the UI thread. Non-search responses no longer incur a second HTML extraction.
+These repairs remain pending actual ART execution.

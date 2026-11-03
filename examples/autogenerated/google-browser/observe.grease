@@ -27,8 +27,17 @@ var deadline = int(started) + 60
 var current_time = started
 var terminal = false
 while (int(current_time) < deadline) {
-  try { "$adb" shell run-as org.isomorphisms.ib.googleprobe test -s files/browser-probe/terminal.txt }
-  if (_error.code === 0) { setvar terminal = true; break }
+  try {
+    "$adb" exec-out run-as org.isomorphisms.ib.googleprobe cat files/browser-probe/terminal.txt \
+      > "$evidence/observed-terminal.txt" 2> "$evidence/terminal-read.stderr"
+  }
+  var read_status = _error.code
+  if (read_status === 0) {
+    if rg -q -x -e BOUNDED_OBSERVATION_COMPLETE -e REFUSED_MAIN_FRAME_OR_CONSENT_OR_VERIFICATION "$evidence/observed-terminal.txt" {
+      setvar terminal = true
+      break
+    }
+  }
   sleep 1
   setvar current_time = $(date +%s)
 }

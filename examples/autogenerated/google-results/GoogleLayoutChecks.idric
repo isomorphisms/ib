@@ -46,3 +46,15 @@ main = do
               (projected_source projection ≟ expected &&
                copy_source_selection (projected_source projection) (projected_display projection)
                  (projected_coordinates projection) 0 (cast (length (unpack (projected_display projection)))) ≟ expected)
+  let ordinary = "https://example.org/%xy"
+  let ordinary_html = "<p>" ++ ordinary ++ "</p>"
+  let ordinary_evidence = HtmlSourceEvidence "arena:ordinary" "7" digest digest
+        (cast (length (unpack ordinary_html))) (cast (length (unpack ordinary_html)))
+        "https://example.org/" "https://example.org/" "text/html" "utf-8" "200" True True
+  check "malformed URL-shaped prose preserves ordinary document and exact copy"
+    (case prepare_committed_document_advances ordinary_evidence ordinary_html (Requirements 128 promptly)
+        "independent-unit-advance-fixture" (\_ ⇒ 1) of
+      Right document ⇒ case selection_projection document.revision_layout of
+        Right projection ⇒ projected_source projection ≟ ordinary
+        _ ⇒ False
+      _ ⇒ False)

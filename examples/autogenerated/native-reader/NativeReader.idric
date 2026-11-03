@@ -387,11 +387,13 @@ reader_google_browser_needed : Text → Text → Int32
 reader_google_browser_needed observations carrier =
   case (do
     evidence ← read_committed_evidence observations
-    source ← decode_committed_html_source evidence carrier
-    candidates ← google_acquisition_candidates source
-    Right source) of
+    if not (is_google_search_address evidence.requested_url) then Right Nothing
+      else do
+        source ← decode_committed_html_source evidence carrier
+        Right (Just source)) of
       Left _ ⇒ 0
-      Right source ⇒ case google_results_from_source source of
+      Right Nothing ⇒ 0
+      Right (Just source) ⇒ case google_results_from_source source of
         Right (Just _) ⇒ 0
         Right Nothing ⇒ 0
         Left _ ⇒ 1

@@ -33,6 +33,13 @@ check title False = do
   putStrLn ("FAIL " ++ title)
   exitFailure
 
+result_snippets : Text → List (Maybe Text)
+result_snippets html = case fixture html of
+  Right source ⇒ case google_results_from_source source of
+    Right (Just search) ⇒ map (\result ⇒ result.snippet) search.results
+    _ ⇒ []
+  _ ⇒ []
+
 main : IO ()
 main = do
   let html = "<html><body><a href=\"/url?q=https%3A%2F%2Fen.wikipedia.org%2Fwiki%2FA%252FB&amp;source=web\"><h3>Music &amp; sound</h3></a></body></html>"
@@ -68,3 +75,19 @@ main = do
       "/url?q=https%3A%2F%2Fen.wikipedia.org%2F%00bad" of
     Left _ ⇒ True
     _ ⇒ False)
+  let first = "<a href=\"https://example.org/music\"><h3>Music</h3></a>"
+  let second = "<a href=\"https://example.net/sound\"><h3>Sound</h3></a>"
+  let snippet = "<div data-sncf=\"1\">Music &amp; sound</div>"
+  check "available snippet belongs to one titled result group"
+    (result_snippets ("<div class=\"MjjYud\">" ++ first ++ snippet ++ "</div>") ≟ [Just "Music & sound"])
+  check "unrelated nearby text is not a displayed snippet"
+    (result_snippets (first ++ snippet) ≟ [Nothing])
+  check "a sibling group's snippet is not borrowed"
+    (result_snippets (first ++ "<div class=\"MjjYud\">" ++ snippet ++ "</div>") ≟ [Nothing])
+  check "ambiguous groups do not assign one snippet to several titles"
+    (result_snippets ("<div class=\"MjjYud\">" ++ first ++ second ++ snippet ++ "</div>") ≟ [Nothing, Nothing])
+  check "duplicate snippet regions are refused"
+    (result_snippets ("<div class=\"MjjYud\">" ++ first ++ snippet ++ snippet ++ "</div>") ≟ [Nothing])
+  check "script text cannot enter a snippet"
+    (result_snippets ("<div class=\"MjjYud\">" ++ first ++
+      "<div data-sncf=\"1\">Music<script>injected()</script> &amp; sound</div></div>") ≟ [Just "Music & sound"])
