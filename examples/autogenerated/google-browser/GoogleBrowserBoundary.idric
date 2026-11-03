@@ -11,29 +11,72 @@ import System
 reference : Text → FrameworkValueType
 reference = ReferenceValue . MkTypeReference
 
+bridge_name : Text
+bridge_name = "Lorg/isomorphisms/ib/googleprobe/Bridge;"
+
+state_fields : List (Text, FrameworkValueType)
+state_fields =
+  [ ("view", reference "Landroid/webkit/WebView;")
+  , ("directory", reference "Ljava/io/File;")
+  , ("polls", reference "Ljava/util/concurrent/atomic/AtomicInteger;")
+  , ("snapshots", reference "Ljava/util/concurrent/atomic/AtomicInteger;") ]
+
+get_field : (Text, FrameworkValueType) → MethodPlan
+get_field (name, value) = MkBoundMethodPlan "checked SDK probe state access" name 0 [] value 1
+  [ StaticGetObject (MkRegister 0) (MkFieldReference (MkTypeReference bridge_name) name value)
+  , ReturnObject (MkRegister 0) ] StaticMethod
+
+put_fields : Number → List (Text, FrameworkValueType) → List Instruction
+put_fields position [] = []
+put_fields position ((name, value) :: rest) =
+  StaticPutObject (MkRegister (cast position))
+    (MkFieldReference (MkTypeReference bridge_name) name value) :: put_fields (S position) rest
+
 boundary : Either Text FilePlan
 boundary = do
-  base ← framework_class_plan
-    (Subclass "Lorg/isomorphisms/ib/googleprobe/Bridge;" "Ljava/lang/Object;"
-      (Just "google_probe") []) []
-  Right ({ methods := base.methods ++
-    [ MkBoundMethodPlan "bounded SDK acquisition probe" "start" 2
-        [reference "Landroid/app/Activity;", ExistingValue TextValue] VoidValue 0 [] NativeStaticMethod
-    , MkBoundMethodPlan "release SDK probe" "stop" 0 [] VoidValue 0 [] NativeStaticMethod
-    ] } base)
+  base ← framework_class_plan (Subclass bridge_name "Ljava/lang/Object;" Nothing []) []
+  let store = MkBoundMethodPlan "checked SDK state initialization" "store" 4
+        (map snd state_fields) VoidValue 4 (put_fields 0 state_fields ++ [ReturnVoid]) StaticMethod
+  Right ({ fields := map (\(name, value) ⇒ MkFieldPlan name value 9) state_fields
+    , methods := base.methods ++ [store] ++ map get_field state_fields } base)
+
+checked_call : Text → List FrameworkValueType → FrameworkValueType → List Register → Maybe Register → Instruction
+checked_call name arguments result registers destination = InvokeMethod (Invoke InvokeStatic
+  (MkMethodReference (MkTypeReference "LIdric/Generated;") name arguments result) registers destination)
 
 client : Either Text FilePlan
-client = framework_class_plan
-  (Subclass "Lorg/isomorphisms/ib/googleprobe/Client;" "Landroid/webkit/WebViewClient;"
-    (Just "google_probe")
-    [ Callback "shouldOverrideUrlLoading" "Z" ["Landroid/webkit/WebView;", "Landroid/webkit/WebResourceRequest;"]
-    , Callback "onPageStarted" "V" ["Landroid/webkit/WebView;", "Ljava/lang/String;", "Landroid/graphics/Bitmap;"]
-    ]) []
+client = do
+  base ← framework_class_plan
+    (Subclass "Lorg/isomorphisms/ib/googleprobe/Client;" "Landroid/webkit/WebViewClient;" Nothing []) []
+  let started = MkBoundMethodPlan "checked first-party main frame policy" "onPageStarted" 3
+        [reference "Landroid/webkit/WebView;", ExistingValue TextValue, reference "Landroid/graphics/Bitmap;"]
+        VoidValue 4 [checked_call "probe_started" [ExistingValue TextValue] VoidValue [MkRegister 2] Nothing,
+          ReturnVoid] InstanceMethod
+  let override = MkBoundMethodPlan "checked main frame refusal" "shouldOverrideUrlLoading" 2
+        [reference "Landroid/webkit/WebView;", reference "Landroid/webkit/WebResourceRequest;"]
+        (ExistingValue BooleanValue) 4
+        [checked_call "probe_override" [reference "Landroid/webkit/WebResourceRequest;"]
+          (ExistingValue BooleanValue) [MkRegister 3] (Just (MkRegister 0)), ReturnInteger (MkRegister 0)] InstanceMethod
+  Right ({ methods := base.methods ++ [started, override] } base)
 
-callback : Text → Text → List Text → List Text → Either Text FilePlan
-callback name method arguments interfaces = framework_class_plan
-  (Subclass ("Lorg/isomorphisms/ib/googleprobe/" ++ name ++ ";") "Ljava/lang/Object;"
-    (Just "google_probe") [Callback method "V" arguments]) interfaces
+snapshot : Either Text FilePlan
+snapshot = do
+  base ← framework_class_plan
+    (Subclass "Lorg/isomorphisms/ib/googleprobe/Snapshot;" "Ljava/lang/Object;" Nothing [])
+    ["Landroid/webkit/ValueCallback;"]
+  let receive = MkBoundMethodPlan "checked DOM observation" "onReceiveValue" 1
+        [ExistingValue ObjectValue] VoidValue 2
+        [checked_call "probe_snapshot" [ExistingValue ObjectValue] VoidValue [MkRegister 1] Nothing,
+          ReturnVoid] InstanceMethod
+  Right ({ methods := base.methods ++ [receive] } base)
+
+tick : Either Text FilePlan
+tick = do
+  base ← framework_class_plan
+    (Subclass "Lorg/isomorphisms/ib/googleprobe/Tick;" "Ljava/lang/Object;" Nothing []) ["Ljava/lang/Runnable;"]
+  let run = MkBoundMethodPlan "checked bounded probe continuation" "run" 0 [] VoidValue 1
+        [checked_call "probe_tick" [] VoidValue [] Nothing, ReturnVoid] InstanceMethod
+  Right ({ methods := base.methods ++ [run] } base)
 
 main : IO ()
 main = do
@@ -42,9 +85,9 @@ main = do
     [_, output] ⇒ case (do
       bridge ← boundary
       browser_client ← client
-      snapshot ← callback "Snapshot" "onReceiveValue" ["Ljava/lang/Object;"] ["Landroid/webkit/ValueCallback;"]
-      tick ← callback "Tick" "run" [] ["Ljava/lang/Runnable;"]
-      encode_dex_classes [bridge, browser_client, snapshot, tick]) of
+      value_callback ← snapshot
+      continuation ← tick
+      encode_dex_classes [bridge, browser_client, value_callback, continuation]) of
         Left reason ⇒ do putStrLn reason; exitFailure
         Right bytes ⇒ do
           result ← write_dex output bytes

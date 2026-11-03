@@ -10,9 +10,11 @@ result reader, source-admission shortcut or accepted Google implementation.
 The checked Idriç Activity owns a fixed public once-encoded query and an
 allowlist of first-party Google search/observed continuation routes. A separate
 checked framework-class plan declares WebViewClient, ValueCallback and Runnable
-interfaces. The existing DEX backend emits all candidate DEX. The C boundary
-only invokes Android SDK calls, validates/copies the callback's UTF-16 into
-bounded UTF-8 files and schedules up to30 read-only DOM observations.
+interfaces and forwards callbacks to checked Idriç exports. The existing DEX
+backend emits all candidate DEX. The probe invokes Android SDK methods through
+checked foreign declarations, validates UTF-16 before UTF-8 serialization and
+schedules up to30 read-only DOM observations. The probe has no native library.
+This does not change ICU's maintained C TLS provider or JNI boundary.
 
 The normal first-party page executes under the platform's unchanged strict TLS
 and Safe Browsing behavior. No SSL callback override, manual challenge answer,
@@ -38,3 +40,34 @@ the canonical frontend compiles and executes the typed class generator.
 Both outputs are independently disassembled. This is host structural evidence,
 not SDK, ART, browser execution or public-result acceptance. No runtime or
 language fallback was selected.
+
+The original bounded C SDK probe remains in `probe.c` and commit07c463f0.
+Its first hosted attempt41576410427 stopped at an unreadable official r27c
+NDK ZIP, before building the probe. A narrow rerun subsequently built its
+signed APK; ART observation remains distinct from successful packaging.
+The current probe instead uses direct checked SDK methods and typed callback
+forwarders, so this qualification does not depend on a new native compiler
+download. The same frontend740bbf and DEX backend153e7f emit its Activity;
+the canonical frontend executes its declaration generator, and independent
+baksmali disassembles both outputs. No Java/Kotlin, d8 or handwritten DEX was
+selected.
+
+The direct framework attempt exposed the backend's explicit exclusion of
+array-bearing foreign declarations (`String.getBytes : [B`) and of a cast
+from an opaque Object domain directly into built-in Text. Both refusals remain
+intact. The Android `OutputStreamWriter` String API supplies bounded UTF-8
+serialization after strict CharsetEncoder validation; the callback's String
+uses its ordinary Object.toString dispatch. This is the same SDK and checked
+DEX backend. General array-bearing foreign ABI support remains language work,
+requiring explicit array descriptors, ownership and bounded operations.
+The first declaration generator also used a nonexistent `ReturnValue`
+constructor; the maintained IR's checked `ReturnInteger` fixes that source
+error. These failed attempts supplied no runtime acceptance.
+
+`attempts/fetch-ndk.grease` preserves the unsuccessful exact-SDK acquisition
+attempt. Its first official32MiB range arrived with a206 response; subsequent
+nonzero ranges returned206 headers and no body, causing transport failure.
+No partial archive, unverified compiler or different NDK was selected. The
+official r27c length is663987688 and release-table SHA1 is
+090e8083a715fdb1a3e402d0763c388abb03fb4e. That failed helper is not in the build
+path and does not provide Google or SDK acceptance.
