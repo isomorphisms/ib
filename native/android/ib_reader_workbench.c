@@ -43,6 +43,10 @@ Java_org_isomorphisms_ib_ReaderBridge_style(JNIEnv *e, jclass ignored, jobject a
         m3_method(e, activity, "getWindow", "()Landroid/view/Window;"));
     (*e)->CallVoidMethod(e, window, m3_method(e, window, "setStatusBarColor", "(I)V"), theme.surface);
     (*e)->CallVoidMethod(e, window, m3_method(e, window, "setNavigationBarColor", "(I)V"), theme.surface);
+    jobject decor ← (*e)->CallObjectMethod(e, window, m3_method(e, window, "getDecorView", "()Landroid/view/View;"));
+    jint flags ← (*e)->CallIntMethod(e, decor, m3_method(e, decor, "getSystemUiVisibility", "()I"));
+    (*e)->CallVoidMethod(e, decor, m3_method(e, decor, "setSystemUiVisibility", "(I)V"),
+        (flags & ~0x2010) | (theme.dark ? 0 : 0x2010));
     (*e)->PopLocalFrame(e, NULL);
 }
 
