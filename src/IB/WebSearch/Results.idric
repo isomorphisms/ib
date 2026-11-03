@@ -240,6 +240,12 @@ collect position Nothing candidate results (ImpliedEndTag "a" :: rest) =
   collect (S position) Nothing Nothing (finished candidate results) rest
 collect position Nothing candidate results (EndTag name :: rest) =
   collect (S position) Nothing (map (leave_heading_scope name) candidate) results rest
+-- The general information recovery log closes headings at block starts.
+-- The captured Google DOM contains a div inside its h3.
+-- That synthetic boundary is not the DOM's actual heading end; the explicit
+-- closing tag still has to close the complete scoped title before admission.
+collect position Nothing candidate results (ImpliedEndTag "h3" :: rest) =
+  collect (S position) Nothing candidate results rest
 collect position Nothing candidate results (ImpliedEndTag name :: rest) =
   collect (S position) Nothing (map (leave_heading_scope name) candidate) results rest
 collect position Nothing candidate results (TextEvent text :: rest) =

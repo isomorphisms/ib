@@ -68,6 +68,12 @@ main = do
     (refuses "<a href=\"https://example.org/music\"><h3>First</h3><h3>Second</h3></a>")
   check "nested distinct heading nodes remain ambiguous"
     (refuses "<a href=\"https://example.org/music\"><h3>Outer<span role=\"heading\">Inner</span></h3></a>")
+  check "actual heading block descendants survive synthetic recovery boundaries"
+    (case fixture "<a href=\"https://example.org/music\"><span>Site label</span><h3><div>Music <em>theory</em></div></h3><span>Badge</span></a>" of
+      Right source ⇒ case google_results_from_source source of
+        Right (Just search) ⇒ map (\result ⇒ result.title) search.results ≟ ["Music theory"]
+        _ ⇒ False
+      _ ⇒ False)
   check "arbitrary anchors are not Google results"
     (refuses "<html><body><a href=\"https://en.wikipedia.org/wiki/Music\">Music</a></body></html>")
   check "retry headings are not public results"

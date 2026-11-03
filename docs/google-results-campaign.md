@@ -133,13 +133,36 @@ and followed by the changed application. This ledger is not release acceptance.
 - The current semantic correction uses the actual h3/role-heading title,
   excluding adjacent site/address labels. It refuses ambiguous headings and
   admits only browser results with a corresponding retained ICU target.
-  Local47 producer assertions,27 independent assertions and eight separately
-  compiled semantic counterexamples pass. The actual retained probe still
-  supplies ten candidates/four snippet groups. Final checked Activity,
-  projection and framework DEX independently disassemble. The producer and
-  strict input guard now both pin ai-cifc65cf0911f38d8955158e70fcf7379b299aab0f,
-  including the valid SDK collapse and bounded same-source touch preparation.
-  Changed-source actual Android qualification remains pending.
+  Real API29 retained DOM includes a div within h3; the general recovery log
+  inserts a synthetic h3 end before that block. The Google title collector now
+  ignores that synthetic boundary and requires the actual explicit heading
+  end. General HTML recovery is unchanged. Local48 producer assertions,
+  28 independent assertions and nine separately compiled semantic
+  counterexamples pass. Retained API29/API34 DOM replays supply eight/seven
+  candidates, and the earlier actual probe still supplies ten/four snippet
+  groups. Final checked Activity, projection and framework DEX compile and
+  independently disassemble in ib-complete-heading-dex-1.
+- Producer41625651486 at1739bf91 stops before application compilation because
+  an older independent semantic mutator no longer changes the refactored
+  heading collector. The independent control now disables both actual heading
+  guards, compiles and fails its designated arbitrary-anchor assertion. All
+  eleven positives and three compiled controls pass. The producer and strict
+  input guard both pin ai-ci39ba6eb1218c7883fa1f1c98b07bf0dceabbf6d5.
+- Producer41618650534 at80933842 completes the signed reproducible build.
+  Required ordinary API34 job125877438694 passes all reader suites. API29
+  job125877437686 passes preceding suites, then fails link-shape setup while
+  initial source restoration is still running. The independent observer now
+  waits for the actual initial readable static document before submitting its
+  first link-shape URL; every link/source/history assertion remains required.
+- Pilot41625382507 at257e3adc/fc65cf09 touches a real native Google result on
+  API29 and acquires its target through ICU. The native reader refuses that
+  target because it contains no selectable static text. Full E2E remains
+  FAIL. API34 fails emulator boot before application execution, hence NOT_RUN.
+  The current observer tries at most three distinct actual visible result
+  links and requires a readable static destination; each explicit refusal must
+  preserve the exact Google document and history. Actual touch and original
+  destination readback remain mandatory. Changed-source Android qualification
+  remains pending.
 
 The first changed IB producer41571281718 failed at the result fold's `else`
 layout. That failed source remains in history; the current tree repairs the
@@ -161,12 +184,12 @@ acceptance failed. Those successes do not qualify the changed reader.
 | ICU authenticated HTTPS acquisition | PASS on hosted host | Actual maintained command in matrix41573122647; changed Android pending |
 | Independent original bytes and metadata | PASS on hosted host | Six original entity captures and metadata; ZIP independently verified |
 | Genuine ICU-only Google public results | FAIL | All six fresh profiles require JavaScript and supply no qualifying results |
-| Native result records, titles, URLs and available snippets | FAIL atbd4f0478 | Both Android APIs explicitly refuse an overlong native source run; current bounded wrapping repair pending ART |
-| Actual destination touch and acquisition | NOT_RUN | A real Google result in the installed application |
-| History, exact copy, reflow and recovery | PENDING | Existing582500a4 regression passes; new DOM/result navigation pending |
-| Independent compiled controls | PASS on checked host | Eleven positives; three compiled mutants execute and fail designated assertions; ART pending |
-| API29/API34 end-to-end | FAIL atbd4f0478 | Real transaction41607144917 reaches public targets but native presentation refuses; no actual result touch yet |
-| Reproducible signed three-ABI APK | PASS atbd4f0478, current pending | App DEX/ELF and signed APK repeated identically; ICU/Grease dependencies reused unchanged and hashed |
+| Native result records, titles, URLs and available snippets | PASS at257e3adc, changed source pending | Both Android APIs display native result text; current complete-title correction requires fresh ART |
+| Actual destination touch and acquisition | Readable destination FAIL at257e3adc | API29 actual touch acquires a JavaScript-only target, correctly refused; other retained results pending |
+| History, exact copy, reflow and recovery | PENDING on changed source | Ordinary80933842 API34 passes; actual Google API34 source copying passes at257e3adc; complete navigation still pending |
+| Independent compiled controls | PASS on checked host | Eleven positives/three controls and28 browser positives/nine controls compile and execute; ART pending |
+| API29/API34 end-to-end | FAIL at257e3adc | No complete readable-target transaction; latest API34 boot failure supplies no application evidence |
+| Reproducible signed three-ABI APK | PASS at80933842, current pending | App DEX/ELF and signed APK repeated identically; ICU/Grease dependencies reused unchanged and hashed |
 | Physical C67 or SVITOO TAB_P10 | BLOCKED | Authenticated channel and fresh instance/ABI/SDK/signer/version/storage/Shizuku observations |
 | Browser-assisted Google acquisition | ART source completion reported atbd4f0478 | Both APIs reach canonical completion with public ICU targets; independent current source readback and native result transaction still pending |
 

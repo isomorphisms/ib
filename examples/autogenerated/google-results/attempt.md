@@ -198,3 +198,33 @@ acquisition candidates and four snippet groups. A first replay used a wrong
 requested query and correctly refused; the next uses retained requested-url.txt.
 ib-heading-scope-dex-2 compiles the final Activity/projection/callback DEX and
 independently disassembles it. None of these host checks is ART acceptance.
+
+Actual retained API29 DOM contains a div nested within h3. The general recovery
+log emits an ImpliedEndTag h3 at that block boundary. The Google collector now
+ignores only that synthetic h3 end and still requires an explicit complete
+heading, preserving general recovery behavior. ib-heading-fortyeight-1 passes
+48 assertions. Independent google-heading-nine-controls-1 passes28 assertions
+and rejects nine compiled semantic mutants, including restored synthetic-end
+closure. Exact retained DOM replays yield eight API29/seven API34 candidates;
+the earlier385173-byte probe still yields ten candidates/four snippet groups.
+ib-complete-heading-dex-1 compiles and independently disassembles the final
+Activity, projection and framework callback DEX. ART remains a separate gate.
+
+Producer41625651486 at1739bf91 correctly stops before compilation because the
+older arbitrary-anchor mutator targets removed heading_seen code. The updated
+independent control disables both actual heading guards, compiles and fails
+the same designated semantic assertion. google-classifier-complete-heading-
+controls-1 passes all11 positives and three compiled controls. Both producer
+checkout and strict input identity now pin independent39ba6eb1.
+
+Producer41618650534 at80933842 passes source, signed reproduction and all
+ordinary API34 suites. API29 passes preceding suites but submits link-shape
+setup before initial restoration finishes. The observer now waits for the
+actual readable static initial document before that URL; its six link and
+source/history assertions are unchanged. Pilot41625382507 at257e3adc performs
+an actual API29 result touch and ICU destination acquisition, then correctly
+refuses a JavaScript-only target with no selectable static text. API34 stops
+at emulator boot. The independent observer tries at most three distinct
+actually visible native links, requiring readable static text and preserved
+Google source/history after every refusal. No successful readable-target
+transaction or changed-source ART qualification is claimed here.
