@@ -12,7 +12,8 @@ typedef struct {
     char request_id[IB_READER_REQUEST_ID_CAP + 1U];
 } ib_dom_target_reference;
 
-/* UTF-8 outerHTML serialization, with distinct browser-rendered provenance.
+/* UTF-8 content-DOM outerHTML serialization, with distinct browser-rendered provenance.
+ * A cloned DOM removes script/style/template/svg/canvas; the live DOM is unchanged.
  * No field purports to observe a browser HTTP status/body/charset/redirect.
  * Parent and target IDs refer to independently verified ICU receipts. */
 typedef struct {

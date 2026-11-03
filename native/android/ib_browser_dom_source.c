@@ -155,7 +155,7 @@ static int dom_write_receipt(FILE *f, const ib_browser_dom_metadata *m) {
         "schema\tib-browser-dom-arena-v1\nrequest_id\t%s\nsource_generation\t%u\n"
         "requested_url\t%s\nresolved_url\t%s\nparent_id\t%s\nparent_generation\t%u\n"
         "parent_sha256\t%s\nprovider_package\t%s\nprovider_version\t%s\n"
-        "serialization\twebview-outerHTML-utf8-v1\narena_offset\t%" PRIu64 "\n"
+        "serialization\twebview-content-outerHTML-utf8-v1\narena_offset\t%" PRIu64 "\n"
         "byte_count\t%u\nsha256\t%s\ntarget_count\t%u\ncomplete\tYES\n",
         m->request_id, m->source_generation, m->requested_url, m->resolved_url,
         m->parent_id, m->parent_generation, m->parent_sha256, m->provider_package,
@@ -271,7 +271,7 @@ static int dom_parse(char *text, size_t length, const char *id,
         !dom_number(fields[11], &offset) || !dom_number(fields[12], &bytes) ||
         !bytes || bytes > IB_DOM_MAX_BYTES || !dom_number(fields[14], &targets) ||
         !targets || targets > IB_DOM_MAX_TARGETS || strcmp(fields[15], "YES") ||
-        strcmp(fields[10], "webview-outerHTML-utf8-v1")) return 0;
+        strcmp(fields[10], "webview-content-outerHTML-utf8-v1")) return 0;
     memset(m, 0, sizeof(*m));
     m->source_generation = generation; m->parent_generation = generation;
     m->arena_offset = offset; m->byte_count = (uint32_t)bytes; m->target_count = (unsigned)targets;

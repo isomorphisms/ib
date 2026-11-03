@@ -110,6 +110,8 @@ write_text : WriterReference → Text → PrimIO ()
 close_writer : WriterReference → PrimIO ()
 %foreign "dex:interface:Ljava/lang/CharSequence;:length:()I"
 utf16_units : Text → PrimIO Int32
+%foreign "dex:virtual:Ljava/lang/String;:startsWith:(Ljava/lang/String;)Z"
+sdk_text_starts : Text → Text → PrimIO Int32
 %foreign "dex:static:Ljava/nio/charset/Charset;:forName:(Ljava/lang/String;)Ljava/nio/charset/Charset;"
 standard_charset : Text → PrimIO CharsetReference
 %foreign "dex:virtual:Ljava/nio/charset/Charset;:newEncoder:()Ljava/nio/charset/CharsetEncoder;"
@@ -223,7 +225,8 @@ probe_snapshot supplied = do
     if position >= 1000 then pure () else do
       raw ← primIO (object_text supplied)
       units ← primIO (utf16_units raw)
-      if units <= 0 || units > 4194304 || not (starts "[" raw) then pure () else do
+      array_start ← primIO (sdk_text_starts raw "[")
+      if units <= 0 || units > 4194304 || array_start ≟ 0 then pure () else do
         values ← primIO (json_array raw)
         url ← primIO (json_text values 0)
         if probe_google_url url /= 1 then pure () else do
@@ -251,7 +254,7 @@ probe_tick = do
         primIO (set_counter polls (number + 1))
         snapshot ← primIO new_snapshot
         callback ← primIO (snapshot_interface snapshot)
-        primIO (read_dom view "[location.href,document.documentElement?document.documentElement.outerHTML:'']" callback)
+        primIO (read_dom view "(()=>{const root=document.documentElement;if(!root)return [location.href,''];const copy=root.cloneNode(true);copy.querySelectorAll('script,style,template,svg,canvas').forEach(node=>node.remove());return [location.href,copy.outerHTML]})()" callback)
         tick ← primIO new_tick
         runnable ← primIO (tick_interface tick)
         target ← primIO (browser_view view)
@@ -271,7 +274,7 @@ create_probe activity saved = do
     polls ← primIO (new_counter 0)
     snapshots ← primIO (new_counter 0)
     primIO (store_state view directory polls snapshots)
-    write_probe_file "provenance.tsv" "representation\tbrowser-rendered-dom\noriginal_network_bytes\tNOT_CAPTURED\nICU_body_identity\tNOT_APPLICABLE\nsource_offsets\tUTF8_DOM_SNAPSHOT_ONLY\ncookie_policy\tordinary_private_WebView_profile_no_cookie_copy\nTLS_policy\tdefault_strict_no_SSL_override\n"
+    write_probe_file "provenance.tsv" "representation\tbrowser-rendered-content-dom\nserialization\twebview-content-outerHTML-utf8-v1\nDOM_projection\tclone_remove_script_style_template_svg_canvas\noriginal_network_bytes\tNOT_CAPTURED\nICU_body_identity\tNOT_APPLICABLE\nsource_offsets\tUTF8_DERIVATIVE_ONLY\ncookie_policy\tordinary_private_WebView_profile_no_cookie_copy\nTLS_policy\tdefault_strict_no_SSL_override\n"
     let requested = "https://google.com/search?q=open+source+guitar+chord+transposition"
     write_probe_file "requested-url.txt" requested
     settings ← primIO (browser_settings view)

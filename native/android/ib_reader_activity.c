@@ -627,7 +627,7 @@ static jstring dom_source_fields(JNIEnv *e, const reader_job *job) {
     const ib_browser_dom_metadata *m = &job->dom;
     ib_reader_sha256_hex(job->source.bytes, job->source.byte_count, observed);
     int count = snprintf(fields, sizeof(fields),
-        "IBDOM1\tarena-dom:%s\t%u\t%s\t%s\t%u\t%zu\t%s\t%s\tarena:%s\t%u\t%s\t%s\t%s\twebview-outerHTML-utf8-v1\tverified-utf8\tcomplete",
+        "IBDOM1\tarena-dom:%s\t%u\t%s\t%s\t%u\t%zu\t%s\t%s\tarena:%s\t%u\t%s\t%s\t%s\twebview-content-outerHTML-utf8-v1\tverified-utf8\tcomplete",
         m->request_id, m->source_generation, m->sha256, observed, m->byte_count, job->source.byte_count,
         m->requested_url, m->resolved_url, m->parent_id, m->parent_generation, m->parent_sha256,
         m->provider_package, m->provider_version);
@@ -1156,7 +1156,7 @@ Java_org_isomorphisms_ib_GooglePollTask_run(JNIEnv *e, jobject self) {
             if (!checking) {
                 jobject callback = task(e, job, application.google_dom);
                 jstring script = callback ? (*e)->NewStringUTF(e,
-                    "[location.href,document.documentElement?document.documentElement.outerHTML:'']") : NULL;
+                    "(()=>{const root=document.documentElement;if(!root)return [location.href,''];const copy=root.cloneNode(true);copy.querySelectorAll('script,style,template,svg,canvas').forEach(node=>node.remove());return [location.href,copy.outerHTML]})()") : NULL;
                 jmethodID evaluate = method(e, "android/webkit/WebView", "evaluateJavascript", "(Ljava/lang/String;Landroid/webkit/ValueCallback;)V");
                 if (script && evaluate) {
                     ++job->browser_polls;

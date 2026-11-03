@@ -374,7 +374,7 @@ browser_dom_admission_reason evidence dom =
           cast (sum (map scalar_utf8_bytes (unpack dom))) /= evidence.reopened_bytes
     then Just "rendered-source-byte-count-mismatch"
   else if not evidence.utf8_verified || not (all dom_scalar (unpack dom)) ||
-          not evidence.fully_serialized || evidence.serialization /= "webview-outerHTML-utf8-v1"
+          not evidence.fully_serialized || evidence.serialization /= "webview-content-outerHTML-utf8-v1"
     then Just "incomplete-or-unsupported-DOM-serialization"
   else if not (metadata_safe evidence.provider_package) || not (metadata_safe evidence.provider_version) ||
           not (cheap_http_url evidence.requested_url) || not (cheap_http_url evidence.resolved_url)

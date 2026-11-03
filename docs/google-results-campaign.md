@@ -111,6 +111,16 @@ stale ownership and cancellation retain the last-good reader state. The
 temporary WebView does not own document navigation or history. Destination
 touches use the existing private Binder/Shizuku/ICU source acquisition.
 
+The DOM derivative format is `webview-content-outerHTML-utf8-v1`: a cloned
+document removes script/style/template/svg/canvas nodes before serialization.
+It is explicitly not full original DOM or browser network bytes. The live page
+is not changed, and all remaining content and control/link references remain
+available to the checked and independent semantic observers. A separate
+API34 probe at f563fb1f hit an ART memory failure when a prefix predicate
+unpacked the complete large JSON string. That failed artifact is preserved;
+the checked SDK String.startsWith interface avoids that materialization. This
+does not relax any original-source or result-admission assertion.
+
 `ib-local-url-layout-before` reproduced a complete destination URL exceeding
 a16-unit viewport. `ib-local-url-layout-after-1` verifies the source-backed
 address break provider with both Greedy and Squared, including exact copying

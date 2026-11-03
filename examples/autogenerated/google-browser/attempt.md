@@ -80,3 +80,23 @@ encoding through the SDK's ByteBuffer instead of rejecting every DOM above
 524288 UTF-16 units. The2MiB serialized-byte limit remains enforced, and
 malformed UTF-16 remains rejected. No result/public-destination assertion is
 relaxed by either repair.
+
+Probe run41587539302 exposed a real ART memory failure on API34. Artifact
+13210125255 (ZIP SHA256 ab17e0e1393142143439b5a75bf4158d547564a5c7177044ed0082fd7ac4ee41)
+retains the original observations and stack: OutOfMemoryError on main in
+`__idricManaged81 → starts → probe_snapshot`. The prefix check unpacked the
+entire large JSON string into a managed character list. Recorded full DOM
+serializations grew from92063 to1423379 bytes. API29 retained a terminal marker
+after the host deadline but no admitted snapshots; that is not a completed
+within-deadline observation.
+
+The prefix check now calls the checked SDK String.startsWith interface.
+The probe and production adapter serialize a cloned content DOM, removing
+script/style/template/svg/canvas nodes while preserving the live page. The
+format is explicitly `webview-content-outerHTML-utf8-v1`, a rendered derivative,
+not full original DOM, original browser network bytes or an ICU body. All
+remaining content, controls and link references are retained for checked
+extraction and independent refusal. No result heading or destination is
+manufactured in JavaScript. Original ICU bytes and receipts remain unchanged.
+`verify-checked.grease` compiles and independently disassembles this narrow SDK
+repair; its receipt does not claim ART or live results.

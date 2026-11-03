@@ -24,7 +24,7 @@ dom_evidence : BrowserDomEvidence
 dom_evidence = BrowserDomSourceEvidence "arena-dom:fixture" "7" digest digest
   (cast (length (unpack html))) (cast (length (unpack html))) query resolved
   "arena:parent" "7" digest "com.android.webview" "74.0.3729.185"
-  "webview-outerHTML-utf8-v1" True True
+  "webview-content-outerHTML-utf8-v1" True True
 
 destination_body : Text
 destination_body = "<html><title>Music</title><body>Sound</body></html>"
