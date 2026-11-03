@@ -32,11 +32,14 @@
         <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
             android:text="Sources" android:textSize="18sp" android:textColor="#ECECEC" />
         <EditText android:id="@id/reader_input" android:layout_width="match_parent"
-            android:layout_height="64dp" android:gravity="top" android:inputType="textUri"
-            android:singleLine="true" android:hint="https://example.com/" android:textSize="16sp" android:textColor="#ECECEC"
+            android:layout_height="64dp" android:gravity="top" android:inputType="text"
+            android:singleLine="true" android:hint="URL or search terms" android:textSize="16sp" android:textColor="#ECECEC"
             android:textColorHint="#ACACAC" android:padding="8dp" />
         <Button android:id="@id/read_button" android:layout_width="wrap_content"
             android:layout_height="48dp" android:text="Read" android:onClick="onClick"
+            android:textColor="#171717" android:backgroundTint="#B8C7DE" />
+        <Button android:id="@id/search_button" android:layout_width="wrap_content"
+            android:layout_height="48dp" android:text="Search Google" android:onClick="onClick"
             android:textColor="#171717" android:backgroundTint="#B8C7DE" />
         <Button android:id="@id/permission_button" android:layout_width="wrap_content"
             android:layout_height="48dp" android:text="Authorize Shizuku" android:onClick="onClick"

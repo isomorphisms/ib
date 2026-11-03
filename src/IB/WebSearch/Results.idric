@@ -1,0 +1,256 @@
+module IB.WebSearch.Results
+
+import Data.Text
+import Data.List
+import Data.List1
+import IB.WebSearch
+import IB.HtmlLinks
+import IB.HtmlAnchors
+import IB.HtmlPrepaint
+import IB.Information
+import IB.RecoveredInformation
+import IB.Reader.Navigation
+import IB.Strand
+import IB.Prepaint
+import IB.Prepaint.Version1
+
+public export
+record GoogleResult where
+  constructor SourceBackedGoogleResult
+  source_key : Text
+  source_generation : Text
+  source_sha256 : Text
+  anchor_occurrence : Number
+  original_href : Text
+  title : Text
+  destination : Text
+  snippet : Maybe Text
+  navigation_identity : Text
+
+public export
+record GoogleResults where
+  constructor SourceBackedGoogleResults
+  original_query : Text
+  requested_url : Text
+  resolved_url : Text
+  results : List GoogleResult
+
+starts : Text → Text → Bool
+starts prefix value = take (length (unpack prefix)) (unpack value) ≟ unpack prefix
+
+export
+is_google_search : Text → Bool
+is_google_search address = starts "https://google.com/search?q=" address ||
+  starts "https://www.google.com/search?q=" address
+
+query_value : List Char → Text
+query_value [] = ""
+query_value ('?' :: rest) = pack rest
+query_value (_ :: rest) = query_value rest
+
+parameter : Text → (Text, Text)
+parameter text =
+  let (name, value) = break (≟ '=') (unpack text) in
+  (pack name, pack (drop 1 value))
+
+query_parameters : Text → List (Text, Text)
+query_parameters address = map parameter (forget (split (≟ '&') (query_value (unpack address))))
+
+decode_query_value : Text → Either Text Text
+decode_query_value encoded = decode_html_fragment
+  (pack (map (\character ⇒ if character ≟ '+' then ' ' else character) (unpack encoded)))
+
+query_from_request : Text → Either Text Text
+query_from_request address = case filter (\entry ⇒ fst entry ≟ "q") (query_parameters address) of
+  [(_, encoded)] ⇒ do
+    query ← decode_query_value encoded
+    let canonical = "https://google.com/search?q=" ++ encoded
+    if google_icu_url query ≟ Just canonical then Right query
+      else Left "Google query is not the retained once-encoded IB request"
+  _ ⇒ Left "Google search has no unique retained query"
+
+google_origin : Text → Bool
+google_origin address = case http_origin address of
+  Just "https://google.com" ⇒ True
+  Just "https://www.google.com" ⇒ True
+  _ ⇒ False
+
+lower_ascii : Char → Char
+lower_ascii character = if character >= 'A' && character <= 'Z'
+  then chr (ord character + 32) else character
+
+public_host : Text → Bool
+public_host origin =
+  let authority = pack (drop (if starts "https://" origin then 8 else 7) (unpack origin))
+      host = pack (takeWhile (/= ':') (unpack authority))
+      normalized = pack (map lower_ascii (unpack host))
+      labels = forget (split (≟ '.') normalized)
+      suffix = case reverse labels of
+        [] ⇒ ""
+        last :: _ ⇒ last in
+  length labels >= 2 && all (/= "") labels &&
+  all (\character ⇒ (character >= 'a' && character <= 'z') ||
+    (character >= '0' && character <= '9') || character ≟ '-' || character ≟ '.')
+    (unpack normalized) &&
+  not (all (\character ⇒ (character >= '0' && character <= '9') || character ≟ '.') (unpack host)) &&
+  not (any (\label ⇒ elem label ["google", "gstatic", "googleusercontent", "googleadservices", "localhost"]) labels) &&
+  not (elem suffix ["local", "invalid", "test"])
+
+hexadecimal : Char → Maybe Number
+hexadecimal character =
+  if character >= '0' && character <= '9' then Just (cast (ord character - ord '0'))
+  else if character >= 'a' && character <= 'f' then Just (10 + cast (ord character - ord 'a'))
+  else if character >= 'A' && character <= 'F' then Just (10 + cast (ord character - ord 'A'))
+  else Nothing
+
+safe_escapes : List Char → Bool
+safe_escapes [] = True
+safe_escapes ('%' :: first :: second :: rest) = case (hexadecimal first, hexadecimal second) of
+  (Just high, Just low) ⇒ let value = high * 16 + low in value >= 32 && value /= 127 && safe_escapes rest
+  _ ⇒ False
+safe_escapes ('%' :: _) = False
+safe_escapes (_ :: rest) = safe_escapes rest
+
+-- This validates a destination candidate. The actual ICU retrieval and source
+-- admission still have to succeed before another document can be displayed.
+export
+public_google_destination : Text → Text → Either Text Text
+public_google_destination resolved href = do
+  absolute ← case resolve_html_reference resolved (decode_html_entities href) of
+    Nothing ⇒ Left "Unsupported Google destination reference"
+    Just value ⇒ Right value
+  let wrapped = starts "https://google.com/url?" absolute || starts "https://www.google.com/url?" absolute
+  destination ← if not wrapped then Right absolute else
+    case filter (\entry ⇒ fst entry ≟ "q" || fst entry ≟ "url") (query_parameters absolute) of
+      [(_, encoded)] ⇒ decode_query_value encoded
+      _ ⇒ Left "Google redirect has no unique destination"
+  request ← navigation_request destination
+  origin ← case http_origin (navigation_address request) of
+    Nothing ⇒ Left "Google destination has no HTTP origin"
+    Just value ⇒ Right value
+  if public_host origin && safe_escapes (unpack destination) &&
+      not (any (\character ⇒ elem character ['<', '>', '"', '\\']) (unpack destination))
+    then Right (navigation_address request) else Left "Google control or unsafe destination"
+
+record AnchorCandidate where
+  constructor Candidate
+  occurrence : Number
+  href : Text
+  heading_seen : Bool
+  characters : List Char
+
+candidate_result : HtmlEvidence → Maybe AnchorCandidate → Maybe GoogleResult
+candidate_result evidence Nothing = Nothing
+candidate_result evidence (Just candidate) =
+  let title = unwords (words (decode_html_entities (pack (reverse candidate.characters)))) in
+  if not candidate.heading_seen || title ≟ "" || length (unpack title) > 1024 then Nothing
+  else case public_google_destination evidence.resolved_url candidate.href of
+    Left _ ⇒ Nothing
+    Right destination ⇒
+      let identity = evidence.source_key ++ ";generation=" ++ evidence.source_generation ++
+        ";sha256=" ++ evidence.claimed_sha256 ++ ";anchor=" ++ cast candidate.occurrence in
+      Just (SourceBackedGoogleResult evidence.source_key evidence.source_generation
+        evidence.claimed_sha256 candidate.occurrence candidate.href title destination Nothing identity)
+
+finished : HtmlEvidence → Maybe AnchorCandidate → List GoogleResult → List GoogleResult
+finished evidence candidate results = case candidate_result evidence candidate of
+  Nothing ⇒ results
+  Just result ⇒ if any (\earlier ⇒ earlier.destination ≟ result.destination) results
+    then results else result :: results
+
+-- Fold the maintained recovered log; this is result semantics, not another
+-- HTML parser. Skip noncontent elements and browser/navigation controls.
+collect : HtmlEvidence → Number → Maybe Text → Maybe AnchorCandidate →
+  List GoogleResult → List DocumentEvent → List GoogleResult
+collect evidence position skipped candidate results [] = reverse (finished evidence candidate results)
+collect evidence position (Just skipped) candidate results (EndTag name :: rest) =
+  collect evidence (S position) (if name ≟ skipped then Nothing else Just skipped) candidate results rest
+collect evidence position (Just skipped) candidate results (_ :: rest) =
+  collect evidence (S position) (Just skipped) candidate results rest
+collect evidence position Nothing candidate results (StartTag name tag :: rest) =
+  if elem name ["script", "style", "template", "svg", "canvas", "nav", "header", "footer"]
+    then collect evidence (S position) (Just name) candidate results rest
+  else if name ≟ "a" then
+    let updated = finished evidence candidate results in
+    case attribute_value "href" tag of
+      Nothing ⇒ collect evidence (S position) Nothing Nothing updated rest
+      Just href ⇒ collect evidence (S position) Nothing
+        (Just (Candidate position href False [])) updated rest
+  else if name ≟ "h3" || attribute_value "role" tag ≟ Just "heading" then
+    collect evidence (S position) Nothing
+      (map (\value ⇒ { heading_seen := True } value) candidate) results rest
+  else collect evidence (S position) Nothing candidate results rest
+collect evidence position Nothing candidate results (EndTag "a" :: rest) =
+  collect evidence (S position) Nothing Nothing (finished evidence candidate results) rest
+collect evidence position Nothing candidate results (ImpliedEndTag "a" :: rest) =
+  collect evidence (S position) Nothing Nothing (finished evidence candidate results) rest
+collect evidence position Nothing candidate results (TextEvent text :: rest) =
+  collect evidence (S position) Nothing
+    (map (\value ⇒ { characters := reverse (unpack text) ++ value.characters } value) candidate) results rest
+collect evidence position Nothing candidate results (_ :: rest) =
+  collect evidence (S position) Nothing candidate results rest
+
+visible_text : InformationItem → Text
+visible_text (IB.Information.Heading title) = title
+visible_text (HeadingAt _ title) = title
+visible_text (IB.Information.TextBlock text) = text
+visible_text (IB.Information.Link text _) = text
+visible_text _ = ""
+
+prefix_characters : List Char → List Char → Bool
+prefix_characters [] _ = True
+prefix_characters (_ :: _) [] = False
+prefix_characters (wanted :: rest) (actual :: later) = wanted ≟ actual && prefix_characters rest later
+
+contains_characters : List Char → List Char → Bool
+contains_characters wanted [] = null wanted
+contains_characters wanted text@(_ :: rest) = prefix_characters wanted text || contains_characters wanted rest
+
+refusal_content : HtmlPrepaintResult → Bool
+refusal_content source =
+  let text = map lower_ascii (unpack (unwords (map visible_text (view_items source.information)))) in
+  any (\phrase ⇒ contains_characters (unpack phrase) text)
+    ["before you continue to google", "our systems have detected unusual traffic", "verify you are human", "verify you are a human", "not a robot"]
+
+export
+google_results_from_source : HtmlPrepaintResult → Either Text (Maybe GoogleResults)
+google_results_from_source source =
+  if not (is_google_search source.evidence.requested_url) then Right Nothing
+  else if document_log_source source.recovered /= source.evidence.source_key ||
+          source.evidence.claimed_sha256 /= source.evidence.reopened_sha256
+    then Left "Google result source identity or digest mismatch"
+  else if not (google_origin source.evidence.resolved_url)
+    then Left "Google search reached consent, verification or another origin; no public results were admitted"
+  else if refusal_content source then Left "Google returned a consent or verification page; no public results were admitted"
+  else do
+    query ← query_from_request source.evidence.requested_url
+    let results = collect source.evidence 0 Nothing Nothing [] (document_log_events source.recovered)
+    if null results then Left "Google returned no verified titled public results; this response may require JavaScript"
+    else if length results > 64 then Left "Google result budget exceeded"
+    else Right (Just (SourceBackedGoogleResults query source.evidence.requested_url source.evidence.resolved_url results))
+
+result_blocks : GoogleResult → List InformationBlock
+result_blocks result = case link_reference result.destination of
+  Nothing ⇒ []
+  Just link ⇒ [IB.Strand.Link result.title link, IB.Strand.TextBlock result.destination]
+
+-- Displayed URLs are decoded semantic derivatives, not claimed original body
+-- byte ranges. The original HtmlEvidence, recovery log and Arena stay intact.
+export
+google_result_projection : HtmlPrepaintResult → Either Text HtmlPrepaintResult
+google_result_projection source = do
+  maybe_results ← google_results_from_source source
+  case maybe_results of
+    Nothing ⇒ Right source
+    Just search ⇒ do
+      reference ← case nonempty_text (source.evidence.source_key ++ ";generation=" ++ source.evidence.source_generation ++
+          ";sha256=" ++ source.evidence.claimed_sha256 ++ ";derivative=google-results-v1") of
+        Nothing ⇒ Left "Google result source reference is empty"
+        Just value ⇒ Right value
+      let blocks = IB.Strand.Heading Heading1 search.original_query :: concatMap result_blocks search.results
+      let strand = { source := Source reference DerivedSource CompleteSource,
+          title := Just ("Google: " ++ search.original_query), blocks := blocks } source.strand
+      let revision = prepaint_from_strand first_revision CompleteRevision strand
+      case serialize_version1 [revision] of
+        Nothing ⇒ Left "Google result projection serialization refused"
+        Just wire ⇒ Right ({ strand := strand, revision := revision, wire := wire } source)

@@ -11,4 +11,5 @@
     <item type="id" name="back_button" />
     <item type="id" name="forward_button" />
     <item type="id" name="reader_title" />
+    <item type="id" name="search_button" />
 </resources>

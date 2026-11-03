@@ -148,6 +148,8 @@ forward_button : Int32
 forward_button = 2130903049
 reader_title : Int32
 reader_title = 2130903050
+search_button : Int32
+search_button = 2130903051
 
 read_view_text : ActivityReference → Int32 → IO Text
 read_view_text activity identity = do
@@ -411,7 +413,7 @@ reader_acquisition_ready activity observations html source_id generation planned
              else if saved /= 0 then "Document displayed; saving its last-good source index failed."
              else if not styled then "Static HTML loaded; native link/heading styling failed."
              else if is_google_search_address document.source_result.evidence.requested_url
-               then "Google response — partial static HTML. Results requiring scripts cannot be shown."
+               then "Google results — retained ICU response."
                else "Static HTML — scripts and forms are unavailable.")
           refusal ← pending_search_refusal activity
           case refusal of
@@ -547,6 +549,13 @@ receive_reader_action activity clicked = do
       then do
         text ← read_view_text activity reader_input
         navigate_to activity text
+      else if identity ≟ search_button
+        then do
+          text ← read_view_text activity reader_input
+          requested ← checked_query_address text
+          case requested of
+            Left reason ⇒ reader_acquisition_failed activity reason
+            Right address ⇒ navigate_to activity address
       else if identity ≟ permission_button
         then do
           _ ← primIO request_acquisition_permission

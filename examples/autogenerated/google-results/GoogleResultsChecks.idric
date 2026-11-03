@@ -1,0 +1,66 @@
+module GoogleResultsChecks
+
+import Data.Text
+import IB.HtmlPrepaint
+import IB.WebSearch.Results
+import IB.RecoveredInformation
+import System
+
+request : Text
+request = "https://google.com/search?q=music"
+
+digest : Text
+digest = "1111111111111111111111111111111111111111111111111111111111111111"
+
+-- These are explicit deterministic semantic fixtures, not observed network
+-- responses. Cryptographic readback and real results have independent gates.
+fixture : Text → Either Text HtmlPrepaintResult
+fixture html = convert_admitted_html
+  (HtmlSourceEvidence "fixture" "7" digest digest (cast (length (unpack html)))
+    (cast (length (unpack html))) request "https://www.google.com/search?q=music"
+    "text/html" "utf-8" "200" True True) html
+
+refuses : Text → Bool
+refuses html = case fixture html of
+  Left _ ⇒ False
+  Right source ⇒ case google_results_from_source source of
+    Left _ ⇒ True
+    Right _ ⇒ False
+
+check : Text → Bool → IO ()
+check title True = putStrLn ("PASS " ++ title)
+check title False = do
+  putStrLn ("FAIL " ++ title)
+  exitFailure
+
+main : IO ()
+main = do
+  let html = "<html><body><a href=\"/url?q=https%3A%2F%2Fen.wikipedia.org%2Fwiki%2FA%252FB&amp;source=web\"><h3>Music &amp; sound</h3></a></body></html>"
+  check "source-bound title and once-decoded public destination" (case fixture html of
+    Right source ⇒ case google_results_from_source source of
+      Right (Just search) ⇒ case search.results of
+        [result] ⇒ search.original_query ≟ "music" && result.title ≟ "Music & sound" &&
+          result.destination ≟ "https://en.wikipedia.org/wiki/A%2FB" && result.source_key ≟ "fixture" &&
+          result.source_generation ≟ "7" && result.source_sha256 ≟ digest && result.snippet ≟ Nothing
+        _ ⇒ False
+      _ ⇒ False
+    _ ⇒ False)
+  check "arbitrary anchors are not Google results"
+    (refuses "<html><body><a href=\"https://en.wikipedia.org/wiki/Music\">Music</a></body></html>")
+  check "retry headings are not public results"
+    (refuses "<html><body><a href=\"/httpservice/retry/enablejs\"><h3>Continue</h3></a></body></html>")
+  check "unsafe destinations are refused"
+    (refuses "<html><body><a href=\"javascript:alert(1)\"><h3>Music</h3></a></body></html>")
+  check "consent is not accepted alongside an external heading"
+    (refuses "<html><body>Before you continue to Google<a href=\"https://en.wikipedia.org/wiki/Music\"><h3>Music</h3></a></body></html>")
+  check "navigation controls are not results"
+    (refuses "<html><body><nav><a href=\"https://en.wikipedia.org/wiki/Music\"><h3>Music</h3></a></nav></body></html>")
+  check "changed source identity is refused" (case fixture html of
+    Right source ⇒ case google_results_from_source ({ recovered := DocumentLog "wrong-source" (document_log_events source.recovered) } source) of
+      Left _ ⇒ True
+      _ ⇒ False
+    _ ⇒ False)
+  check "encoded controls are refused" (case public_google_destination "https://www.google.com/search?q=music"
+      "/url?q=https%3A%2F%2Fen.wikipedia.org%2F%00bad" of
+    Left _ ⇒ True
+    _ ⇒ False)

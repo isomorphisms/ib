@@ -6,6 +6,7 @@ import IB.HtmlPrepaint
 import IB.Prepaint.Reflow
 import IB.Reflow
 import IB.SourceDecoding
+import IB.WebSearch.Results
 
 -- Only the trusted source owner may supply these observations. Incoming
 -- Intents, HTML and search text never enter this constructor path.
@@ -28,12 +29,14 @@ read_committed_evidence fields =
 -- This function performs neither network acquisition nor durable publication.
 admit_committed_document : HtmlEvidence → Text → Either Text HtmlPrepaintResult
 admit_committed_document evidence html =
-  if evidence.charset ≟ "utf-8" || evidence.charset ≟ "UTF-8"
-    then convert_admitted_html evidence html
-    else if not (windows_1252_label evidence.charset) then Left "unsupported-charset"
-    else do
-      octets ← source_octet_carrier html
-      convert_committed_html_octets evidence octets
+  do
+    admitted ← if evidence.charset ≟ "utf-8" || evidence.charset ≟ "UTF-8"
+      then convert_admitted_html evidence html
+      else if not (windows_1252_label evidence.charset) then Left "unsupported-charset"
+      else do
+        octets ← source_octet_carrier html
+        convert_committed_html_octets evidence octets
+    google_result_projection admitted
 
 export
 prepare_committed_document : HtmlEvidence → Text → ReflowRequirements → Text →
