@@ -1,0 +1,80 @@
+module GoogleLayoutChecks
+
+import Data.Text
+import IB.HtmlPrepaint
+import IB.Reader.Document
+import IB.Reader.Selection
+import IB.Reflow
+import IB.Reflow.SourceBreaks
+import IB.Prepaint.Reflow
+import System
+
+destination : Text
+destination = "https://github.com/barrettj12/chord-transposer?query=once%252Fencoded"
+
+html : Text
+html = "<html><a href=\"" ++ destination ++ "\"><h3>Chord transposition</h3></a></html>"
+
+digest : Text
+digest = "1111111111111111111111111111111111111111111111111111111111111111"
+
+check : Text → Bool → IO ()
+check label True = putStrLn ("PASS " ++ label)
+check label False = do
+  putStrLn ("FAIL " ++ label)
+  exitFailure
+
+main : IO ()
+main = do
+  let evidence = HtmlSourceEvidence "arena:fixture" "7" digest digest
+        (cast (length (unpack html))) (cast (length (unpack html)))
+        "https://google.com/search?q=chords" "https://www.google.com/search?q=chords"
+        "text/html" "utf-8" "200" True True
+  for_ [promptly, evenly] $ \mode ⇒
+    case prepare_committed_document_advances evidence html (Requirements 16 mode)
+      "independent-unit-advance-fixture" (\_ ⇒ 1) of
+      Left _ ⇒ check "Google native URL layout admission" False
+      Right document ⇒ do
+        check "complete result URL wraps within the native viewport"
+          (all (\block ⇒ all (\line ⇒ length (unpack line.visible_text) <= 16) block.text_lines)
+            document.revision_layout.block_plans)
+        case selection_projection document.revision_layout of
+          Left _ ⇒ check "source-faithful URL selection projection" False
+          Right projection ⇒ do
+            let expected = "chords\n\nChord transposition\n\n" ++ destination
+            check "URI line wrapping preserves exact source and once-encoded URL"
+              (projected_source projection ≟ expected &&
+               copy_source_selection (projected_source projection) (projected_display projection)
+                 (projected_coordinates projection) 0 (cast (length (unpack (projected_display projection)))) ≟ expected)
+  let ordinary = "https://example.org/%xy"
+  let ordinary_html = "<p>" ++ ordinary ++ "</p>"
+  let ordinary_evidence = HtmlSourceEvidence "arena:ordinary" "7" digest digest
+        (cast (length (unpack ordinary_html))) (cast (length (unpack ordinary_html)))
+        "https://example.org/" "https://example.org/" "text/html" "utf-8" "200" True True
+  check "malformed URL-shaped prose preserves ordinary document and exact copy"
+    (case prepare_committed_document_advances ordinary_evidence ordinary_html (Requirements 128 promptly)
+        "independent-unit-advance-fixture" (\_ ⇒ 1) of
+      Right document ⇒ case selection_projection document.revision_layout of
+        Right projection ⇒ projected_source projection ≟ ordinary
+        _ ⇒ False
+      _ ⇒ False)
+  let title = "TransposeChordhttps://transposechord.com/transpose-online"
+  let mixed = "<a href=\"https://transposechord.com/\"><h3>" ++ title ++ "</h3></a>"
+  let mixed_evidence = { claimed_bytes := cast (length (unpack mixed)),
+                         reopened_bytes := cast (length (unpack mixed)) } evidence
+  for_ [promptly, evenly] $ \mode ⇒
+    case prepare_committed_document_advances mixed_evidence mixed (Requirements 16 mode)
+        "independent-unit-advance-fixture" (\_ ⇒ 1) of
+      Left _ ⇒ check "mixed result title layout admission" False
+      Right document ⇒ do
+        check "overlong result title wraps without a whole-address assumption"
+          (all (\block ⇒ all (\line ⇒ length (unpack line.visible_text) <= 16) block.text_lines)
+            document.revision_layout.block_plans)
+        case selection_projection document.revision_layout of
+          Left _ ⇒ check "mixed title selection admission" False
+          Right projection ⇒ do
+            let expected = "chords\n\n" ++ title ++ "\n\nhttps://transposechord.com/"
+            check "emergency title wrapping preserves every source character"
+              (projected_source projection ≟ expected &&
+               copy_source_selection (projected_source projection) (projected_display projection)
+                 (projected_coordinates projection) 0 (cast (length (unpack (projected_display projection)))) ≟ expected)

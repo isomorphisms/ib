@@ -1,4 +1,3 @@
-android-prepaint/.gradle/
-android-prepaint/app/build/
-android-prepaint/dist/
-android-prepaint/local.properties
+.tools/
+build/
+android-native/dist/

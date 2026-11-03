@@ -1,0 +1,61 @@
+module SelectionProjection
+
+import Data.Text
+import IB.Strand
+import IB.Prepaint.Reflow
+import IB.Reader.Selection
+import IB.Reflow
+import IB.Reflow.Source
+import IB.Reflow.SourceBreaks
+import System
+
+-- This consumer observes the real maintained projection and reflow owners.
+-- It grants no HTML/network/source admission and creates no candidate DEX.
+sample : Text → Text → Int32 → Int32 → Either Text SelectionProjection
+sample source target width algorithm =
+  if width <= 0 || algorithm < 0 || algorithm > 1 then Left "Unsupported sample reflow"
+  else do
+    lines ← reflow_source (Requirements (cast width) (if algorithm ≟ 0 then promptly else evenly))
+      (length . unpack) source
+    let block = case link_reference target of
+          Nothing ⇒ IB.Strand.TextBlock source
+          Just destination ⇒ IB.Strand.Link source destination
+    selection_of_blocks [PreparedBlock 0 block (Just source) lines]
+
+%export "dex:selection_display"
+selection_display : Text → Int32 → Int32 → Text
+selection_display source width algorithm = case sample source "" width algorithm of
+  Left reason ⇒ "refused:" ++ reason
+  Right projection ⇒ projected_display projection
+
+%export "dex:selection_copy"
+selection_copy : Text → Int32 → Int32 → Int32 → Int32 → Text
+selection_copy source width algorithm first after = case sample source "" width algorithm of
+  Left reason ⇒ "refused:" ++ reason
+  Right projection ⇒ copy_source_selection (projected_source projection)
+    (projected_display projection) (projected_coordinates projection) first after
+
+%export "dex:selection_link"
+selection_link : Text → Text → Int32 → Int32 → Text
+selection_link source target width point = case sample source target width 0 of
+  Left reason ⇒ "refused:" ++ reason
+  Right projection ⇒ selection_link_at (projected_source projection)
+    (projected_display projection) (projected_coordinates projection) point
+
+%export "dex:copy_reader_selection"
+selection_wire_copy : Text → Text → Text → Int32 → Int32 → Text
+selection_wire_copy = copy_source_selection
+
+main : IO ()
+main = do
+  args ← getArgs
+  case args of
+    [_, "display", source, width, algorithm] ⇒
+      putStrLn (selection_display source (cast width) (cast algorithm))
+    [_, "copy", source, width, algorithm, first, after] ⇒
+      putStrLn (selection_copy source (cast width) (cast algorithm) (cast first) (cast after))
+    [_, "link", source, target, width, point] ⇒
+      putStrLn (selection_link source target (cast width) (cast point))
+    _ ⇒ do
+      putStrLn "usage: selection display SOURCE WIDTH ALGORITHM | copy SOURCE WIDTH ALGORITHM FIRST AFTER | link SOURCE TARGET WIDTH POINT"
+      exitFailure

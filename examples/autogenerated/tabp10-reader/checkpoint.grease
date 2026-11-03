@@ -1,0 +1,38 @@
+#!/usr/bin/env grease
+set -eu -o pipefail
+if (len(ARGV) !== 2) { echo 'usage: grease checkpoint.grease IB NEW_EVIDENCE' >&2; exit 2 }
+var repository = ARGV[0]
+var evidence = ARGV[1]
+if test -e "$evidence" { echo 'FAIL reused checkpoint' >&2; exit 2 }
+mkdir -p "$evidence/sources" "$evidence/replay" "$evidence/ick-host" "$evidence/android-ick"
+# Exact source snapshots are reproducible independently of a scratch checkout.
+# All Actions checkouts have persist-credentials:false. Archive tracked source
+# and Git identity separately; never collect runner credentials or environment.
+for owner in android-NDK Idric icu reader-acceptance appendfat Idric-Net OpenSSL catfood {
+  var source = "$repository/.tools/$owner"
+  git -C "$source" rev-parse HEAD > "$evidence/sources/$owner.commit"
+  git -C "$source" archive --format=tar.gz HEAD -o "$evidence/sources/$owner.source.tar.gz"
+  tar -czf "$evidence/sources/$owner.git.tar.gz" -C "$source" .git
+}
+git -C "$repository" rev-parse HEAD > "$evidence/sources/ib.commit"
+git -C "$repository" archive --format=tar.gz HEAD -o "$evidence/sources/ib.source.tar.gz"
+tar -czf "$evidence/sources/ib.git.tar.gz" -C "$repository" .git
+git -C "$repository/.tools/runtime/grease" rev-parse HEAD > "$evidence/sources/grease.commit"
+git -C "$repository/.tools/runtime/grease" archive --format=tar.gz HEAD -o "$evidence/sources/grease.source.tar.gz"
+tar -czf "$evidence/sources/grease.git.tar.gz" -C "$repository/.tools/runtime/grease" .git
+tar -czf "$evidence/replay/grease-host.tar.gz" -C "$repository/.tools/runtime" .build/grease
+# The launcher imports generated ASDL/native modules from the source working
+# tree; a tracked-only source archive cannot replay that bootstrap.
+tar -czf "$evidence/replay/grease-generated.tar.gz" --exclude=.git -C "$repository/.tools/runtime/grease/source" .
+cp "$evidence/../ib-reader/frontend-replay.tar.gz" "$evidence/replay/"
+cp "$evidence/../ib-reader/backend-replay.tar.gz" "$evidence/replay/"
+tar -czf "$evidence/ick-host/compiler.tar.gz" -C "$evidence/../ick-host-stage" .
+sha256sum "$evidence/ick-host/compiler.tar.gz" > "$evidence/ick-host/compiler.sha256"
+split -b 220m "$evidence/ick-host/compiler.tar.gz" "$evidence/ick-host/part-"
+test ! -e "$evidence/ick-host/part-ad"
+sha256sum "$evidence/ick-host/part-aa" "$evidence/ick-host/part-ab" "$evidence/ick-host/part-ac" > "$evidence/ick-host/parts.sha256"
+rm "$evidence/ick-host/compiler.tar.gz" # Only this operation's generated archive.
+for abi in x86_64 armeabi-v7a arm64-v8a {
+  tar -czf "$evidence/android-ick/$abi.tar.gz" -C "$evidence/../ib-worker-toolchains/ick/$abi" .
+}
+find "$evidence" -type f -name '*.tar.gz' -exec sha256sum '{}' ';' > "$evidence/checkpoint.sha256"

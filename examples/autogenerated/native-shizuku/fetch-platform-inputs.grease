@@ -1,0 +1,21 @@
+#!/usr/bin/env grease
+set -eu -o pipefail
+if (len(ARGV) !== 2) { echo 'usage: grease fetch-platform-inputs.grease SDK NEW_EVIDENCE' >&2; exit 2 }
+var sdk = ARGV[0]
+var evidence = ARGV[1]
+if (len(evidence) === 0 or evidence[0] !== '/' or sdk[0] !== '/') { exit 2 }
+if test -e "$evidence" { echo 'FAIL reused platform input evidence' >&2; exit 2 }
+mkdir -p "$evidence"
+curl -fsSL --retry 3 --max-time 90 \
+  https://raw.githubusercontent.com/isomorphismes/wegert/89dcfb840cec1a66ee04c7f7404954cbd6c09839/_/build/app/wegert-debug.keystore \
+  -o "$evidence/public-test-keystore"
+printf 'd83f7a36a205e49b4c755f37d27a0ded02779acc0da82a22e19d458dc6e5a89a  %s\n' "$evidence/public-test-keystore" | sha256sum -c -
+curl -fsSL --retry 3 --max-time 90 \
+  https://github.com/RikkaApps/Shizuku/releases/download/v13.6.0/shizuku-v13.6.0.r1086.2650830c-release.apk \
+  -o "$evidence/shizuku-official.apk"
+printf '6e273ab0e991c4e79bc8b1bbb9b9dd739ccac1a8712a541a214078886b7b790f  %s\n' "$evidence/shizuku-official.apk" | sha256sum -c -
+"$sdk/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$evidence/shizuku-official.apk" > "$evidence/shizuku-signer.txt"
+rg -x -F 'Signer #1 certificate SHA-256 digest: 268b5590e868fb08bae7e0ac413564cd1ff88f5ccff74af9dbd0dc918e30db30' "$evidence/shizuku-signer.txt"
+"$sdk/build-tools/35.0.0/aapt2" dump badging "$evidence/shizuku-official.apk" > "$evidence/shizuku-package.txt"
+rg -q -F "package: name='moe.shizuku.privileged.api' versionCode='1086'" "$evidence/shizuku-package.txt"
+printf 'Shizuku_source\t2650830c5b099ae0dd34fedf614d4f592ca05d65\nShizuku_API_source\ta27f6e4151ba7b39965ca47edb2bf0aeed7102e5\npublic_test_keystore\twegert/89dcfb840cec1a66ee04c7f7404954cbd6c09839\nphysical_TAB_P10\tNOT_RUN\n' > "$evidence/source-pins.tsv"

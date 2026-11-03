@@ -13,6 +13,20 @@ typedef struct {
     atomic_uint_fast64_t wanted_navigation_generation;
 } ib_arena_source_owner;
 
+/* Observations copied by the one maintained receipt parser after committed
+ * source checks. Original representation admission remains an observation,
+ * separate from the decoder-input contract. No Intent supplies this object. */
+typedef struct {
+    char source_key[IB_READER_REQUEST_ID_CAP + 7U];
+    uint64_t source_generation;
+    char requested_url[2049], resolved_url[2049];
+    char mime_type[64], charset[64], http_status[4];
+    char redirect_chain[8193];
+    /* Empty means absent in a retained legacy receipt, never inferred identity. */
+    char transfer_decoding[9];
+    int utf8_valid, navigation_admitted;
+} ib_arena_source_observations;
+
 /* The trusted application host passes its existing app-private Arena root
  * (e.g. Context.getFilesDir()/arena). This does not choose/create a store. */
 int ib_arena_source_owner_init(ib_arena_source_owner *owner,
@@ -33,6 +47,58 @@ int ib_arena_source_owner_open(ib_arena_source_owner *owner,
                                uint64_t navigation_generation,
                                ib_reader_source_ticket *ticket,
                                int *read_fd);
+
+/* Reopen an already committed source selected by trusted browser history.
+ * retained_source_generation is the immutable generation in that source's
+ * receipt; navigation_generation is the current disposable-reader request.
+ * Validate both independently. Never rewrite a source receipt to make Back,
+ * Forward or process recreation appear to be a new acquisition. The trusted
+ * application callback supplies the retained generation, not a Binder parcel
+ * or a renderer. The existing open entrypoint keeps its stricter initial-
+ * acquisition contract where both generations must coincide. */
+int ib_arena_source_owner_open_retained(ib_arena_source_owner *owner,
+                                       const char *request_id,
+                                       uint64_t retained_source_generation,
+                                       uint64_t navigation_generation,
+                                       ib_reader_source_ticket *ticket,
+                                       int *read_fd);
+
+int ib_arena_source_owner_open_observed(ib_arena_source_owner *owner,
+                                       const char *request_id,
+                                       uint64_t retained_source_generation,
+                                       uint64_t navigation_generation,
+                                       ib_reader_source_ticket *ticket,
+                                       ib_arena_source_observations *observations,
+                                       int *read_fd);
+
+/* Original-byte input to a checked decoder, not HTML reader admission.
+ * Validate the same response identity, generation, complete acquisition,
+ * canonical range and independently reopened digest. Preserve the original
+ * charset, status and admission observation even when the representation is
+ * unsupported. The checked reader must then admit the decoded representation;
+ * successfully opening this pipe alone never authorizes visible content.
+ * The older admitted-source APIs retain their strict UTF-8 contract. */
+int ib_arena_source_owner_open_decode_input(ib_arena_source_owner *owner,
+                                       const char *request_id,
+                                       uint64_t retained_source_generation,
+                                       uint64_t navigation_generation,
+                                       ib_reader_source_ticket *ticket,
+                                       ib_arena_source_observations *observations,
+                                       int *read_fd);
+
+/* Input for a separately admitted immutable representation, not HTTP reader
+ * admission. Its representation owner must verify its own typed receipt. The
+ * canonical range is independently reopened, bounded and hashed here, then
+ * copied into the same bounded read-only FIFO capability. ICU APIs above keep their exact
+ * existing receipt/status/MIME/charset gates and never dispatch through this
+ * entrypoint. No Binder transaction exposes arbitrary range parameters. */
+int ib_arena_source_owner_open_representation_range(ib_arena_source_owner *owner,
+                                       const char *request_id,
+                                       uint64_t navigation_generation,
+                                       uint64_t offset, uint32_t length,
+                                       const char expected_sha256[65],
+                                       ib_reader_source_ticket *ticket,
+                                       int *read_fd);
 
 /* Adapter for ib_arena_pfd_provider.open_verified_fd. */
 int ib_arena_source_owner_open_binder(void *owner, const char *request_id,

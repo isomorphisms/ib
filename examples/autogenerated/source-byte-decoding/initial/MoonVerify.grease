@@ -1,0 +1,91 @@
+#!/usr/bin/env grease
+# Independent source-decoder rebuild and publication/admission controls.
+umask 077
+if (len(ARGV) !== 6) {
+  write -- 'usage: moon-verify.grease IDRIC GREASE GOOGLE_BODY GOOGLE_METADATA PRIMARY_INDEX NEW_EVIDENCE' >&2
+  exit 2
+}
+var compiler = ARGV[0]
+var grease = ARGV[1]
+var google = ARGV[2]
+var google_metadata = ARGV[3]
+var primary_index = ARGV[4]
+var evidence = ARGV[5]
+for path in (ARGV) {
+  if (not path.startsWith('/')) { write -- 'FAIL absolute input required' >&2; exit 2 }
+}
+if test -e $evidence { write -- 'FAIL refusing existing evidence' >&2; exit 2 }
+var example = $(dirname -- $0)
+var root = $(realpath -- "$example/../../..")
+var source = "$evidence/source"
+mkdir -p $source
+cp -R "$root/src/." "$source/"
+cp "$example/SourceDecodingChecks.idric" "$source/"
+sha256sum "$root/src/IB/SourceDecoding.idric" "$root/src/SourceDecodingCommand.idric" $primary_index > "$evidence/inputs.sha256"
+git -C $root rev-parse HEAD > "$evidence/source-ref.txt"
+var previous = $(pwd)
+cd $source
+$compiler SourceDecodingCommand.idric -o source-decoder > "$evidence/command-compile.log" 2>&1
+$compiler SourceDecodingChecks.idric -o source-decoding-checks > "$evidence/checks-compile.log" 2>&1
+cd $previous
+if rg -n '^[[:space:]]*(Error:|INTERNAL ERROR)' "$evidence/command-compile.log" "$evidence/checks-compile.log" {
+  write -- 'FAIL fresh compiler diagnostic' >&2
+  exit 1
+}
+var decoder = "$source/build/exec/source-decoder"
+var checks = "$source/build/exec/source-decoding-checks"
+sha256sum "${decoder}_app/source-decoder.so" "${checks}_app/source-decoding-checks.so" > "$evidence/programs.sha256"
+$checks $primary_index "$evidence/all.raw" "$evidence/expected.utf8" > "$evidence/primary-index.log"
+env GREASE=$grease $grease "$root/tests/source-decoding.grease" $checks $decoder $google $google_metadata > "$evidence/process.log" 2>&1
+env IDRIC=$compiler $grease "$root/tests/source-decoding-mutations.grease" > "$evidence/mutants.log" 2>&1
+
+var raw = "$evidence/all.raw"
+var descriptor = "$evidence/source.tsv"
+var hash = $(sha256sum $raw | cut -d ' ' -f 1)
+printf 'source_key\tmoon:source-generation\nsource_generation\t42-retained\nsha256\t%s\nbyte_count\t256\ncharset\tISO-8859-1\nnavigation_admitted\tYES\nredirect_count\t1\nopaque_origin\tretained provenance with spaces\n' $hash > $descriptor
+$grease "$root/bin/ib_decode_html_bytes.grease" $decoder $descriptor $raw "$evidence/yes-derived" > "$evidence/yes-result.log" 2>&1
+cmp $descriptor "$evidence/yes-derived/source.tsv"
+cmp "$evidence/expected.utf8" "$evidence/yes-derived/decoded.utf8"
+grep -Fx b'original_navigation_admitted\tYES' "$evidence/yes-derived/decode.tsv"
+grep -Fx b'reader_admission\tNOT_GRANTED' "$evidence/yes-derived/decode.tsv"
+grep -Fx b'opaque_origin\tretained provenance with spaces' "$evidence/yes-derived/source.tsv"
+printf '\033[32mPASS\033[0m source navigation YES and opaque provenance preserved without reader admission\n'
+
+cp $descriptor "$evidence/duplicate.tsv"
+printf 'charset\tISO-8859-1\n' >> "$evidence/duplicate.tsv"
+try { $grease "$root/bin/ib_decode_html_bytes.grease" $decoder "$evidence/duplicate.tsv" $raw "$evidence/duplicate-derived" > "$evidence/duplicate.log" 2>&1 }
+if (not _error.code) { write -- 'FAIL duplicate descriptor accepted' >&2; exit 1 }
+test ! -e "$evidence/duplicate-derived"
+grep -F 'malformed or incomplete source descriptor' "$evidence/duplicate.log"
+sed '/^source_generation\t/d' $descriptor > "$evidence/missing.tsv"
+try { $grease "$root/bin/ib_decode_html_bytes.grease" $decoder "$evidence/missing.tsv" $raw "$evidence/missing-derived" > "$evidence/missing.log" 2>&1 }
+if (not _error.code) { write -- 'FAIL missing source generation accepted' >&2; exit 1 }
+test ! -e "$evidence/missing-derived"
+grep -F 'malformed or incomplete source descriptor' "$evidence/missing.log"
+printf '\033[32mPASS\033[0m malformed descriptor refusals have no derivative\n'
+
+# A deterministic process fixture creates the winner after initial precheck.
+printf '#!%s\n' $grease > "$evidence/competing-producer"
+cat >> "$evidence/competing-producer" <<'EOF'
+var decoder = ENV.MOON_REAL_DECODER
+$decoder @ARGV
+var destination = ENV.MOON_COMPETING_DESTINATION
+mkdir $destination
+printf 'retained winner\n' > "$destination/winner"
+EOF
+chmod +x "$evidence/competing-producer"
+try {
+  env MOON_REAL_DECODER=$decoder MOON_COMPETING_DESTINATION="$evidence/competing-derived" \
+    $grease "$root/bin/ib_decode_html_bytes.grease" "$evidence/competing-producer" $descriptor $raw "$evidence/competing-derived" > "$evidence/competing.log" 2>&1
+}
+if (not _error.code) { write -- 'FAIL competing winner was reported as our publication' >&2; exit 1 }
+grep -F 'derivative publication conflicted' "$evidence/competing.log"
+test $(cat "$evidence/competing-derived/winner") = 'retained winner'
+test ! -e "$evidence/competing-derived/source.tsv"
+test ! -e "$evidence/competing-derived/decode.tsv"
+var leftovers = $(find $evidence -maxdepth 1 -name '.ib-decode.*' -print)
+if (leftovers !== '') { write -- 'FAIL discarded staging directory survived' >&2; exit 1 }
+cmp $descriptor "$evidence/yes-derived/source.tsv"
+cmp "$evidence/expected.utf8" "$evidence/yes-derived/decoded.utf8"
+printf '\033[32mPASS\033[0m competing winner and previous derivative survive; losing stage removed\n'
+printf 'fresh_Idric_build\tPASS\nprimary_index_all256\tPASS\nprovided_process_controls\tPASS\ncompiled_mutants_rejected\tPASS\noriginal_navigation_YES\tPRESERVED\nopaque_provenance\tPRESERVED\nreader_admission\tNOT_GRANTED\nmalformed_descriptor\tREFUSED\ncompeting_winner\tPRESERVED\nlosing_stage\tREMOVED\nART\tNOT_RUN\njoined_Prepaint\tNOT_RUN\nphysical_device\tNOT_RUN\n' > "$evidence/result.tsv"

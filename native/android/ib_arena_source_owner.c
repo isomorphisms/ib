@@ -1,6 +1,7 @@
 #define _GNU_SOURCE
 #define _FILE_OFFSET_BITS 64
 #include "ib_arena_source_owner.h"
+#include "ib_redirect_observations.h"
 
 #include <errno.h>
 #include <fcntl.h>
@@ -15,20 +16,23 @@
 #include <string.h>
 #include <sys/file.h>
 #include <sys/stat.h>
+#include <sys/syscall.h>
 #include <sys/types.h>
 #include <time.h>
 #include <unistd.h>
 
 /* ICU #35/IB #152 v2 receipts carry both committed byte provenance and
  * explicit HTML admission. No v1 UNOBSERVED receipt can be delivered to
- * a visible reader. Source generation must match the requested navigation. */
+ * a visible reader. Retained source and current navigation generations are
+ * checked independently; neither field is rewritten during history reads. */
 enum receipt_key {
     RK_SCHEMA, RK_REQUEST, RK_SOURCE_KEY, RK_SOURCE_GENERATION,
     RK_REQUESTED_URL, RK_RESOLVED_URL, RK_STATUS, RK_MIME, RK_CHARSET,
     RK_CONTENT_ENCODING, RK_UTF8, RK_REDIRECT_COUNT,
     RK_DECLARED_LENGTH, RK_RECEIVED_LENGTH, RK_TRANSPORT,
     RK_ARENA, RK_OFFSET, RK_END, RK_LENGTH, RK_SHA256,
-    RK_REOPEN, RK_ACQUISITION, RK_NAVIGATION, RK_COUNT
+    RK_REOPEN, RK_ACQUISITION, RK_NAVIGATION, RK_REDIRECT_CHAIN,
+    RK_TRANSFER_DECODING, RK_COUNT
 };
 static const char *const receipt_names[RK_COUNT] = {
     "schema", "request_id", "source_key", "source_generation",
@@ -37,9 +41,9 @@ static const char *const receipt_names[RK_COUNT] = {
     "declared_length", "received_length", "transport",
     "arena_name", "arena_offset", "arena_end", "byte_count",
     "sha256", "reopen_check", "acquisition_complete",
-    "navigation_admitted"
+    "navigation_admitted", "redirect_chain", "transfer_decoding"
 };
-#define RECEIPT_MAX_BYTES 8192U
+#define RECEIPT_MAX_BYTES 16384U
 #define SOURCE_WRITER_DEADLINE_MS 5000
 #define SOURCE_MAX_CONCURRENT_WRITERS 2U
 static atomic_uint source_writers = 0;
@@ -97,9 +101,20 @@ static int allowed_url(const char *value) {
     return 1;
 }
 
+static int bounded_observation(const char *value, size_t capacity) {
+    size_t amount = strlen(value);
+    if (!amount || amount >= capacity) return 0;
+    for (size_t i = 0; i < amount; ++i)
+        if ((unsigned char)value[i] <= 32U || (unsigned char)value[i] >= 127U)
+            return 0;
+    return 1;
+}
+
 static int parse_receipt(char *text, size_t size, const char *request_id,
                          uint64_t wanted_generation, uint64_t *offset,
-                         uint32_t *length, char sha256[65]) {
+                         uint32_t *length, char sha256[65],
+                         ib_arena_source_observations *observations,
+                         int decode_input) {
     char *fields[RK_COUNT] = {0};
     size_t found = 0;
     char *position = text, *end = text + size;
@@ -133,22 +148,46 @@ static int parse_receipt(char *text, size_t size, const char *request_id,
 
     /* A body-only v1 receipt is not a proof of response identity/charset,
      * and cannot authorize reader publication even with a valid byte hash. */
-    if (found != RK_COUNT ||
+    for (size_t i = 0; i < RK_REDIRECT_CHAIN; ++i)
+        if (!fields[i]) return -1;
+    if (found != (size_t)RK_REDIRECT_CHAIN + (fields[RK_REDIRECT_CHAIN] != NULL) +
+            (fields[RK_TRANSFER_DECODING] != NULL) ||
         strcmp(fields[RK_SCHEMA], "ib-icu-arena-v2") != 0 ||
         strcmp(fields[RK_REQUEST], request_id) != 0 ||
         strcmp(fields[RK_TRANSPORT], "icu-app-process-via-binder-shizuku") != 0 ||
         strcmp(fields[RK_ARENA], "responses.arena") != 0 ||
         strcmp(fields[RK_REOPEN], "MATCH") != 0 ||
         strcmp(fields[RK_ACQUISITION], "YES") != 0 ||
-        strcmp(fields[RK_NAVIGATION], "YES") != 0 ||
-        strcmp(fields[RK_STATUS], "200") != 0 ||
-        strcmp(fields[RK_MIME], "text/html") != 0 ||
-        strcmp(fields[RK_CHARSET], "utf-8") != 0 ||
+        (strcmp(fields[RK_NAVIGATION], "YES") != 0 &&
+         strcmp(fields[RK_NAVIGATION], "NO") != 0) ||
         strcmp(fields[RK_CONTENT_ENCODING], "identity") != 0 ||
-        strcmp(fields[RK_UTF8], "valid") != 0 ||
+        (strcmp(fields[RK_UTF8], "valid") != 0 &&
+         strcmp(fields[RK_UTF8], "invalid") != 0) ||
         !allowed_url(fields[RK_REQUESTED_URL]) ||
         !allowed_url(fields[RK_RESOLVED_URL]))
         return -1;
+
+    if (fields[RK_TRANSFER_DECODING] &&
+        strcmp(fields[RK_TRANSFER_DECODING], "identity") != 0 &&
+        strcmp(fields[RK_TRANSFER_DECODING], "chunked") != 0) return -1;
+
+    /* The raw snapshot has no representation authority. Reject malformed or
+     * unbounded metadata before copying it; leave encoding/MIME/status policy
+     * to the checked decoder. Existing readers still require original UTF-8
+     * admission and cannot silently acquire this broader input contract. */
+    if (strlen(fields[RK_STATUS]) != 3U ||
+        fields[RK_STATUS][0] < '1' || fields[RK_STATUS][0] > '5' ||
+        fields[RK_STATUS][1] < '0' || fields[RK_STATUS][1] > '9' ||
+        fields[RK_STATUS][2] < '0' || fields[RK_STATUS][2] > '9' ||
+        !bounded_observation(fields[RK_MIME], 64U) ||
+        !bounded_observation(fields[RK_CHARSET], 64U))
+        return -1;
+    if (!decode_input &&
+        (strcmp(fields[RK_NAVIGATION], "YES") != 0 ||
+         strcmp(fields[RK_STATUS], "200") != 0 ||
+         strcmp(fields[RK_MIME], "text/html") != 0 ||
+         strcmp(fields[RK_CHARSET], "utf-8") != 0 ||
+         strcmp(fields[RK_UTF8], "valid") != 0)) return -1;
 
     char expected_key[IB_READER_REQUEST_ID_CAP + 7U];
     int printed = snprintf(expected_key, sizeof(expected_key),
@@ -162,6 +201,16 @@ static int parse_receipt(char *text, size_t size, const char *request_id,
         generation == 0 || generation != wanted_generation ||
         parse_uint(fields[RK_REDIRECT_COUNT], &redirects) != 0 ||
         redirects > 8U)
+        return -1;
+    /* Preserve already retained v2 records. When a new response-owner chain
+     * is present it is mandatory evidence, never an ignored extension. */
+    if (fields[RK_REDIRECT_CHAIN] &&
+        !ib_redirect_chain_valid(fields[RK_REDIRECT_CHAIN], fields[RK_REQUESTED_URL],
+                                 fields[RK_RESOLVED_URL], (unsigned)redirects))
+        return -1;
+    if (decode_input && strcmp(fields[RK_NAVIGATION], "NO") == 0 &&
+        !fields[RK_REDIRECT_CHAIN] &&
+        (redirects != 0 || strcmp(fields[RK_REQUESTED_URL], fields[RK_RESOLVED_URL]) != 0))
         return -1;
 
     uint64_t begin = 0, finish = 0, amount = 0, received = 0;
@@ -189,12 +238,34 @@ static int parse_receipt(char *text, size_t size, const char *request_id,
     *offset = begin;
     *length = (uint32_t)amount;
     memcpy(sha256, hash, 65U);
+    if (observations) {
+        memset(observations, 0, sizeof(*observations));
+        observations->source_generation = generation;
+        observations->utf8_valid = strcmp(fields[RK_UTF8], "valid") == 0;
+        observations->navigation_admitted = strcmp(fields[RK_NAVIGATION], "YES") == 0;
+        memcpy(observations->source_key, expected_key, strlen(expected_key) + 1U);
+        memcpy(observations->requested_url, fields[RK_REQUESTED_URL], strlen(fields[RK_REQUESTED_URL]) + 1U);
+        memcpy(observations->resolved_url, fields[RK_RESOLVED_URL], strlen(fields[RK_RESOLVED_URL]) + 1U);
+        memcpy(observations->mime_type, fields[RK_MIME], strlen(fields[RK_MIME]) + 1U);
+        memcpy(observations->charset, fields[RK_CHARSET], strlen(fields[RK_CHARSET]) + 1U);
+        memcpy(observations->http_status, fields[RK_STATUS], strlen(fields[RK_STATUS]) + 1U);
+        if (fields[RK_TRANSFER_DECODING])
+            memcpy(observations->transfer_decoding, fields[RK_TRANSFER_DECODING],
+                   strlen(fields[RK_TRANSFER_DECODING]) + 1U);
+        if (fields[RK_REDIRECT_CHAIN]) {
+            size_t chain_bytes = strlen(fields[RK_REDIRECT_CHAIN]);
+            if (chain_bytes >= sizeof(observations->redirect_chain)) return -1;
+            memcpy(observations->redirect_chain, fields[RK_REDIRECT_CHAIN], chain_bytes + 1U);
+        }
+    }
     return 0;
 }
 
 static int read_manifest(int root_fd, const char *request_id,
                          uint64_t navigation_generation, uint64_t *offset,
-                         uint32_t *length, char sha256[65]) {
+                         uint32_t *length, char sha256[65],
+                         ib_arena_source_observations *observations,
+                         int decode_input) {
     int dir = -1, manifest = -1, result = -1;
     char filename[IB_READER_REQUEST_ID_CAP + 5U];
     struct stat info;
@@ -220,7 +291,7 @@ static int read_manifest(int root_fd, const char *request_id,
     }
     content[size] = '\0';
     result = parse_receipt(content, size, request_id, navigation_generation,
-                           offset, length, sha256);
+                           offset, length, sha256, observations, decode_input);
 done:
     if (manifest >= 0) close(manifest);
     if (dir >= 0) close(dir);
@@ -326,14 +397,78 @@ void ib_arena_source_owner_want(ib_arena_source_owner *owner,
                      navigation_generation);
 }
 
-int ib_arena_source_owner_open(ib_arena_source_owner *owner,
-                               const char *request_id,
-                               uint64_t navigation_generation,
-                               ib_reader_source_ticket *ticket,
-                               int *read_fd) {
+int ib_arena_source_owner_open_representation_range(ib_arena_source_owner *owner,
+                                       const char *request_id,
+                                       uint64_t navigation_generation,
+                                       uint64_t offset, uint32_t length,
+                                       const char expected_sha256[65],
+                                       ib_reader_source_ticket *ticket,
+                                       int *read_fd) {
+    if (read_fd) *read_fd = -1;
+    if (!owner || !ticket || !read_fd || !safe_request_id(request_id) ||
+        !navigation_generation || !length || length > IB_READER_SOURCE_MAX_BYTES ||
+        !expected_sha256 || strnlen(expected_sha256, 65U) != 64U ||
+        navigation_generation != atomic_load(&owner->wanted_navigation_generation)) return -1;
+    int root = -1, descriptor[2] = {-1, -1}, result = -1;
+    unsigned char *bytes = NULL;
+    struct stat info;
+    root = open(owner->private_root, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
+    if (root < 0 || fstat(root, &info) != 0 || !S_ISDIR(info.st_mode) ||
+        info.st_uid != geteuid() || (info.st_mode & 077U) != 0) goto done;
+    bytes = malloc(length);
+    if (!bytes || read_committed_bytes(root, offset, length, bytes) != 0) goto done;
+    char observed[65];
+    ib_reader_sha256_hex(bytes, length, observed);
+    if (strcmp(expected_sha256, observed) != 0 || navigation_generation !=
+        atomic_load(&owner->wanted_navigation_generation)) goto done;
+    /* Preserve the reader's finite, read-only FIFO contract. A sealed memfd
+     * would be a different capability and is deliberately not admitted. */
+    if (atomic_fetch_add(&source_writers, 1U) >= SOURCE_MAX_CONCURRENT_WRITERS) {
+        atomic_fetch_sub(&source_writers, 1U); goto done;
+    }
+    if (pipe2(descriptor, O_CLOEXEC | O_NONBLOCK) != 0) {
+        atomic_fetch_sub(&source_writers, 1U); goto done;
+    }
+    int flags = fcntl(descriptor[0], F_GETFL);
+    if (flags < 0 || fcntl(descriptor[0], F_SETFL, flags & ~O_NONBLOCK) != 0) {
+        atomic_fetch_sub(&source_writers, 1U); goto done;
+    }
+    source_writer *writer = calloc(1, sizeof(*writer));
+    if (!writer) { atomic_fetch_sub(&source_writers, 1U); goto done; }
+    writer->bytes = bytes; writer->length = length; writer->writer_fd = descriptor[1];
+    pthread_t thread;
+    if (pthread_create(&thread, NULL, write_source, writer) != 0) {
+        free(writer); atomic_fetch_sub(&source_writers, 1U); goto done;
+    }
+    (void)pthread_detach(thread);
+    bytes = NULL; descriptor[1] = -1;
+    memset(ticket, 0, sizeof(*ticket));
+    memcpy(ticket->request_id, request_id, strlen(request_id) + 1U);
+    ticket->navigation_generation = navigation_generation;
+    ticket->byte_count = length;
+    memcpy(ticket->sha256_hex, observed, sizeof(observed));
+    *read_fd = descriptor[0];
+    descriptor[0] = -1;
+    result = 0;
+done:
+    if (descriptor[0] >= 0) close(descriptor[0]);
+    if (descriptor[1] >= 0) close(descriptor[1]);
+    if (root >= 0) close(root);
+    free(bytes);
+    return result;
+}
+
+static int open_source_snapshot(ib_arena_source_owner *owner,
+                                       const char *request_id,
+                                       uint64_t retained_source_generation,
+                                       uint64_t navigation_generation,
+                                       ib_reader_source_ticket *ticket,
+                                       ib_arena_source_observations *observations,
+                                       int *read_fd, int decode_input) {
+    if (observations) memset(observations, 0, sizeof(*observations));
     if (read_fd) *read_fd = -1;
     if (!owner || !read_fd || !safe_request_id(request_id) ||
-        navigation_generation == 0 ||
+        retained_source_generation == 0 || navigation_generation == 0 ||
         navigation_generation !=
             atomic_load(&owner->wanted_navigation_generation))
         return -1;
@@ -352,8 +487,8 @@ int ib_arena_source_owner_open(ib_arena_source_owner *owner,
     if (root < 0 || fstat(root, &info) != 0 ||
         !S_ISDIR(info.st_mode) || info.st_uid != geteuid() ||
         (info.st_mode & 077U) != 0) goto done;
-    if (read_manifest(root, request_id, navigation_generation,
-                      &offset, &length, expected) != 0)
+    if (read_manifest(root, request_id, retained_source_generation,
+                      &offset, &length, expected, observations, decode_input) != 0)
         goto done;
     bytes = malloc(length);
     if (!bytes || read_committed_bytes(root, offset, length, bytes) != 0)
@@ -414,7 +549,50 @@ done:
     if (descriptor[1] >= 0) close(descriptor[1]);
     if (root >= 0) close(root);
     free(bytes);
+    if (result != 0 && observations) memset(observations, 0, sizeof(*observations));
     return result;
+}
+
+int ib_arena_source_owner_open_observed(ib_arena_source_owner *owner,
+                                       const char *request_id,
+                                       uint64_t retained_source_generation,
+                                       uint64_t navigation_generation,
+                                       ib_reader_source_ticket *ticket,
+                                       ib_arena_source_observations *observations,
+                                       int *read_fd) {
+    return open_source_snapshot(owner, request_id, retained_source_generation,
+        navigation_generation, ticket, observations, read_fd, 0);
+}
+
+int ib_arena_source_owner_open_decode_input(ib_arena_source_owner *owner,
+                                       const char *request_id,
+                                       uint64_t retained_source_generation,
+                                       uint64_t navigation_generation,
+                                       ib_reader_source_ticket *ticket,
+                                       ib_arena_source_observations *observations,
+                                       int *read_fd) {
+    if (!observations) { if (read_fd) *read_fd = -1; return -1; }
+    return open_source_snapshot(owner, request_id, retained_source_generation,
+        navigation_generation, ticket, observations, read_fd, 1);
+}
+
+int ib_arena_source_owner_open_retained(ib_arena_source_owner *owner,
+                                       const char *request_id,
+                                       uint64_t retained_source_generation,
+                                       uint64_t navigation_generation,
+                                       ib_reader_source_ticket *ticket,
+                                       int *read_fd) {
+    return ib_arena_source_owner_open_observed(owner, request_id,
+        retained_source_generation, navigation_generation, ticket, NULL, read_fd);
+}
+
+int ib_arena_source_owner_open(ib_arena_source_owner *owner,
+                               const char *request_id,
+                               uint64_t navigation_generation,
+                               ib_reader_source_ticket *ticket,
+                               int *read_fd) {
+    return ib_arena_source_owner_open_retained(owner, request_id,
+        navigation_generation, navigation_generation, ticket, read_fd);
 }
 
 int ib_arena_source_owner_open_binder(void *owner, const char *request_id,

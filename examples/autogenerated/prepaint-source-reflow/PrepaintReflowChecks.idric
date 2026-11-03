@@ -1,0 +1,125 @@
+module PrepaintReflowChecks
+
+import Data.Text
+import Data.Maybe
+import IB.Strand
+import IB.Prepaint
+import IB.Prepaint.Version1
+import IB.HtmlPrepaint
+import IB.Prepaint.Reflow
+import IB.Reflow
+import IB.Reflow.SourceBreaks
+import System
+
+codepoint_width : Text → Number
+codepoint_width text = length (unpack text)
+
+double_width : Text → Number
+double_width text = 2 × codepoint_width text
+
+visible_lines : List SourceLine → List Text
+visible_lines [] = []
+visible_lines (line :: rest) = line.visible_text :: visible_lines rest
+
+reconstruct : Text → List SourceLine → Text
+reconstruct source [] = ""
+reconstruct source (line :: rest) =
+  source_for_line source line ++ reconstruct source rest
+
+all_blocks_reconstruct : List BlockReflow → Bool
+all_blocks_reconstruct [] = True
+all_blocks_reconstruct (plan :: rest) =
+  (case plan.decoded_text of
+    Nothing ⇒ null plan.text_lines
+    Just text ⇒ reconstruct text plan.text_lines ≟ text) &&
+  all_blocks_reconstruct rest
+
+positions_match : Number → List BlockReflow → Bool
+positions_match position [] = True
+positions_match position (plan :: rest) =
+  plan.block_position ≟ position && positions_match (S position) rest
+
+same_original_blocks : List InformationBlock → List BlockReflow → Bool
+same_original_blocks [] [] = True
+same_original_blocks (block :: rest) (plan :: plans) =
+  same_block block plan.original_block && same_original_blocks rest plans
+  where
+    same_block : InformationBlock → InformationBlock → Bool
+    same_block (Heading left_level left) (Heading right_level right) =
+      heading_level_number left_level ≟ heading_level_number right_level && left ≟ right
+    same_block (TextBlock left) (TextBlock right) = left ≟ right
+    same_block (Link left left_ref) (Link right right_ref) =
+      left ≟ right && link_reference_value left_ref ≟ link_reference_value right_ref
+    same_block (TableRow left) (TableRow right) =
+      table_row_cells left ≟ table_row_cells right
+    same_block _ _ = False
+same_original_blocks _ _ = False
+
+source_identity : PrepaintRevision → Text
+source_identity revision = nonempty_text_value revision.source.reference
+
+cases : HtmlPrepaintResult → Bool
+cases original =
+  case (reflow_html_prepaint (Requirements 4 promptly) "codepoints-v1" codepoint_width original,
+        reflow_html_prepaint (Requirements 4 promptly) "double-codepoints-v1" double_width original) of
+    (Right result, Right wider) ⇒
+      let layout = result.revision_layout in
+      let wider_layout = wider.revision_layout in
+      let retained = layout.source_revision in
+      let same_source = source_identity retained ≟ source_identity original.revision &&
+                        source_identity retained ≟ "arena-source;generation=generation-7;sha256=" ++
+                          original.evidence.claimed_sha256 in
+      let same_revision = revision_sequence_value retained.sequence ≟
+                          revision_sequence_value original.revision.sequence in
+      let same_wire = serialize_version1 [retained] ≟ Just original.wire in
+      let source_sidecar = result.source_result.evidence.source_generation ≟ "generation-7" &&
+                           result.source_result.evidence.claimed_sha256 ≟ original.evidence.claimed_sha256 in
+      let same_blocks = same_original_blocks original.revision.blocks layout.block_plans in
+      let widths = case (layout.block_plans, wider_layout.block_plans) of
+            (heading :: paragraph :: link :: row :: [], wide_heading :: _) ⇒
+              visible_lines heading.text_lines ≟ ["漢字漢字"] &&
+              visible_lines wide_heading.text_lines ≟ ["漢字", "漢字"] &&
+              visible_lines paragraph.text_lines ≟ ["red", "blue"] &&
+              visible_lines link.text_lines ≟ ["next"] &&
+              isNothing row.decoded_text && null row.text_lines
+            _ ⇒ False in
+      same_source && same_revision && same_wire && source_sidecar && same_blocks && widths &&
+      positions_match 0 layout.block_plans && all_blocks_reconstruct layout.block_plans &&
+      layout.measurement_identity ≟ "codepoints-v1" &&
+      wider_layout.measurement_identity ≟ "double-codepoints-v1"
+    _ ⇒ False
+
+refused : Either Text PrepaintLayout → Bool
+refused (Left _) = True
+refused _ = False
+
+refusal_cases : PrepaintRevision → Bool
+refusal_cases revision =
+  refused (reflow_prepaint (Requirements 0 promptly) "metric" codepoint_width revision) &&
+  refused (reflow_prepaint (Requirements 4 promptly) " " codepoint_width revision) &&
+  refused (reflow_prepaint (Requirements 4 streamingly) "metric" codepoint_width revision) &&
+  refused (reflow_prepaint (Requirements 4 typographically) "metric" codepoint_width revision)
+
+nontext_refusal_cases : PrepaintRevision → Bool
+nontext_refusal_cases revision =
+  let empty_revision = record { blocks = [] } revision in
+  refused (reflow_prepaint (Requirements 4 streamingly) "metric" codepoint_width empty_revision) &&
+  refused (reflow_prepaint (Requirements 4 typographically) "metric" codepoint_width empty_revision) &&
+  refused (reflow_prepaint (Requirements 0 promptly) "metric" codepoint_width empty_revision)
+
+main : IO ()
+main = do
+  let digest = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  let evidence = HtmlSourceEvidence "arena-source" "generation-7" digest digest
+        123 123 "https://example.test/request" "https://example.test/resolved"
+        "text/html" "utf-8" "200" True True
+  let html = "<h2>漢字漢字</h2><p>red blue</p><a href='/next'>next</a><table><tr><td>left</td><td>right</td></tr></table>"
+  case convert_admitted_html evidence html of
+    Left problem ⇒ do
+      putStrLn ("prepaint-reflow-conversion=" ++ problem)
+      exitFailure
+    Right result ⇒ do
+      let passed = cases result && refusal_cases result.revision &&
+                   nontext_refusal_cases result.revision
+      putStrLn ("prepaint-source-reflow-cases=" ++ show passed)
+      if passed then pure () else exitFailure

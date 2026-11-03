@@ -1,0 +1,736 @@
+module NativeReader
+
+import Data.Text
+import Data.List
+import Data.List1
+import IB.Reader.Document
+import IB.Reader.Navigation
+import IB.Reader.Selection
+import IB.HtmlPrepaint
+import IB.HtmlAnchors
+import IB.Prepaint.Reflow
+import IB.Prepaint
+import IB.Reflow
+import IB.Reflow.SourceBreaks
+import IB.WebSearch
+import IB.WebSearch.Results
+
+-- These domains belong to the Android adapter; none represents a browser task.
+data ActivityReference : Type where [external]
+data IntentReference : Type where [external]
+data ViewReference : Type where [external]
+data TextViewReference : Type where [external]
+data CharacterSequenceReference : Type where [external]
+data MetricsReference : Type where [external]
+data SavedStateReference : Type where [external]
+data ObjectReference : Type where [external]
+data ContextReference : Type where [external]
+data PackageManagerReference : Type where [external]
+data CharsetReference : Type where [external]
+data EncoderReference : Type where [external]
+
+%foreign "dex:virtual:Landroid/app/Activity;:setContentView:(I)V"
+apply_reader_layout : ActivityReference → Int32 → PrimIO ()
+%foreign "dex:virtual:Landroid/app/Activity;:findViewById:(I)Landroid/view/View;"
+find_reader_view : ActivityReference → Int32 → PrimIO ViewReference
+%foreign "dex:virtual:Landroid/app/Activity;:getIntent:()Landroid/content/Intent;"
+incoming_intent : ActivityReference → PrimIO IntentReference
+%foreign "dex:virtual:Landroid/content/Intent;:getStringExtra:(Ljava/lang/String;)Ljava/lang/String;"
+incoming_text : IntentReference → Text → PrimIO Text
+%foreign "dex:static:Landroid/text/TextUtils;:isEmpty:(Ljava/lang/CharSequence;)Z"
+raw_text_is_empty : Text → PrimIO Int32
+%foreign "dex:virtual:Landroid/content/Intent;:getAction:()Ljava/lang/String;"
+incoming_action : IntentReference → PrimIO Text
+%foreign "dex:virtual:Landroid/content/Intent;:setAction:(Ljava/lang/String;)Landroid/content/Intent;"
+set_request_action : IntentReference → Text → PrimIO IntentReference
+%foreign "dex:virtual:Landroid/content/Intent;:removeExtra:(Ljava/lang/String;)V"
+remove_request_extra : IntentReference → Text → PrimIO ()
+%foreign "dex:virtual:Landroid/app/Activity;:setIntent:(Landroid/content/Intent;)V"
+retain_request_intent : ActivityReference → IntentReference → PrimIO ()
+%foreign "dex:virtual:Landroid/app/Activity;:getCallingPackage:()Ljava/lang/String;"
+framework_calling_package : ActivityReference → PrimIO Text
+%foreign "dex:virtual:Landroid/app/Activity;:getPackageName:()Ljava/lang/String;"
+reader_package_name : ActivityReference → PrimIO Text
+%foreign "dex:virtual:Landroid/app/Activity;:getPackageManager:()Landroid/content/pm/PackageManager;"
+reader_package_manager : ActivityReference → PrimIO PackageManagerReference
+%foreign "dex:virtual:Landroid/content/pm/PackageManager;:checkSignatures:(Ljava/lang/String;Ljava/lang/String;)I"
+compare_package_signers : PackageManagerReference → Text → Text → PrimIO Int32
+%foreign "dex:interface:Ljava/lang/CharSequence;:length:()I"
+request_utf16_units : Text → PrimIO Int32
+%foreign "dex:static:Ljava/nio/charset/Charset;:forName:(Ljava/lang/String;)Ljava/nio/charset/Charset;"
+standard_request_charset : Text → PrimIO CharsetReference
+%foreign "dex:virtual:Ljava/nio/charset/Charset;:newEncoder:()Ljava/nio/charset/CharsetEncoder;"
+new_request_encoder : CharsetReference → PrimIO EncoderReference
+%foreign "dex:virtual:Ljava/nio/charset/CharsetEncoder;:canEncode:(Ljava/lang/CharSequence;)Z"
+query_has_valid_unicode : EncoderReference → Text → PrimIO Int32
+%foreign "dex:cast:Landroid/os/Bundle;:Ljava/lang/Object;"
+saved_state_object : SavedStateReference → PrimIO ObjectReference
+%foreign "dex:static:Ljava/util/Objects;:isNull:(Ljava/lang/Object;)Z"
+saved_state_is_absent : ObjectReference → PrimIO Int32
+%foreign "dex:virtual:Landroid/view/View;:getContext:()Landroid/content/Context;"
+action_view_context : ViewReference → PrimIO ContextReference
+%foreign "dex:cast:Landroid/content/Context;:Landroid/app/Activity;"
+context_as_reader_activity : ContextReference → PrimIO ActivityReference
+
+%foreign "dex:cast:Landroid/view/View;:Landroid/widget/TextView;"
+as_text_view : ViewReference → PrimIO TextViewReference
+%foreign "dex:virtual:Landroid/widget/TextView;:setText:(Ljava/lang/CharSequence;)V"
+write_reader_text : TextViewReference → Text → PrimIO ()
+%foreign "dex:virtual:Landroid/widget/TextView;:getText:()Ljava/lang/CharSequence;"
+read_reader_characters : TextViewReference → PrimIO CharacterSequenceReference
+%foreign "dex:interface:Ljava/lang/CharSequence;:toString:()Ljava/lang/String;"
+characters_as_text : CharacterSequenceReference → PrimIO Text
+%foreign "dex:virtual:Landroid/view/View;:getId:()I"
+clicked_view_identity : ViewReference → PrimIO Int32
+%foreign "dex:virtual:Landroid/view/View;:getVisibility:()I"
+reader_view_visibility : ViewReference → PrimIO Int32
+%foreign "dex:virtual:Landroid/view/View;:setVisibility:(I)V"
+set_reader_view_visibility : ViewReference → Int32 → PrimIO ()
+%foreign "dex:virtual:Landroid/view/View;:setEnabled:(Z)V"
+set_reader_control_enabled : ViewReference → Int32 → PrimIO ()
+%foreign "dex:static:Lorg/isomorphisms/ib/ShizukuClient;:state:()I"
+current_acquisition_capability : PrimIO Int32
+%foreign "dex:static:Lorg/isomorphisms/ib/ShizukuClient;:requestPermission:()I"
+request_acquisition_permission : PrimIO Int32
+%foreign "dex:static:Lorg/isomorphisms/ib/ReaderBridge;:attach:(Landroid/app/Activity;)I"
+attach_reader_host : ActivityReference → PrimIO Int32
+%foreign "dex:static:Lorg/isomorphisms/ib/ReaderBridge;:resume:(Landroid/app/Activity;)I"
+resume_reader_host : ActivityReference → PrimIO Int32
+%foreign "dex:static:Lorg/isomorphisms/ib/ReaderBridge;:detach:(Landroid/app/Activity;)V"
+detach_reader_host : ActivityReference → PrimIO ()
+%foreign "dex:static:Lorg/isomorphisms/ib/ReaderBridge;:navigate:(Ljava/lang/String;)I"
+acquire_navigation : Text → PrimIO Int32
+%foreign "dex:static:Lorg/isomorphisms/ib/ReaderBridge;:cancel:(Landroid/app/Activity;)I"
+cancel_acquisition : ActivityReference → PrimIO Int32
+%foreign "dex:static:Lorg/isomorphisms/ib/ReaderBridge;:googleTargetCount:(Ljava/lang/String;I)I"
+google_target_count : Text → Int32 → PrimIO Int32
+%foreign "dex:static:Lorg/isomorphisms/ib/ReaderBridge;:googleTargetReference:(Ljava/lang/String;II)Ljava/lang/String;"
+google_target_reference : Text → Int32 → Int32 → PrimIO Text
+%foreign "dex:static:Lorg/isomorphisms/ib/ReaderBridge;:googleTargetEvidence:(Ljava/lang/String;II)Ljava/lang/String;"
+google_target_evidence : Text → Int32 → Int32 → PrimIO Text
+%foreign "dex:static:Lorg/isomorphisms/ib/ReaderBridge;:googleTargetBody:(Ljava/lang/String;II)Ljava/lang/String;"
+google_target_body : Text → Int32 → Int32 → PrimIO Text
+%foreign "dex:static:Lorg/isomorphisms/ib/ReaderBridge;:restore:()I"
+restore_committed_source : PrimIO Int32
+%foreign "dex:static:Lorg/isomorphisms/ib/ReaderBridge;:history:()Ljava/lang/String;"
+retained_history_text : PrimIO Text
+%foreign "dex:static:Lorg/isomorphisms/ib/ReaderBridge;:openRetained:(Ljava/lang/String;ILjava/lang/String;)I"
+open_history_source : Text → Int32 → Text → PrimIO Int32
+%foreign "dex:static:Lorg/isomorphisms/ib/ReaderBridge;:acknowledge:(Ljava/lang/String;ILjava/lang/String;)I"
+acknowledge_presented_source : Text → Int32 → Text → PrimIO Int32
+%foreign "dex:static:Lorg/isomorphisms/ib/ReaderBridge;:presentText:(Landroid/app/Activity;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)I"
+present_projected_text : ActivityReference → Text → Text → Text → PrimIO Int32
+%foreign "dex:static:Lorg/isomorphisms/ib/ReaderBridge;:markText:(Landroid/app/Activity;III)I"
+mark_projected_text : ActivityReference → Int32 → Int32 → Int32 → PrimIO Int32
+%foreign "dex:static:Lorg/isomorphisms/ib/ReaderBridge;:metrics:(Landroid/app/Activity;)Lorg/isomorphisms/ib/ReaderMetrics;"
+snapshot_reader_metrics : ActivityReference → PrimIO MetricsReference
+-- The handle contains a private immutable copy of the current Paint and its
+-- measured viewport. Pure measurement cannot mutate Android or reader state.
+%foreign "dex:virtual:Lorg/isomorphisms/ib/ReaderMetrics;:width:()I"
+metric_width : MetricsReference → Int32
+%foreign "dex:virtual:Lorg/isomorphisms/ib/ReaderMetrics;:measure:(Ljava/lang/String;)I"
+metric_measure : MetricsReference → Text → Int32
+%foreign "dex:virtual:Landroid/app/Activity;:setTitle:(Ljava/lang/CharSequence;)V"
+set_document_title : ActivityReference → Text → PrimIO ()
+%foreign "dex:static:Lorg/isomorphisms/ib/ReaderBridge;:scrollAnchor:(Landroid/app/Activity;I)I"
+scroll_fragment_target : ActivityReference → Int32 → PrimIO Int32
+
+-- Stable resource IDs are checked against android-native/res/values/public.xml.
+reader_layout : Int32
+reader_layout = 2130837504
+reader_body : Int32
+reader_body = 2130903040
+reader_input : Int32
+reader_input = 2130903041
+sources_panel : Int32
+sources_panel = 2130903042
+sources_button : Int32
+sources_button = 2130903043
+read_button : Int32
+read_button = 2130903044
+reader_status : Int32
+reader_status = 2130903045
+permission_button : Int32
+permission_button = 2130903046
+reflow_button : Int32
+reflow_button = 2130903047
+back_button : Int32
+back_button = 2130903048
+forward_button : Int32
+forward_button = 2130903049
+reader_title : Int32
+reader_title = 2130903050
+search_button : Int32
+search_button = 2130903051
+cancel_button : Int32
+cancel_button = 2130903053
+
+read_view_text : ActivityReference → Int32 → IO Text
+read_view_text activity identity = do
+  view ← primIO (find_reader_view activity identity)
+  text_view ← primIO (as_text_view view)
+  characters ← primIO (read_reader_characters text_view)
+  primIO (characters_as_text characters)
+
+write_view_text : ActivityReference → Int32 → Text → IO ()
+write_view_text activity identity text = do
+  view ← primIO (find_reader_view activity identity)
+  text_view ← primIO (as_text_view view)
+  primIO (write_reader_text text_view text)
+
+capability_message : Int32 → Text
+capability_message 0 = "Shizuku unavailable — start Shizuku, then retry."
+capability_message 1 = "Connecting to Shizuku…"
+capability_message 2 = "Shizuku permission required."
+capability_message 3 = "Shizuku authorized."
+capability_message _ = "Shizuku connection failed — restart Shizuku, then retry."
+
+refresh_acquisition_capability : ActivityReference → IO ()
+refresh_acquisition_capability activity = do
+  view ← primIO (find_reader_view activity reader_status)
+  text_view ← primIO (as_text_view view)
+  capability ← primIO current_acquisition_capability
+  primIO (write_reader_text text_view (capability_message capability))
+
+%export "dex:present_source_text"
+present_source_text : ActivityReference → Text → IO ()
+present_source_text activity text = do
+  view ← primIO (find_reader_view activity reader_body)
+  text_view ← primIO (as_text_view view)
+  primIO (write_reader_text text_view text)
+
+is_search_request : IntentReference → IO Bool
+is_search_request intent = do
+  action ← primIO (incoming_action intent)
+  empty ← primIO (raw_text_is_empty action)
+  if empty /= 0 then pure False else pure (action ≟ "android.intent.action.SEARCH")
+
+-- Keep the query validator shared by the real Activity and its independent
+-- SDK/ART observer. Exporting a URL/refusal result grants no acquisition.
+checked_query_address : Text → IO (Either Text Text)
+checked_query_address supplied_query = do
+  empty ← primIO (raw_text_is_empty supplied_query)
+  if empty /= 0 then pure (Left "Search refused: the query is empty.")
+    else do
+      units ← primIO (request_utf16_units supplied_query)
+      if units > 1024 then pure (Left "Search refused: the query exceeds 1024 UTF-16 units.")
+        else do
+          charset ← primIO (standard_request_charset "UTF-8")
+          encoder ← primIO (new_request_encoder charset)
+          valid_unicode ← primIO (query_has_valid_unicode encoder supplied_query)
+          if valid_unicode ≟ 0 then pure (Left "Search refused: the query contains invalid Unicode.")
+            else case google_icu_url supplied_query of
+              Nothing ⇒ pure (Left "Search refused: the query is unsupported or its encoded URL is too long.")
+              Just address ⇒ pure (Right address)
+
+%export "dex:checked_search_query"
+checked_search_query : Text → IO Text
+checked_search_query supplied_query = do
+  requested ← checked_query_address supplied_query
+  pure (case requested of
+    Left reason ⇒ reason
+    Right address ⇒ address)
+
+-- Android supplies this caller identity only for a fresh for-result handoff.
+-- Referrer extras and Binder's system-server caller are not sender identity.
+search_address_from_intent : ActivityReference → IntentReference → IO (Either Text Text)
+search_address_from_intent activity intent = do
+  caller_package ← primIO (framework_calling_package activity)
+  caller_empty ← primIO (raw_text_is_empty caller_package)
+  if caller_empty /= 0 then pure (Left "Search refused: a fresh authenticated ChordReader handoff is required.")
+    else if caller_package /= "org.isomorphisms.chordreader.dev"
+      then pure (Left "Search refused: the sender is not ChordReader.")
+      else do
+        packages ← primIO (reader_package_manager activity)
+        reader_package ← primIO (reader_package_name activity)
+        signer_match ← primIO (compare_package_signers packages caller_package reader_package)
+        if signer_match /= 0
+          then pure (Left "Search refused: the installed ChordReader signer does not match this reader.")
+          else do
+            supplied_query ← primIO (incoming_text intent "query")
+            checked_query_address supplied_query
+
+consume_initial_request : ActivityReference → IntentReference → IO ()
+consume_initial_request activity intent = do
+  _ ← primIO (set_request_action intent "android.intent.action.MAIN")
+  primIO (remove_request_extra intent "query")
+  primIO (remove_request_extra intent "android.intent.extra.TEXT")
+  primIO (retain_request_intent activity intent)
+
+pending_search_refusal : ActivityReference → IO (Maybe Text)
+pending_search_refusal activity = do
+  intent ← primIO (incoming_intent activity)
+  pending ← is_search_request intent
+  if not pending then pure Nothing else do
+    requested ← search_address_from_intent activity intent
+    case requested of
+      Left reason ⇒ pure (Just reason)
+      Right _ ⇒ pure Nothing
+
+%export "dex:reader_acquisition_failed"
+reader_acquisition_failed : ActivityReference → Text → IO ()
+reader_acquisition_failed activity reason = do
+  refusal ← pending_search_refusal activity
+  write_view_text activity reader_status (case refusal of
+    Just message ⇒ message
+    Nothing ⇒ reason)
+
+line_text : SourceLine → Text
+line_text line = line.visible_text ++ "\n"
+
+%export "dex:copy_reader_selection"
+copy_reader_selection : Text → Text → Text → Int32 → Int32 → Text
+copy_reader_selection = copy_source_selection
+
+%export "dex:reader_link_at"
+reader_link_at : Text → Text → Text → Int32 → Text
+reader_link_at = selection_link_at
+
+style_regions : ActivityReference → List DisplayRegion → IO Bool
+style_regions activity [] = pure True
+style_regions activity (region :: rest) = do
+  marked ← if region.first_utf16 < region.after_utf16 &&
+      (region.destination /= "" || region.heading > 0)
+    then primIO (mark_projected_text activity (cast region.first_utf16)
+      (cast region.after_utf16) (if region.destination /= "" then 0 else region.heading))
+    else pure 0
+  remaining ← style_regions activity rest
+  pure (marked ≟ 0 && remaining)
+
+layout_fits : MetricsReference → Int32 → PrepaintLayout → Bool
+layout_fits metric width layout =
+  all (\block => all (\line => metric_measure metric line.visible_text <= width) block.text_lines)
+    layout.block_plans
+
+existing_history : Text → Either Text BrowserHistory
+existing_history "" = Right empty_history -- Explicit pre-journal index migration.
+existing_history text = read_history text
+
+presented_history : RetainedSource → Int32 → Text → Either Text BrowserHistory
+presented_history source kind text = do
+  history ← existing_history text
+  if kind ≟ 0 then Right (history_arrive source history)
+    else if kind ≟ 1 || kind ≟ 2 then
+      case history_current history of
+        Just selected ⇒ if same_retained_source source selected
+          then Right history else Left "Retained history selected another source generation"
+        Nothing ⇒ if kind ≟ 1 && text ≟ ""
+          then Right (history_arrive source empty_history)
+          else Left "Retained navigation has no selected source"
+      else Left "Unknown browser navigation occurrence"
+
+-- The file adapter verifies byte framing; this checked owner alone decides
+-- whether its opaque journal selects the retained source being reopened.
+%export "dex:reader_retained_history_valid"
+reader_retained_history_valid : Text → Text → Text → Int32
+reader_retained_history_valid identity generation journal =
+  case retained_source identity generation of
+    Left _ ⇒ 0
+    Right source ⇒ case presented_history source 1 journal of
+      Left _ ⇒ 0
+      Right _ ⇒ 1
+
+enable_history_control : ActivityReference → Int32 → Bool → IO ()
+enable_history_control activity identity enabled = do
+  view ← primIO (find_reader_view activity identity)
+  primIO (set_reader_control_enabled view (if enabled then 1 else 0))
+
+available : Maybe value → Bool
+available Nothing = False
+available (Just _) = True
+
+show_history_controls : ActivityReference → BrowserHistory → IO ()
+show_history_controls activity history = do
+  enable_history_control activity back_button (available (history_back history))
+  enable_history_control activity forward_button (available (history_forward history))
+
+has_address_prefix : Text → Text → Bool
+has_address_prefix prefix address =
+  take (length (unpack prefix)) (unpack address) ≟ unpack prefix
+
+is_google_search_address : Text → Bool
+is_google_search_address requested =
+  has_address_prefix "https://google.com/search?" requested ||
+  has_address_prefix "https://www.google.com/search?" requested
+
+search_response_refusal : HtmlEvidence → Maybe Text
+search_response_refusal evidence =
+  if not (is_google_search_address evidence.requested_url) then Nothing
+    else if has_address_prefix "https://consent.google.com/" evidence.resolved_url
+      then Just "Google redirected this search to its consent service; native results are unavailable."
+      else if has_address_prefix "https://google.com/sorry" evidence.resolved_url ||
+              has_address_prefix "https://www.google.com/sorry" evidence.resolved_url
+        then Just "Google redirected this search to verification; native results are unavailable."
+        else Nothing
+
+document_refusal_message : Text → Text → Text
+document_refusal_message observations reason =
+  if reason /= "unadmitted-http-status" then "Document refused: " ++ reason
+    else case read_committed_evidence observations of
+      Right evidence ⇒ "HTTP " ++ evidence.http_status ++ " did not admit a readable document."
+      Left _ ⇒ "Document refused: malformed committed response observations."
+
+%export "dex:reader_acquisition_progress"
+reader_acquisition_progress : ActivityReference → Text → IO ()
+reader_acquisition_progress activity message = write_view_text activity reader_status message
+
+%export "dex:reader_browser_url_allowed"
+reader_browser_url_allowed : Text → Text → Int32
+reader_browser_url_allowed requested actual = if google_browser_location requested actual then 1 else 0
+
+%export "dex:reader_google_snapshot_ready"
+reader_google_snapshot_ready : Text → Text → Text → Int32
+reader_google_snapshot_ready = google_snapshot_candidate_count
+
+%export "dex:reader_google_browser_needed"
+reader_google_browser_needed : Text → Text → Int32
+reader_google_browser_needed observations carrier =
+  case (do
+    evidence ← read_committed_evidence observations
+    if not (is_google_search_address evidence.requested_url) then Right Nothing
+      else do
+        source ← decode_committed_html_source evidence carrier
+        Right (Just source)) of
+      Left _ ⇒ 0
+      Right Nothing ⇒ 0
+      Right (Just source) ⇒ case google_results_from_source source of
+        Right (Just _) ⇒ 0
+        Right Nothing ⇒ 0
+        Left _ ⇒ 1
+
+%export "dex:reader_google_candidate_wire"
+reader_google_candidate_wire : Text → Text → Text
+reader_google_candidate_wire observations dom =
+  case (do
+    evidence ← read_committed_dom_evidence observations
+    source ← convert_committed_browser_dom evidence dom
+    google_candidate_request_wire source) of
+      Left _ ⇒ "ERROR\n"
+      Right wire ⇒ wire
+
+%export "dex:reader_google_target_admitted"
+reader_google_target_admitted : Text → Text → Int32
+reader_google_target_admitted observations carrier =
+  case (do
+    evidence ← read_committed_evidence observations
+    identity ← verify_committed_html_representation evidence carrier
+    public_google_destination "https://www.google.com/" identity.resolved_url) of
+      Left _ ⇒ 0
+      Right _ ⇒ 1
+
+target_reference : Text → Either Text (Number, Text)
+target_reference fields = case forget (split (≟ '\t') fields) of
+  [number, href] ⇒
+    if number ≟ "" || length (unpack number) > 7 ||
+       not (all (\character ⇒ character >= '0' && character <= '9') (unpack number))
+      then Left "Invalid resolved-anchor occurrence"
+      else let occurrence : Number = cast number in
+        if cast occurrence /= number then Left "Noncanonical resolved-anchor occurrence"
+          else Right (occurrence, href)
+  _ ⇒ Left "Malformed resolved-anchor reference"
+
+load_google_targets : HtmlPrepaintResult → Text → Int32 → Number → Number →
+  IO (Either Text (List GoogleVerifiedDestination))
+load_google_targets source identity navigation index 0 = pure (Right [])
+load_google_targets source identity navigation index (S remaining) = do
+  reference ← primIO (google_target_reference identity navigation (cast index))
+  observations ← primIO (google_target_evidence identity navigation (cast index))
+  carrier ← primIO (google_target_body identity navigation (cast index))
+  let verified : Either Text GoogleVerifiedDestination = do
+        (occurrence, href) ← target_reference reference
+        evidence ← read_committed_evidence observations
+        verify_google_destination source occurrence href evidence carrier
+  case verified of
+    Left reason ⇒ pure (Left reason)
+    Right target ⇒ do
+      later ← load_google_targets source identity navigation (S index) remaining
+      pure (map (target ::) later)
+
+present_prepared_document : ActivityReference → HtmlPrepaintLayout → BrowserHistory →
+  SelectionProjection → Int32 → Text → Int32 → IO ()
+present_prepared_document activity document history projection target source_id generation = do
+  let title = case document.source_result.revision.title of
+        Nothing ⇒ "IB"
+        Just value ⇒ value
+  shown ← primIO (present_projected_text activity (projected_display projection)
+    (projected_source projection) (projected_coordinates projection))
+  if shown /= 0 then reader_acquisition_failed activity "Native source-linked presentation failed."
+    else do
+      styled ← style_regions activity (projected_regions projection)
+      primIO (set_document_title activity title)
+      write_view_text activity reader_title title
+      let requested = document.source_result.evidence.requested_url
+      let input = if is_google_search_address requested then
+            case original_google_query requested of
+              Right query ⇒ query
+              Left _ ⇒ requested
+            else requested
+      write_view_text activity reader_input input
+      positioned ← primIO (scroll_fragment_target activity target)
+      saved ← if positioned ≟ 0
+        then primIO (acknowledge_presented_source source_id generation (history_text history))
+        else pure (-1)
+      if saved ≟ 0 then show_history_controls activity history
+        else do
+          enable_history_control activity back_button False
+          enable_history_control activity forward_button False
+      let acquired = case document.source_result.evidence.provenance of
+            RenderedBrowserDom _ ⇒ "Google results — browser rendered; links verified through ICU."
+            OriginalIcuResponse _ ⇒ if is_google_search_address requested
+              then "Google results — retained ICU response."
+              else "Static HTML — scripts and forms are unavailable."
+      write_view_text activity reader_status
+        (if positioned /= 0 then "Document displayed; its fragment position could not be applied."
+         else if saved /= 0 then "Document displayed; saving its last-good source index failed."
+         else if not styled then "Static HTML loaded; native link/heading styling failed."
+         else acquired)
+      refusal ← pending_search_refusal activity
+      case refusal of
+        Just message ⇒ write_view_text activity reader_status message
+        Nothing ⇒ pure ()
+
+%export "dex:reader_acquisition_ready"
+reader_acquisition_ready : ActivityReference → Text → Text → Text → Int32 → Text → Int32 → IO ()
+reader_acquisition_ready activity observations html source_id generation planned_history kind = do
+  metric ← primIO (snapshot_reader_metrics activity)
+  selected ← read_view_text activity reflow_button
+  current_history ← if kind ≟ 0 then primIO retained_history_text else pure planned_history
+  let width = metric_width metric
+  let manner = if selected ≟ "Reflow: Squared" then evenly else promptly
+  let prepared : Either Text (HtmlPrepaintLayout, BrowserHistory, SelectionProjection, Int32) =
+        if width <= 0 then Left "Native viewport is not measured yet"
+        else do
+          evidence ← read_committed_evidence observations
+          case search_response_refusal evidence of
+            Just reason ⇒ Left reason
+            Nothing ⇒ Right ()
+          source ← retained_source source_id evidence.source_generation
+          history ← presented_history source kind current_history
+          document ← prepare_committed_document_advances evidence html (Requirements (cast width) manner)
+            "android-Paint-codepoint-advances-pixels-times-64-v1"
+            (\character ⇒ cast (metric_measure metric (pack [character])))
+          if not (layout_fits metric width document.revision_layout)
+            then Left "An unbreakable source run exceeds the native viewport"
+            else do
+              projection ← selection_projection document.revision_layout
+              fragment ← requested_html_fragment evidence.requested_url
+              target ← case fragment of
+                Nothing ⇒ Right 0
+                Just "" ⇒ Right 0
+                Just label ⇒ html_fragment_display_offset document label
+              Right (document, history, projection, target)
+  case prepared of
+    Left reason ⇒ reader_acquisition_failed activity (document_refusal_message observations reason)
+    Right (document, history, projection, target) ⇒
+      present_prepared_document activity document history projection target source_id generation
+
+%export "dex:reader_dom_acquisition_ready"
+reader_dom_acquisition_ready : ActivityReference → Text → Text → Text → Int32 → Text → Int32 → IO ()
+reader_dom_acquisition_ready activity observations dom source_id generation planned_history kind = do
+  metric ← primIO (snapshot_reader_metrics activity)
+  selected ← read_view_text activity reflow_button
+  current_history ← if kind ≟ 0 then primIO retained_history_text else pure planned_history
+  count ← primIO (google_target_count source_id generation)
+  let admitted = do
+        evidence ← read_committed_dom_evidence observations
+        convert_committed_browser_dom evidence dom
+  case admitted of
+    Left reason ⇒ reader_acquisition_failed activity ("Google rendered source refused: " ++ reason)
+    Right source ⇒ do
+      destinations ← if count > 0 && count <= 3
+        then load_google_targets source source_id generation 0 (cast count)
+        else pure (Left "Google result destination count is invalid")
+      let width = metric_width metric
+      let manner = if selected ≟ "Reflow: Squared" then evenly else promptly
+      let prepared : Either Text (HtmlPrepaintLayout, BrowserHistory, SelectionProjection) = do
+            if width <= 0 then Left "Native viewport is not measured yet" else Right ()
+            verified ← destinations
+            retained ← retained_source source_id source.evidence.source_generation
+            history ← presented_history retained kind current_history
+            document ← prepare_committed_dom_advances source verified (Requirements (cast width) manner)
+              "android-Paint-codepoint-advances-pixels-times-64-v1"
+              (\character ⇒ cast (metric_measure metric (pack [character])))
+            if not (layout_fits metric width document.revision_layout)
+              then Left "An unbreakable source run exceeds the native viewport" else Right ()
+            projection ← selection_projection document.revision_layout
+            Right (document, history, projection)
+      case prepared of
+        Left reason ⇒ reader_acquisition_failed activity ("Google results refused: " ++ reason)
+        Right (document, history, projection) ⇒
+          present_prepared_document activity document history projection 0 source_id generation
+
+-- Independent ART observers execute this same source/admission/fragment owner
+-- with a declared unit-advance provider. It grants no navigation capability.
+%export "dex:reader_fragment_offset"
+reader_fragment_offset : Text → Text → Int32 → Int32
+reader_fragment_offset observations html width =
+  if width <= 0 then -1 else case (do
+    evidence ← read_committed_evidence observations
+    document ← prepare_committed_document_advances evidence html
+      (Requirements (cast width) promptly) "unit-codepoint-advances-v1" (\_ ⇒ 1)
+    fragment ← requested_html_fragment evidence.requested_url
+    case fragment of
+      Nothing ⇒ Right 0
+      Just "" ⇒ Right 0
+      Just label ⇒ html_fragment_display_offset document label) of
+        Left _ ⇒ -1
+        Right point ⇒ point
+
+
+navigate_to : ActivityReference → Text → IO ()
+navigate_to activity text = do
+  intent ← primIO (incoming_intent activity)
+  consume_initial_request activity intent
+  case navigation_request text of
+    Left reason ⇒ reader_acquisition_failed activity reason
+    Right request ⇒ do
+      accepted ← primIO (acquire_navigation (navigation_address request))
+      if accepted ≟ 0
+        then do
+          write_view_text activity reader_status "Loading through Shizuku and ICU…"
+          panel ← primIO (find_reader_view activity sources_panel)
+          primIO (set_reader_view_visibility panel 8)
+        else reader_acquisition_failed activity "Acquisition is busy or unavailable. Retry after authorizing Shizuku."
+
+%export "dex:reader_follow_link"
+reader_follow_link : ActivityReference → Text → IO ()
+reader_follow_link = navigate_to
+
+move_history : ActivityReference → Bool → IO ()
+move_history activity backward = do
+  intent ← primIO (incoming_intent activity)
+  consume_initial_request activity intent
+  text ← primIO retained_history_text
+  case existing_history text of
+    Left reason ⇒ reader_acquisition_failed activity ("History refused: " ++ reason)
+    Right history ⇒
+      case (if backward then history_back history else history_forward history) of
+        Nothing ⇒ reader_acquisition_failed activity "No retained document in that direction."
+        Just selected ⇒
+          case history_current selected of
+            Nothing ⇒ reader_acquisition_failed activity "History has no selected source."
+            Just source ⇒ do
+              accepted ← primIO (open_history_source (retained_identity source)
+                (cast (retained_generation source)) (history_text selected))
+              if accepted ≟ 0
+                then write_view_text activity reader_status "Reopening a verified retained source…"
+                else reader_acquisition_failed activity "Retained navigation is busy or unavailable."
+
+process_fresh_reader_request : ActivityReference → IntentReference → IO ()
+process_fresh_reader_request activity intent = do
+  search ← is_search_request intent
+  if search
+    then do
+      requested ← search_address_from_intent activity intent
+      case requested of
+        Left reason ⇒ reader_acquisition_failed activity reason
+        Right address ⇒ do
+          write_view_text activity reader_input address
+          navigate_to activity address
+    else do
+      raw_text ← primIO (incoming_text intent "android.intent.extra.TEXT")
+      empty ← primIO (raw_text_is_empty raw_text)
+      if empty ≟ 0 then navigate_to activity raw_text
+        else present_source_text activity "Open Sources, enter an HTTP(S) URL, and select Read. Retained documents reopen after layout."
+
+%export "dex:create_reader"
+create_reader : ActivityReference → SavedStateReference → IO ()
+create_reader activity saved_state = do
+  primIO (apply_reader_layout activity reader_layout)
+  refresh_acquisition_capability activity
+  attached ← primIO (attach_reader_host activity)
+  if attached ≟ 0 then pure ()
+    else reader_acquisition_failed activity "Private source storage or the native reader adapter is unavailable."
+  intent ← primIO (incoming_intent activity)
+  state_object ← primIO (saved_state_object saved_state)
+  fresh ← primIO (saved_state_is_absent state_object)
+  if fresh ≟ 0
+    then do
+      consume_initial_request activity intent
+      present_source_text activity "Reopening the last committed readable document…"
+    else process_fresh_reader_request activity intent
+
+%export "dex:resume_reader"
+resume_reader : ActivityReference → IO ()
+resume_reader activity = do
+  resumed ← primIO (resume_reader_host activity)
+  if resumed ≟ 0 then pure ()
+    else if resumed ≟ 1
+      then write_view_text activity reader_status "Reopening the last committed readable document…"
+      else if resumed ≟ 2
+        then write_view_text activity reader_status "Reader ready. Enter an HTTP(S) URL."
+        else reader_acquisition_failed activity "The native reader could not reclaim this Activity; committed documents are retained."
+
+%export "dex:destroy_reader"
+destroy_reader : ActivityReference → IO ()
+destroy_reader activity = primIO (detach_reader_host activity)
+
+%export "dex:receive_reader_new_intent"
+receive_reader_new_intent : ActivityReference → IntentReference → IO ()
+receive_reader_new_intent activity delivered = do
+  current ← primIO (incoming_intent activity)
+  consume_initial_request activity current
+  -- API 29/34 does not authenticate a new warm sender through the original
+  -- Activity.getCallingPackage. Require the maintained fresh caller route.
+  write_view_text activity reader_status "Search refused: start a fresh ChordReader handoff or enter a URL in Sources."
+
+%export "dex:receive_reader_action"
+receive_reader_action : ActivityReference → ViewReference → IO ()
+receive_reader_action activity clicked = do
+  identity ← primIO (clicked_view_identity clicked)
+  if identity ≟ sources_button
+    then do
+      refresh_acquisition_capability activity
+      panel ← primIO (find_reader_view activity sources_panel)
+      visibility ← primIO (reader_view_visibility panel)
+      primIO (set_reader_view_visibility panel (if visibility ≟ 0 then 8 else 0))
+    else if identity ≟ read_button
+      then do
+        text ← read_view_text activity reader_input
+        navigate_to activity text
+      else if identity ≟ search_button
+        then do
+          text ← read_view_text activity reader_input
+          requested ← checked_query_address text
+          case requested of
+            Left reason ⇒ reader_acquisition_failed activity reason
+            Right address ⇒ navigate_to activity address
+        else if identity ≟ permission_button
+          then do
+            _ ← primIO request_acquisition_permission
+            refresh_acquisition_capability activity
+          else if identity ≟ reflow_button
+            then do
+              intent ← primIO (incoming_intent activity)
+              consume_initial_request activity intent
+              selected ← read_view_text activity reflow_button
+              write_view_text activity reflow_button
+                (if selected ≟ "Reflow: Greedy" then "Reflow: Squared" else "Reflow: Greedy")
+              restored ← primIO restore_committed_source
+              if restored ≟ 0 then write_view_text activity reader_status "Reflowing the retained document…"
+                else reader_acquisition_failed activity "No retained readable document is ready for reflow."
+            else if identity ≟ back_button then move_history activity True
+              else if identity ≟ forward_button then move_history activity False
+                else if identity ≟ cancel_button then do
+                  cancelled ← primIO (cancel_acquisition activity)
+                  write_view_text activity reader_status
+                    (if cancelled ≟ 1 then "Search cancelled; the previous document is retained."
+                     else "No acquisition is running.")
+                  else pure ()
+
+%export "dex:receive_reader_view_action"
+receive_reader_view_action : ViewReference → IO ()
+receive_reader_view_action clicked = do
+  context ← primIO (action_view_context clicked)
+  activity ← primIO (context_as_reader_activity context)
+  receive_reader_action activity clicked
+
+%cg dex extends Landroid/app/Activity;
+%cg dex override onCreate (Landroid/os/Bundle;)V create_reader
+%cg dex override onResume ()V resume_reader
+%cg dex override onDestroy ()V destroy_reader
+%cg dex override onNewIntent (Landroid/content/Intent;)V receive_reader_new_intent
+%cg dex callback Landroid/view/View$OnClickListener; onClick (Landroid/view/View;)V receive_reader_view_action
+
+main : IO ()
+main = pure ()

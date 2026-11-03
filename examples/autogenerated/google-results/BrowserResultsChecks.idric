@@ -1,0 +1,126 @@
+module BrowserResultsChecks
+
+import Data.Text
+import IB.HtmlPrepaint
+import IB.WebSearch.Results
+import System
+
+query : Text
+query = "https://google.com/search?q=music"
+
+resolved : Text
+resolved = "https://www.google.com/search?q=music"
+
+digest : Text
+digest = "1111111111111111111111111111111111111111111111111111111111111111"
+
+href : Text
+href = "/url?q=CAESDobserved_token"
+
+html : Text
+html = "<html><body><a href=\"/url?q=CAESDobserved_token\"><h3>Music &amp; sound</h3></a></body></html>"
+
+dom_evidence : BrowserDomEvidence
+dom_evidence = BrowserDomSourceEvidence "arena-dom:fixture" "7" digest digest
+  (cast (length (unpack html))) (cast (length (unpack html))) query resolved
+  "arena:parent" "7" digest "com.android.webview" "74.0.3729.185"
+  "webview-content-outerHTML-utf8-v1" True True
+
+destination_body : Text
+destination_body = "<html><title>Music</title><body>Sound</body></html>"
+
+target_evidence : HtmlEvidence
+target_evidence = HtmlSourceEvidence "arena:destination" "7" digest digest
+  (cast (length (unpack destination_body))) (cast (length (unpack destination_body)))
+  "https://www.google.com/url?q=CAESDobserved_token" "https://en.wikipedia.org/wiki/Music"
+  "text/html" "utf-8" "200" True True
+
+check : Text → Bool → IO ()
+check label True = putStrLn ("PASS " ++ label)
+check label False = do
+  putStrLn ("FAIL " ++ label)
+  exitFailure
+
+source_occurrence : HtmlPrepaintResult → Number
+source_occurrence source = case google_acquisition_candidates source of
+  Right [candidate] ⇒ candidate.anchor_occurrence
+  _ ⇒ 0
+
+refuses_target : HtmlPrepaintResult → HtmlEvidence → Bool
+refuses_target source evidence = case verify_google_destination source (source_occurrence source) href evidence destination_body of
+  Left _ ⇒ True
+  Right _ ⇒ False
+
+main : IO ()
+main = do
+  check "uncommitted DOM readiness has no result admission"
+    (google_snapshot_candidate_count query resolved html ≟ 1)
+  check "rendered source refuses an HTTP source key"
+    (case convert_committed_browser_dom ({ source_key := "arena:fixture" } dom_evidence) html of
+      Left _ ⇒ True
+      _ ⇒ False)
+  check "rendered source requires immutable readback digest"
+    (case convert_committed_browser_dom ({ reopened_sha256 := "bad" } dom_evidence) html of
+      Left _ ⇒ True
+      _ ⇒ False)
+  check "rendered source requires parent generation"
+    (case convert_committed_browser_dom ({ parent_source_generation := "8" } dom_evidence) html of
+      Left _ ⇒ True
+      _ ⇒ False)
+  check "rendered source requires exact serialized UTF-8 length"
+    (case convert_committed_browser_dom ({ reopened_bytes := dom_evidence.reopened_bytes + 1 } dom_evidence) html of
+      Left _ ⇒ True
+      _ ⇒ False)
+  check "browser location refuses consent and changed query"
+    (not (google_browser_location query "https://consent.google.com/") &&
+     not (google_browser_location query "https://www.google.com/search?q=other"))
+  check "observed API34 goto remains an acquisition candidate"
+    (google_snapshot_candidate_count query query
+      "<a href=\"/goto?url=CAESDobserved_token\"><h3>Music</h3></a>" ≟ 1)
+  check "unobserved first-party support path is not an acquisition candidate"
+    (google_snapshot_candidate_count query query
+      "<a href=\"/support?url=CAESDobserved_token\"><h3>Music</h3></a>" ≟ 0)
+  case convert_committed_browser_dom dom_evidence html of
+    Left _ ⇒ check "rendered source admission" False
+    Right source ⇒ do
+      check "opaque Google link is not an unverified public result"
+        (case google_results_from_source source of
+          Left _ ⇒ True
+          _ ⇒ False)
+      check "committed DOM repeats source-backed acquisition extraction"
+        (google_candidate_request_wire source ≟ Right
+          ("IBGOOGLE1\n" ++ cast (source_occurrence source) ++
+           "\t/url?q=CAESDobserved_token\thttps://www.google.com/url?q=CAESDobserved_token\n"))
+      check "destination refuses changed source generation"
+        (refuses_target source ({ source_generation := "8" } target_evidence))
+      check "destination refuses a different original request"
+        (refuses_target source ({ requested_url := "https://www.google.com/url?q=other_token" } target_evidence))
+      check "destination refuses a fabricated original-byte digest"
+        (refuses_target source ({ reopened_sha256 := "bad" } target_evidence))
+      check "destination refuses a first-party continuation"
+        (refuses_target source ({ resolved_url := "https://www.google.com/httpservice/retry/enablejs" } target_evidence))
+      check "destination refuses unsupported source charset"
+        (refuses_target source ({ charset := "utf-16" } target_evidence))
+      case verify_google_destination source (source_occurrence source) href target_evidence destination_body of
+        Left _ ⇒ check "source-bound public destination qualification" False
+        Right target ⇒ do
+          check "verified browser-derived result retains both source identities"
+            (case google_results_with_destinations source [target] of
+              Right (Just search) ⇒ case search.results of
+                [result] ⇒ result.title ≟ "Music & sound" &&
+                  result.destination ≟ "https://en.wikipedia.org/wiki/Music" &&
+                  result.source_key ≟ "arena-dom:fixture" && result.source_generation ≟ "7" &&
+                  (case (result.source_provenance, result.destination_source) of
+                    (RenderedBrowserDom _, Just retained) ⇒ retained.source_key ≟ "arena:destination"
+                    _ ⇒ False)
+                _ ⇒ False
+              _ ⇒ False)
+          check "duplicate verified mapping refuses rather than inventing results"
+            (case google_results_with_destinations source [target, target] of
+              Left _ ⇒ True
+              _ ⇒ False)
+          check "changed search source refuses verified mappings"
+            (case google_results_with_destinations
+              ({ evidence := { source_generation := "8" } source.evidence } source) [target] of
+                Left _ ⇒ True
+                _ ⇒ False)

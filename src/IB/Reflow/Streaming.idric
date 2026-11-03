@@ -1,0 +1,101 @@
+module IB.Reflow.Streaming
+
+import Data.Text
+
+-- A real push interface: each chunk may end inside a word. The caller owns
+-- paragraph boundaries, and can emit completed lines before the source ends.
+-- Only the current line and one incomplete word are retained; an extremely
+-- long unbreakable word is necessarily retained until its next boundary.
+-- The list is reversed so receiving one character takes constant list work.
+public export
+record ReflowStream where
+  constructor Streaming
+  stream_width : Number
+  reversed_unfinished_word : List Char
+  unfinished_line : Maybe Text
+
+public export
+record StreamStep where
+  constructor Emitted
+  next_stream : ReflowStream
+  completed_lines : List Text
+
+public export
+begin_stream : Number → Either Text ReflowStream
+begin_stream Z = Left "Reflow width must be positive"
+begin_stream width = Right (Streaming width [] Nothing)
+
+-- We deliberately normalize whitespace to one display space. The source
+-- bytes and semantic spans remain owned by IB.Information, not this renderer.
+separator : Char → Bool
+separator char =
+  char ≟ ' ' || char ≟ '\n' || char ≟ '\r' || char ≟ '\t'
+
+-- A finished word may complete the previous line, which can be published
+-- immediately. Unlike the batch function, no future word is needed afterward.
+put_word : (Text → Number) → Number → Maybe Text → Text →
+  (Maybe Text, List Text)
+put_word measure width Nothing word = (Just word, [])
+put_word measure width (Just line) word =
+  let extended = line ++ " " ++ word in
+  if measure extended <= width
+    then (Just extended, [])
+    else (Just word, [line])
+
+complete_word : (Text → Number) → ReflowStream →
+  (ReflowStream, List Text)
+complete_word measure state@(Streaming width [] line) = (state, [])
+complete_word measure (Streaming width reversed_word line) =
+  let word = pack (reverse reversed_word) in
+  let (next_line, emitted) = put_word measure width line word in
+  (Streaming width [] next_line, emitted)
+
+scan_chunk : (Text → Number) → ReflowStream → List Char → List Text →
+  StreamStep
+scan_chunk measure state [] emitted_reversed =
+  Emitted state (reverse emitted_reversed)
+scan_chunk measure state@(Streaming width word line) (char :: rest) emitted_reversed =
+  if separator char
+    then let (next, emitted) = complete_word measure state in
+         scan_chunk measure next rest (reverse emitted ++ emitted_reversed)
+    else scan_chunk measure (Streaming width (char :: word) line)
+      rest emitted_reversed
+
+-- feed_chunk accepts arbitrarily split source chunks. No pending word is
+-- published prematurely at the end of a chunk.
+public export
+feed_chunk : (Text → Number) → ReflowStream → Text → StreamStep
+feed_chunk measure state chunk =
+  scan_chunk measure state (unpack chunk) []
+
+-- Explicit paragraph or stream completion flushes the last line.
+public export
+finish_stream : (Text → Number) → ReflowStream → List Text
+finish_stream measure state =
+  let (Streaming _ _ line, emitted) = complete_word measure state in
+  case line of
+    Nothing ⇒ emitted
+    Just value ⇒ emitted ++ [value]
+
+-- Paragraph boundaries are semantic input, not inferred from arbitrary
+-- transport chunking. The returned state can receive the next paragraph.
+public export
+end_paragraph : (Text → Number) → ReflowStream →
+  (ReflowStream, List Text)
+end_paragraph measure state@(Streaming width _ _) =
+  (Streaming width [] Nothing, finish_stream measure state)
+
+-- Batch adapter over the same one-word-at-a-time state transition. It does
+-- not materialize a joined paragraph or change token boundaries.
+-- Calling feed_chunk instead is the genuine streaming source interface.
+run_segments : (Text → Number) → Number → Maybe Text → List Text → List Text
+run_segments measure width Nothing [] = []
+run_segments measure width (Just line) [] = [line]
+run_segments measure width line (word :: rest) =
+  let (next, emitted) = put_word measure width line word in
+  emitted ++ run_segments measure width next rest
+
+public export
+reflow_streaming_segments : (Text → Number) → Number → List Text → List Text
+reflow_streaming_segments measure width segments =
+  run_segments measure width Nothing segments

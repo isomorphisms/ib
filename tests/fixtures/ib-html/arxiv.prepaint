@@ -1,0 +1,13 @@
+ib-prepaint	1
+revision	0	complete
+requested-url	https://arxiv.org/html/2401.00100
+resolved-url	https://arxiv.org/html/2401.00100
+title	Article & algebra
+heading	2	2 Introduction
+text	A word with é and 🙂.
+row	Name	Value
+text	See
+link	abstract	https://arxiv.org/abs/2401.00100
+text	afterward.
+text	Image pending acquisition: Diagram — Figure 1
+end

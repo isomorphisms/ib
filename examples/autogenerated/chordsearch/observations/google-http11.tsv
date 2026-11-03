@@ -1,0 +1,10 @@
+http_status	200
+content_type	text/html; charset=ISO-8859-1
+content_encoding	identity
+content_range	absent
+declared_length	-1
+received_length	93166
+transfer_decoding	chunked
+utf8	valid
+resolved_url	https://www.google.com/search?q=Bj%C3%B6rk+%26+C%23+chords
+redirect_count	1

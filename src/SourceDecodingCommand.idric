@@ -1,0 +1,85 @@
+module SourceDecodingCommand
+
+import Data.Text
+import Data.Buffer
+import System
+import System.File
+import System.File.Buffer
+import IB.SourceDecoding
+
+-- This command reads a bounded frozen byte file. It neither acquires a source
+-- nor supplies canonical-store, redirect or navigation admission evidence.
+source_byte_limit : Int
+source_byte_limit = 4194304
+
+covering
+read_source_octets : Text → IO (Either Text (List SourceOctet))
+read_source_octets path = do
+  opened ← openFile path Read
+  case opened of
+    Left _ ⇒ pure (Left "source-open-failed")
+    Right file ⇒ do
+      sized ← fileSize file
+      result ← case sized of
+        Left _ ⇒ pure (Left "source-size-unavailable")
+        Right count ⇒
+          if count < 0 || count > source_byte_limit
+            then pure (Left "source-outside-four-mebibyte-bound")
+            else do
+              allocated ← newBuffer count
+              case allocated of
+                Nothing ⇒ pure (Left "source-buffer-unavailable")
+                Just buffer ⇒ do
+                  read_result ← readBufferData file buffer 0 count
+                  case read_result of
+                    Left _ ⇒ pure (Left "source-read-failed")
+                    Right actual_count ⇒
+                      if not (actual_count ≟ count) then pure (Left "short-source-read")
+                      else do
+                        probe ← newBuffer 1
+                        case probe of
+                          Nothing ⇒ pure (Left "source-probe-unavailable")
+                          Just tail_buffer ⇒ do
+                            tail_result ← readBufferData file tail_buffer 0 1
+                            case tail_result of
+                              Right 0 ⇒ map Right (bufferData' buffer)
+                              _ ⇒ pure (Left "source-size-changed-or-eof-unavailable")
+      closeFile file
+      pure result
+
+write_decoded_utf8 : Text → Text → IO (Either Text ())
+write_decoded_utf8 path text = do
+  let count = stringByteLength text
+  allocated ← newBuffer count
+  case allocated of
+    Nothing ⇒ pure (Left "decoded-buffer-unavailable")
+    Just buffer ⇒ do
+      setString buffer 0 text
+      written ← writeBufferToFile path buffer count
+      case written of
+        Left _ ⇒ pure (Left "decoded-write-failed")
+        Right () ⇒ pure (Right ())
+
+covering
+main : IO ()
+main = do
+  arguments ← getArgs
+  case arguments of
+    [_, label, input_path, output_path] ⇒ do
+      if input_path ≟ output_path then die "source-decoding: output-is-input" else pure ()
+      read_result ← read_source_octets input_path
+      case read_result of
+        Left reason ⇒ die ("source-decoding: " ++ reason)
+        Right octets ⇒
+          case decode_html_bytes label octets of
+            Left reason ⇒ die ("source-decoding: " ++ reason)
+            Right decoded ⇒ do
+              written ← write_decoded_utf8 output_path decoded.decoded_text
+              case written of
+                Left reason ⇒ die ("source-decoding: " ++ reason)
+                Right () ⇒ do
+                  putStrLn ("original_byte_count\t" ++ show decoded.original_byte_count)
+                  putStrLn ("decoded_codepoint_count\t" ++ show (length (unpack decoded.decoded_text)))
+                  putStrLn ("selected_encoding\t" ++ decoded.selected_encoding)
+                  putStrLn ("decoder_identity\t" ++ decoder_identity)
+    _ ⇒ die "usage: ib-source-decoder LABEL RAW_BYTES DISPOSABLE_UTF8"

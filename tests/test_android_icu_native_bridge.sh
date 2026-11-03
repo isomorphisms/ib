@@ -2,7 +2,7 @@
 # Host integration of actual ICU #35 native transport through IB's unchanged
 # Shizuku framing + canonical Arena producer and verified reader.
 # The app_process wrapper, Shizuku authority and HTTP server are TEST ONLY.
-# This does not qualify Idriç DEX, real rish, Android or physical C67.
+# This does not qualify Idriç DEX, real rish, Android or physical TAB_P10.
 set -eu
 export LC_ALL=C
 root=$(CDPATH='' cd -- "$(dirname "$0")/.." && pwd)
@@ -17,6 +17,11 @@ for executable in "$arena_tool" "$slice_tool" "$probe"; do
     }
 done
 test -n "$native_so" && test -f "$native_so" || exit 2
+evidence=${IB_TEST_EVIDENCE:-}
+if test -n "$evidence"; then
+    case "$evidence" in /*) ;; *) echo 'absolute test evidence directory required' >&2; exit 2 ;; esac
+    test ! -e "$evidence" && test ! -L "$evidence" || exit 2
+fi
 work=$(mktemp -d)
 server_pid=
 cleanup() {
@@ -45,7 +50,7 @@ ib_shizuku_authority() { printf 'shell\n'; }
 ib_shizuku_run_bounded() {
     test "$1" = 30 || return 90
     case "$2" in
-        *ICU_CAPTURE_BODY_PATH*ICU_CAPTURE_METADATA_PATH*Idric.Generated\ get*) ;;
+        *ICU_CAPTURE_BODY_PATH*ICU_CAPTURE_METADATA_PATH*Idric.Generated\ --http1.1\ get*) ;;
         *) return 91 ;;
     esac
     printf '%s\n' "$2" >> "$IB_TEST_REMOTE_COMMANDS"
@@ -61,12 +66,13 @@ cat > "$work/fake-bin/app_process" <<'WRAPPER'
 # This wrapper invokes ICU #35's *actual compiled native transport*, but is
 # deliberately not a claim of running a real Android Idriç app_process DEX.
 set -eu
-test "$#" = 5
+test "$#" = 6
 case "$1" in -Dicu.library=*) ;; *) exit 80 ;; esac
 test "$2" = /system/bin
 test "$3" = Idric.Generated
-test "$4" = get
-exec "$IB_ICU_NATIVE_PROBE" "$5"
+test "$4" = --http1.1
+test "$5" = get
+exec "$IB_ICU_NATIVE_PROBE" "$6"
 WRAPPER
 chmod 700 "$work/fake-bin/app_process"
 PATH="$work/fake-bin:$PATH"
@@ -96,6 +102,11 @@ class Handler(BaseHTTPRequestHandler):
         pass
 
     def do_GET(self):
+        if self.path == "/cross-origin":
+            self.send_response(301)
+            self.send_header("Location", f"https://localhost:{tls_port}/start")
+            self.end_headers()
+            return
         if self.path == "/start":
             self.send_response(302)
             self.send_header("Location", "/final")
@@ -117,7 +128,7 @@ class Handler(BaseHTTPRequestHandler):
         if self.path == "/binary":
             body = bytes([0, 255, 10])
             mime = "application/octet-stream"
-        elif self.path == "/final":
+        elif self.path in ("/final", "/"):
             body = b"<p>ICU 35 host</p>\n"
             mime = "text/html; charset=utf-8"
         else:
@@ -163,6 +174,9 @@ run secure "https://localhost:$tls_port/start" 17 > "$work/out-secure"
 test "$(field secure schema)" = ib-icu-arena-v2
 test "$(field secure resolved_url)" = "https://localhost:$tls_port/final"
 test "$(field secure redirect_count)" = 1
+first="https://localhost:$tls_port/start"
+final="https://localhost:$tls_port/final"
+test "$(field secure redirect_chain)" = "R1 ${#first} ${first}302 ${#final} $final"
 test "$(field secure http_status)" = 200
 test "$(field secure mime_type)" = text/html
 test "$(field secure charset)" = utf-8
@@ -190,6 +204,36 @@ sh "$aici_verify" "$work/private" plain 18 "http://127.0.0.1:$http_port/start" \
   > "$work/aici-plain.tsv"
 grep -F "$(printf 'PASS\tib-source-v2-admitted\tplain\t18\t')" "$work/aici-plain.tsv"
 
+run crossed "http://127.0.0.1:$http_port/cross-origin" 19 > "$work/out-crossed"
+first="http://127.0.0.1:$http_port/cross-origin"
+middle="https://localhost:$tls_port/start"
+final="https://localhost:$tls_port/final"
+test "$(field crossed redirect_chain)" = "R1 ${#first} ${first}301 ${#middle} ${middle}302 ${#final} $final"
+test "$(field crossed redirect_count)" = 2
+readback crossed > "$work/crossed.body"
+cmp -s "$work/expected.html" "$work/crossed.body"
+sh "$aici_verify" "$work/private" crossed 19 "$first" > "$work/aici-crossed.tsv"
+
+run normalized "http://127.0.0.1:$http_port" 20 > "$work/out-normalized"
+first="http://127.0.0.1:$http_port/"
+test "$(field normalized redirect_chain)" = "R1 ${#first} $first"
+test "$(field normalized redirect_count)" = 0
+test "$(field normalized navigation_admitted)" = YES
+sh "$aici_verify" "$work/private" normalized 20 "http://127.0.0.1:$http_port" > "$work/aici-normalized.tsv"
+
+# A correct body hash cannot hide a corrupted redirect observation. Both
+# readers must refuse before emitting bytes/acceptance, then recover unchanged.
+cp "$work/private/receipts/crossed.tsv" "$work/crossed.original.tsv"
+sed -i 's/^redirect_chain.*/redirect_chain\tR1 1 x/' "$work/private/receipts/crossed.tsv"
+if readback crossed > "$work/corrupt-chain.body" 2>/dev/null; then exit 1; fi
+test ! -s "$work/corrupt-chain.body"
+if sh "$aici_verify" "$work/private" crossed 19 \
+    "http://127.0.0.1:$http_port/cross-origin" > "$work/corrupt-chain.tsv" 2>/dev/null; then exit 1; fi
+test ! -s "$work/corrupt-chain.tsv"
+cp "$work/crossed.original.tsv" "$work/private/receipts/crossed.tsv"
+readback crossed > "$work/recovered-chain.body"
+cmp -s "$work/expected.html" "$work/recovered-chain.body"
+
 run binary "http://127.0.0.1:$http_port/binary" 19 > "$work/out-binary"
 test "$(field binary utf8)" = invalid
 test "$(field binary navigation_admitted)" = NO
@@ -214,6 +258,18 @@ for mode in not-found truncated; do
     test ! -e "$work/private/receipts/reject_$mode.tsv"
     test "$(cat "$work/private/responses.arena.used")" = "$used"
 done
+trusted_ca=$SSL_CERT_FILE
+SSL_CERT_FILE=/dev/null
+export SSL_CERT_FILE
+if run reject_untrusted_tls "https://localhost:$tls_port/final" 20 \
+    > "$work/tls-refused.stdout" 2> "$work/tls-refused.stderr"; then
+    echo 'ICU accepted the untrusted fixture certificate' >&2
+    exit 1
+fi
+test ! -e "$work/private/receipts/reject_untrusted_tls.tsv"
+test "$(cat "$work/private/responses.arena.used")" = "$used"
+SSL_CERT_FILE=$trusted_ca
+export SSL_CERT_FILE
 good_digest=$IB_C67_ICU_SO_SHA256
 IB_C67_ICU_SO_SHA256=0000000000000000000000000000000000000000000000000000000000000000
 export IB_C67_ICU_SO_SHA256
@@ -225,8 +281,26 @@ test ! -e "$work/private/receipts/wronghash.tsv"
 test "$(cat "$work/private/responses.arena.used")" = "$used"
 IB_C67_ICU_SO_SHA256=$good_digest
 export IB_C67_ICU_SO_SHA256
+readback secure > "$work/after-failures.body"
+cmp -s "$work/expected.html" "$work/after-failures.body"
+if test -n "$evidence"; then
+    mkdir -m 700 "$evidence"
+    cp "$work/private/receipts/secure.tsv" "$evidence/secure-receipt.tsv"
+    cp "$work/private/receipts/plain.tsv" "$evidence/plain-receipt.tsv"
+    cp "$work/private/receipts/binary.tsv" "$evidence/binary-receipt.tsv"
+    cp "$work/private/receipts/crossed.tsv" "$evidence/crossed-receipt.tsv"
+    cp "$work/private/receipts/normalized.tsv" "$evidence/normalized-receipt.tsv"
+    cp "$work/secure.body" "$evidence/secure-body.html"
+    cp "$work/plain.body" "$evidence/plain-body.html"
+    cp "$work/binary.body" "$evidence/binary-body"
+    cp "$work/aici-secure.tsv" "$evidence/independent-secure.tsv"
+    cp "$work/aici-plain.tsv" "$evidence/independent-plain.tsv"
+    cp "$work/aici-crossed.tsv" "$evidence/independent-crossed.tsv"
+    cp "$work/aici-normalized.tsv" "$evidence/independent-normalized.tsv"
+    printf 'host_ICU_TLS_Arena\tPASS\nordered_cross_origin_redirects\tPASS\ninitial_endpoint_projection\tPASS\ncorrupted_chain\tREJECTED\nuntrusted_TLS\tREJECTED\nfailed_status\tREJECTED\ntruncation\tREJECTED\nwrong_native_hash\tREJECTED\nlast_good_after_failure\tPASS\nAndroid_app_process\tNOT_RUN\nBinder_Shizuku\tNOT_RUN\nphysical_TAB_P10\tNOT_RUN\n' > "$evidence/stages.tsv"
+fi
 printf '%s\n' \
   'PASS: real compiled pinned ICU #35 native HTTP and HTTPS+redirect captured by IB Shizuku frame into canonical appendfat and verified v2 reader' \
-  'PASS: independent AI-CI verified two actual persisted HTML sources and rejected binary resource' \
-  'PASS: binary fidelity, HTTP 404, truncated length, native hash mismatch, denied publication' \
-  'NOT_RUN: actual Android app_process Idric DEX, physical Shizuku/rish, Binder/PFD and C67 UI'
+  'PASS: independent AI-CI verified four actual persisted HTML sources, ordered cross-origin redirects and omitted-path projection, rejecting a corrupted chain and binary resource' \
+  'PASS: binary fidelity, HTTP 404, truncated length, untrusted TLS, native hash mismatch, denied publication and last-good readback' \
+  'NOT_RUN: actual Android app_process Idric DEX, physical Shizuku/rish, Binder/PFD and TAB_P10 UI'

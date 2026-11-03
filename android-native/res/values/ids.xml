@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <item type="id" name="reader_body" />
+    <item type="id" name="reader_input" />
+    <item type="id" name="sources_panel" />
+    <item type="id" name="sources_button" />
+    <item type="id" name="read_button" />
+    <item type="id" name="reader_status" />
+    <item type="id" name="permission_button" />
+    <item type="id" name="reflow_button" />
+    <item type="id" name="back_button" />
+    <item type="id" name="forward_button" />
+    <item type="id" name="reader_title" />
+    <item type="id" name="search_button" />
+    <item type="id" name="google_acquisition_panel" />
+    <item type="id" name="cancel_button" />
+    <item type="id" name="reader_scroll" />
+</resources>

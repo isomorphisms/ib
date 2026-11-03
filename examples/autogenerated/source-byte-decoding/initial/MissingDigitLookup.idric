@@ -1,0 +1,10 @@
+module MissingDigitLookup
+
+import Data.Text
+import Data.List
+
+-- Reduced initial test-helper attempt: the pinned 94df library does not export
+-- elemIndex through Data.List. The maintained helper uses an explicit bounded
+-- position lookup instead; this file records the rejected library assumption.
+digit_value : Char → Maybe Int
+digit_value character = map cast (elemIndex character (unpack "0123456789"))

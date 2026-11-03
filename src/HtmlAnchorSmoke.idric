@@ -1,0 +1,78 @@
+module HtmlAnchorSmoke
+
+import Data.Text
+import IB.HtmlAnchors
+import IB.HtmlPrepaint
+import IB.Reader.Document
+import IB.Prepaint.Reflow
+import IB.Reflow
+import System
+
+source_html : Text
+source_html =
+  "<html><head><title>Anchors</title></head><body>" ++
+  "<p>before text</p><h2 id='caf&#233;'>Cafe heading</h2>" ++
+  "<p>alpha &#x1F30D; <span id='inside'>beta</span> tail</p>" ++
+  "<a name='old'></a><p>after named anchor</p>" ++
+  "<script id='hidden'>unavailable</script>" ++
+  "<p id='dup'>first duplicate</p><p id='dup'>second duplicate</p>" ++
+  "<a name='priority'>legacy name</a><p id='priority'>identifier wins</p>" ++
+  "<p id='plus+name'>literal plus</p><a href='#inside'>Jump</a>" ++
+  "</body></html>"
+
+fixture_evidence : HtmlEvidence
+fixture_evidence =
+  let digest = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      count : Integer = cast (length (unpack source_html)) in
+  HtmlSourceEvidence "arena:anchor-fixture" "1" digest digest count count
+    "https://example.com/anchors#inside" "https://example.com/anchors#inside"
+    "text/html" "utf-8" "200" True True
+
+point_is : HtmlPrepaintResult → Text → Number → Number → Bool
+point_is document label block point =
+  case html_fragment_source_point document label of
+    Left _ ⇒ False
+    Right (actual_block, actual_point) ⇒ actual_block ≟ block && actual_point ≟ point
+
+refused_point : HtmlPrepaintResult → Text → Bool
+refused_point document label = case html_fragment_source_point document label of
+  Left _ ⇒ True
+  Right _ ⇒ False
+
+decoded_is : Text → Text → Bool
+decoded_is encoded expected = case decode_html_fragment encoded of
+  Left _ ⇒ False
+  Right actual ⇒ actual ≟ expected
+
+bad_fragment : Text → Bool
+bad_fragment encoded = case decode_html_fragment encoded of
+  Left _ ⇒ True
+  Right _ ⇒ False
+
+%export "dex:html_anchor_cases"
+html_anchor_cases : IO ()
+html_anchor_cases = do
+  let decoder_cases = decoded_is "caf%C3%A9" "café" &&
+        decoded_is "%F0%9F%8C%8D" "🌍" && decoded_is "%F4%8F%BF%BF" (pack [chr 1114111]) &&
+        decoded_is "plus+name" "plus+name" && decoded_is "%252F" "%2F" &&
+        decoded_is "%23" "#" && decoded_is "%20" " " && decoded_is "" "" &&
+        all bad_fragment ["%", "%0", "%GG", "%C0%AF", "%ED%A0%80", "%F4%90%80%80",
+          "%F5%80%80%80", "%E2%82", "%80", "%00"]
+  let result = do
+        admitted ← convert_admitted_html fixture_evidence source_html
+        prepared ← prepare_committed_document_advances fixture_evidence source_html
+          (Requirements 80 promptly) "unit-codepoint-advances-v1" (\_ ⇒ 1)
+        point ← html_fragment_display_offset prepared "inside"
+        Right (point_is admitted "café" 1 0 && point_is admitted "inside" 2 8 &&
+          point_is admitted "old" 3 0 && point_is admitted "dup" 4 0 &&
+          point_is admitted "priority" 7 0 && point_is admitted "plus+name" 8 0 &&
+          refused_point admitted "hidden" && refused_point admitted "missing" &&
+          refused_point admitted "%69nside" && point ≟ 36)
+  let passed = decoder_cases && case result of
+        Left _ ⇒ False
+        Right value ⇒ value
+  putStrLn (show passed)
+  if passed then pure () else exitFailure
+
+main : IO ()
+main = html_anchor_cases

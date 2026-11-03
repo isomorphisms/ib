@@ -1,0 +1,18 @@
+#!/usr/bin/env grease
+# Run only from an authorized, pinned private Binder broker holding the
+# WRITE-end PFD as stdout. No Arena path or app UID filesystem access.
+set -eu
+if test "$#" -ne 1; then
+  printf 'usage: ib_android_icu_stdout.grease HTTP_URL\n' >&2
+  exit 2
+fi
+script_directory=$(dirname "$0")
+repository_root=$(CDPATH='' cd -- "$script_directory/.." && pwd)
+. "$repository_root/lib/android_shizuku_host.grease"
+. "$repository_root/lib/android_shizuku_icu_provider.grease"
+. "$repository_root/lib/android_binder_icu.grease"
+
+# Writes literal ICU response bytes to stdout. The caller must close its PFD
+# and send the real exit status to private Binder FINISH; failed or truncated
+# stdout cannot become a committed source.
+ib_binder_icu_stream "$1"

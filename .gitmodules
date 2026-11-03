@@ -1,3 +1,6 @@
 [submodule "vendor/harvest-images-from-pdf"]
 	path = vendor/harvest-images-from-pdf
 	url = https://github.com/isomorphisms/harvest-images-from-pdf.git
+[submodule "vendor/android-NDK"]
+	path = vendor/android-NDK
+	url = https://github.com/isomorphisms/android-NDK.git

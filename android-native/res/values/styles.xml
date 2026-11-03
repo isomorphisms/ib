@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <attr name="readerSurfaceColor" format="color" />
+    <style name="Theme.IBNative" parent="android:style/Theme.Material.NoActionBar">
+        <item name="readerSurfaceColor">#171717</item>
+        <item name="android:windowBackground">#171717</item>
+        <item name="android:colorAccent">#B8C7DE</item>
+        <item name="android:statusBarColor">#171717</item>
+        <item name="android:navigationBarColor">#171717</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:fontFamily">sans</item>
+    </style>
+</resources>
