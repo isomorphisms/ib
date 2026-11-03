@@ -23,6 +23,7 @@ mkdir -p "$evidence/frontend-parts"
 split -b 32m "$evidence/frontend-replay.tar.gz" "$evidence/frontend-parts/part-"
 test ! -e "$evidence/frontend-parts/part-af"
 printf '' > "$evidence/frontend-parts/parts.sha256"
-for part in @(rg --files "$evidence/frontend-parts" -g 'part-*' | sort) {
-  sha256sum "$part" >> "$evidence/frontend-parts/parts.sha256"
+for suffix in aa ab ac ad ae {
+  var part = "$evidence/frontend-parts/part-$suffix"
+  if test -f "$part" { sha256sum "$part" >> "$evidence/frontend-parts/parts.sha256" }
 }

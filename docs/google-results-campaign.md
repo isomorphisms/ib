@@ -16,7 +16,9 @@ and followed by the changed application. This ledger is not release acceptance.
   [hosted classifier run](https://github.com/isomorphisms/ai-ci/actions/runs/41569944102)
   **PASS**: three positives and twelve designated semantic refusals.
 - Independent compiled IB observer: ai-ci
-  `a163a5ffdcdbf07e5543d5839be64a5c821ccdd3`; execution **PENDING**. The producer
+  `a163a5ffdcdbf07e5543d5839be64a5c821ccdd3`; local checked host execution **PASS**
+  (eleven assertions and three compiled semantic mutants rejected at their
+  designated assertions). This is not ART or live acceptance. The producer
   consumes those immutable observer bytes without changing their assertions.
 - The [first actual ICU matrix attempt](https://github.com/isomorphisms/ai-ci/actions/runs/41569944402)
   stopped before acquisition: the default Make target did not build the command
@@ -24,6 +26,16 @@ and followed by the changed application. This ledger is not release acceptance.
   independent runner repair both issues. No new Google response was obtained
   by that failed build. Matrix transport, HTTP and semantic outcomes remain
   separate; completion of characterization cannot imply results.
+- The [completed fresh matrix](https://github.com/isomorphisms/ai-ci/actions/runs/41573122647)
+  at ICU4f365/ai-ci aef9dd obtains six real HTTP200 responses,92433–92883 bytes
+  (http10 is92815). Each response is retained with its digest, exact command
+  arguments, metadata and parser inputs. All six independent semantic outcomes
+  are **JAVASCRIPT_REQUIRED**, with zero qualifying public destinations.
+  Artifact13202677402 is722420 bytes; ZIP SHA256
+  `a19a928d70e92e0975ff0198dc16445d6d416ef853927017192254c87cd62112`.
+  HTTP/1.1 follows one observed301 to www.google.com, decodes chunked framing
+  into92433 identity-encoded ISO-8859-1 entity bytes. Wire/TLS octets are not
+  claimed as captured. Browser-assisted acquisition remains unimplemented.
 
 The first changed IB producer41571281718 failed at the result fold's `else`
 layout. That failed source remains in history; the current tree repairs the
@@ -42,13 +54,13 @@ acceptance failed. Those successes do not qualify the changed reader.
 
 | Requirement | State | Missing evidence |
 | --- | --- | --- |
-| ICU authenticated HTTPS acquisition | PENDING | Fresh changed-command execution |
-| Independent original bytes and metadata | PENDING | New matrix readback and digests |
-| Genuine ICU-only Google public results | PENDING | Actual titled public destinations; historical baseline FAIL |
+| ICU authenticated HTTPS acquisition | PASS on hosted host | Actual maintained command in matrix41573122647; changed Android pending |
+| Independent original bytes and metadata | PASS on hosted host | Six original entity captures and metadata; ZIP independently verified |
+| Genuine ICU-only Google public results | FAIL | All six fresh profiles require JavaScript and supply no qualifying results |
 | Native result records, titles and URLs | PENDING | Checked compilation, runtime and live results |
 | Actual destination touch and acquisition | NOT_RUN | A real Google result in the installed application |
 | History, exact copy, reflow and recovery | PENDING | Changed-head complete regression and result navigation |
-| Independent compiled controls | PENDING | Exact assertion failures after successful compilation |
+| Independent compiled controls | PASS on checked host | Eleven positives; three compiled mutants execute and fail designated assertions; ART pending |
 | API29/API34 end-to-end | NOT_RUN | Signed changed APK and full real transaction |
 | Reproducible signed three-ABI APK | NOT_RUN | Changed-head build, identity, signer and byte-reproduction receipts |
 | Physical C67 or SVITOO TAB_P10 | BLOCKED | Authenticated channel and fresh instance/ABI/SDK/signer/version/storage/Shizuku observations |

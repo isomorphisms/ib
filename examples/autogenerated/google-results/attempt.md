@@ -36,3 +36,18 @@ the `do` block needed deeper layout indentation. The existing source was
 preserved in the failed commit; the current tree repairs that layout and
 qualifies the pure semantics with independent compiled controls before the
 larger DEX suite. This is a source correction, not a backend gap or acceptance.
+
+Local replay of the verified producer compiler now passes ten maintained
+result assertions and the independent observer's eleven assertions. All three
+independently compiled mutants execute and fail their designated assertion
+(heading semantics, first-party control refusal and source generation).
+These receipts are host execution, not ART or live Google acceptance. The
+second hosted attempt stopped because `rg` was used before its installation;
+the workflow now installs it before running that observer.
+
+The fresh ICU matrix41573122647 completed at ICU4f365/ai-ci aef9dd. Every one
+of six controlled legitimate requests returned HTTP200 and an identity-encoded
+ISO-8859-1 HTML entity, but the independent classifier found zero qualifying
+public results. The HTTP/1.1 entity is92433 bytes, chunked, with one301 redirect
+to www.google.com. All six semantic outcomes are JAVASCRIPT_REQUIRED. A
+successful matrix job means characterization completed, not search success.

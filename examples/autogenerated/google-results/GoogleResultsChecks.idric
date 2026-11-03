@@ -55,6 +55,10 @@ main = do
     (refuses "<html><body>Before you continue to Google<a href=\"https://en.wikipedia.org/wiki/Music\"><h3>Music</h3></a></body></html>")
   check "navigation controls are not results"
     (refuses "<html><body><nav><a href=\"https://en.wikipedia.org/wiki/Music\"><h3>Music</h3></a></nav></body></html>")
+  check "nested navigation controls are not results"
+    (refuses "<html><body><nav><nav>Inside</nav><a href=\"https://en.wikipedia.org/wiki/Music\"><h3>Music</h3></a></nav></body></html>")
+  check "noncanonical query ordering still requires result semantics"
+    (is_google_search "https://www.google.com/search?hl=en&q=music")
   check "changed source identity is refused" (case fixture html of
     Right source ⇒ case google_results_from_source ({ recovered := DocumentLog "wrong-source" (document_log_events source.recovered) } source) of
       Left _ ⇒ True

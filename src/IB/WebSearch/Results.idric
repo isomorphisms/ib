@@ -40,8 +40,8 @@ starts prefix value = take (length (unpack prefix)) (unpack value) ≟ unpack pr
 
 export
 is_google_search : Text → Bool
-is_google_search address = starts "https://google.com/search?q=" address ||
-  starts "https://www.google.com/search?q=" address
+is_google_search address = starts "https://google.com/search?" address ||
+  starts "https://www.google.com/search?" address
 
 query_value : List Char → Text
 query_value [] = ""
@@ -224,8 +224,8 @@ google_results_from_source source =
   else if document_log_source source.recovered /= source.evidence.source_key ||
           source.evidence.claimed_sha256 /= source.evidence.reopened_sha256
     then Left "Google result source identity or digest mismatch"
-  else if not (google_origin source.evidence.resolved_url)
-    then Left "Google search reached consent, verification or another origin; no public results were admitted"
+  else if not (google_origin source.evidence.resolved_url) || not (is_google_search source.evidence.resolved_url)
+    then Left "Google search reached a control, consent or verification document; no public results were admitted"
   else if refusal_content source then Left "Google returned a consent or verification page; no public results were admitted"
   else do
     query ← query_from_request source.evidence.requested_url
