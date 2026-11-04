@@ -49,3 +49,19 @@ physical tablet channel in this environment. A model name, old phone receipt,
 synthetic Cat Food inventory, host pass or emulator pass cannot qualify TAB_P10.
 No APK, physical acceptance, release readiness or end-to-end completion is
 claimed by this attempt record.
+# Current native-presentation observer reconciliation
+
+The unchanged signed candidate at `a30381aee243d56d83da19befe64e2f84ebccfc9`
+independently passed API29 and API34 in ai-ci run41758756603. The observer source
+was `67b425686234e9cb007e5b16a69611b42cfbabc0`. Those receipts cover real native
+acquisition, retained-source history, History/Reader View/selection/scroll
+preservation, exact stale-revision/callback refusals and capability/provenance
+mutations. They do not make the old producer runtime jobs green: those still
+pin the superseded external diagnostic probe and root-transition coordinator.
+
+The source and runtime observer checkouts, presentation oracle and immutable
+archive-input expectation now all use that same independently qualified source.
+The actual observer-pin mismatch controls remain required. Application semantics,
+source arena, renderer, manifest and signer are unchanged. A new exact-source
+candidate build and full producer API29/34 matrix are required for this commit;
+the older candidate's passing receipt is not promoted to a new source identity.
