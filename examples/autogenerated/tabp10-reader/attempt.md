@@ -65,3 +65,19 @@ The actual observer-pin mismatch controls remain required. Application semantics
 source arena, renderer, manifest and signer are unchanged. A new exact-source
 candidate build and full producer API29/34 matrix are required for this commit;
 the older candidate's passing receipt is not promoted to a new source identity.
+# Material control tint reconciliation
+
+Independent6f88d23d API29/34 reader/history semantics passed. Actual retained
+document screenshots show old XML backgroundTint=#292929 surviving native
+setBackground, while shared styling changes text to the light theme foreground.
+This creates dark-on-dark legacy controls; History, which had no XML tint,
+already has the intended pale neutral surface. Remove those conflicting XML
+tints rather than adding another palette or replacing the reader controls.
+
+The producer now pins ai-ci da9207f05189058b9e4002f326f6c56c800b4c88.
+Its independent live compositor probe samples actual Sources/History Button
+fills before the instrumentation finishes, retaining the actual live frame.
+A test-only inflated-control tint mutation must fail the exact pixel assertion.
+The old semantic passes do not qualify the old control contrast. New source
+requires its own reproducible APK and API29/34 runtime results; physical remains
+blocked. Native source/reflow/selection/history semantics are unchanged.
