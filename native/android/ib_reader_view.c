@@ -4,6 +4,7 @@
 #include <android/log.h>
 #include <math.h>
 #include <stdint.h>
+#include "material.h"
 
 #define BODY_VIEW 2130903040
 #define ANDROID_COPY 16908321
@@ -276,10 +277,10 @@ Java_org_isomorphisms_ib_ReaderBridge_markText(JNIEnv *e, jclass ignored, jobjec
     int ok = span_type && (*e)->IsInstanceOf(e, text, span_type) && set &&
         first >= 0 && first < after && after <= count && style >= 0 && style <= 6 && !(*e)->ExceptionCheck(e);
     if (ok) {
+        M3Theme palette ← m3_theme(e, activity);
         jclass color_type = (*e)->FindClass(e, "android/text/style/ForegroundColorSpan");
         jmethodID color_constructor = color_type ? (*e)->GetMethodID(e, color_type, "<init>", "(I)V") : NULL;
-        jobject color = color_constructor ? (*e)->NewObject(e, color_type, color_constructor,
-            style == 0 ? (jint)UINT32_C(0xff90caf9) : (jint)UINT32_C(0xffce93d8)) : NULL;
+        jobject color = color_constructor ? (*e)->NewObject(e, color_type, color_constructor, palette.primary) : NULL;
         jclass underline_type = color ? (*e)->FindClass(e, "android/text/style/UnderlineSpan") : NULL;
         jmethodID underline_constructor = underline_type ? (*e)->GetMethodID(e, underline_type, "<init>", "()V") : NULL;
         jobject underline = underline_constructor ? (*e)->NewObject(e, underline_type, underline_constructor) : NULL;

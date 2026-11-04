@@ -49,3 +49,56 @@ physical tablet channel in this environment. A model name, old phone receipt,
 synthetic Cat Food inventory, host pass or emulator pass cannot qualify TAB_P10.
 No APK, physical acceptance, release readiness or end-to-end completion is
 claimed by this attempt record.
+# Current native-presentation observer reconciliation
+
+The unchanged signed candidate at `a30381aee243d56d83da19befe64e2f84ebccfc9`
+independently passed API29 and API34 in ai-ci run41758756603. The observer source
+was `67b425686234e9cb007e5b16a69611b42cfbabc0`. Those receipts cover real native
+acquisition, retained-source history, History/Reader View/selection/scroll
+preservation, exact stale-revision/callback refusals and capability/provenance
+mutations. They do not make the old producer runtime jobs green: those still
+pin the superseded external diagnostic probe and root-transition coordinator.
+
+The source and runtime observer checkouts, presentation oracle and immutable
+archive-input expectation now all use that same independently qualified source.
+The actual observer-pin mismatch controls remain required. Application semantics,
+source arena, renderer, manifest and signer are unchanged. A new exact-source
+candidate build and full producer API29/34 matrix are required for this commit;
+the older candidate's passing receipt is not promoted to a new source identity.
+# Material control tint reconciliation
+
+Independent6f88d23d API29/34 reader/history semantics passed. Actual retained
+document screenshots show old XML backgroundTint=#292929 surviving native
+setBackground, while shared styling changes text to the light theme foreground.
+This creates dark-on-dark legacy controls; History, which had no XML tint,
+already has the intended pale neutral surface. Remove those conflicting XML
+tints rather than adding another palette or replacing the reader controls.
+
+The producer now pins ai-ci da9207f05189058b9e4002f326f6c56c800b4c88.
+Its independent live compositor probe samples actual Sources/History Button
+fills before the instrumentation finishes, retaining the actual live frame.
+A test-only inflated-control tint mutation must fail the exact pixel assertion.
+The old semantic passes do not qualify the old control contrast. New source
+requires its own reproducible APK and API29/34 runtime results; physical remains
+blocked. Native source/reflow/selection/history semantics are unchanged.
+# Consume the qualified compositor mutation driver
+
+Sourcea6ef built reproducible signed three-ABI APKs in41768558936. Both producer
+API29/34 runs passed the live color/history check, then failed the old observer's
+required tint refusal. The same new APK passed actual color and retained history
+in independent9efa API34, but its mutation also returned normal success. A View
+tint setter returning had not established that the new compositor frame showed
+the mutation; that whole workflow was not PASS.
+
+Independent observer d059e45b56de1f9b17e71852c886111940701f27 now observes the
+actual Sources pixel reach the declared dark tint before running the unchanged
+palette assertion. Activation failure cannot count as rejection. It saves the
+actual good and mutated frames, requires the exact compositor refusal and
+verifies unchanged durable history. Run41775440050 PASS on both API29 and API34
+against the unchanged a6ef APK, including actual tint activation and rejection.
+
+All producer source/runtime/presentation checkouts and archive-input expectations
+now consistently pin this independently qualified observer. Application code,
+reader resources, package/version and persistent test signer remain unchanged
+by this observer reconciliation. This new source still requires its own APK,
+reproduction and producer runtime receipts; prior APKs are not relabeled.
