@@ -7,7 +7,7 @@ var artifact = ARGV[2]
 var digest = ARGV[3]
 var input = ARGV[4]
 var evidence = ARGV[5]
-var expected_observer = 'da9207f05189058b9e4002f326f6c56c800b4c88'
+var expected_observer = 'd059e45b56de1f9b17e71852c886111940701f27'
 var grease = ENV.IB_GREASE
 printf '%s\n' "$source" | rg -x '[0-9a-f]{40}'
 printf '%s\n' "$artifact" | rg -x '[1-9][0-9]{0,19}'

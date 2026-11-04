@@ -43,19 +43,19 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           repository: isomorphisms/ai-ci
-          ref: da9207f05189058b9e4002f326f6c56c800b4c88
+          ref: d059e45b56de1f9b17e71852c886111940701f27
           path: .tools/reader-acceptance
           persist-credentials: false
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           repository: isomorphisms/ai-ci
-          ref: da9207f05189058b9e4002f326f6c56c800b4c88
+          ref: d059e45b56de1f9b17e71852c886111940701f27
           path: .tools/google-result-acceptance
           persist-credentials: false
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           repository: isomorphisms/ai-ci
-          ref: da9207f05189058b9e4002f326f6c56c800b4c88
+          ref: d059e45b56de1f9b17e71852c886111940701f27
           path: .tools/presentation-acceptance
           persist-credentials: false
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
@@ -339,7 +339,7 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           repository: isomorphisms/ai-ci
-          ref: da9207f05189058b9e4002f326f6c56c800b4c88
+          ref: d059e45b56de1f9b17e71852c886111940701f27
           path: .tools/reader-acceptance
           persist-credentials: false
       - id: ick
@@ -347,7 +347,7 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           repository: isomorphisms/ai-ci
-          ref: da9207f05189058b9e4002f326f6c56c800b4c88
+          ref: d059e45b56de1f9b17e71852c886111940701f27
           path: .tools/presentation-acceptance
           persist-credentials: false
       - id: presentation_observer_ready

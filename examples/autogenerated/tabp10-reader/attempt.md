@@ -81,3 +81,24 @@ A test-only inflated-control tint mutation must fail the exact pixel assertion.
 The old semantic passes do not qualify the old control contrast. New source
 requires its own reproducible APK and API29/34 runtime results; physical remains
 blocked. Native source/reflow/selection/history semantics are unchanged.
+# Consume the qualified compositor mutation driver
+
+Sourcea6ef built reproducible signed three-ABI APKs in41768558936. Both producer
+API29/34 runs passed the live color/history check, then failed the old observer's
+required tint refusal. The same new APK passed actual color and retained history
+in independent9efa API34, but its mutation also returned normal success. A View
+tint setter returning had not established that the new compositor frame showed
+the mutation; that whole workflow was not PASS.
+
+Independent observer d059e45b56de1f9b17e71852c886111940701f27 now observes the
+actual Sources pixel reach the declared dark tint before running the unchanged
+palette assertion. Activation failure cannot count as rejection. It saves the
+actual good and mutated frames, requires the exact compositor refusal and
+verifies unchanged durable history. Run41775440050 PASS on both API29 and API34
+against the unchanged a6ef APK, including actual tint activation and rejection.
+
+All producer source/runtime/presentation checkouts and archive-input expectations
+now consistently pin this independently qualified observer. Application code,
+reader resources, package/version and persistent test signer remain unchanged
+by this observer reconciliation. This new source still requires its own APK,
+reproduction and producer runtime receipts; prior APKs are not relabeled.
