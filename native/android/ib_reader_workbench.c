@@ -17,7 +17,14 @@ static void style_branch(JNIEnv *e, jobject view, M3Theme theme, int depth, unsi
     jclass group ← (*e)->FindClass(e, "android/view/ViewGroup");
     if ((*e)->IsInstanceOf(e, view, text))
         (*e)->CallVoidMethod(e, view, m3_method(e, view, "setTextColor", "(I)V"), theme.on_surface);
-    if ((*e)->IsInstanceOf(e, view, button)) m3_control(e, view, theme, 0);
+    if ((*e)->IsInstanceOf(e, view, button)) {
+        m3_control(e, view, theme, 0);
+        /* The installed reader's reflow selector has an established visible
+         * label contract. Styling must not change that independent interface. */
+        jint identity ← (*e)->CallIntMethod(e, view, m3_method(e, view, "getId", "()I"));
+        if (identity == 0x7f030007)
+            (*e)->CallVoidMethod(e, view, m3_method(e, view, "setAllCaps", "(Z)V"), JNI_TRUE);
+    }
     if ((*e)->IsInstanceOf(e, view, group)) {
         (*e)->CallVoidMethod(e, view, m3_method(e, view, "setBackgroundColor", "(I)V"), theme.surface);
         jint count ← (*e)->CallIntMethod(e, view, m3_method(e, view, "getChildCount", "()I"));
