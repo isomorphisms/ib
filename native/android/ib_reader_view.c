@@ -280,7 +280,7 @@ Java_org_isomorphisms_ib_ReaderBridge_markText(JNIEnv *e, jclass ignored, jobjec
         M3Theme palette ← m3_theme(e, activity);
         jclass color_type = (*e)->FindClass(e, "android/text/style/ForegroundColorSpan");
         jmethodID color_constructor = color_type ? (*e)->GetMethodID(e, color_type, "<init>", "(I)V") : NULL;
-        jobject color = color_constructor ? (*e)->NewObject(e, color_type, color_constructor, palette.primary) : NULL;
+        jobject color = color_constructor ? (*e)->NewObject(e, color_type, color_constructor, palette.on_surface) : NULL;
         jclass underline_type = color ? (*e)->FindClass(e, "android/text/style/UnderlineSpan") : NULL;
         jmethodID underline_constructor = underline_type ? (*e)->GetMethodID(e, underline_type, "<init>", "()V") : NULL;
         jobject underline = underline_constructor ? (*e)->NewObject(e, underline_type, underline_constructor) : NULL;

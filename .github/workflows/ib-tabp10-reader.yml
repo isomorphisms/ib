@@ -28,6 +28,12 @@ jobs:
           persist-credentials: false
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
+          repository: isomorphisms/android-NDK
+          ref: 3e682fb1175beef5625dbd2418730220e49fc9bd
+          path: .tools/charcoal
+          persist-credentials: false
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
           repository: isomorphisms/Idric
           ref: 740bbf2b1d9e811fd00c719c3473eede17ceea3b
           path: .tools/Idric
