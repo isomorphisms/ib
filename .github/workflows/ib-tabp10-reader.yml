@@ -62,7 +62,7 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           repository: isomorphisms/ai-ci
-          ref: 981fe1c068f4754135fe83a648354880714e01ed
+          ref: 3e7a512fd68e299491bac8b40f2e199875b62008
           path: .tools/presentation-acceptance
           persist-credentials: false
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
@@ -355,7 +355,7 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           repository: isomorphisms/ai-ci
-          ref: 981fe1c068f4754135fe83a648354880714e01ed
+          ref: 3e7a512fd68e299491bac8b40f2e199875b62008
           path: .tools/presentation-acceptance
           persist-credentials: false
       - id: presentation_observer_ready
