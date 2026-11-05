@@ -6,28 +6,28 @@
         android:orientation="horizontal" android:gravity="center_vertical" android:paddingHorizontal="12dp">
         <Button android:id="@id/sources_button" android:layout_width="56dp"
             android:layout_height="48dp" android:text="☰" android:contentDescription="Sources"
-            android:textColor="#ECECEC" android:onClick="onClick" />
+            android:textColor="#F4F4F4" android:onClick="onClick" />
         <TextView android:id="@id/reader_title" android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content"
-            android:text="IB" android:textSize="21sp" android:textColor="#ECECEC" android:paddingStart="16dp"
+            android:text="IB" android:textSize="21sp" android:textColor="#F4F4F4" android:paddingStart="16dp"
             android:maxLines="1" android:ellipsize="end" />
         <Button android:id="@id/reflow_button" android:layout_width="140dp"
             android:layout_height="48dp" android:text="Reflow: Greedy" android:onClick="onClick"
-            android:textColor="#ECECEC" />
+            android:textColor="#F4F4F4" />
     </LinearLayout>
     <TextView android:id="@id/reader_status" android:layout_width="match_parent" android:layout_height="wrap_content"
-        android:textSize="14sp" android:textColor="#ACACAC" android:paddingHorizontal="16dp"
+        android:textSize="14sp" android:textColor="#B4B4B4" android:paddingHorizontal="16dp"
         android:paddingBottom="8dp" android:maxLines="3" android:ellipsize="end" />
     <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
         android:orientation="horizontal" android:paddingHorizontal="12dp">
         <Button android:id="@id/back_button" android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content"
             android:text="Back" android:enabled="false" android:onClick="onClick"
-            android:textColor="#ECECEC" />
+            android:textColor="#F4F4F4" />
         <Button android:id="@id/forward_button" android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content"
             android:text="Forward" android:enabled="false" android:onClick="onClick"
-            android:textColor="#ECECEC" />
+            android:textColor="#F4F4F4" />
         <Button android:id="@id/cancel_button" android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content"
             android:text="Cancel" android:onClick="onClick"
-            android:textColor="#ECECEC" />
+            android:textColor="#F4F4F4" />
         <Button android:id="@id/workbench_button" android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content"
             android:text="History" android:contentDescription="Retained workbench history" android:onClick="onClick" />
     </LinearLayout>
@@ -35,20 +35,20 @@
         android:layout_height="wrap_content" android:orientation="vertical"
         android:padding="16dp" android:background="#212121" android:visibility="gone">
         <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
-            android:text="Sources" android:textSize="18sp" android:textColor="#ECECEC" />
+            android:text="Sources" android:textSize="18sp" android:textColor="#F4F4F4" />
         <EditText android:id="@id/reader_input" android:layout_width="match_parent"
             android:layout_height="64dp" android:gravity="top" android:inputType="text"
-            android:singleLine="true" android:hint="URL or search terms" android:textSize="16sp" android:textColor="#ECECEC"
-            android:textColorHint="#ACACAC" android:padding="8dp" />
+            android:singleLine="true" android:hint="URL or search terms" android:textSize="16sp" android:textColor="#F4F4F4"
+            android:textColorHint="#B4B4B4" android:padding="8dp" />
         <Button android:id="@id/read_button" android:layout_width="wrap_content"
             android:layout_height="48dp" android:text="Read" android:onClick="onClick"
-            android:textColor="#171717" />
+            android:textColor="#F4F4F4" />
         <Button android:id="@id/search_button" android:layout_width="wrap_content"
             android:layout_height="48dp" android:text="Search Google" android:onClick="onClick"
-            android:textColor="#171717" />
+            android:textColor="#F4F4F4" />
         <Button android:id="@id/permission_button" android:layout_width="wrap_content"
             android:layout_height="48dp" android:text="Authorize Shizuku" android:onClick="onClick"
-            android:textColor="#ECECEC" />
+            android:textColor="#F4F4F4" />
     </LinearLayout>
     <FrameLayout android:id="@id/google_acquisition_panel" android:layout_width="match_parent"
         android:layout_height="0dp" android:layout_weight="1" android:visibility="gone" />
@@ -62,7 +62,7 @@
         android:fillViewport="true" android:padding="20dp">
         <org.isomorphisms.ib.NativeTextView android:id="@id/reader_body" android:layout_width="match_parent"
             android:layout_height="wrap_content" android:textSize="18sp" android:lineSpacingExtra="5dp"
-            android:textColor="#ECECEC" android:textIsSelectable="true" android:fontFamily="sans"
+            android:textColor="#F4F4F4" android:textIsSelectable="true" android:fontFamily="sans"
             android:paddingBottom="40dp" />
     </ScrollView>
 </LinearLayout>

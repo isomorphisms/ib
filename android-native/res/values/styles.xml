@@ -2,12 +2,24 @@
 <resources>
     <attr name="readerSurfaceColor" format="color" />
     <style name="Theme.IBNative" parent="android:style/Theme.Material.NoActionBar">
-        <item name="readerSurfaceColor">#171717</item>
-        <item name="android:windowBackground">#171717</item>
-        <item name="android:colorAccent">#B8C7DE</item>
-        <item name="android:statusBarColor">#171717</item>
-        <item name="android:navigationBarColor">#171717</item>
+        <item name="readerSurfaceColor">#212121</item>
+        <item name="android:windowBackground">#212121</item>
+        <item name="android:colorAccent">#B4B4B4</item>
+        <item name="android:statusBarColor">#212121</item>
+        <item name="android:navigationBarColor">#212121</item>
         <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowSplashScreenBackground">#212121</item>
+        <item name="android:colorBackground">#212121</item>
+        <item name="android:colorForeground">#F4F4F4</item>
+        <item name="android:textColorPrimary">#F4F4F4</item>
+        <item name="android:textColorSecondary">#B4B4B4</item>
+        <item name="android:textColorHint">#B4B4B4</item>
+        <item name="android:textColorHighlight">#595959</item>
+        <item name="android:colorControlNormal">#B4B4B4</item>
+        <item name="android:colorControlActivated">#F4F4F4</item>
+        <item name="android:colorButtonNormal">#383838</item>
+        <item name="android:windowLightNavigationBar">false</item>
+        <item name="android:forceDarkAllowed">false</item>
         <item name="android:fontFamily">sans</item>
     </style>
 </resources>
