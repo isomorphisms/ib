@@ -57,6 +57,9 @@ legacy_article =
   "<TABLE><TR><TD>first<BR>second</TD><TD>third</TD></TR></TABLE>" ++
   "</BODY></HTML>"
 
+legacy_page_url : Text
+legacy_page_url = "http://www.wlym.com/antidummies/part21.html"
+
 plain_url_list : Text
 plain_url_list =
   "https://example.test/one\n" ++
@@ -79,8 +82,7 @@ main = do
   let shell = extract_html "https://console.test/app" "https://console.test/app" shell_only
   let article = prepaint_full_text "https://example.test/notes" "https://example.test/notes" article_body
   let plain = prepaint_text "URL list" plain_url_list
-  let legacy = extract_html "http://www.wlym.com/antidummies/part21.html"
-    "http://www.wlym.com/antidummies/part21.html" legacy_article
+  let legacy = extract_html legacy_page_url legacy_page_url legacy_article
   let phone = phone_lines 6 48 full
   putStrLn ("information-title=" ++ view_title full)
   putStrLn ("early-table-header=" ++ show (has_table_row ["Service", "Status"] early))
