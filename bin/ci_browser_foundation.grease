@@ -149,6 +149,10 @@ build_information_programs() {
     2>&1 | tee /tmp/idric-arxiv-prepaint-compile.txt
   test -x ./build/exec/ib-arxiv-prepaint
   ! grep -q '^Error:' /tmp/idric-arxiv-prepaint-compile.txt
+  "$idric_prefix/bin/idris2" LegacyArticleReflowSmoke.idric -o ib-legacy-article-reflow \
+    2>&1 | tee /tmp/idric-legacy-article-reflow-compile.txt
+  test -x ./build/exec/ib-legacy-article-reflow
+  ! grep -q '^Error:' /tmp/idric-legacy-article-reflow-compile.txt
 }
 
 exercise_information() {
@@ -170,6 +174,9 @@ exercise_information() {
   grep -Fx 'phone-width-bounded=True' /tmp/ib-information-smoke.txt
   grep -Fx 'legacy-html-br-paragraph=True' /tmp/ib-information-smoke.txt
   grep -Fx 'legacy-html-br-inline=True' /tmp/ib-information-smoke.txt
+  src/build/exec/ib-legacy-article-reflow | tee /tmp/ib-legacy-article-reflow.txt
+  grep -Fx 'legacy-article-narrow-wide-narrow=True' /tmp/ib-legacy-article-reflow.txt
+  grep -Fx 'legacy-article-checked-windows1252=True' /tmp/ib-legacy-article-reflow.txt
   sh -n bin/prepaint_arxiv_progressively.grease
   sh -n tests/test_arxiv_progressive_prepaint.grease
   sh tests/test_arxiv_progressive_prepaint.grease
