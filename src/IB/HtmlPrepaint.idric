@@ -348,7 +348,7 @@ dom_generation value = value /= "" && value /= "0" &&
   (length (unpack value) < 10 || (length (unpack value) ≟ 10 && value <= "2147483647"))
 
 source_prefix : Text → Text → Bool
-source_prefix prefix value = take (length (unpack prefix)) (unpack value) ≟ unpack prefix
+source_prefix sought value = take (length (unpack sought)) (unpack value) ≟ unpack sought
 
 dom_scalar : Char → Bool
 dom_scalar character = ord character < 0xD800 ||
