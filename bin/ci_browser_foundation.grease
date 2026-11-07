@@ -118,6 +118,19 @@ exercise_core() {
   grep -Fx 'paint-budget-expensive-reduced=True' /tmp/ib-paint-budget-smoke.txt
   grep -Fx 'paint-budget-pathological-reused=True' /tmp/ib-paint-budget-smoke.txt
   grep -Fx 'paint-budget-pathological-deferred=True' /tmp/ib-paint-budget-smoke.txt
+
+  "$idric_prefix/bin/idris2" CartRepairSmoke.idric -o ib-cart-repair-smoke \
+    2>&1 | tee /tmp/idric-cart-repair-compile.txt
+  test -x ./build/exec/ib-cart-repair-smoke
+  ! grep -q '^Error:' /tmp/idric-cart-repair-compile.txt
+  ./build/exec/ib-cart-repair-smoke | tee /tmp/ib-cart-repair-smoke.txt
+  grep -Fx 'cart-repair-delivered-cheapest=True' /tmp/ib-cart-repair-smoke.txt
+  grep -Fx 'cart-repair-no-candidate-no-action=True' /tmp/ib-cart-repair-smoke.txt
+  grep -Fx 'cart-repair-verified-transaction=True' /tmp/ib-cart-repair-smoke.txt
+  grep -Fx 'cart-repair-missing-add-protected=True' /tmp/ib-cart-repair-smoke.txt
+  grep -Fx 'cart-repair-price-change-protected=True' /tmp/ib-cart-repair-smoke.txt
+  grep -Fx 'cart-repair-stale-evidence-protected=True' /tmp/ib-cart-repair-smoke.txt
+  grep -Fx 'cart-repair-untrusted-evidence-protected=True' /tmp/ib-cart-repair-smoke.txt
 }
 
 exercise_workbench() {
