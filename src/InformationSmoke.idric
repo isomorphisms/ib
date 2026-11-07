@@ -46,6 +46,17 @@ article_body =
   "<a href='/full-figure'><img src='/figure.png' alt='Figure one' title='Measured values'></a>" ++
   "</article></body></html>"
 
+-- Synthetic older HTML, not downloaded from wlym.com. This checks
+-- case-insensitive tag/attribute handling and source-backed text boundaries.
+legacy_article : Text
+legacy_article =
+  "<HTML><HEAD><TITLE>Part 21</TITLE></HEAD><BODY>" ++
+  "<H2>Old<BR>HTML</H2>" ++
+  "<P>One<BR>Two<BR/>Three</P>" ++
+  "<P><A HREF='part22.html'>Part<BR>22</A></P>" ++
+  "<TABLE><TR><TD>first<BR>second</TD><TD>third</TD></TR></TABLE>" ++
+  "</BODY></HTML>"
+
 plain_url_list : Text
 plain_url_list =
   "https://example.test/one\n" ++
@@ -68,6 +79,8 @@ main = do
   let shell = extract_html "https://console.test/app" "https://console.test/app" shell_only
   let article = prepaint_full_text "https://example.test/notes" "https://example.test/notes" article_body
   let plain = prepaint_text "URL list" plain_url_list
+  let legacy = extract_html "http://www.wlym.com/antidummies/part21.html"
+    "http://www.wlym.com/antidummies/part21.html" legacy_article
   let phone = phone_lines 6 48 full
   putStrLn ("information-title=" ++ view_title full)
   putStrLn ("early-table-header=" ++ show (has_table_row ["Service", "Status"] early))
@@ -93,6 +106,17 @@ main = do
   putStrLn ("plain-first-url=" ++ show (has_link "https://example.test/one" "https://example.test/one" plain))
   putStrLn ("plain-second-url=" ++ show (has_link "http://example.test/two?q=three" "http://example.test/two?q=three" plain))
   putStrLn ("cheap-url-rejects-relative=" ++ show (cheap_http_url "/relative"))
+  let legacy_br_paragraph =
+        has_exact_item_text "One" legacy &&
+        has_exact_item_text "Two" legacy &&
+        has_exact_item_text "Three" legacy &&
+        not (has_exact_item_text "OneTwoThree" legacy)
+  let legacy_br_inline =
+        has_exact_item_text "Old HTML" legacy &&
+        has_link "Part 22" "part22.html" legacy &&
+        has_table_row ["first second", "third"] legacy
+  putStrLn ("legacy-html-br-paragraph=" ++ show legacy_br_paragraph)
+  putStrLn ("legacy-html-br-inline=" ++ show legacy_br_inline)
 
   let article_retains_content =
         has_exact_item_text "The first paragraph is the useful first paint." article &&
@@ -107,6 +131,7 @@ main = do
         has_link "http://example.test/two?q=three" "http://example.test/two?q=three" plain &&
         not (cheap_http_url "/relative") &&
         not (cheap_http_url "https://example.test/a b")
-  if article_retains_content && plain_links_are_candidates
+  if article_retains_content && plain_links_are_candidates &&
+     legacy_br_paragraph && legacy_br_inline
     then pure ()
     else exitFailure
