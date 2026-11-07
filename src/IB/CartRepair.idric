@@ -169,6 +169,8 @@ count_listing wanted (entry :: rest) =
 old_line_matches : CartLine → CartLine → Bool
 old_line_matches old entry =
   old.row_id /= "" &&
+  old.row_listing_id /= "" &&
+  old.row_seller_id /= "" &&
   old.row_id == entry.row_id &&
   old.row_listing_id == entry.row_listing_id &&
   old.row_seller_id == entry.row_seller_id &&
@@ -187,6 +189,21 @@ any_old old (entry :: rest) =
 exact_old_present : CartLine → CartObservation → Bool
 exact_old_present old view =
   count_row old.row_id view.lines == 1 && any_old old view.lines
+
+old_matches_requirement : BookRequirement → CartLine → Bool
+old_matches_requirement wanted old =
+  old.row_origin == wanted.site_origin &&
+  old.row_isbn == wanted.isbn &&
+  old.row_edition == wanted.edition &&
+  old.row_binding == wanted.binding
+
+count_old_listing : CartLine → List CartLine → Number
+count_old_listing old [] = 0
+count_old_listing old (entry :: rest) =
+  (if entry.row_listing_id == old.row_listing_id &&
+      entry.row_seller_id == old.row_seller_id
+     then 1 else 0) +
+  count_old_listing old rest
 
 new_line_matches : BookRequirement → BookOffer → CartLine → Bool
 new_line_matches wanted offered entry =
@@ -225,7 +242,7 @@ start_repair wanted old candidates view =
   let chosen = cheapest_offer wanted candidates in
   let state =
         if trusted_observation wanted view && exact_old_present old view &&
-           old.row_origin == wanted.site_origin
+           old_matches_requirement wanted old
           then case chosen of
                  Nothing ⇒ no_replacement
                  Just offered ⇒ if new_absent offered view
@@ -292,6 +309,7 @@ verify_remove repair view =
       if trusted_observation repair.requirement view &&
          number_less repair.last_observation view.sequence &&
          count_row repair.old_line.row_id view.lines == 0 &&
+         count_old_listing repair.old_line view.lines == 0 &&
          exact_new_present repair.requirement offered view
         then rebuild repair_complete view.sequence repair
         else rebuild reconcile_required view.sequence repair
