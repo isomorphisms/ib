@@ -493,26 +493,29 @@ collect_information (LocateInformationAnchor element label identifier :: rest) s
           anchor = LocatedInformationAnchor label identifier (length items) point supported in
       collect_information rest skip capture chars row title items (anchor :: anchors)
 
+-- Legacy BR occurs inside P/LI and inline captures as well as between blocks.
+-- Split captured paragraph segments; preserve a word boundary without
+-- splitting the semantic identity of links, headings or table cells.
+collect_information (SemanticToken (OpenTag "br" tag) :: rest) skip capture chars row title items anchors =
+  case skip of
+    Skipping target depth ⇒
+      collect_information rest (Skipping target depth) capture chars row title items anchors
+    NotSkipping ⇒
+      case capture of
+        CaptureText kind ⇒
+          let text = clean_text (pack (reverse chars)) in
+          let (next_title, next_items, next_row) = finish_capture capture text title items row in
+          collect_information rest NotSkipping (CaptureText kind) []
+            next_row next_title next_items anchors
+        NoCapture ⇒ collect_information rest NotSkipping NoCapture [] row title items anchors
+        _ ⇒ collect_information rest NotSkipping capture
+          (append_capture_text " " chars) row title items anchors
 collect_information (SemanticToken (OpenTag name tag) :: rest) skip capture chars row title items anchors =
   case skip of
     Skipping target depth ⇒
       collect_information rest (update_skip name False (Skipping target depth)) capture chars row title items anchors
     NotSkipping ⇒
-      -- A legacy BR is a real line boundary, not a tag to discard. Finish
-      -- the current paragraph segment without closing its enclosing P/LI.
-      -- Other captures remain one semantic item: a space preserves the
-      -- exact word boundary in headings, links, captions and table cells.
-      if name ≟ "br"
-        then case capture of
-          CaptureText kind ⇒
-            let text = clean_text (pack (reverse chars)) in
-            let (next_title, next_items, next_row) = finish_capture capture text title items row in
-            collect_information rest NotSkipping (CaptureText kind) []
-              next_row next_title next_items anchors
-          NoCapture ⇒ collect_information rest NotSkipping NoCapture [] row title items anchors
-          _ ⇒ collect_information rest NotSkipping capture
-            (append_capture_text " " chars) row title items anchors
-        else case capture of
+      case capture of
         NoCapture ⇒
           if skipped_tag name
             then collect_information rest (Skipping name Z) NoCapture chars row title items anchors
