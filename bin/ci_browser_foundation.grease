@@ -168,6 +168,8 @@ exercise_information() {
   grep -Fx 'phone-api-row=True' /tmp/ib-information-smoke.txt
   grep -Fx 'phone-lines=8' /tmp/ib-information-smoke.txt
   grep -Fx 'phone-width-bounded=True' /tmp/ib-information-smoke.txt
+  grep -Fx 'legacy-html-br-paragraph=True' /tmp/ib-information-smoke.txt
+  grep -Fx 'legacy-html-br-inline=True' /tmp/ib-information-smoke.txt
   sh -n bin/prepaint_arxiv_progressively.grease
   sh -n tests/test_arxiv_progressive_prepaint.grease
   sh tests/test_arxiv_progressive_prepaint.grease
