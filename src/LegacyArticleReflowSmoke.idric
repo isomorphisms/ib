@@ -1,0 +1,153 @@
+module LegacyArticleReflowSmoke
+
+import Data.Text
+import IB.SourceDecoding
+import IB.HtmlPrepaint
+import IB.Prepaint.Reflow
+import IB.Reflow
+import IB.Reflow.SourceBreaks
+import IB.Strand
+import IB.Prepaint
+import IB.Prepaint.Version1
+import System
+
+-- This deliberately synthetic fixture does NOT claim to be the live WLYM
+-- response. The source owner alone can attest real ICU/Arena bytes and headers.
+page_url : Text
+page_url = "http://www.wlym.com/antidummies/part21.html"
+
+article : Text
+article =
+  "<HTML><HEAD><TITLE>Part 21</TITLE></HEAD><BODY>" ++
+  "<H2>Legacy<BR>Article</H2>" ++
+  "<P>First segment has many separate words to wrap at narrow viewport widths." ++
+  "<BR>Second segment preserves every original character through reflow.</P>" ++
+  "<P><A HREF='part22.html'>Next<BR>article</A></P>" ++
+  "<TABLE><TR><TD>one<BR>two</TD><TD>three</TD></TR></TABLE>" ++
+  "</BODY></HTML>"
+
+digest : Text
+digest = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+
+-- The fake receipt is confined to a semantic smoke test. No original network
+-- SHA-256, actual response length, or live content is asserted by this test.
+synthetic_evidence : HtmlEvidence
+synthetic_evidence =
+  HtmlSourceEvidence "arena:fixture-part21-synthetic" "test-generation-1"
+    digest digest 300 300 page_url page_url "text/html" "utf-8" "200" True True
+
+has_text : Text → List InformationBlock → Bool
+has_text wanted [] = False
+has_text wanted (TextBlock value :: rest) =
+  value ≟ wanted || has_text wanted rest
+has_text wanted (_ :: rest) = has_text wanted rest
+
+has_link : Text → Text → List InformationBlock → Bool
+has_link wanted_text wanted_url [] = False
+has_link wanted_text wanted_url (Link label target :: rest) =
+  (label ≟ wanted_text && link_reference_value target ≟ wanted_url) ||
+  has_link wanted_text wanted_url rest
+has_link wanted_text wanted_url (_ :: rest) = has_link wanted_text wanted_url rest
+
+reconstruct : Text → List SourceLine → Text
+reconstruct source [] = ""
+reconstruct source (line :: rest) =
+  source_for_line source line ++ reconstruct source rest
+
+contiguous : Text → Number → List SourceLine → Bool
+contiguous source position [] = position ≟ length (unpack source)
+contiguous source position (line :: rest) =
+  line.first_codepoint ≟ position &&
+  line.after_last_codepoint > position &&
+  line.after_last_codepoint <= length (unpack source) &&
+  contiguous source line.after_last_codepoint rest
+
+valid_plans : Number → List BlockReflow → Bool
+valid_plans position [] = True
+valid_plans position (block :: rest) =
+  block.block_position ≟ position &&
+  (case block.decoded_text of
+    Nothing ⇒ null block.text_lines
+    Just source ⇒
+      reconstruct source block.text_lines ≟ source &&
+      contiguous source 0 block.text_lines) &&
+  valid_plans (S position) rest
+
+line_count : List BlockReflow → Number
+line_count [] = 0
+line_count (block :: rest) = length block.text_lines + line_count rest
+
+same_source : HtmlPrepaintResult → HtmlPrepaintLayout → Bool
+same_source original layout =
+  let retained = layout.revision_layout.source_revision in
+  serialize_version1 [retained] ≟ Just original.wire &&
+  layout.source_result.evidence.source_key ≟ original.evidence.source_key &&
+  layout.source_result.evidence.source_generation ≟ original.evidence.source_generation &&
+  layout.source_result.evidence.claimed_sha256 ≟ original.evidence.claimed_sha256 &&
+  length retained.blocks ≟ length original.revision.blocks
+
+-- Width changes affect only disposable SourceLine projections, not bytes,
+-- semantic blocks, source identity, link targets, or revision sequence.
+reflow_cases : HtmlPrepaintResult → Bool
+reflow_cases original =
+  case (reflow_html_prepaint_advances (Requirements 12 promptly) "codepoint-fixture-v1" (const 1) original,
+        reflow_html_prepaint_advances (Requirements 70 promptly) "codepoint-fixture-v1" (const 1) original,
+        reflow_html_prepaint_advances (Requirements 12 promptly) "codepoint-fixture-v1" (const 1) original,
+        reflow_html_prepaint_advances (Requirements 12 evenly) "codepoint-fixture-v1" (const 1) original) of
+    (Right narrow, Right wide, Right narrow_again, Right squared) ⇒
+      let a = narrow.revision_layout.block_plans in
+      let b = wide.revision_layout.block_plans in
+      let c = narrow_again.revision_layout.block_plans in
+      let d = squared.revision_layout.block_plans in
+      let original_blocks = original.revision.blocks in
+      has_text "First segment has many separate words to wrap at narrow viewport widths." original_blocks &&
+      has_text "Second segment preserves every original character through reflow." original_blocks &&
+      has_link "Next article" "http://www.wlym.com/antidummies/part22.html" original_blocks &&
+      line_count a > line_count b &&
+      line_count a ≟ line_count c &&
+      valid_plans 0 a && valid_plans 0 b &&
+      valid_plans 0 c && valid_plans 0 d &&
+      same_source original narrow && same_source original wide &&
+      same_source original narrow_again && same_source original squared
+    _ ⇒ False
+
+ascii_octets : Text → List SourceOctet
+ascii_octets text = map (cast . ord) (unpack text)
+
+legacy_octets : List SourceOctet
+legacy_octets =
+  ascii_octets "<html><body><p>" ++ [0x93] ++ ascii_octets "Part 21" ++
+  [0x94] ++ ascii_octets " costs " ++ [0x80] ++
+  ascii_octets "</p></body></html>"
+
+legacy_encoding_evidence : HtmlEvidence
+legacy_encoding_evidence =
+  let count = cast (length legacy_octets) in
+  HtmlSourceEvidence "arena:fixture-windows1252" "test-generation-1"
+    digest digest count count page_url page_url
+    "text/html" "iso-8859-1" "200" False True
+
+-- This tests the existing checked octet decoder, not charset guessing.
+encoding_cases : Bool
+encoding_cases =
+  case convert_committed_html_octets legacy_encoding_evidence legacy_octets of
+    Left _ ⇒ False
+    Right produced ⇒
+      has_text "“Part 21” costs €" produced.revision.blocks &&
+      produced.evidence.claimed_sha256 ≟ digest &&
+      case produced.decoding of
+        Nothing ⇒ False
+        Just decoded ⇒ decoded.selected_encoding ≟ "windows-1252" &&
+                        decoded.original_byte_count ≟ length legacy_octets
+
+%export "dex:legacy_article_reflow_cases"
+main : IO ()
+main =
+  case convert_admitted_html synthetic_evidence article of
+    Left reason ⇒ die ("legacy-article-conversion: " ++ reason)
+    Right produced ⇒ do
+      let reflow_ok = reflow_cases produced
+      let encoding_ok = encoding_cases
+      putStrLn ("legacy-article-narrow-wide-narrow=" ++ show reflow_ok)
+      putStrLn ("legacy-article-checked-windows1252=" ++ show encoding_ok)
+      if reflow_ok && encoding_ok then pure () else exitFailure
