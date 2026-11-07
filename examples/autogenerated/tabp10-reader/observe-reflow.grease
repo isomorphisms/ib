@@ -13,7 +13,7 @@ var digest = $(sha256sum "$input/source-reflow/reader.dex" | cut -d ' ' -f 1)
 var remote = "/data/local/tmp/ib-reflow-$digest"
 "$adb" -s "$serial" shell test ! -e "$remote"
 "$adb" -s "$serial" shell mkdir "$remote"
-for lane in source-reflow source-reflow-boundary-mutant source-reflow-generation-mutant source-reflow-pruning-mutant source-reflow-coordinates-mutant {
+for lane in source-reflow legacy-article-reflow source-reflow-boundary-mutant source-reflow-generation-mutant source-reflow-pruning-mutant source-reflow-coordinates-mutant {
   "$adb" -s "$serial" push "$input/$lane/reader.dex" "$remote/$lane.dex"
   "$adb" -s "$serial" shell chmod 444 "$remote/$lane.dex"
   "$adb" -s "$serial" pull "$remote/$lane.dex" "$evidence/$lane.received.dex"
@@ -26,11 +26,14 @@ for lane in source-reflow source-reflow-boundary-mutant source-reflow-generation
   if (lane === 'source-reflow') {
     if (status !== 0) { echo 'FAIL actual reflow regression' >&2; exit 1 }
     printf '%s\n' source-reflow-unicode-offset-cases=True > "$evidence/expected.txt"
+  } elif (lane === 'legacy-article-reflow') {
+    if (status !== 0) { echo 'FAIL actual ART legacy HTML reader reflow' >&2; exit 1 }
+    printf 'legacy-article-narrow-wide-narrow=True\nlegacy-article-checked-windows1252=True\n' > "$evidence/expected.txt"
   } else {
     if (status !== 1) { echo 'FAIL reflow mutation did not fail by its semantic result' >&2; exit 1 }
     printf '%s\n' source-reflow-unicode-offset-cases=False > "$evidence/expected.txt"
   }
   cmp "$evidence/expected.txt" "$evidence/$lane.actual"
 }
-printf 'schema\tib-source-reflow-advances-v2\napi\t%s\nexhaustive_equivalence\tPASS\nunsafe_optional_generated_cuts\tREJECTED\nfour_compiled_mutants\tREJECTED\nphysical_TAB_P10\tNOT_RUN\n' "$api" > "$evidence/receipt.tsv"
+printf 'schema\tib-source-reflow-advances-v2\napi\t%s\nexhaustive_equivalence\tPASS\nunsafe_optional_generated_cuts\tREJECTED\nfour_compiled_mutants\tREJECTED\nlegacy_html_reflow_art\tPASS\nlegacy_windows1252_art\tPASS\nphysical_TAB_P10\tNOT_RUN\n' "$api" > "$evidence/receipt.tsv"
 cat "$evidence/receipt.tsv"
