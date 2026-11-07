@@ -1,0 +1,313 @@
+module IB.CartRepair
+
+%default total
+
+-- Policy only. The browser task owns the journal, the acquiring adapter
+-- supplies observations, and the authenticated renderer performs effects.
+-- No function in this module can mutate a remote cart or initiate checkout.
+
+public export
+record BookRequirement where
+  constructor RequireBook
+  site_origin : String
+  isbn : String
+  edition : String
+  binding : String
+  minimum_condition : Number
+  currency : String
+
+-- Condition is adapter-normalized: larger grades mean no worse condition.
+-- All costs are integer minor currency units. An unknown tax, shipping
+-- charge, or fee is Nothing, not zero.
+public export
+record BookOffer where
+  constructor QuotedBook
+  offer_origin : String
+  listing_id : String
+  seller_id : String
+  offered_isbn : String
+  offered_edition : String
+  offered_binding : String
+  offered_condition : Number
+  offered_currency : String
+  item_cents : Number
+  shipping_cents : Maybe Number
+  tax_cents : Maybe Number
+  fees_cents : Maybe Number
+  available : Bool
+
+public export
+delivered_cents : BookOffer → Maybe Number
+delivered_cents offer =
+  case (offer.shipping_cents, offer.tax_cents, offer.fees_cents) of
+    (Just shipping, Just tax, Just fees) ⇒
+      Just (offer.item_cents + shipping + tax + fees)
+    _ ⇒ Nothing
+
+number_at_most : Number → Number → Bool
+number_at_most Z _ = True
+number_at_most (S _) Z = False
+number_at_most (S left) (S right) = number_at_most left right
+
+number_less : Number → Number → Bool
+number_less left right =
+  number_at_most left right && not (left == right)
+
+public export
+eligible_offer : BookRequirement → BookOffer → Bool
+eligible_offer wanted offer =
+  wanted.site_origin /= "" &&
+  wanted.isbn /= "" &&
+  wanted.edition /= "" &&
+  wanted.binding /= "" &&
+  wanted.currency /= "" &&
+  offer.offer_origin == wanted.site_origin &&
+  offer.listing_id /= "" &&
+  offer.seller_id /= "" &&
+  offer.offered_isbn == wanted.isbn &&
+  offer.offered_edition == wanted.edition &&
+  offer.offered_binding == wanted.binding &&
+  number_at_most wanted.minimum_condition offer.offered_condition &&
+  offer.offered_currency == wanted.currency &&
+  offer.available &&
+  (case delivered_cents offer of
+     Nothing ⇒ False
+     Just _ ⇒ True)
+
+prefer_offer : BookOffer → Maybe BookOffer → Maybe BookOffer
+prefer_offer offered Nothing = Just offered
+prefer_offer offered (Just incumbent) =
+  case (delivered_cents offered, delivered_cents incumbent) of
+    (Just offered_price, Just incumbent_price) ⇒
+      if number_at_most offered_price incumbent_price
+        then Just offered
+        else Just incumbent
+    _ ⇒ Just incumbent
+
+-- Prefer the first matching offer when delivered totals tie.
+public export
+cheapest_offer : BookRequirement → List BookOffer → Maybe BookOffer
+cheapest_offer wanted [] = Nothing
+cheapest_offer wanted (offer :: rest) =
+  let earlier = if eligible_offer wanted offer then Just offer else Nothing in
+  case (earlier, cheapest_offer wanted rest) of
+    (Nothing, later) ⇒ later
+    (Just accepted, Nothing) ⇒ Just accepted
+    (Just accepted, Just later) ⇒
+      prefer_offer accepted (Just later)
+
+-- Exact cart-line identity is separate from bibliographic identity.
+public export
+record CartLine where
+  constructor CartEntry
+  row_id : String
+  row_listing_id : String
+  row_seller_id : String
+  row_origin : String
+  row_isbn : String
+  row_edition : String
+  row_binding : String
+  row_condition : Number
+  row_currency : String
+  row_quantity : Number
+  row_delivered_cents : Maybe Number
+  row_available : Bool
+
+-- Observation sequence is browser-owned, durable and strictly increasing
+-- across independent cart reads, including across host restarts.
+public export
+record CartObservation where
+  constructor CartRead
+  observed_origin : String
+  authenticated : Bool
+  complete : Bool
+  sequence : Number
+  lines : List CartLine
+
+public export
+choice repair_phase one_of
+  no_replacement
+  ready_to_add
+  add_unverified
+  ready_to_remove
+  remove_unverified
+  repair_complete
+  reconcile_required
+
+public export
+record CartRepair where
+  constructor Repair
+  requirement : BookRequirement
+  old_line : CartLine
+  replacement : Maybe BookOffer
+  phase : repair_phase
+  last_observation : Number
+
+-- Only add and remove are part of the delegated effect vocabulary.
+-- Checkout/payment are deliberately absent.
+public export
+data CartMutation
+  = AddListing String String
+  | RemoveCartRow String
+
+trusted_observation : BookRequirement → CartObservation → Bool
+trusted_observation wanted view =
+  view.authenticated && view.complete &&
+  view.observed_origin == wanted.site_origin
+
+count_row : String → List CartLine → Number
+count_row wanted [] = 0
+count_row wanted (entry :: rest) =
+  (if entry.row_id == wanted then 1 else 0) + count_row wanted rest
+
+count_listing : String → List CartLine → Number
+count_listing wanted [] = 0
+count_listing wanted (entry :: rest) =
+  (if entry.row_listing_id == wanted then 1 else 0) +
+  count_listing wanted rest
+
+old_line_matches : CartLine → CartLine → Bool
+old_line_matches old entry =
+  old.row_id /= "" &&
+  old.row_id == entry.row_id &&
+  old.row_listing_id == entry.row_listing_id &&
+  old.row_seller_id == entry.row_seller_id &&
+  old.row_origin == entry.row_origin &&
+  old.row_isbn == entry.row_isbn &&
+  old.row_edition == entry.row_edition &&
+  old.row_binding == entry.row_binding &&
+  not entry.row_available &&
+  entry.row_quantity == 1
+
+any_old : CartLine → List CartLine → Bool
+any_old old [] = False
+any_old old (entry :: rest) =
+  old_line_matches old entry || any_old old rest
+
+exact_old_present : CartLine → CartObservation → Bool
+exact_old_present old view =
+  count_row old.row_id view.lines == 1 && any_old old view.lines
+
+new_line_matches : BookRequirement → BookOffer → CartLine → Bool
+new_line_matches wanted offered entry =
+  entry.row_listing_id == offered.listing_id &&
+  entry.row_seller_id == offered.seller_id &&
+  entry.row_origin == wanted.site_origin &&
+  entry.row_isbn == wanted.isbn &&
+  entry.row_edition == wanted.edition &&
+  entry.row_binding == wanted.binding &&
+  number_at_most wanted.minimum_condition entry.row_condition &&
+  entry.row_currency == wanted.currency &&
+  entry.row_quantity == 1 &&
+  entry.row_available &&
+  (case (delivered_cents offered, entry.row_delivered_cents) of
+     (Just quoted, Just observed) ⇒ number_at_most observed quoted
+     _ ⇒ False)
+
+any_new : BookRequirement → BookOffer → List CartLine → Bool
+any_new wanted offered [] = False
+any_new wanted offered (entry :: rest) =
+  new_line_matches wanted offered entry || any_new wanted offered rest
+
+exact_new_present : BookRequirement → BookOffer → CartObservation → Bool
+exact_new_present wanted offered view =
+  count_listing offered.listing_id view.lines == 1 &&
+  any_new wanted offered view.lines
+
+new_absent : BookOffer → CartObservation → Bool
+new_absent offered view =
+  count_listing offered.listing_id view.lines == 0
+
+public export
+start_repair :
+  BookRequirement → CartLine → List BookOffer → CartObservation → CartRepair
+start_repair wanted old candidates view =
+  let chosen = cheapest_offer wanted candidates in
+  let state =
+        if trusted_observation wanted view && exact_old_present old view &&
+           old.row_origin == wanted.site_origin
+          then case chosen of
+                 Nothing ⇒ no_replacement
+                 Just offered ⇒ if new_absent offered view
+                   then ready_to_add
+                   else reconcile_required
+          else reconcile_required in
+  Repair wanted old chosen state view.sequence
+
+rebuild : repair_phase → Number → CartRepair → CartRepair
+rebuild state seen repair =
+  Repair repair.requirement repair.old_line repair.replacement state seen
+
+-- The returned phase MUST be durably journaled before dispatching mutation.
+-- A timeout/crash in add_unverified must trigger a new read, not blind replay.
+public export
+prepare_add : CartRepair → CartObservation → Maybe (CartRepair, CartMutation)
+prepare_add repair view =
+  case (repair.phase, repair.replacement) of
+    (ready_to_add, Just offered) ⇒
+      if trusted_observation repair.requirement view &&
+         number_less repair.last_observation view.sequence &&
+         exact_old_present repair.old_line view &&
+         new_absent offered view
+        then Just
+          (rebuild add_unverified view.sequence repair,
+           AddListing offered.listing_id offered.seller_id)
+        else Nothing
+    _ ⇒ Nothing
+
+public export
+verify_add : CartRepair → CartObservation → CartRepair
+verify_add repair view =
+  case (repair.phase, repair.replacement) of
+    (add_unverified, Just offered) ⇒
+      if trusted_observation repair.requirement view &&
+         number_less repair.last_observation view.sequence &&
+         exact_old_present repair.old_line view &&
+         exact_new_present repair.requirement offered view
+        then rebuild ready_to_remove view.sequence repair
+        else rebuild reconcile_required view.sequence repair
+    _ ⇒ repair
+
+-- Require a further independent read before authorizing old-row removal.
+public export
+prepare_remove : CartRepair → CartObservation → Maybe (CartRepair, CartMutation)
+prepare_remove repair view =
+  case (repair.phase, repair.replacement) of
+    (ready_to_remove, Just offered) ⇒
+      if trusted_observation repair.requirement view &&
+         number_less repair.last_observation view.sequence &&
+         exact_old_present repair.old_line view &&
+         exact_new_present repair.requirement offered view
+        then Just
+          (rebuild remove_unverified view.sequence repair,
+           RemoveCartRow repair.old_line.row_id)
+        else Nothing
+    _ ⇒ Nothing
+
+public export
+verify_remove : CartRepair → CartObservation → CartRepair
+verify_remove repair view =
+  case (repair.phase, repair.replacement) of
+    (remove_unverified, Just offered) ⇒
+      if trusted_observation repair.requirement view &&
+         number_less repair.last_observation view.sequence &&
+         count_row repair.old_line.row_id view.lines == 0 &&
+         exact_new_present repair.requirement offered view
+        then rebuild repair_complete view.sequence repair
+        else rebuild reconcile_required view.sequence repair
+    _ ⇒ repair
+
+public export
+completed : CartRepair → Bool
+completed repair =
+  case repair.phase of
+    repair_complete ⇒ True
+    _ ⇒ False
+
+public export
+can_mutate : CartRepair → Bool
+can_mutate repair =
+  case repair.phase of
+    ready_to_add ⇒ True
+    ready_to_remove ⇒ True
+    _ ⇒ False
