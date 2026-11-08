@@ -1,0 +1,37 @@
+#!/bin/sh
+set -eu
+root=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
+. "$root/lib/scholarly_investigation.grease"
+
+work=$(mktemp -d)
+trap 'rm -rf "$work"' EXIT HUP INT TERM
+export IB_STATE_DIR="$work/state"
+mkdir -p "$IB_STATE_DIR"
+
+url=https://link.springer.com/book/10.1007/978-3-322-90166-8
+ib_scholarly_investigation_begin task-one "$url" publisher-metadata-only
+ib_scholarly_investigation_begin task-one "$url" publisher-metadata-only
+ib_scholarly_investigation_begin task-two "$url" restricted
+test -f "$IB_STATE_DIR/investigations/task-one/root.tsv"
+test -f "$IB_STATE_DIR/investigations/task-two/root.tsv"
+
+if ib_scholarly_investigation_begin task-one https://example.test/conflict restricted; then exit 1; fi
+if ib_scholarly_investigation_begin ../outside "$url" restricted; then exit 1; fi
+if ib_scholarly_investigation_begin unsafe 'https://link.springer.com/book?a=secret' restricted; then exit 1; fi
+if ib_scholarly_investigation_begin unsafe 'https://link.springer.com@attacker.test/book' restricted; then exit 1; fi
+if ib_scholarly_investigation_begin unsafe "$(printf 'https://link.springer.com/book\nbogus')" restricted; then exit 1; fi
+
+hash=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+candidate=https://web.archive.org/web/20200101/https://link.springer.com/book/10.1007/978-3-322-90166-8
+ib_scholarly_investigation_event task-one result-1 discovered wayback "$candidate" -
+ib_scholarly_investigation_event task-one result-1 discovered wayback "$candidate" -
+if ib_scholarly_investigation_event task-one result-1 verified-full-text wayback "$candidate" "$hash"; then exit 1; fi
+ib_scholarly_investigation_event task-one result-2 verified-full-text repository https://example.org/open.pdf "$hash"
+grep -F 'initial_assessment' "$IB_STATE_DIR/investigations/task-one/root.tsv" >/dev/null
+grep -F 'verified-full-text' "$IB_STATE_DIR/investigations/task-one/events/result-2.tsv" >/dev/null
+
+mkdir -p "$work/cache"
+rm -rf "$work/cache"
+. "$root/lib/scholarly_investigation.grease"
+test "$(find "$IB_STATE_DIR/investigations/task-one/events" -name '*.tsv' | wc -l | tr -d ' ')" -eq 2
+printf 'scholarly investigation: PASS\n'
