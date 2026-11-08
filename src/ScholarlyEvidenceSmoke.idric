@@ -1,6 +1,7 @@
 module ScholarlyEvidenceSmoke
 
 import IB.ScholarlyEvidence
+import Data.Text
 import System
 
 same : ScholarlyDisposition → Text → Bool

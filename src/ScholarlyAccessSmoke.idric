@@ -1,9 +1,10 @@
 module ScholarlyAccessSmoke
 
 import IB.ScholarlyAccess
+import Data.Text
 import System
 
-check_label : String → ScholarlyAccess → String → Bool
+check_label : Text → ScholarlyAccess → Text → Bool
 check_label _ outcome expected = access_label outcome == expected
 
 main : IO ()
@@ -33,5 +34,5 @@ main = do
         should_discover_alternatives absent &&
         not (should_discover_alternatives readable) &&
         not (should_discover_alternatives arbitrary)
-  putStrLn ("scholarly-access=" ++ if ok then "PASS" else "FAIL")
+  putStrLn (if ok then "scholarly-access=PASS" else "scholarly-access=FAIL")
   if ok then pure () else exitFailure

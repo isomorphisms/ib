@@ -45,7 +45,7 @@ ib_scholarly_summary_publish() {
     printf 'prompt_revision\t%s\n' "$ib_sum_prompt"
     printf 'basis\t%s\n' "$ib_sum_basis"
     printf 'status\tuntrusted-proposal\n'
-    printf '---\n'
+    printf '%s\n' '---'
     cat "$ib_sum_body"
   } > "$ib_sum_temp"
   ib_scholarly_publish_file "$ib_sum_task_dir/summaries/$ib_sum_id.md" "$ib_sum_temp"

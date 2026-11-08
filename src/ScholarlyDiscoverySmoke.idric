@@ -1,6 +1,7 @@
 module ScholarlyDiscoverySmoke
 
 import IB.ScholarlyDiscovery
+import Data.Text
 import System
 
 contains_provider : Text → List DiscoveryRequest → Bool
