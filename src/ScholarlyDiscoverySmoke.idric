@@ -1,0 +1,31 @@
+module ScholarlyDiscoverySmoke
+
+import IB.ScholarlyDiscovery
+import System
+
+contains_provider : Text → List DiscoveryRequest → Bool
+contains_provider _ [] = False
+contains_provider desired (request :: rest) =
+  scholarly_provider_name request.provider == desired ||
+  contains_provider desired rest
+
+main : IO ()
+main = do
+  let springer = "https://link.springer.com/book/10.1007/978-3-322-90166-8"
+  let candidates = scholarly_discovery_requests springer
+                     (Just "Hypergeometric Functions, My Love")
+  let without_title = scholarly_discovery_requests springer Nothing
+  let private = scholarly_discovery_requests
+                  "https://link.springer.com/book/10.1007/example?token=secret"
+                  (Just "Hidden")
+  let spoofed = scholarly_discovery_requests
+                  "https://link.springer.com.evil.test/book" (Just "Hidden")
+  let ok = length candidates == 4 &&
+           length without_title == 2 &&
+           null private && null spoofed &&
+           contains_provider "wayback-cdx" candidates &&
+           contains_provider "internet-archive" candidates &&
+           contains_provider "openalex" candidates &&
+           contains_provider "archive-today" candidates
+  putStrLn (if ok then "scholarly-discovery=PASS" else "scholarly-discovery=FAIL")
+  if ok then pure () else exitFailure
