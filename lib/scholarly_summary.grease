@@ -1,0 +1,52 @@
+# Browser-owned append-only summary *proposals* with explicit source scope.
+# The model cannot overwrite the selected original or prior proposal.
+# Requires lib/scholarly_investigation.grease to have been sourced.
+
+ib_scholarly_summary_publish() {
+  ib_sum_task=$1
+  ib_sum_id=$2
+  ib_sum_source=$3
+  ib_sum_digest=$4
+  ib_sum_model=$5
+  ib_sum_prompt=$6
+  ib_sum_basis=$7
+  ib_sum_body=$8
+  ib_scholarly_safe_id "$ib_sum_task" || return 1
+  ib_scholarly_safe_id "$ib_sum_id" || return 1
+  ib_scholarly_safe_id "$ib_sum_source" || return 1
+  ib_scholarly_field "$ib_sum_model" || return 1
+  ib_scholarly_field "$ib_sum_prompt" || return 1
+  test -n "$ib_sum_model" && test -n "$ib_sum_prompt" || return 1
+  case "$ib_sum_basis" in
+    full-text|abstract-only|metadata-only) ;;
+    *) return 1 ;;
+  esac
+  case "$ib_sum_digest" in
+    *[!0-9a-f]*|'') return 1 ;;
+    *) test "${#ib_sum_digest}" -eq 64 || return 1 ;;
+  esac
+  test -f "$ib_sum_body" && test ! -L "$ib_sum_body" || return 1
+  test -s "$ib_sum_body" || return 1
+  test "$(wc -c < "$ib_sum_body")" -le 65536 || return 1
+
+  ib_sum_root=$(ib_scholarly_state_root) || return 1
+  ib_sum_task_dir="$ib_sum_root/$ib_sum_task"
+  test -f "$ib_sum_task_dir/root.tsv" || return 1
+  test ! -L "$ib_sum_task_dir" || return 1
+  mkdir -p "$ib_sum_task_dir/summaries" || return 1
+  test ! -L "$ib_sum_task_dir/summaries" || return 1
+  ib_sum_temp=$(mktemp "$ib_sum_task_dir/summaries/.proposal.XXXXXXXX") || return 1
+  {
+    printf 'schema\tib-scholarly-summary-proposal-v1\n'
+    printf 'proposal_id\t%s\n' "$ib_sum_id"
+    printf 'source_key\t%s\n' "$ib_sum_source"
+    printf 'representation_sha256\t%s\n' "$ib_sum_digest"
+    printf 'model_id\t%s\n' "$ib_sum_model"
+    printf 'prompt_revision\t%s\n' "$ib_sum_prompt"
+    printf 'basis\t%s\n' "$ib_sum_basis"
+    printf 'status\tuntrusted-proposal\n'
+    printf '---\n'
+    cat "$ib_sum_body"
+  } > "$ib_sum_temp"
+  ib_scholarly_publish_file "$ib_sum_task_dir/summaries/$ib_sum_id.md" "$ib_sum_temp"
+}

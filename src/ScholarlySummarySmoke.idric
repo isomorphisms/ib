@@ -1,0 +1,30 @@
+module ScholarlySummarySmoke
+
+import IB.ScholarlySummary
+import System
+
+main : IO ()
+main = do
+  let digest = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+  let evidence = CandidateReceipt
+        "https://link.springer.com/book/example"
+        "https://example.org/abstract"
+        "arena-source-1" digest digest "200" "text/html" True True
+        ExactDOI AbstractExtract
+  case prepare_scholarly_summary evidence "local-model-v1" "summary-prompt-v1" of
+    Nothing => do
+      putStrLn "scholarly-summary=FAIL"
+      exitFailure
+    Just request => do
+      let valid = ProposedSummary "arena-source-1" digest "local-model-v1"
+                    "summary-prompt-v1" BasedOnAbstract "Only the abstract was available."
+      let false_whole = ProposedSummary "arena-source-1" digest "local-model-v1"
+                         "summary-prompt-v1" BasedOnFullText "The full book says..."
+      let wrong = ProposedSummary "another-source" digest "local-model-v1"
+                    "summary-prompt-v1" BasedOnAbstract "Incorrect source."
+      let ok = summary_basis_label request.basis == "abstract-only" &&
+               check_scholarly_proposal request valid &&
+               not (check_scholarly_proposal request false_whole) &&
+               not (check_scholarly_proposal request wrong)
+      putStrLn (if ok then "scholarly-summary=PASS" else "scholarly-summary=FAIL")
+      if ok then pure () else exitFailure

@@ -1,0 +1,23 @@
+#!/bin/sh
+set -eu
+root=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
+. "$root/lib/scholarly_investigation.grease"
+. "$root/lib/scholarly_summary.grease"
+
+work=$(mktemp -d)
+trap 'rm -rf "$work"' EXIT HUP INT TERM
+export IB_STATE_DIR="$work/state"
+mkdir -p "$IB_STATE_DIR"
+ib_scholarly_investigation_begin task-1 \
+  https://link.springer.com/book/10.1007/example publisher-metadata-only
+
+printf 'Only the metadata and abstract were available.\n' > "$work/summary.txt"
+digest=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+ib_scholarly_summary_publish task-1 proposal-1 arena-1 "$digest" model-1 prompt-1 abstract-only "$work/summary.txt"
+ib_scholarly_summary_publish task-1 proposal-1 arena-1 "$digest" model-1 prompt-1 abstract-only "$work/summary.txt"
+file="$IB_STATE_DIR/investigations/task-1/summaries/proposal-1.md"
+grep -F 'abstract-only' "$file" >/dev/null
+grep -F 'Only the metadata' "$file" >/dev/null
+if ib_scholarly_summary_publish task-1 proposal-1 arena-1 "$digest" model-1 prompt-1 full-text "$work/summary.txt"; then exit 1; fi
+if ib_scholarly_summary_publish task-1 ../bad arena-1 "$digest" model-1 prompt-1 abstract-only "$work/summary.txt"; then exit 1; fi
+printf 'scholarly summary proposal: PASS\n'
