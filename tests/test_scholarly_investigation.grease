@@ -1,5 +1,5 @@
 #!/bin/sh
-set -eu
+set -eux
 root=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
 . "$root/lib/scholarly_investigation.grease"
 
