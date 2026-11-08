@@ -1,6 +1,7 @@
 module ScholarlySummarySmoke
 
 import IB.ScholarlySummary
+import IB.ScholarlyEvidence
 import Data.Text
 import System
 
