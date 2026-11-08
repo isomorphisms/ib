@@ -1,0 +1,82 @@
+module IB.ScholarlySummary
+
+import Data.Text
+import IB.ScholarlyEvidence
+
+%default total
+
+public export
+data SummaryBasis
+  = BasedOnFullText
+  | BasedOnAbstract
+  | BasedOnMetadata
+
+public export
+summary_basis_label : SummaryBasis → Text
+summary_basis_label BasedOnFullText = "full-text"
+summary_basis_label BasedOnAbstract = "abstract-only"
+summary_basis_label BasedOnMetadata = "metadata-only"
+
+public export
+record ScholarlySummaryIntent where
+  constructor SummaryFromSource
+  source_key : Text
+  representation_sha256 : Text
+  model_identifier : Text
+  prompt_revision : Text
+  basis : SummaryBasis
+
+nonempty_control_free : Text → Bool
+nonempty_control_free value =
+  let chars = unpack value in
+    not (null chars) && length chars <= 128 &&
+    all (\ch => ord ch >= 33 && ord ch <= 126) chars
+
+-- A model is replaceable. This is an untrusted-proposal request, never an
+-- instruction to mutate the source, overwrite a previous summary or transmit
+-- private tab/session material.
+public export
+prepare_scholarly_summary : ScholarlyCandidateEvidence → Text → Text →
+  Maybe ScholarlySummaryIntent
+prepare_scholarly_summary evidence model revision =
+  if not (nonempty_control_free model) ||
+     not (nonempty_control_free revision)
+    then Nothing
+    else case candidate_disposition evidence of
+      WholeWorkAvailable =>
+        Just (SummaryFromSource evidence.source_key evidence.reopened_sha256
+              model revision BasedOnFullText)
+      AbstractAvailable =>
+        Just (SummaryFromSource evidence.source_key evidence.reopened_sha256
+              model revision BasedOnAbstract)
+      MetadataAvailable =>
+        Just (SummaryFromSource evidence.source_key evidence.reopened_sha256
+              model revision BasedOnMetadata)
+      _ => Nothing
+
+public export
+record ScholarlySummaryProposal where
+  constructor ProposedSummary
+  source_key : Text
+  representation_sha256 : Text
+  model_identifier : Text
+  prompt_revision : Text
+  basis : SummaryBasis
+  body : Text
+
+-- A response cannot promote an abstract-only request into full text, switch
+-- its source identity, or claim the wrong model or prompt revision.
+public export
+check_scholarly_proposal : ScholarlySummaryIntent →
+  ScholarlySummaryProposal → Bool
+check_scholarly_proposal intent proposal =
+  intent.source_key == proposal.source_key &&
+  intent.representation_sha256 == proposal.representation_sha256 &&
+  intent.model_identifier == proposal.model_identifier &&
+  intent.prompt_revision == proposal.prompt_revision &&
+  summary_basis_label intent.basis == summary_basis_label proposal.basis &&
+  let chars = unpack proposal.body in
+    not (null chars) && length chars <= 16000
+
+-- Individual source spans and a separately checked citation renderer remain
+-- required before any generated references are presented as verified citations.

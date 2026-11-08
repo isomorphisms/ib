@@ -1,0 +1,38 @@
+module ScholarlyAccessSmoke
+
+import IB.ScholarlyAccess
+import Data.Text
+import System
+
+check_label : Text → ScholarlyAccess → Text → Bool
+check_label _ outcome expected = access_label outcome == expected
+
+main : IO ()
+main = do
+  let springer = "https://link.springer.com/book/10.1007/978-3-322-90166-8"
+  let publisher_page = "<html><title>Hypergeometric Functions, My Love</title>" ++
+                       "<meta name='citation_isbn' content='978-3-322-90166-8'/>" ++
+                       "<p>Textbook | 1997</p><p>Buy eBook</p></html>"
+  let locked = assess_scholarly_access springer "200" False publisher_page
+  let metadata = assess_scholarly_access springer "200" False
+                   "<meta name='citation_doi' content='10.1007/example'/>"
+  let readable = assess_scholarly_access springer "200" True publisher_page
+  let absent = assess_scholarly_access springer "404" False ""
+  let arbitrary = assess_scholarly_access "https://private.example.test/accounts" "403" False "buy ebook"
+  let lookalike = assess_scholarly_access "https://link.springer.com.evil.test/book" "200" False publisher_page
+  let uncertain = assess_scholarly_access springer "200" False "<h1>Welcome</h1>"
+  let ok =
+        check_label "locked" locked "restricted" &&
+        check_label "metadata" metadata "publisher-metadata-only" &&
+        check_label "readable" readable "verified-full-text" &&
+        check_label "absent" absent "publisher-resource-missing" &&
+        check_label "arbitrary" arbitrary "not-scholarly-discovery" &&
+        check_label "lookalike" lookalike "not-scholarly-discovery" &&
+        check_label "uncertain" uncertain "access-undetermined" &&
+        should_discover_alternatives locked &&
+        should_discover_alternatives metadata &&
+        should_discover_alternatives absent &&
+        not (should_discover_alternatives readable) &&
+        not (should_discover_alternatives arbitrary)
+  putStrLn (if ok then "scholarly-access=PASS" else "scholarly-access=FAIL")
+  if ok then pure () else exitFailure

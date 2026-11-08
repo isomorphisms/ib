@@ -1,0 +1,123 @@
+# Grease/POSIX shell adapter for browser-owned investigation metadata.
+# Never store response bodies here. Explicit IB_STATE_DIR, not prefetch cache.
+ib_scholarly_state_root() {
+  test -n "${IB_STATE_DIR:-}" || return 1
+  test -d "$IB_STATE_DIR" || return 1
+  test ! -L "$IB_STATE_DIR" || return 1
+  printf '%s/investigations\n' "$IB_STATE_DIR"
+}
+
+ib_scholarly_safe_id() {
+  case "$1" in
+    ''|.|..|*[!a-zA-Z0-9._-]*) return 1 ;;
+  esac
+  test "${#1}" -le 64
+}
+
+ib_scholarly_field() {
+  test "${#1}" -le 4096 || return 1
+  if printf '%s' "$1" | LC_ALL=C tr '\n' '\001' | LC_ALL=C grep '[[:cntrl:]]' >/dev/null 2>&1; then
+    return 1
+  fi
+}
+
+ib_scholarly_public_url() {
+  case "$1" in
+    https://*) ;;
+    *) return 1 ;;
+  esac
+  # Do not forward userinfo, query tokens or fragments to discovery services.
+  # Host/intent policy belongs to Idric, not to a competing shell classifier.
+  case "$1" in
+    *'@'*|*'?'*|*'#'*) return 1 ;;
+  esac
+  ib_scholarly_field "$1"
+}
+
+# Atomic no-replace publication, including byte-for-byte idempotent retry.
+ib_scholarly_publish_file() {
+  ib_scholarly_destination=$1
+  ib_scholarly_staging=$2
+  if ln "$ib_scholarly_staging" "$ib_scholarly_destination" 2>/dev/null; then
+    rm -f "$ib_scholarly_staging"
+    return 0
+  fi
+  if test -f "$ib_scholarly_destination" &&
+     test ! -L "$ib_scholarly_destination" &&
+     cmp -s "$ib_scholarly_staging" "$ib_scholarly_destination"; then
+    rm -f "$ib_scholarly_staging"
+    return 0
+  fi
+  rm -f "$ib_scholarly_staging"
+  return 1
+}
+
+ib_scholarly_investigation_begin() {
+  ib_scholarly_task=$1
+  ib_scholarly_url=$2
+  ib_scholarly_assessment=$3
+  ib_scholarly_safe_id "$ib_scholarly_task" || return 1
+  ib_scholarly_public_url "$ib_scholarly_url" || return 1
+  case "$ib_scholarly_assessment" in
+    restricted|publisher-metadata-only|publisher-resource-missing) ;;
+    *) return 1 ;;
+  esac
+  ib_scholarly_root=$(ib_scholarly_state_root) || return 1
+  test ! -L "$ib_scholarly_root" || return 1
+  mkdir -p "$ib_scholarly_root" || return 1
+  ib_scholarly_dir="$ib_scholarly_root/$ib_scholarly_task"
+  test ! -L "$ib_scholarly_dir" || return 1
+  mkdir -p "$ib_scholarly_dir/events" || return 1
+  test ! -L "$ib_scholarly_dir/events" || return 1
+  ib_scholarly_tmp=$(mktemp "$ib_scholarly_dir/.root.XXXXXXXX") || return 1
+  {
+    printf 'schema\tib-scholarly-investigation-v1\n'
+    printf 'task_id\t%s\n' "$ib_scholarly_task"
+    printf 'original_url\t%s\n' "$ib_scholarly_url"
+    printf 'initial_assessment\t%s\n' "$ib_scholarly_assessment"
+  } > "$ib_scholarly_tmp"
+  ib_scholarly_publish_file "$ib_scholarly_dir/root.tsv" "$ib_scholarly_tmp"
+}
+
+# Event IDs are browser-owned. One immutable event file per unique occurrence.
+ib_scholarly_investigation_event() {
+  ib_scholarly_task=$1
+  ib_scholarly_event=$2
+  ib_scholarly_kind=$3
+  ib_scholarly_provider=$4
+  ib_scholarly_address=$5
+  ib_scholarly_hash=$6
+  ib_scholarly_safe_id "$ib_scholarly_task" || return 1
+  ib_scholarly_safe_id "$ib_scholarly_event" || return 1
+  ib_scholarly_safe_id "$ib_scholarly_provider" || return 1
+  ib_scholarly_field "$ib_scholarly_address" || return 1
+  ib_scholarly_field "$ib_scholarly_hash" || return 1
+  case "$ib_scholarly_kind" in
+    discovered|fetching|verified-full-text|abstract-only|unavailable|refused|summary-proposal) ;;
+    *) return 1 ;;
+  esac
+  case "$ib_scholarly_address" in
+    -) ;;
+    *) ib_scholarly_public_url "$ib_scholarly_address" || return 1 ;;
+  esac
+  case "$ib_scholarly_hash" in
+    -) ;;
+    *[!0-9a-f]*|'') return 1 ;;
+    *) test "${#ib_scholarly_hash}" -eq 64 || return 1 ;;
+  esac
+  ib_scholarly_root=$(ib_scholarly_state_root) || return 1
+  ib_scholarly_dir="$ib_scholarly_root/$ib_scholarly_task"
+  test -f "$ib_scholarly_dir/root.tsv" || return 1
+  test ! -L "$ib_scholarly_dir" || return 1
+  test ! -L "$ib_scholarly_dir/events" || return 1
+  ib_scholarly_tmp=$(mktemp "$ib_scholarly_dir/events/.event.XXXXXXXX") || return 1
+  {
+    printf 'schema\tib-scholarly-event-v1\n'
+    printf 'event_id\t%s\n' "$ib_scholarly_event"
+    printf 'kind\t%s\n' "$ib_scholarly_kind"
+    printf 'provider\t%s\n' "$ib_scholarly_provider"
+    printf 'address\t%s\n' "$ib_scholarly_address"
+    printf 'representation_sha256\t%s\n' "$ib_scholarly_hash"
+  } > "$ib_scholarly_tmp"
+  ib_scholarly_publish_file "$ib_scholarly_dir/events/$ib_scholarly_event.tsv" "$ib_scholarly_tmp"
+}

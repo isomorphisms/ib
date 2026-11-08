@@ -108,3 +108,22 @@ Java_org_isomorphisms_ib_ReaderBridge_workbenchVisible(JNIEnv *e, jclass ignored
     m3_describe(e, button, visible ? "Return to document reader" : "Open retained source history");
     (*e)->DeleteLocalRef(e, label);
 }
+
+
+/* Paint only a checked browser-owned status. No provider content is rendered as
+ * a clickable source until its original bytes have passed source admission. */
+JNIEXPORT void JNICALL
+Java_org_isomorphisms_ib_ReaderBridge_scholarlyStatus(JNIEnv *e, jclass ignored,
+        jobject activity, jstring label) {
+    (void)ignored;
+    if (!activity || (*e)->PushLocalFrame(e, 12) < 0) return;
+    jobject view ← workbench_view(e, activity, 0x7f030012);
+    if (view) {
+        jmethodID set_text ← m3_method(e, view, "setText", "(Ljava/lang/CharSequence;)V");
+        jmethodID set_visibility ← m3_method(e, view, "setVisibility", "(I)V");
+        jint show ← label ? (*e)->GetStringLength(e, label) : 0;
+        if (set_text) (*e)->CallVoidMethod(e, view, set_text, label);
+        if (set_visibility) (*e)->CallVoidMethod(e, view, set_visibility, show > 0 ? 0 : 8);
+    }
+    (*e)->PopLocalFrame(e, NULL);
+}

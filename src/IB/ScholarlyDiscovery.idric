@@ -1,0 +1,88 @@
+module IB.ScholarlyDiscovery
+
+import Data.Text
+import IB.ScholarlyAccess
+import IB.WebSearch
+
+%default total
+
+-- Provider requests are descriptions for the maintained ICU acquisition
+-- boundary, never HTTP performed by this pure browser-policy module.
+public export
+data ScholarlyProvider
+  = WaybackCDX
+  | InternetArchiveCatalog
+  | OpenAlexWorks
+  | ArchiveTodayLookup
+
+public export
+scholarly_provider_name : ScholarlyProvider → Text
+scholarly_provider_name WaybackCDX = "wayback-cdx"
+scholarly_provider_name InternetArchiveCatalog = "internet-archive"
+scholarly_provider_name OpenAlexWorks = "openalex"
+scholarly_provider_name ArchiveTodayLookup = "archive-today"
+
+public export
+record DiscoveryRequest where
+  constructor QueryProvider
+  provider : ScholarlyProvider
+  request_url : Text
+
+-- Never disclose URL credentials, searches, fragments, or potentially private
+-- publisher query parameters. The publisher authority itself is allowlisted.
+public export
+public_discovery_url : Text → Bool
+public_discovery_url address =
+  scholarly_public_address address &&
+  not (any (\ch => elem ch ['@', '?', '#'] ||
+                 ord ch < 33 || ord ch > 126) (unpack address)) &&
+  length (unpack address) <= 2048
+
+safe_title : Text → Bool
+safe_title title =
+  let chars = unpack (trim title) in
+    length chars >= 4 && length chars <= 180 &&
+    not (any (\ch => ord ch < 32 || ord ch == 127) chars)
+
+wayback_query : Text → DiscoveryRequest
+wayback_query source =
+  QueryProvider WaybackCDX
+    ("https://web.archive.org/cdx/search/cdx?url=" ++
+     encode_search_terms source ++
+     "&output=json&filter=statuscode%3A200&fl=timestamp%2Coriginal%2Cstatuscode%2Cmimetype&collapse=timestamp%3A4")
+
+archive_today_query : Text → DiscoveryRequest
+archive_today_query source =
+  -- Lookup URL only. It is not a claim that a snapshot exists.
+  QueryProvider ArchiveTodayLookup ("https://archive.ph/" ++ encode_search_terms source)
+
+archive_catalog_query : Text → DiscoveryRequest
+archive_catalog_query title =
+  QueryProvider InternetArchiveCatalog
+    ("https://archive.org/advancedsearch.php?q=" ++
+     encode_search_terms ("title:(\"" ++ title ++ "\")") ++
+     "&fl%5B%5D=identifier&fl%5B%5D=title&rows=5&output=json")
+
+openalex_query : Text → DiscoveryRequest
+openalex_query title =
+  QueryProvider OpenAlexWorks
+    ("https://api.openalex.org/works?search=" ++ encode_search_terms title ++
+     "&per-page=5")
+
+request_is_bounded : DiscoveryRequest → Bool
+request_is_bounded request = length (unpack request.request_url) <= 2048
+
+-- Bounded four-provider search plan. The request producer still must enforce
+-- budgets, validate the provider response and admit any proposed document.
+public export
+scholarly_discovery_requests : Text → Maybe Text → List DiscoveryRequest
+scholarly_discovery_requests source title =
+  if not (public_discovery_url source) then []
+  else let roots = [wayback_query source, archive_today_query source] in
+    case title of
+      Nothing => filter request_is_bounded roots
+      Just name =>
+        if safe_title name
+          then filter request_is_bounded
+                 (roots ++ [archive_catalog_query name, openalex_query name])
+          else filter request_is_bounded roots

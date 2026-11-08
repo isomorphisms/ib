@@ -1,0 +1,100 @@
+module IB.ScholarlyEvidence
+
+import Data.Text
+
+%default total
+
+-- Provider search hits, fetched representations and proven readable text
+-- are different stages.  Neither a catalogue row nor HTTP 200 proves that
+-- an advertised book is available.
+
+public export
+data ScholarlyCoverage
+  = WholeWork
+  | AbstractExtract
+  | MetadataExtract
+  | CoverageUnknown
+
+public export
+data BibliographicMatch
+  = ExactDOI
+  | ExactISBN
+  | ExactTitleAndAuthor
+  | NoVerifiedMatch
+
+public export
+record ScholarlyCandidateEvidence where
+  constructor CandidateReceipt
+  original_url : Text
+  candidate_url : Text
+  source_key : Text
+  expected_sha256 : Text
+  reopened_sha256 : Text
+  http_status : Text
+  mime_type : Text
+  completed : Bool
+  extracted_from_verified_bytes : Bool
+  bibliographic_match : BibliographicMatch
+  coverage : ScholarlyCoverage
+
+public export
+data ScholarlyDisposition
+  = WholeWorkAvailable
+  | AbstractAvailable
+  | MetadataAvailable
+  | CandidateNotReadable
+  | CandidateRefused
+
+public export
+disposition_label : ScholarlyDisposition → Text
+disposition_label WholeWorkAvailable = "verified-full-text"
+disposition_label AbstractAvailable = "abstract-only"
+disposition_label MetadataAvailable = "metadata-only"
+disposition_label CandidateNotReadable = "not-readable"
+disposition_label CandidateRefused = "refused"
+
+hex_digit : Char → Bool
+hex_digit ch = (ch >= '0' && ch <= '9') || (ch >= 'a' && ch <= 'f')
+
+valid_sha256 : Text → Bool
+valid_sha256 digest =
+  let chars = unpack digest in length chars == 64 && all hex_digit chars
+
+public export
+candidate_disposition : ScholarlyCandidateEvidence → ScholarlyDisposition
+candidate_disposition evidence =
+  if evidence.original_url == "" ||
+     evidence.candidate_url == "" ||
+     evidence.source_key == "" ||
+     not (valid_sha256 evidence.expected_sha256) ||
+     evidence.expected_sha256 /= evidence.reopened_sha256 ||
+     evidence.http_status /= "200" ||
+     not evidence.completed ||
+     not evidence.extracted_from_verified_bytes
+    then CandidateRefused
+    else case evidence.bibliographic_match of
+      NoVerifiedMatch => CandidateRefused
+      _ =>
+        if evidence.mime_type /= "text/html" &&
+           evidence.mime_type /= "application/pdf"
+          then CandidateRefused
+          else case evidence.coverage of
+            WholeWork => WholeWorkAvailable
+            AbstractExtract => AbstractAvailable
+            MetadataExtract => MetadataAvailable
+            CoverageUnknown => CandidateNotReadable
+
+-- Full-text availability is stronger than bibliographic identity and is
+-- established by an extractor over independently reopened original bytes.
+-- Unverified PDF text extraction must pass CoverageUnknown, not WholeWork.
+public export
+can_offer_reading : ScholarlyDisposition → Bool
+can_offer_reading WholeWorkAvailable = True
+can_offer_reading _ = False
+
+public export
+can_request_grounded_summary : ScholarlyDisposition → Bool
+can_request_grounded_summary WholeWorkAvailable = True
+can_request_grounded_summary AbstractAvailable = True
+can_request_grounded_summary MetadataAvailable = True
+can_request_grounded_summary _ = False

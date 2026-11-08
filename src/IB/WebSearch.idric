@@ -57,11 +57,16 @@ unsafe_control : Char → Bool
 unsafe_control character =
   let scalar = ord character in scalar < 32 || scalar == 127
 
+-- One shared UTF-8 form-query encoder for checked public search endpoints.
+public export
+encode_search_terms : Text → Text
+encode_search_terms terms = concat (map encoded_character (unpack terms))
+
 public export
 google_icu_url : Text → Maybe Text
 google_icu_url supplied =
   let terms = trim supplied in
     if any unsafe_control (unpack supplied) || terms == "" then Nothing
     else let url = "https://google.com/search?q=" ++
-                   concat (map encoded_character (unpack terms))
+                   encode_search_terms terms
          in if length (unpack url) > 2048 then Nothing else Just url

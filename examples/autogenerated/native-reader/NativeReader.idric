@@ -6,6 +6,7 @@ import Data.List1
 import IB.Reader.Document
 import IB.Reader.Navigation
 import IB.Reader.Workbench
+import IB.ScholarlyAccess
 import IB.Reader.Selection
 import IB.HtmlPrepaint
 import IB.HtmlAnchors
@@ -40,6 +41,8 @@ present_workbench_source : ActivityReference → Int32 → Text → PrimIO ()
 workbench_projection_revision : ActivityReference → PrimIO Text
 %foreign "dex:static:Lorg/isomorphisms/ib/ReaderBridge;:workbenchVisible:(Landroid/app/Activity;I)V"
 show_workbench_projection : ActivityReference → Int32 → PrimIO ()
+%foreign "dex:static:Lorg/isomorphisms/ib/ReaderBridge;:scholarlyStatus:(Landroid/app/Activity;Ljava/lang/String;)V"
+present_scholarly_status : ActivityReference → Text → PrimIO ()
 
 %foreign "dex:virtual:Landroid/app/Activity;:setContentView:(I)V"
 apply_reader_layout : ActivityReference → Int32 → PrimIO ()
@@ -384,7 +387,9 @@ document_refusal_message observations reason =
 
 %export "dex:reader_acquisition_progress"
 reader_acquisition_progress : ActivityReference → Text → IO ()
-reader_acquisition_progress activity message = write_view_text activity reader_status message
+reader_acquisition_progress activity message = do
+  primIO (present_scholarly_status activity "")
+  write_view_text activity reader_status message
 
 %export "dex:reader_browser_url_allowed"
 reader_browser_url_allowed : Text → Text → Int32
@@ -533,8 +538,17 @@ reader_acquisition_ready activity observations html source_id generation planned
               Right (document, history, projection, target)
   case prepared of
     Left reason ⇒ reader_acquisition_failed activity (document_refusal_message observations reason)
-    Right (document, history, projection, target) ⇒
+    Right (document, history, projection, target) ⇒ do
       present_prepared_document activity document history projection target source_id generation
+      case read_committed_evidence observations of
+        Left _ ⇒ primIO (present_scholarly_status activity "")
+        Right evidence ⇒ do
+          let assessment = assess_scholarly_access evidence.requested_url evidence.http_status False html
+          let notice = case assessment of
+                RestrictedAccess ⇒ "Publisher access restricted; full text not verified."
+                PublisherMetadata ⇒ "Publisher metadata only; full book or article text not verified."
+                _ ⇒ ""
+          primIO (present_scholarly_status activity notice)
 
 %export "dex:reader_dom_acquisition_ready"
 reader_dom_acquisition_ready : ActivityReference → Text → Text → Text → Int32 → Text → Int32 → IO ()
