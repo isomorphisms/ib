@@ -63,5 +63,6 @@ jobs:
             /tmp/idric/bin/idris2 "${name}Smoke.idric" -o "ib-${name}" > "/tmp/${name}.compile.log" 2>&1 || { cat "/tmp/${name}.compile.log"; exit 1; }
             cat "/tmp/${name}.compile.log"
             "./build/exec/ib-${name}" | tee "/tmp/${name}.run.log"
-            grep -Fx "scholarly-$(printf '%s' "$name" | tr '[:upper:]' '[:lower:]')=PASS" "/tmp/${name}.run.log"
+            short=$(printf '%s' "$name" | sed 's/^Scholarly//' | tr '[:upper:]' '[:lower:]')
+            grep -Fx "scholarly-$short=PASS" "/tmp/${name}.run.log"
           done

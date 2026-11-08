@@ -16,7 +16,7 @@ ib_scholarly_safe_id() {
 
 ib_scholarly_field() {
   test "${#1}" -le 4096 || return 1
-  if printf '%s' "$1" | LC_ALL=C grep '[[:cntrl:]]' >/dev/null 2>&1; then
+  if printf '%s' "$1" | LC_ALL=C tr '\n' '\001' | LC_ALL=C grep '[[:cntrl:]]' >/dev/null 2>&1; then
     return 1
   fi
 }
