@@ -20,4 +20,5 @@
     <public type="id" name="workbench_button" id="0x7f03000f" />
     <public type="id" name="workbench_scroll" id="0x7f030010" />
     <public type="id" name="workbench_entries" id="0x7f030011" />
+    <public type="id" name="scholarly_status" id="0x7f030012" />
 </resources>

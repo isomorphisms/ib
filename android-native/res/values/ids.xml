@@ -18,4 +18,5 @@
     <item type="id" name="workbench_button" />
     <item type="id" name="workbench_scroll" />
     <item type="id" name="workbench_entries" />
+    <item type="id" name="scholarly_status" />
 </resources>
