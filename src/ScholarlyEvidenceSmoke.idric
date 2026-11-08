@@ -1,0 +1,37 @@
+module ScholarlyEvidenceSmoke
+
+import IB.ScholarlyEvidence
+import System
+
+same : ScholarlyDisposition → Text → Bool
+same d label = disposition_label d == label
+
+main : IO ()
+main = do
+  let hash = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+  let origin = "https://link.springer.com/book/10.1007/978-3-322-90166-8"
+  let copy = "https://repository.example.test/scholarly/text.html"
+  let good = CandidateReceipt origin copy "source-1" hash hash "200" "text/html"
+               True True ExactISBN WholeWork
+  let abstract = CandidateReceipt origin copy "source-1" hash hash "200" "text/html"
+                   True True ExactISBN AbstractExtract
+  let other = CandidateReceipt origin copy "source-1" hash hash "200" "text/html"
+                True True NoVerifiedMatch WholeWork
+  let changed = CandidateReceipt origin copy "source-1" hash
+                  "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+                  "200" "text/html" True True ExactISBN WholeWork
+  let extracted_pdf = CandidateReceipt origin copy "source-1" hash hash "200"
+                        "application/pdf" True False ExactISBN WholeWork
+  let catalogue = CandidateReceipt origin copy "source-1" hash hash "200"
+                    "text/html" True True ExactDOI MetadataExtract
+  let ok = same (candidate_disposition good) "verified-full-text" &&
+           same (candidate_disposition abstract) "abstract-only" &&
+           same (candidate_disposition other) "refused" &&
+           same (candidate_disposition changed) "refused" &&
+           same (candidate_disposition extracted_pdf) "refused" &&
+           same (candidate_disposition catalogue) "metadata-only" &&
+           can_offer_reading (candidate_disposition good) &&
+           not (can_offer_reading (candidate_disposition abstract)) &&
+           can_request_grounded_summary (candidate_disposition abstract)
+  putStrLn (if ok then "scholarly-evidence=PASS" else "scholarly-evidence=FAIL")
+  if ok then pure () else exitFailure
