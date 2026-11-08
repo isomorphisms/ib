@@ -1,0 +1,127 @@
+module IB.ScholarlyAccess
+
+import Data.Text
+
+%default total
+
+-- A publisher landing page is not evidence that its advertised work is
+-- readable.  This module consumes only observations from an already admitted
+-- source.  It does not grant admission, make network requests, or infer that a
+-- book has been read.
+
+public export
+data ScholarlyAccess
+  = ReadableFullText
+  | RestrictedAccess
+  | PublisherMetadata
+  | MissingPublisherResource
+  | AccessUndetermined
+  | OutsideScholarlyScope
+
+public export
+access_label : ScholarlyAccess → Text
+access_label ReadableFullText = "verified-full-text"
+access_label RestrictedAccess = "restricted"
+access_label PublisherMetadata = "publisher-metadata-only"
+access_label MissingPublisherResource = "publisher-resource-missing"
+access_label AccessUndetermined = "access-undetermined"
+access_label OutsideScholarlyScope = "not-scholarly-discovery"
+
+strip_prefix : List Char → List Char → Maybe (List Char)
+strip_prefix [] rest = Just rest
+strip_prefix (_ :: _) [] = Nothing
+strip_prefix (wanted :: rest) (actual :: following) =
+  if wanted == actual then strip_prefix rest following else Nothing
+
+host_boundary : List Char → Bool
+host_boundary [] = True
+host_boundary ('/' :: _) = True
+host_boundary ('?' :: _) = True
+host_boundary ('#' :: _) = True
+host_boundary _ = False
+
+has_host : Text → Text → Bool
+has_host address host =
+  case strip_prefix (unpack ("https://" ++ host)) (unpack address) of
+    Just tail => host_boundary tail
+    Nothing => case strip_prefix (unpack ("http://" ++ host)) (unpack address) of
+      Just tail => host_boundary tail
+      Nothing => False
+
+-- Exact authorities only.  A suffix such as link.springer.com.evil.test
+-- must not cause IB to disclose the visited URL to search providers.
+public export
+scholarly_public_address : Text → Bool
+scholarly_public_address address =
+  any (has_host address)
+    ["link.springer.com", "www.springer.com", "onlinelibrary.wiley.com",
+     "www.jstor.org", "jstor.org", "academic.oup.com",
+     "www.sciencedirect.com", "www.tandfonline.com",
+     "www.nature.com", "nature.com"]
+
+ascii_lower : Char → Char
+ascii_lower ch =
+  let value = ord ch in
+    if value >= 65 && value <= 90 then chr (value + 32) else ch
+
+starts_at : List Char → List Char → Bool
+starts_at [] _ = True
+starts_at (_ :: _) [] = False
+starts_at (a :: rest) (b :: tail) =
+  a == b && starts_at rest tail
+
+contains_chars : List Char → List Char → Bool
+contains_chars [] _ = True
+contains_chars (_ :: _) [] = False
+contains_chars sought chars@(_ :: rest) =
+  starts_at sought chars || contains_chars sought rest
+
+-- Only inspect a bounded prefix.  Arbitrary page text is untrusted and cannot
+-- assert that the *advertised* book or paper was obtained.
+contains_cue : Text → Text → Bool
+contains_cue cue html =
+  contains_chars (map ascii_lower (unpack cue))
+                 (map ascii_lower (take 32768 (unpack html)))
+
+has_restriction_cue : Text → Bool
+has_restriction_cue html =
+  any (\cue => contains_cue cue html)
+    ["access through your institution", "log in to access",
+     "login to access", "purchase this book", "buy ebook",
+     "purchase pdf", "get access", "access this book",
+     "rent this article", "subscribe to read"]
+
+has_bibliographic_cue : Text → Bool
+has_bibliographic_cue html =
+  any (\cue => contains_cue cue html)
+    ["citation_doi", "citation_isbn", "citation_title",
+     "textbook", "book title", "abstract", "publication date"]
+
+-- full_text_verified must be supplied by the trusted extraction/admission
+-- path; neither a page's "full text" label nor an HTML 200 is sufficient.
+public export
+assess_scholarly_access : Text → Text → Bool → Text → ScholarlyAccess
+assess_scholarly_access address http_status full_text_verified html =
+  if not (scholarly_public_address address)
+    then OutsideScholarlyScope
+    else if http_status == "401" || http_status == "402" ||
+            http_status == "403" || http_status == "451"
+      then RestrictedAccess
+      else if http_status == "404" || http_status == "410"
+        then MissingPublisherResource
+        else if http_status /= "200"
+          then AccessUndetermined
+          else if full_text_verified
+            then ReadableFullText
+            else if has_restriction_cue html
+              then RestrictedAccess
+              else if has_bibliographic_cue html
+                then PublisherMetadata
+                else AccessUndetermined
+
+public export
+should_discover_alternatives : ScholarlyAccess → Bool
+should_discover_alternatives RestrictedAccess = True
+should_discover_alternatives PublisherMetadata = True
+should_discover_alternatives MissingPublisherResource = True
+should_discover_alternatives _ = False
