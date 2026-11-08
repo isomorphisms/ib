@@ -16,14 +16,14 @@ main = do
   let candidates = scholarly_discovery_requests springer
                      (Just "Hypergeometric Functions, My Love")
   let without_title = scholarly_discovery_requests springer Nothing
-  let private = scholarly_discovery_requests
+  let private_query = scholarly_discovery_requests
                   "https://link.springer.com/book/10.1007/example?token=secret"
                   (Just "Hidden")
   let spoofed = scholarly_discovery_requests
                   "https://link.springer.com.evil.test/book" (Just "Hidden")
   let ok = length candidates == 4 &&
            length without_title == 2 &&
-           null private && null spoofed &&
+           null private_query && null spoofed &&
            contains_provider "wayback-cdx" candidates &&
            contains_provider "internet-archive" candidates &&
            contains_provider "openalex" candidates &&
