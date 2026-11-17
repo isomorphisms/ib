@@ -465,7 +465,7 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           repository: isomorphisms/ai-ci
-          ref: 81b9fe7b95446216c9626ef252255e26782008ab
+          ref: f6a6e4a240f45dd3fe515f8fc71619a9be8da6fa
           path: .tools/admin-acceptance
           persist-credentials: false
       - id: ick
@@ -520,9 +520,12 @@ jobs:
           api-level: ${{ matrix.api }}
           target: ${{ matrix.target }}
           arch: x86_64
+          cores: ${{ matrix.cores }}
+          ram-size: ${{ matrix.memory }}M
           disk-size: 2048M
           avd-name: ib-admin-${{ matrix.lane }}
-          emulator-options: -no-window -no-audio -no-snapshot -no-boot-anim -memory ${{ matrix.memory }} -cores ${{ matrix.cores }} -skin 480x800 -gpu swiftshader_indirect
+          # Keep the declared RAM instead of the emulator's API minimum; the observer still checks actual guest RAM and CPUs.
+          emulator-options: -no-window -no-audio -no-snapshot -no-boot-anim -lowram -memory ${{ matrix.memory }} -cores ${{ matrix.cores }} -skin 480x800 -gpu swiftshader_indirect
           disable-animations: true
           script: .tools/runtime/.build/grease/bin/grease .tools/admin-acceptance/android-admin/observe.grease "$GITHUB_WORKSPACE/.tools/admin-acceptance" "$GITHUB_WORKSPACE" "$RUNNER_TEMP/ib-reader/native-client/ib-native-boundary.apk" "$ANDROID_HOME" "$RUNNER_TEMP/ib-reader/oracles/smali.jar" "$RUNNER_TEMP/ib-reader/oracles/baksmali.jar" "$RUNNER_TEMP/ib-reader/platform-inputs/public-test-keystore" "${{ steps.ick.outputs.compiler }}" "$ANDROID_HOME/platform-tools/adb" emulator-5554 "$RUNNER_TEMP/ib-admin-observed"
       - name: Retain admin observations and exact input identity on failure

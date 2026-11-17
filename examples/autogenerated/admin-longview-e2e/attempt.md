@@ -262,11 +262,67 @@ capture and original-exit controls are recorded in
 execution must supply its own input and assertion before that failure is
 attributed to the same source-layout boundary.
 
+The instrumented `b6e0924` hosted run now supplies that evidence. Its core,
+three deterministic scientific tests and four-paper live harvest pass. The
+live prepaint step reports `paper-heading-at-16384`, exit one, and retains the
+exact input/output with complete size/hash records. That hosted HTML is the
+same 134,967-byte document; its first `<h1>` starts at zero-based byte offset
+17,136. The declared `7050c` renderer's output also matches the earlier local
+replay byte for byte. The first 16 KiB cannot contain the required heading;
+the 32 KiB output includes it and the opening abstract within the existing
+item limit. This is a confirmed blocked shared contract, with the documented
+threshold preserved. `scientific-prepaint-hosted-b6e0924.tsv` binds the exact
+job, artifact, input, output and governing requirement.
+
 The observer repository's 46 checks passed at
 `81b9fe7b95446216c9626ef252255e26782008ab`. This includes the repaired
 [native handoff check](https://github.com/isomorphisms/ai-ci/actions/runs/44130578780/job/134206206402)
 and [delivery check](https://github.com/isomorphisms/ai-ci/actions/runs/44130578672/job/134206206444).
 These host and repository results do not establish installed admin acceptance.
+
+## Installed results and observer correction
+
+The retained reader suites pass on both API29 and API34 at `b02e678` in
+[the hosted native run](https://github.com/isomorphisms/ib/actions/runs/44132047628).
+Those results bind the hosted APK `e7da1f237160ecc8965e881ce8e1d932eb4c7b2c66a5fd22ad155b43760e8ae0`,
+not the differently hashed local package. The reader receipts cover their
+existing positive interactions and compiled refusal controls. They do not
+establish the new protected admin journey.
+The API34 archive's actual installed APK copies, eleven runtime receipts and
+native document screenshot are independently inspected in
+`installed-reader-b02e678.tsv`.
+
+The first admin API29 attempt installed the product and observer, then stopped
+at a debug-only `run-as` access against the non-debuggable product. An earlier
+selector probe also treated that access denial as absence. The observer
+correction checks the actual target UID and unchanged debug flag inside the
+same-signer instrumentation. Its preflight accepts only a missing selector;
+permission and other filesystem failures remain failures. Approved record
+and screenshot bytes leave the process during the existing observation
+phases, with closed names, ordered bounded chunks, byte counts and SHA-256.
+Raw exports remain private and are removed after decoding. Host controls
+exercise malformed transport and protected-value refusal. Data and cache
+growth now use separate own-UID byte counts from Android storage statistics.
+No application debugging setting or product payload is changed by this repair.
+The corrected observer is pinned at
+`f6a6e4a240f45dd3fe515f8fc71619a9be8da6fa`. Its actual qualified Grease execution
+passes 31 record, 23 diagnostic and 22 transport negative controls, with
+positive complete phase exports and malformed-transcript privacy cleanup.
+The rebuilt observer DEX is
+`4d887d8338f9700211ee9d00a670c4e1c03568f72ce6b97dbe16c4483788858c`;
+its signed APK is
+`e03b9af5dfb5eb32f31ba597d12361066860bd56ea303a94a34983918c229b0d`.
+All eighteen retained source digests match the tested files. These host and
+package results do not establish actual Android execution of the repair.
+
+Both first API34 admin attempts stopped before product installation: emulator
+37.2.13 raised the requested RAM to 2,560 MB. The workflow now writes the
+matrix CPU/RAM settings into the AVD and supplies the emulator's `-lowram`
+option alongside the original values. Actual guest bounds remain required,
+including API34, one CPU and one GiB for the public ladder. The observer saves
+the observed guest values before applying those bounds. The official binary's
+option check and exact failed jobs are recorded in `emulator-target-repair.tsv`;
+a successful boot or installed admin pass is not inferred from that check.
 
 ## Acceptance ledger
 
@@ -274,7 +330,7 @@ Detailed source-bound receipts live beside the core, native and fixture
 attempts. A receipt naming a working-tree base and source hashes is evidence
 for those bytes; it is not relabelled as a later commit's hosted acceptance.
 
-| Obligation | State at initial integration |
+| Obligation | Observed state and source boundary |
 | --- | --- |
 | Strict checked codec and generation/session refusal cases | PASS on host; 48 named assertions and three compiled counterexamples |
 | Six actual managed codec exports, independently disassembled | PASS at the declared backend; no ART execution implied |
@@ -282,8 +338,9 @@ for those bytes; it is not relabelled as a later commit's hosted acceptance.
 | Trusted-root alias, strict descendant and atomic store behavior | PASS on host; 40 assertions execute the production store |
 | Complete native app DEX and three ABI native libraries | PASS at the declared compiler stages; independent DEX/ELF inspection |
 | Complete signed APK packaging and byte reproduction | PASS at `b02e678`, including the callback correction, complete maintained recipe and signed APK byte equality; installed evidence remains separate |
-| Installed API29 / API34 admin and retained reader suites | NOT_RUN for this change at initial integration |
-| Separate 1 CPU / 1 GiB / 480×800 lane | NOT_RUN for this change at initial integration |
+| Installed API29 / API34 retained reader suites | PASS at hosted `b02e678`; actual hosted candidate identified above |
+| Installed API29 / API34 admin suites | First attempts FAIL before functional acceptance at observer access / emulator target guards; corrected observer and target configuration await installed execution |
+| Separate API34 / 1 CPU / 1 GiB / 480×800 lane | First attempt FAIL at actual guest memory guard before installation; required target and public acceptance predicates unchanged |
 | Physical C67 startup and authenticated Google Cloud control | BLOCKED_EXTERNAL; no physical connection or signed-in interaction available |
 | Separate YouTube Studio / YouTube API workflow | BLOCKED_EXTERNAL; exact live screen and user-operated authorization required |
 
