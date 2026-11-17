@@ -258,7 +258,7 @@ caption_without_figure_label() {
 conceptual_name_slug() {
   text=$1
   if command -v iconv >/dev/null 2>&1; then
-    ascii=$(printf '%s\n' "$text" | iconv -c -f UTF-8 -t ASCII//TRANSLIT 2>/dev/null || printf '%s\n' "$text")
+    ascii=$(printf '%s\n' "$text" | iconv -c -f UTF-8 -t ASCII//TRANSLIT 2>/dev/null) || ascii=$text
   else
     ascii=$text
   fi

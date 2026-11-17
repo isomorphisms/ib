@@ -12,8 +12,22 @@ ib_media_require_command pdftohtml
 # XML text is UTF-8 even when the calling process uses the C locale. A
 # conversion failure must not append the original caption to partial output.
 unicode_caption=$(printf 'Mean\302\240activation \342\210\222 training loss')
-test "$(conceptual_name_slug "$unicode_caption")" = mean_activation_training_loss
-test "$(LC_ALL=C conceptual_name_slug "$unicode_caption")" = mean_activation_training_loss
+unicode_default=$(conceptual_name_slug "$unicode_caption")
+unicode_c=$(LC_ALL=C conceptual_name_slug "$unicode_caption")
+if test "$unicode_default" != mean_activation_training_loss ||
+   test "$unicode_c" != mean_activation_training_loss; then
+  printf 'scientific-media: Unicode caption filename mismatch\n' >&2
+  printf 'expected=mean_activation_training_loss\ndefault=%s\nC=%s\n' \
+    "$unicode_default" "$unicode_c" | head -c 1024 >&2
+  printf 'default bytes:\n' >&2
+  printf '%s' "$unicode_default" | head -c 512 | od -An -tx1 >&2
+  printf 'C bytes:\n' >&2
+  printf '%s' "$unicode_c" | head -c 512 | od -An -tx1 >&2
+  locale >&2
+  command -v iconv >&2
+  iconv --version | head -n 1 >&2
+  exit 1
+fi
 
 work_directory=$(mktemp -d)
 server_pid=''

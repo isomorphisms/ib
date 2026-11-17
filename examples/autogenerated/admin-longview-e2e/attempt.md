@@ -214,6 +214,21 @@ archive from one tar block over the limit even when the producer exits zero.
 The source-bound receipt and repeatable helper are retained alongside this
 attempt. Hosted execution of this followup remains a separate gate.
 
+The next hosted head, `003524f`, passed the core job but failed the new Unicode
+regression before the local fixture server started. The exact Ubuntu
+`2.43-2ubuntu2.4` libc, converter, gconv modules and locale reproduced the
+failure: `iconv` emitted converted text but exited one under `C.UTF-8`. The
+fallback was inside the same command substitution, so it appended the original
+caption to the emitted text. Moving fallback assignment outside the command
+substitution discards failed output before retaining the original caption.
+Both exact expected-slug assertions remain in place. The local `2.41` result
+is retained separately; it had not exercised this converter behavior.
+All three deterministic scientific tests pass with the exact `2.43` converter
+components. The same local shell and `740bb` PDF bridge are explicitly recorded
+in `scientific-iconv-243.tsv`; this is not a complete Ubuntu runner replay.
+The old library still fails the unchanged expected strings with the new bounded
+diagnostic branch. The next hosted run remains the authoritative CI result.
+
 The observer repository's 46 checks passed at
 `81b9fe7b95446216c9626ef252255e26782008ab`. This includes the repaired
 [native handoff check](https://github.com/isomorphisms/ai-ci/actions/runs/44130578780/job/134206206402)

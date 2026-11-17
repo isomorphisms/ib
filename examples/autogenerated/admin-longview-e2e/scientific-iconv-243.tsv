@@ -1,0 +1,52 @@
+schema	ib-scientific-iconv-243-v1
+date_utc	2026-11-17
+qualification	Executed local working-tree bytes over 003524fd0cdc3dd6f19732890ee16f9098ec3dc5; exact Ubuntu converter components, not a full Ubuntu runner replay.
+hosted_failure	https://github.com/isomorphisms/ib/actions/runs/44137203308/job/134229870055
+hosted_observation	Ubuntu 26.04.1 image 20261111.196.1, libc-bin 2.43-2ubuntu2.4; image regression begins 17:28:04.7629869 and exits 1 at 17:28:04.7733995, before fixture sleep/acquisition.
+hosted_unknown	The failed job did not print actual locale, command resolution or the failed assertion; selected converter/default locale are not inferred as directly observed.
+source.media.before.sha256	2c6e3a4651007cc393c5a1e78ed63aedd995a7778d0e69db5144a6af1eb4807f lib/scientific_media.grease at 003524f
+source.media.after.sha256	fe5c0f5da74d5bc4ca6c9d3ef897659cd835d0ff1c8737ae513f441eccce76e7 lib/scientific_media.grease
+source.test.before.sha256	1e70b209a770c67817bf98ac9da928333bf8177f7f0757e8379c5068966c8e7a tests/test_scientific_image_harvest.grease at 003524f
+source.test.after.sha256	ee30a4226e705a32648ea17446b0a0ab78ed94536c3c23de7c44ad0235edcad3 tests/test_scientific_image_harvest.grease
+repair	Move fallback outside command substitution: ascii=$(converter) || ascii=$text. Output emitted before nonzero exit is replaced, not concatenated with original input.
+assertions	Both default/C expected strings remain mean_activation_training_loss; all pre-existing fixture assertions remain unchanged.
+diagnostics	On mismatch only: expected/observed public-fixture slugs capped at 1024 bytes; each byte rendering capped at 512 input bytes; locale, converter resolution and first version line.
+package.base_url	https://snapshot.ubuntu.com/ubuntu/20261111T000000Z/pool/main/g/glibc/
+package.libc_bin	libc-bin_2.43-2ubuntu2.4_amd64v3.deb; SHA256=ced8ae3a81cd0c7958a4d0940f01e99afff46de259081c09fa34faf36427b7cd
+package.libc6	libc6_2.43-2ubuntu2.4_amd64v3.deb; SHA256=0c5edeae615e0e43c669e4a2c65e6cbb271484f66230c1ffc32f4503b3854309
+package.gconv_extra	libc-gconv-modules-extra_2.43-2ubuntu2.4_amd64v3.deb; SHA256=b1fa85cc21200657822f4c796f7d10fec84687b484cf05184fba62c09e16b50c
+package.installation	Extracted with dpkg-deb --extract into isolated scratch; no system installation or dependency pin change.
+runtime_root	/workspace/scratch/c37bb9f8dd86/scientific-media-repro/ubuntu-glibc-243
+runtime.iconv.sha256	3ba48955b185f12ccbdaa8737696b778f7f0965e2efce9d19de940363321ae60 usr/bin/iconv
+runtime.loader.sha256	75c84c6a1522e227864db7d8b40f66b5d6edefcff92538e15a964f1de7855390 usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2
+runtime.libc.sha256	305014d0b30755fc12cb419074f6acb4d43c4111e006f2981fd23ee21e25e508 usr/lib/x86_64-linux-gnu/libc.so.6
+runtime.C_UTF8.sha256	40680545df4f92443c15e7c6f51a7fdc9154ebedd9eff1ed5c48437039add365 usr/lib/locale/C.utf8/LC_CTYPE
+evidence_root	/workspace/scratch/c37bb9f8dd86/scientific-media-repro/locale-243-01
+input	caption.utf8: Mean<U+00A0>activation <U+2212> training loss followed by LF; SHA256=faccbdf0adf8eb38e9f9979caf8ed167b7a7f45853175ec4808152be5a6eb11b
+converter.LOCPATH	/workspace/scratch/c37bb9f8dd86/scientific-media-repro/ubuntu-glibc-243/usr/lib/locale
+converter.GCONV_PATH	/workspace/scratch/c37bb9f8dd86/scientific-media-repro/ubuntu-glibc-243/usr/lib/x86_64-linux-gnu/gconv
+converter.command	/workspace/scratch/c37bb9f8dd86/scientific-media-repro/ubuntu-glibc-243/usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2 --library-path /workspace/scratch/c37bb9f8dd86/scientific-media-repro/ubuntu-glibc-243/usr/lib/x86_64-linux-gnu /workspace/scratch/c37bb9f8dd86/scientific-media-repro/ubuntu-glibc-243/usr/bin/iconv -c -f UTF-8 -t ASCII//TRANSLIT < caption.utf8
+converter.C.result	LC_ALL=C: exit=0, one converted line, empty stderr; C-iconv.txt. Initial core-module replay before the matching extra-module package was extracted.
+converter.C_UTF8.result	LC_ALL=C.UTF-8: exit=1 despite one converted line and empty stderr; confirmed again after matching extra-module extraction in C-UTF8-full-iconv.txt.
+converter.stdout.sha256	e402e4098606ea24b9dc162877b88eb87d9b3207624ce91d64d562c6263df823 in both C and C.UTF-8; text is Mean activation - training loss followed by LF.
+converter.without_c	Same exact C.UTF-8 converter command without -c also exits 1 and emits the converted line; C-UTF8-no-c-iconv.txt.
+test.cwd	/workspace/scratch/c37bb9f8dd86/ib
+test.shell	sh resolves locally to /usr/bin/dash; shell/coreutils remain the local host's. Exact converter runs through the Grease invocation shim below.
+test.PATH	/workspace/scratch/c37bb9f8dd86/scientific-media-repro/locale-243-01/bin:/workspace/scratch/c37bb9f8dd86/scientific-media-repro/runtime/usr/bin:/workspace/scratch/c37bb9f8dd86/scientific-media-repro/runtime/bin:/usr/bin:/bin
+test.LD_LIBRARY_PATH	/workspace/scratch/c37bb9f8dd86/scientific-media-repro/runtime/usr/lib/x86_64-linux-gnu
+test.LC_ALL	C.UTF-8; second unchanged assertion invokes conceptual_name_slug with LC_ALL=C.
+shim	locale-243-01/bin/iconv; genuine Grease entrypoint /workspace/scratch/c37bb9f8dd86/toolchain/runtime/.build/grease/bin/grease; SHA256=94116aa0ac65dc66de4d41485085e292b7821e4619fd9f7733bec801c0f1f663
+shim.behavior	Sets matching LOCPATH/GCONV_PATH, then execs the matching loader, library path and iconv with caller @ARGV; no stdout processing or substitute converter.
+before.command	sh -x tests/test_scientific_image_harvest.grease
+before.result	exit=1; first exact assertion sees two identical mean_activation_training_loss lines; image-before.txt SHA256=af524578d801aeea3699d3565f4b193d5f4014090b64b3ff5488a99a46f5f477
+after.image	sh tests/test_scientific_image_harvest.grease; exit=0; image-after.txt SHA256=0a244c11867b1c3b020289254a4aa532fe4a52dc4ebe663232fd07e53171f54b
+after.prefetch	sh tests/test_prefetch_reading.grease; exit=0; prefetch-after.txt SHA256=4bb8fcb8b42e4d81fb212ba3b153411d0d45b3e326bdad31d7360fd521ba39c6
+after.navigation	timeout 30 sh tests/test_scientific_navigation_prefetch.grease; exit=0; navigation-after.txt SHA256=75e7ca4bf248fbe28fd4b2bc3b2080598f6460097833843e3b24b1ce6801ea71
+diagnostic.control	Copied new test and exact 003524f old library into locale-243-01/before-diagnostic; no old/new source substitution in the real checkout.
+diagnostic.command	sh /workspace/scratch/c37bb9f8dd86/scientific-media-repro/locale-243-01/before-diagnostic/tests/test_scientific_image_harvest.grease
+diagnostic.result	exit=1; correctly prints doubled default slug and embedded 0a byte, single C slug, locale and Ubuntu GLIBC 2.43-2ubuntu2.4 version; old-library-diagnostic-after.txt SHA256=f3ed42f7f8e12cee68585ab4c7b1ffa212ac637d6d996f83d8e1ba7b67c736d2
+compiler_boundary	Local full tests use the already-built 740bbf2b1d9e811fd00c719c3473eede17ceea3b PDF bridge; hosted workflow pin 7050c116326c9c8e8d0a56c2db7baf2119cbae19 is unchanged.
+validation	sh -n tests/test_scientific_image_harvest.grease and git diff --check exit=0.
+hosted_fixed_head	NOT_RUN
+earlier_live_failure_cause	UNPROVED; this receipt reproduces and repairs the deterministic caption failure path, not the earlier uncaptured live article failure.
+acceptance_scope	Package-bound converter and local deterministic tests; no claim of full Ubuntu image replay, new hosted acceptance, or Android runtime execution.
