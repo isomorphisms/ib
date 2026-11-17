@@ -1,0 +1,6 @@
+.method public static admin_core_attach(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;
+.method public static admin_core_counter(Ljava/lang/String;I)I
+.method public static admin_core_field(Ljava/lang/String;I)Ljava/lang/String;
+.method public static admin_core_observe(Ljava/lang/String;ILjava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;III)Ljava/lang/String;
+.method public static admin_core_open(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;
+.method public static admin_core_start(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;

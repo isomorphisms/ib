@@ -1,6 +1,7 @@
 module IB.LongViewTask
 
-import Data.String
+import Data.Text
+import Data.List
 
 -- Long-view tasks refine the existing browser-owned task, tab, and history
 -- identities.  Renderer and Android process identities are attachments to
@@ -16,11 +17,64 @@ contains_record_separator ('\n' :: _) = True
 contains_record_separator ('\r' :: _) = True
 contains_record_separator (_ :: rest) = contains_record_separator rest
 
-contains_address_secret_delimiter : List Char → Bool
-contains_address_secret_delimiter [] = False
-contains_address_secret_delimiter ('?' :: _) = True
-contains_address_secret_delimiter ('#' :: _) = True
-contains_address_secret_delimiter (_ :: rest) = contains_address_secret_delimiter rest
+-- Recovered from the qualified neutral-address repair at
+-- f2b3ea861ef960bc79fe59406131abbff0c628d2. A neutral address is selected
+-- by browser policy; validation must not copy user-info or parser delimiters.
+address_whitespace : Char → Bool
+address_whitespace character =
+  let scalar = ord character in
+    elem scalar [0x20, 0xA0, 0x1680, 0x2028, 0x2029, 0x202F, 0x205F, 0x3000] ||
+    (scalar >= 0x2000 && scalar <= 0x200A)
+
+unsafe_address_character : Char → Bool
+unsafe_address_character character =
+  ord character < 32 || (ord character >= 127 && ord character <= 159) || address_whitespace character ||
+  elem character ['?', '#', '\\']
+
+after_address_prefix : List Char → List Char → Maybe (List Char)
+after_address_prefix [] remaining = Just remaining
+after_address_prefix (_ :: _) [] = Nothing
+after_address_prefix (expected :: expected_suffix) (actual :: remaining) =
+  if toLower expected ≟ toLower actual
+    then after_address_prefix expected_suffix remaining
+    else Nothing
+
+after_http_scheme : List Char → Maybe (List Char)
+after_http_scheme characters =
+  case after_address_prefix (unpack "https://") characters of
+    Just remaining ⇒ Just remaining
+    Nothing ⇒ after_address_prefix (unpack "http://") characters
+
+valid_address_port : List Char → Bool
+valid_address_port [] = True
+valid_address_port (':' :: first :: rest) =
+  all (\character ⇒ character >= '0' && character <= '9') (first :: rest)
+valid_address_port _ = False
+
+ordinary_host_character : Char → Bool
+ordinary_host_character character =
+  isAlphaNum character || elem character (unpack "-._~!$&'()*+,;=") ||
+  (ord character >= 0xA0 && not (address_whitespace character))
+
+valid_address_authority : List Char → Bool
+valid_address_authority ('[' :: remaining) =
+  let (host, ending) = break (≟ ']') remaining in
+    case ending of
+      ']' :: port ⇒
+        not (null host) && elem ':' host &&
+        all (\character ⇒ elem character (unpack "0123456789abcdefABCDEF:.")) host &&
+        valid_address_port port
+      _ ⇒ False
+valid_address_authority authority =
+  let (host, port) = break (≟ ':') authority in
+    not (null host) && all ordinary_host_character host && valid_address_port port
+
+valid_neutral_destination : List Char → Bool
+valid_neutral_destination characters =
+  case after_http_scheme characters of
+    Nothing ⇒ False
+    Just remaining ⇒
+      valid_address_authority (takeWhile (\character ⇒ not (character ≟ '/')) remaining)
 
 export
 durable_identity : String → Maybe DurableIdentity
@@ -42,7 +96,8 @@ data NeutralAddress = NeutralWebAddress DurableIdentity
 export
 neutral_address : String → Maybe NeutralAddress
 neutral_address value =
-  if contains_address_secret_delimiter (unpack value)
+  let characters = unpack value in
+  if any unsafe_address_character characters || not (valid_neutral_destination characters)
     then Nothing
     else map NeutralWebAddress (durable_identity value)
 
@@ -70,6 +125,30 @@ choice address_reconstruction one_of
   exact_neutral_address
   potentially_sensitive_url_material_redacted
   no_safe_navigation
+
+-- The initial full address is transient. This operation selects an origin
+-- before ordinary persistence; it never decodes or retains path/query values.
+unsafe_requested_character : Char → Bool
+unsafe_requested_character character =
+  ord character < 32 || (ord character >= 127 && ord character <= 159) ||
+  address_whitespace character || character ≟ '\\'
+
+export
+neutral_origin_from_request : Text → Maybe (NeutralAddress, address_reconstruction)
+neutral_origin_from_request requested =
+  let characters = unpack requested in
+  if null characters || length characters > 8192 || any unsafe_requested_character characters
+    then Nothing
+    else do
+      remaining ← after_http_scheme characters
+      let authority = takeWhile (\character ⇒ not (elem character ['/', '?', '#'])) remaining
+      let scheme = case after_address_prefix (unpack "https://") characters of
+            Just _ ⇒ "https://"
+            Nothing ⇒ "http://"
+      selected ← neutral_address (scheme ++ pack authority ++ "/")
+      let recovery = if requested ≟ neutral_address_text selected || requested ≟ scheme ++ pack authority
+            then exact_neutral_address else potentially_sensitive_url_material_redacted
+      pure (selected, recovery)
 
 public export
 choice continuity_kind one_of
@@ -262,6 +341,7 @@ observe_live_heap task =
     task.reconstruction task.renderer_identity task.host_process_identity
     task.host_generation task.activity_generation task.renderer_generation task
 
+export
 continuity_text : continuity_kind → String
 continuity_text live_renderer_survival = "live-renderer-survival"
 continuity_text activity_recreation = "activity-recreation"
@@ -269,11 +349,13 @@ continuity_text renderer_replacement = "renderer-replacement"
 continuity_text host_process_restart = "host-process-restart"
 continuity_text remote_site_blocked = "remote-site-blocked"
 
+export
 session_text : session_result → String
 session_text session_not_proven = "not-proven"
 session_text authenticated_session_confirmed = "authenticated-confirmed"
 session_text authenticated_session_unavailable = "unavailable"
 
+export
 form_text : form_result → String
 form_text no_permitted_form_state = "none-permitted"
 form_text permitted_form_state_available = "permitted-available"
@@ -285,6 +367,7 @@ heap_text live_heap_observed = "live-observed"
 heap_text recreated_heap_observed = "recreated-observed"
 heap_text heap_not_available = "not-available"
 
+export
 reconstruction_text : reconstruction_result → String
 reconstruction_text live_page = "live-page"
 reconstruction_text reconstruction_pending = "pending"

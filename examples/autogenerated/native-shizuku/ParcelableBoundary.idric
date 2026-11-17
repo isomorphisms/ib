@@ -192,6 +192,41 @@ google_dom_plan = do
     ["Landroid/webkit/ValueCallback;"]
   Right ({ fields := [MkFieldPlan "storageAnchor" (object "Landroid/os/IBinder;") 2] } base)
 
+longview_bridge_plan : Either Text FilePlan
+longview_bridge_plan = do
+  base ← framework_class_plan
+    (Subclass "Lorg/isomorphisms/ib/LongViewBridge;" "Ljava/lang/Object;" (Just "ib_reader") []) []
+  let native = \name, arguments, result => MkBoundMethodPlan "checked Longview platform effect" name
+        (cast (length arguments)) arguments result 0 [] NativeStaticMethod
+  Right ({ methods := base.methods ++
+    [ native "open" [object "Landroid/app/Activity;", ExistingValue TextValue] (ExistingValue IntegerValue)
+    , native "reopen" [object "Landroid/app/Activity;"] (ExistingValue IntegerValue)
+    , native "resume" [object "Landroid/app/Activity;"] (ExistingValue IntegerValue)
+    , native "hide" [object "Landroid/app/Activity;"] VoidValue
+    , native "detach" [object "Landroid/app/Activity;"] VoidValue
+    ] } base)
+
+longview_client_plan : Either Text FilePlan
+longview_client_plan = do
+  base ← framework_class_plan
+    (Subclass "Lorg/isomorphisms/ib/LongViewClient;" "Landroid/webkit/WebViewClient;" (Just "ib_reader")
+      [ Callback "onPageStarted" "V" ["Landroid/webkit/WebView;", "Ljava/lang/String;", "Landroid/graphics/Bitmap;"]
+      , Callback "shouldOverrideUrlLoading" "Z" ["Landroid/webkit/WebView;", "Landroid/webkit/WebResourceRequest;"]
+      , Callback "onPageCommitVisible" "V" ["Landroid/webkit/WebView;", "Ljava/lang/String;"]
+      , Callback "onPageFinished" "V" ["Landroid/webkit/WebView;", "Ljava/lang/String;"]
+      , Callback "onReceivedError" "V" ["Landroid/webkit/WebView;", "Landroid/webkit/WebResourceRequest;", "Landroid/webkit/WebResourceError;"]
+      , Callback "onRenderProcessGone" "Z" ["Landroid/webkit/WebView;", "Landroid/webkit/RenderProcessGoneDetail;"]
+      ]) []
+  Right ({ fields := [ MkFieldPlan "observationRecord" (ExistingValue TextValue) 2
+                    , MkFieldPlan "documentEpoch" (object "Ljava/lang/Integer;") 2 ] } base)
+
+longview_observer_plan : Text → Text → List Text → Text → Either Text FilePlan
+longview_observer_plan name callback arguments implemented_interface = do
+  base ← framework_class_plan
+    (Subclass name "Ljava/lang/Object;" (Just "ib_reader") [Callback callback "V" arguments]) [implemented_interface]
+  Right ({ fields := [ MkFieldPlan "observationRecord" (ExistingValue TextValue) 2
+                    , MkFieldPlan "documentEpoch" (object "Ljava/lang/Integer;") 2 ] } base)
+
 reader_metrics_plan : Either Text FilePlan
 reader_metrics_plan = do
   base ← framework_class_plan
@@ -275,6 +310,12 @@ client_bytes = do
   google_client ← google_client_plan
   google_dom ← google_dom_plan
   google_poll ← reader_task_plan "Lorg/isomorphisms/ib/GooglePollTask;"
+  longview_bridge ← longview_bridge_plan
+  longview_client ← longview_client_plan
+  longview_timing ← longview_observer_plan "Lorg/isomorphisms/ib/LongViewTimingCallback;"
+    "onReceiveValue" ["Ljava/lang/Object;"] "Landroid/webkit/ValueCallback;"
+  longview_recovery ← longview_observer_plan "Lorg/isomorphisms/ib/LongViewRecoveryTask;"
+    "run" [] "Ljava/lang/Runnable;"
   metrics ← reader_metrics_plan
   layout ← reader_layout_plan
   anchor ← reader_anchor_plan
@@ -282,7 +323,8 @@ client_bytes = do
   text_view ← reader_text_plan
   encode_dex_classes [container, creator, provider, application, death, client, ingress, connection,
     worker, reader, acquire, complete, google_client, google_dom, google_poll,
-    metrics, layout, anchor, projection, text_view]
+    metrics, layout, anchor, projection, text_view,
+    longview_bridge, longview_client, longview_timing, longview_recovery]
 
 parcelable_bytes : Either Text (List Int)
 parcelable_bytes = do

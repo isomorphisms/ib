@@ -1,0 +1,33 @@
+module AdminLongViewCoreProbe
+
+import Data.Text
+import IB.LongViewNative
+
+-- Compiler consumer of the production codec. These wrappers contain no
+-- alternate task semantics and do not claim Activity or installed acceptance.
+%export "dex:admin_core_start"
+core_start : Text → Text → Text → Text → Text → Text
+core_start = start_record
+
+%export "dex:admin_core_open"
+core_open : Text → Text → Text
+core_open = open_record
+
+%export "dex:admin_core_attach"
+core_attach : Text → Text → Text
+core_attach = attach_record
+
+%export "dex:admin_core_observe"
+core_observe : Text → Int32 → Text → Text → Text → Text → Text → Int32 → Int32 → Int32 → Text
+core_observe = observe_record
+
+%export "dex:admin_core_field"
+core_field : Text → Int32 → Text
+core_field = field
+
+%export "dex:admin_core_counter"
+core_counter : Text → Int32 → Int32
+core_counter = counter
+
+main : IO ()
+main = pure ()

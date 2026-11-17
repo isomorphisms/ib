@@ -1,0 +1,176 @@
+module AdminLongViewCoreChecks
+
+import Data.Text
+import Data.List
+import Data.List1
+import IB.LongViewTask
+import IB.LongViewNative
+import System
+
+check : Text → Bool → IO ()
+check label True = putStrLn ("PASS " ++ label)
+check label False = do
+  putStrLn ("FAIL " ++ label)
+  exitFailure
+
+expected_initial : Text
+expected_initial =
+  "schema\tib-long-view-task-v1\n" ++
+  "task_id\ttask-1\n" ++
+  "tab_id\ttab-1\n" ++
+  "navigation_id\tnavigation-1\n" ++
+  "neutral_url\thttps://admin.example/\n" ++
+  "origin\thttps://admin.example/\n" ++
+  "address_reconstruction\tpath-query-or-fragment-redacted\n" ++
+  "continuity\tlive-renderer-survival\n" ++
+  "session_result\tnot-proven\n" ++
+  "form_result\tnone-permitted\n" ++
+  "heap_result\tnot-available\n" ++
+  "reconstruction_result\tpending\n" ++
+  "renderer_id\t\n" ++
+  "host_process_id\thost-1\n" ++
+  "host_generation\t1\n" ++
+  "activity_generation\t1\n" ++
+  "renderer_generation\t0\n" ++
+  "authorization_adapter\tnone\n"
+
+replace_row : Text → Text → Text → Text
+replace_row selected replacement row = case forget (split (≟ '\t') row) of
+  [name, value] ⇒ if name ≟ selected then name ++ "\t" ++ replacement else row
+  _ ⇒ row
+
+change_field : Text → Text → Text → Text
+change_field selected replacement encoded =
+  concatMap (\row ⇒ replace_row selected replacement row ++ "\n") (lines encoded)
+
+keep_row : Text → Text → Bool
+keep_row selected row = case forget (split (≟ '\t') row) of
+  [name, value] ⇒ not (name ≟ selected)
+  _ ⇒ True
+
+without_field : Text → Text → Text
+without_field selected encoded = concatMap (\row ⇒ row ++ "\n") (filter (keep_row selected) (lines encoded))
+
+refuses : Text → Bool
+refuses encoded = counter encoded 0 ≟ -1 && field encoded 0 ≟ "" && open_record encoded "host-next" ≟ ""
+
+same_task : Text → Bool
+same_task encoded = field encoded 0 ≟ "task-1" && field encoded 1 ≟ "tab-1" &&
+  field encoded 2 ≟ "navigation-1" && field encoded 3 ≟ "https://admin.example/"
+
+observe_first : Text → Int32 → Text
+observe_first encoded kind = observe_record encoded kind "task-1" "tab-1" "navigation-1"
+  "host-1" "renderer-1" 1 1 1
+
+main : IO ()
+main = do
+  let initial = start_record "task-1" "tab-1" "navigation-1" "host-1"
+        "https://admin.example/credentials?code=SYNTHETIC_ONLY#one-time"
+  check "initial record exactly excludes path query fragment and one-time value" (initial ≟ expected_initial)
+  check "initial task has no renderer or authentication evidence"
+    (same_task initial && field initial 5 ≟ "" && field initial 7 ≟ "not-proven" && counter initial 2 ≟ 0)
+  check "exact ordinary origin remains distinguishable"
+    (start_record "task-1" "tab-1" "navigation-1" "host-1" "https://admin.example/" ≟
+      change_field "address_reconstruction" "exact-neutral" expected_initial)
+  check "HTTP loopback port can be a deterministic live fixture origin"
+    (field (start_record "task-1" "tab-1" "navigation-1" "host-1" "http://127.0.0.1:18080/admin?one=synthetic") 3 ≟
+      "http://127.0.0.1:18080/")
+  check "origin retains bracketed IPv6 without path material"
+    (field (start_record "task-1" "tab-1" "navigation-1" "host-1" "https://[::1]:18443/admin") 3 ≟
+      "https://[::1]:18443/")
+  check "userinfo and non-HTTP schemes refuse"
+    (start_record "task-1" "tab-1" "navigation-1" "host-1" "https://name:secret@admin.example/" ≟ "" &&
+     start_record "task-1" "tab-1" "navigation-1" "host-1" "javascript:alert(1)" ≟ "")
+  check "authority ambiguity refuses before redaction"
+    (start_record "task-1" "tab-1" "navigation-1" "host-1" "https://admin.example\\@other.example/path" ≟ "" &&
+     start_record "task-1" "tab-1" "navigation-1" "host-1" "https://admin.example/%20 space" ≟ "" &&
+     start_record "task-1" "tab-1" "navigation-1" "host-1" "https://admin.example:secret/path" ≟ "")
+  check "filesystem identities refuse traversal and separators"
+    (start_record ".." "tab-1" "navigation-1" "host-1" "https://admin.example/" ≟ "" &&
+     start_record "task/escape" "tab-1" "navigation-1" "host-1" "https://admin.example/" ≟ "" &&
+     start_record "task\tsecret" "tab-1" "navigation-1" "host-1" "https://admin.example/" ≟ "")
+  check "missing field refuses" (refuses (without_field "navigation_id" initial))
+  check "repeated field refuses" (refuses (initial ++ "task_id\ttask-1\n"))
+  check "unknown secret-bearing diagnostic refuses" (refuses (initial ++ "authorization_code\tSYNTHETIC_ONLY\n"))
+  check "wrong schema refuses" (refuses (change_field "schema" "ib-long-view-task-v2" initial))
+  check "unclassified authorization adapter refuses" (refuses (change_field "authorization_adapter" "oauth" initial))
+  check "persisted authentication claim refuses" (refuses (change_field "session_result" "authenticated-confirmed" initial))
+  check "persisted heap claim refuses" (refuses (change_field "heap_result" "live-observed" initial))
+  check "unapproved form checkpoint refuses" (refuses (change_field "form_result" "permitted-available" initial))
+  check "path-bearing durable target refuses"
+    (refuses (change_field "origin" "https://admin.example/secret"
+      (change_field "neutral_url" "https://admin.example/secret" initial)))
+  check "mismatched durable origins refuse" (refuses (change_field "origin" "https://other.example/" initial))
+  check "noncanonical and negative generations refuse"
+    (refuses (change_field "host_generation" "01" initial) &&
+     refuses (change_field "renderer_generation" "-1" initial) &&
+     refuses (change_field "activity_generation" "2147483648" initial))
+  check "truncated final line refuses" (refuses (pack (reverse (drop 1 (reverse (unpack initial))))))
+  check "record beyond metadata bound refuses" (refuses (initial ++ pack (replicate 16384 'x')))
+  let attached = attach_record initial "renderer-1"
+  check "attachment preserves identity and advances renderer only"
+    (same_task attached && counter attached 0 ≟ 1 && counter attached 1 ≟ 1 && counter attached 2 ≟ 1)
+  check "attachment alone has no committed page"
+    (field attached 9 ≟ "pending" && field attached 7 ≟ "not-proven")
+  check "second attachment requires a loss or reopen" (attach_record attached "renderer-2" ≟ "")
+  let committed = observe_first attached 1
+  check "page commit remains unconfirmed without a usable action"
+    (same_task committed && field committed 9 ≟ "page-not-confirmed" && field committed 7 ≟ "not-proven")
+  check "unsupported action kind cannot assert authentication" (observe_first attached 2 ≟ "")
+  check "wrong task callback refuses"
+    (observe_record attached 1 "task-other" "tab-1" "navigation-1" "host-1" "renderer-1" 1 1 1 ≟ "")
+  check "wrong tab callback refuses"
+    (observe_record attached 1 "task-1" "tab-other" "navigation-1" "host-1" "renderer-1" 1 1 1 ≟ "")
+  check "wrong navigation callback refuses"
+    (observe_record attached 1 "task-1" "tab-1" "navigation-other" "host-1" "renderer-1" 1 1 1 ≟ "")
+  check "wrong host callback refuses"
+    (observe_record attached 1 "task-1" "tab-1" "navigation-1" "host-other" "renderer-1" 1 1 1 ≟ "")
+  check "wrong renderer callback refuses"
+    (observe_record attached 1 "task-1" "tab-1" "navigation-1" "host-1" "renderer-other" 1 1 1 ≟ "")
+  check "wrong host generation refuses"
+    (observe_record attached 1 "task-1" "tab-1" "navigation-1" "host-1" "renderer-1" 2 1 1 ≟ "")
+  check "wrong Activity generation refuses"
+    (observe_record attached 1 "task-1" "tab-1" "navigation-1" "host-1" "renderer-1" 1 2 1 ≟ "")
+  check "wrong renderer generation refuses"
+    (observe_record attached 1 "task-1" "tab-1" "navigation-1" "host-1" "renderer-1" 1 1 2 ≟ "")
+  let lost = observe_first committed 0
+  check "renderer loss preserves task and requires ordinary-form repetition"
+    (same_task lost && field lost 5 ≟ "" && field lost 6 ≟ "renderer-replacement" &&
+     field lost 8 ≟ "repeat-required" && field lost 9 ≟ "pending" && counter lost 2 ≟ 1)
+  check "late commit after loss refuses" (observe_first lost 1 ≟ "")
+  let replacement = attach_record lost "renderer-2"
+  check "replacement advances renderer while preserving task and uncertainty"
+    (same_task replacement && counter replacement 2 ≟ 2 && field replacement 7 ≟ "not-proven" &&
+     field replacement 8 ≟ "repeat-required")
+  check "old renderer cannot commit replacement" (observe_first replacement 1 ≟ "")
+  check "replacement renderer commit uses exact current observation"
+    (field (observe_record replacement 1 "task-1" "tab-1" "navigation-1" "host-1" "renderer-2" 1 1 2) 9 ≟
+      "page-not-confirmed")
+  let reopened_activity = open_record committed "host-1"
+  check "same host reopens as Activity recreation"
+    (same_task reopened_activity && counter reopened_activity 0 ≟ 1 && counter reopened_activity 1 ≟ 2 &&
+     field reopened_activity 6 ≟ "activity-recreation" && field reopened_activity 5 ≟ "" &&
+     field reopened_activity 8 ≟ "repeat-required")
+  check "Activity reconstruction keeps its cause after renderer attachment"
+    (field (attach_record reopened_activity "renderer-2") 6 ≟ "activity-recreation")
+  let reopened_hidden = attach_record (open_record lost "host-1") "renderer-2"
+  check "hidden detached task still advances Activity generation before attachment"
+    (same_task reopened_hidden && counter reopened_hidden 0 ≟ 1 && counter reopened_hidden 1 ≟ 2 &&
+     counter reopened_hidden 2 ≟ 2 && field reopened_hidden 6 ≟ "activity-recreation" &&
+     observe_record reopened_hidden 1 "task-1" "tab-1" "navigation-1" "host-1" "renderer-2" 1 1 2 ≟ "")
+  let reopened_host = open_record committed "host-2"
+  check "new host preserves task and advances host and Activity generations"
+    (same_task reopened_host && counter reopened_host 0 ≟ 2 && counter reopened_host 1 ≟ 2 &&
+     field reopened_host 4 ≟ "host-2" && field reopened_host 6 ≟ "host-process-restart" &&
+     field reopened_host 5 ≟ "" && field reopened_host 8 ≟ "repeat-required")
+  let host_renderer = attach_record reopened_host "renderer-2"
+  check "host reconstruction keeps cause and never replays a one-time action"
+    (same_task host_renderer && field host_renderer 6 ≟ "host-process-restart" &&
+     field host_renderer 7 ≟ "not-proven" && field host_renderer 9 ≟ "pending")
+  check "old host observations cannot complete reopened task" (observe_first host_renderer 1 ≟ "")
+  let exhausted = change_field "host_generation" "2147483647"
+        (change_field "activity_generation" "2147483647" reopened_host)
+  check "generation exhaustion refuses without wrapping" (open_record exhausted "host-3" ≟ "")
+  let renderer_exhausted = change_field "renderer_generation" "2147483647" lost
+  check "renderer exhaustion refuses without wrapping" (attach_record renderer_exhausted "renderer-3" ≟ "")
+  check "invalid projection selectors fail closed" (field initial 99 ≟ "" && counter initial 99 ≟ -1)
