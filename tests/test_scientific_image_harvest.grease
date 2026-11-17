@@ -9,6 +9,12 @@ ib_media_require_command curl
 ib_media_require_command xmlstarlet
 ib_media_require_command pdftohtml
 
+# XML text is UTF-8 even when the calling process uses the C locale. A
+# conversion failure must not append the original caption to partial output.
+unicode_caption=$(printf 'Mean\302\240activation \342\210\222 training loss')
+test "$(conceptual_name_slug "$unicode_caption")" = mean_activation_training_loss
+test "$(LC_ALL=C conceptual_name_slug "$unicode_caption")" = mean_activation_training_loss
+
 work_directory=$(mktemp -d)
 server_pid=''
 cleanup() {

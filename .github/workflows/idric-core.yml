@@ -121,6 +121,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       PDF_HARVESTER_REF: 77d85dc6f7e89d109cb9e06f42706bc34f00e4a3
+      IB_SCIENTIFIC_FAILURE_DIRECTORY: /tmp/ib-scientific-failure
     steps:
       - name: Check out exact IB source revision
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
@@ -150,7 +151,17 @@ jobs:
         run: sh bin/ci_browser_foundation.grease exercise-scientific-media
 
       - name: Exercise live arXiv HTML-first harvesting
+        id: live_arxiv
         run: sh bin/ci_browser_foundation.grease exercise-live-arxiv
 
       - name: Exercise live arXiv progressive pre-paint
         run: sh bin/ci_browser_foundation.grease exercise-live-arxiv-prepaint
+
+      - name: Preserve failed live scientific input
+        if: failure() && steps.live_arxiv.conclusion == 'failure'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: scientific-media-failure-${{ github.run_id }}-${{ github.run_attempt }}
+          path: /tmp/ib-scientific-failure
+          if-no-files-found: error
+          retention-days: 7

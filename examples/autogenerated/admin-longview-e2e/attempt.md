@@ -151,6 +151,17 @@ refusals. Its APK was 10,425,976 bytes, SHA-256
 This package evidence precedes the callback correction and does not qualify
 that later source or installed Android behavior.
 
+A further fresh, complete build at
+`b02e67811acd43067eec2bc2f9d9a2042fd978bb` includes the callback correction.
+The maintained recipe exited zero with repeated managed DEX, all three
+application ELF libraries, signed APK bytes and the maintained payload/signer
+refusal controls passing. The APK is 10,430,072 bytes, SHA-256
+`614c6e7da28a09571f71c03c9400e802a726877b6f9b8dfa9de805171fcbc7e8`.
+It keeps versionCode 3 and the existing certificate. The exact invocation and
+result are retained in `package-b02e678-command.tsv` and `package-b02e678.tsv`.
+These are package/build results; installed Android and physical acceptance
+remain distinct.
+
 ### Existing scientific-media CI failure
 
 The initial head's
@@ -174,6 +185,41 @@ That is additional local evidence; the hosted scientific-media job's
 `7050c1163` compiler remains its authoritative gate. No test, compiler pin or
 assertion was weakened.
 
+At `b02e678`, all three deterministic scientific regressions passed in the
+hosted job with its pinned `7050c1163` frontend. The live arXiv check then
+failed at the copied-tag / manifest-row count for `1901.09021`. One rerun of
+the failed job reached the same assertion. Both attempts deleted their
+temporary input through the existing cleanup, so the exact failed HTML and
+rows were unavailable. A fresh public capture produced consistent counts;
+it is not a reproduction of those hosted failures.
+
+The followup fixes a separately reproduced locale defect. XML text is UTF-8,
+but the existing `iconv` call inferred its source encoding from the process
+locale. Under `LC_ALL=C`, a valid Unicode caption produced partial ASCII
+output followed by the fallback input, yielding two filename lines. Declaring
+`-f UTF-8` makes the new regression pass and changes the captured real caption
+from two lines to one. The default `C.UTF-8` output remains byte-identical.
+All three deterministic tests also pass locally with the same `740bb`-built
+PDF bridge. This does not establish the cause of the hosted count failure.
+
+The existing `sh` live-test boundary now retains a bounded failure capture
+for its fixed public article identifiers: exact HTML, manifests, copied tags,
+regenerated extraction rows, a NUL-delimited image filename inventory, source
+and input hashes, versions, locale and original exit status. Downloaded image
+binaries are excluded. The workflow uploads this capture only after that live
+step fails. A 32 MiB limit is checked with an extra-byte probe; truncated
+captures are explicitly incomplete. Executed Grease-driven controls preserve
+the original exits, including cleanup failure, and distinguish an exact-limit
+archive from one tar block over the limit even when the producer exits zero.
+The source-bound receipt and repeatable helper are retained alongside this
+attempt. Hosted execution of this followup remains a separate gate.
+
+The observer repository's 46 checks passed at
+`81b9fe7b95446216c9626ef252255e26782008ab`. This includes the repaired
+[native handoff check](https://github.com/isomorphisms/ai-ci/actions/runs/44130578780/job/134206206402)
+and [delivery check](https://github.com/isomorphisms/ai-ci/actions/runs/44130578672/job/134206206444).
+These host and repository results do not establish installed admin acceptance.
+
 ## Acceptance ledger
 
 Detailed source-bound receipts live beside the core, native and fixture
@@ -187,7 +233,7 @@ for those bytes; it is not relabelled as a later commit's hosted acceptance.
 | Real local HTTP fixture, one-time delivery, ambiguous effect and read-only no-replay | PASS on host |
 | Trusted-root alias, strict descendant and atomic store behavior | PASS on host; 40 assertions execute the production store |
 | Complete native app DEX and three ABI native libraries | PASS at the declared compiler stages; independent DEX/ELF inspection |
-| Complete signed APK packaging and byte reproduction | PASS for initial published head `6b74dae`; the later callback correction requires its own complete package and installed evidence |
+| Complete signed APK packaging and byte reproduction | PASS at `b02e678`, including the callback correction, complete maintained recipe and signed APK byte equality; installed evidence remains separate |
 | Installed API29 / API34 admin and retained reader suites | NOT_RUN for this change at initial integration |
 | Separate 1 CPU / 1 GiB / 480×800 lane | NOT_RUN for this change at initial integration |
 | Physical C67 startup and authenticated Google Cloud control | BLOCKED_EXTERNAL; no physical connection or signed-in interaction available |

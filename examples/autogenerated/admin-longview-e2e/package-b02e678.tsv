@@ -1,0 +1,26 @@
+schema	ib-local-exact-head-package-result-v1
+source_commit	b02e67811acd43067eec2bc2f9d9a2042fd978bb
+source_tree	3f492722d03cb0f593e36546596497ec9f931322
+source_worktree	/workspace/scratch/c37bb9f8dd86/ib-build-snapshot-04
+source_tracked_clean_after_build	PASS
+pipeline	maintained prepare-client.grease; package-b02e678-command.tsv
+pipeline_exit	0
+APK	/workspace/scratch/c37bb9f8dd86/full-app-04/ib-native-boundary.apk
+APK_bytes	10430072
+APK_sha256	614c6e7da28a09571f71c03c9400e802a726877b6f9b8dfa9de805171fcbc7e8
+package	org.isomorphisms.ib.prepaint
+versionCode	3
+certificate_sha256	de9b1d47c5a65e6d46a204b79dd9ee566b9d3c9832ba81ebc4213d3392e92ff9
+signature_verification	PASS
+checked_Activity_ICU_platform	PASS
+managed_DEX_repeat	PASS
+application_ELF_three_ABIs_repeat	PASS
+callback_ELF_matches_prior_source_bound_outputs	PASS all three ABIs
+signed_APK_byte_reproduction	PASS
+native_ICU_Grease_reproduction_inputs	REUSED_UNCHANGED_HASHED_INPUTS within this fresh pipeline run
+payload_and_identity_controls	PASS intentional wrong-input refusals
+OpenSSL_checkout	f4dc4d58b48d346a8270183f89acf826d459b0ca; canonical missing tracked paths restored; tracked-clean after build
+installed_Android	NOT_RUN
+real_Shizuku_worker	NOT_RUN
+Google_YouTube_usability	NOT_RUN
+physical_C67	NOT_RUN
