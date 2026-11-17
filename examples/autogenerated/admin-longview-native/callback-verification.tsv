@@ -1,0 +1,17 @@
+schema	ib-longview-callback-attribution-build-v1
+date_utc	2026-11-17
+base_commit	6b74dae7419e5d373ff227e268155ee6318516ea
+source_binding	callback-source.sha256; C-only working-tree followup, not exact-commit CI acceptance
+ICK_declared_source	fbe86e23d55cfec2000c08e61deea2a407fd7175
+NDK	27.2.12479018
+native_x86_64	PASS ICK C frontend; NDK assembly/link; ELF checks
+native_armeabi_v7a	PASS ICK C frontend; NDK assembly/link; ELF checks
+native_arm64_v8a	PASS ICK C frontend; NDK assembly/link; ELF checks
+literal_Icky_source	PASS compiled unchanged by selected ICK frontend
+read_only_source_review	PASS bounded URL ownership; first-load positive reachability; UNKNOWN no checkpoint/status/timing; current invalid-payload refusal; stale epoch rejection
+managed_Idric_source	UNCHANGED from base; no new DEX compilation claim
+kernel_store_source	UNCHANGED from local 40-check receipt
+diff_whitespace	PASS
+installed_callback_controls	NOT_RUN in these receipts
+Google_YouTube_redirect_timing	UNKNOWN beyond first document by explicit contract
+physical_C67	NOT_RUN

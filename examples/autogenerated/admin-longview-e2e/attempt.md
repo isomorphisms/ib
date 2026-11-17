@@ -77,9 +77,36 @@ one-time result and a server operation whose committed effect has an incomplete
 response. The independent observer belongs to `isomorphisms/ai-ci`; product
 code does not recognize a fixture-ready marker as task success.
 
-The consumer pins observer commit `40ff48763a45f0da97cc83ba29c2759ba8e80b29`
+### Late callback attribution correction
+
+Review of the first published head, `6b74dae7419e5d373ff227e268155ee6318516ea`,
+found that raw commit/finish callbacks discarded their URL and could acquire a
+later document's mutable epoch. The existing stale timing-object control did
+not exercise those raw lifecycle methods. This was a source-level finding;
+an installed race was not claimed as reproduced.
+
+The corrected adapter attributes raw callbacks only during the first accepted
+main-frame start of a fresh renderer, with the callback URL matching both the
+bounded transient started URL and the WebView's current URL. A later start or
+URL ambiguity produces `document_epoch=0`, unknown attribution and no elapsed
+time claim. These callbacks do not checkpoint a page observation or initiate
+an attributed timing sample. Normal page interaction continues. Invalid numeric
+payloads still reach the bounded parser when task/generation identity is current
+and produce only a fixed refusal message.
+
+This deliberately leaves later-document and ambiguous-redirect lifecycle
+timings UNKNOWN within the same renderer. Android's callback API supplies a
+URL, not an immutable originating-document token; a URL-history set would not
+remove the redirect ambiguity. The
+[Android WebViewClient contract](https://developer.android.com/reference/android/webkit/WebViewClient)
+also separates a visible commit from complete loading or a useful control.
+The independent observer exercises both a prior URL and the repeated current
+URL through the actual client methods. Its bounded observation interval must
+contain four UNKNOWN callbacks and no checkpoint or timing sample.
+
+The consumer pins observer commit `81b9fe7b95446216c9626ef252255e26782008ab`
 from [isomorphisms/ai-ci PR #355, "Independently exercise IB admin controls and protected-task recovery"](https://github.com/isomorphisms/ai-ci/pull/355).
-Its host qualification rejects 31 record counterexamples and six diagnostic
+Its host qualification rejects 31 record counterexamples and 23 diagnostic
 counterexamples. The separately signed observer package was built and decoded;
 that result does not establish installed ART execution. The consumer workflow
 executes these host refusal controls and three independent installed lanes.
@@ -112,6 +139,41 @@ parts before the full hash check. These are provisioning failures, not product
 test results. SDK build-tools 35 and platform 34 archives were independently
 checked against the official repository manifest before use.
 
+The recovered OpenSSL source archive omitted 61 tracked paths through the
+pinned commit's export-ignore rules. The first complete build stopped at the
+unchanged clean-source preflight. Those missing paths were restored from the
+exact local Git objects at `f4dc4d58b48d346a8270183f89acf826d459b0ca`; no source
+pin or preflight was weakened. A fresh build from immutable IB head `6b74dae`
+then completed the whole maintained recipe, including repeated DEX, three-ABI
+ELF, signed APK byte comparison, payload counterexamples and signer/package
+refusals. Its APK was 10,425,976 bytes, SHA-256
+`d40958d8406bb41b5f31ffa4866282cf9120c12323c125472b2c9b8cdd6a3dab`.
+This package evidence precedes the callback correction and does not qualify
+that later source or installed Android behavior.
+
+### Existing scientific-media CI failure
+
+The initial head's
+[scientific-media job 134194762486](https://github.com/isomorphisms/ib/actions/runs/44127381054/job/134194762486)
+failed before its PDF bridge was used. XML serialization replaced the row
+separator U+001F with `&#xFFFD;`, so the image downloader read all four fields as
+one malformed URL. The unchanged image-harvest regression reproduced this
+failure locally with Ubuntu XMLStarlet 1.6.1-5build1, libxml2 2.15.2 and
+libxslt 1.1.45.
+
+The repair keeps the existing row contract. HTML text fields use text output;
+the actual image tags remain XML and are joined to those ordered fields
+outside the XML serializer. The two PDF row serializers also use text output.
+Simply applying text output to the copied image node would lose its markup,
+so the existing image-tag assertions remain necessary and unchanged.
+
+All three existing image-harvest, reading-prefetch and navigation-prefetch
+regressions then passed on the final local source. The PDF bridge used its
+unchanged vendor revision and the declared local Idriç frontend `740bbf2b1`.
+That is additional local evidence; the hosted scientific-media job's
+`7050c1163` compiler remains its authoritative gate. No test, compiler pin or
+assertion was weakened.
+
 ## Acceptance ledger
 
 Detailed source-bound receipts live beside the core, native and fixture
@@ -125,7 +187,7 @@ for those bytes; it is not relabelled as a later commit's hosted acceptance.
 | Real local HTTP fixture, one-time delivery, ambiguous effect and read-only no-replay | PASS on host |
 | Trusted-root alias, strict descendant and atomic store behavior | PASS on host; 40 assertions execute the production store |
 | Complete native app DEX and three ABI native libraries | PASS at the declared compiler stages; independent DEX/ELF inspection |
-| Complete signed APK packaging and byte reproduction | In progress; first primitive-field generation attempt failed and was repaired using the supported boxed reference field |
+| Complete signed APK packaging and byte reproduction | PASS for initial published head `6b74dae`; the later callback correction requires its own complete package and installed evidence |
 | Installed API29 / API34 admin and retained reader suites | NOT_RUN for this change at initial integration |
 | Separate 1 CPU / 1 GiB / 480×800 lane | NOT_RUN for this change at initial integration |
 | Physical C67 startup and authenticated Google Cloud control | BLOCKED_EXTERNAL; no physical connection or signed-in interaction available |

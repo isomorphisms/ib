@@ -25,6 +25,7 @@
 #define LV_REFLOW_BUTTON 2130903047
 #define LV_BACK_BUTTON 2130903048
 #define LV_FORWARD_BUTTON 2130903049
+#define LV_ATTRIBUTION_URL_CAP 8192
 
 /* Framework entrypoints and WebView callbacks are confined to the main
  * Looper. No worker thread may manipulate these attachment references. */
@@ -37,7 +38,7 @@ static struct {
     ib_longview_store store;
     jweak activity;
     jobject browser;
-    jstring record;
+    jstring record, started_url;
     jclass generated, client, timing, recovery;
     jmethodID start, open, attach, observe, field, counter;
 } protected_view ← { .store ← { -1, -1, -1 } };
@@ -147,14 +148,18 @@ static int lv_nonempty(JNIEnv *env, jstring value) {
     return value && !(*env)->ExceptionCheck(env) && (*env)->GetStringLength(env, value) > 0;
 }
 
-static void lv_event(JNIEnv *env, int event, int code, int64_t elapsed) {
+static void lv_event_epoch(JNIEnv *env, int event, int code, int64_t elapsed, jint document_epoch) {
     jint host ← lv_counter(env, protected_view.record, 0);
     jint activity ← lv_counter(env, protected_view.record, 1);
     jint renderer ← lv_counter(env, protected_view.record, 2);
     if ((*env)->ExceptionCheck(env)) (*env)->ExceptionClear(env);
     __android_log_print(ANDROID_LOG_INFO, "IBLongView",
         "event=%d host_pid=%ld host_generation=%d activity_generation=%d renderer_generation=%d document_epoch=%d code=%d elapsed_ms=%" PRId64,
-        event, (long)getpid(), host, activity, renderer, protected_view.document_epoch, code, elapsed);
+        event, (long)getpid(), host, activity, renderer, document_epoch, code, elapsed);
+}
+
+static void lv_event(JNIEnv *env, int event, int code, int64_t elapsed) {
+    lv_event_epoch(env, event, code, elapsed, protected_view.document_epoch);
 }
 
 static int lv_utf8(JNIEnv *env, jstring text, unsigned char out[IB_LONGVIEW_RECORD_CAP + 1U], size_t *length) {
@@ -212,12 +217,18 @@ static int lv_save(JNIEnv *env, jstring next, int initial) {
     return ok ? 0 : -1;
 }
 
+static void lv_clear_started_url(JNIEnv *env) {
+    if (protected_view.started_url) (*env)->DeleteGlobalRef(env, protected_view.started_url);
+    protected_view.started_url ← NULL;
+}
+
 static void lv_destroy_browser(JNIEnv *env) {
     jobject browser ← protected_view.browser;
     protected_view.browser ← NULL;
     protected_view.recovering ← 0;
     protected_view.document_epoch ← 0;
     protected_view.document_at ← -1;
+    lv_clear_started_url(env);
     if (!browser) return;
     if ((*env)->ExceptionCheck(env)) (*env)->ExceptionClear(env);
     jmethodID parent_method ← lv_method(env, "android/view/View", "getParent", "()Landroid/view/ViewParent;");
@@ -352,6 +363,26 @@ static int lv_current(JNIEnv *env, jobject self, jobject web) {
     return lv_nonempty(env, lv_observed(env, lv_snapshot(env, self), 1));
 }
 
+/* Android's commit/finish/error callbacks carry a URL but no immutable
+ * document identity. Only the first start of an attachment is attributable.
+ * Any additional start or mismatch leaves later observations unknown. The
+ * bounded URL is transient and is never logged or stored in a task record. */
+static int lv_attributed_document(JNIEnv *env, jobject web, jstring url) {
+    int ok ← protected_view.document_epoch == 1 && protected_view.started_url && url &&
+        !(*env)->ExceptionCheck(env);
+    jsize length ← ok ? (*env)->GetStringLength(env, url) : 0;
+    ok ← ok && length > 0 && length <= LV_ATTRIBUTION_URL_CAP;
+    jmethodID equals ← ok ? lv_method(env, "java/lang/String", "equals", "(Ljava/lang/Object;)Z") : NULL;
+    ok ← equals && (*env)->CallBooleanMethod(env, url, equals, protected_view.started_url) &&
+        !(*env)->ExceptionCheck(env);
+    jmethodID get ← ok ? lv_method(env, "android/webkit/WebView", "getUrl", "()Ljava/lang/String;") : NULL;
+    jstring current ← get ? (*env)->CallObjectMethod(env, web, get) : NULL;
+    ok ← current && !(*env)->ExceptionCheck(env) &&
+        (*env)->CallBooleanMethod(env, url, equals, current) && !(*env)->ExceptionCheck(env);
+    if (!ok) lv_clear_started_url(env);
+    return ok;
+}
+
 static int lv_record_loss(JNIEnv *env) {
     if (!protected_view.browser || !protected_view.record) return 0;
     jstring next ← lv_observed(env, protected_view.record, 0);
@@ -397,6 +428,7 @@ static int lv_start_renderer(JNIEnv *env, jobject activity, jstring url) {
     if (!browser || (*env)->ExceptionCheck(env)) return -1;
     protected_view.document_epoch ← 0;
     protected_view.document_at ← -1;
+    lv_clear_started_url(env);
     protected_view.browser ← (*env)->NewGlobalRef(env, browser);
     if (!protected_view.browser || lv_save(env, next, 0) != 0) {
         lv_destroy_browser(env);
@@ -578,17 +610,23 @@ Java_org_isomorphisms_ib_LongViewClient_onPageStarted(JNIEnv *env, jobject self,
     if ((*env)->PushLocalFrame(env, 96) != 0) return;
     if (lv_current(env, self, web)) {
         if (!lv_allowed(env, url)) {
+            lv_clear_started_url(env);
             jmethodID stop ← lv_method(env, "android/webkit/WebView", "stopLoading", "()V");
             if (stop) (*env)->CallVoidMethod(env, web, stop);
             lv_status(env, "This navigation requires a supported external authorization step or is not an ordinary web address.");
-            lv_event(env, 7, 1, -1);
+            lv_event_epoch(env, 7, 1, -1, 0);
         } else if (protected_view.document_epoch < INT32_MAX) {
             ++protected_view.document_epoch;
             protected_view.document_at ← lv_clock();
-            if (lv_set_document_epoch(env, self, protected_view.document_epoch))
+            lv_clear_started_url(env);
+            jsize length ← (*env)->GetStringLength(env, url);
+            if (protected_view.document_epoch == 1 && length > 0 && length <= LV_ATTRIBUTION_URL_CAP)
+                protected_view.started_url ← (*env)->NewGlobalRef(env, url);
+            if (!(*env)->ExceptionCheck(env) && lv_set_document_epoch(env, self, protected_view.document_epoch)) {
+                lv_status(env, "Use the needed controls when they become available.");
                 lv_event(env, 3, 0, protected_view.document_epoch == 1 && protected_view.document_at >= 0 &&
                     protected_view.requested_at >= 0 ? protected_view.document_at - protected_view.requested_at : 0);
-            else lv_failure(env);
+            } else lv_failure(env);
         } else lv_failure(env);
     }
     if ((*env)->ExceptionCheck(env)) (*env)->ExceptionClear(env);
@@ -614,15 +652,16 @@ Java_org_isomorphisms_ib_LongViewClient_shouldOverrideUrlLoading(JNIEnv *env, jo
 
 JNIEXPORT void JNICALL
 Java_org_isomorphisms_ib_LongViewClient_onPageCommitVisible(JNIEnv *env, jobject self, jobject web, jstring url) {
-    (void)url;
     if ((*env)->PushLocalFrame(env, 96) != 0) return;
     if (lv_current(env, self, web)) {
-        jstring next ← lv_observed(env, lv_snapshot(env, self), 1);
-        if (lv_nonempty(env, next) && lv_save(env, next, 0) == 0) {
-            lv_status(env, "Page visible. Confirm the needed control yourself; authentication and unsaved form recovery remain unproven.");
-            lv_event(env, 5, 0, lv_elapsed(protected_view.document_at));
-            lv_measure(env);
-        } else lv_failure(env);
+        if (lv_attributed_document(env, web, url)) {
+            jstring next ← lv_observed(env, lv_snapshot(env, self), 1);
+            if (lv_nonempty(env, next) && lv_save(env, next, 0) == 0) {
+                lv_status(env, "Page visible. Confirm the needed control yourself; authentication and unsaved form recovery remain unproven.");
+                lv_event(env, 5, 0, lv_elapsed(protected_view.document_at));
+                lv_measure(env);
+            } else lv_failure(env);
+        } else lv_event_epoch(env, 5, 2, -1, 0);
     }
     if ((*env)->ExceptionCheck(env)) (*env)->ExceptionClear(env);
     (*env)->PopLocalFrame(env, NULL);
@@ -630,11 +669,12 @@ Java_org_isomorphisms_ib_LongViewClient_onPageCommitVisible(JNIEnv *env, jobject
 
 JNIEXPORT void JNICALL
 Java_org_isomorphisms_ib_LongViewClient_onPageFinished(JNIEnv *env, jobject self, jobject web, jstring url) {
-    (void)url;
     if ((*env)->PushLocalFrame(env, 96) != 0) return;
     if (lv_current(env, self, web)) {
-        lv_event(env, 6, 0, lv_elapsed(protected_view.document_at));
-        lv_measure(env);
+        if (lv_attributed_document(env, web, url)) {
+            lv_event(env, 6, 0, lv_elapsed(protected_view.document_at));
+            lv_measure(env);
+        } else lv_event_epoch(env, 6, 2, -1, 0);
     }
     if ((*env)->ExceptionCheck(env)) (*env)->ExceptionClear(env);
     (*env)->PopLocalFrame(env, NULL);
@@ -647,8 +687,14 @@ Java_org_isomorphisms_ib_LongViewClient_onReceivedError(JNIEnv *env, jobject sel
     if (lv_current(env, self, web) && request && main && (*env)->CallBooleanMethod(env, request, main)) {
         jmethodID code ← lv_method(env, "android/webkit/WebResourceError", "getErrorCode", "()I");
         jint value ← error && code ? (*env)->CallIntMethod(env, error, code) : 0;
-        lv_event(env, 7, value, lv_elapsed(protected_view.document_at));
-        lv_status(env, "The main page did not load. Protected identity is retained; no remote action was automatically repeated.");
+        jmethodID get ← lv_method(env, "android/webkit/WebResourceRequest", "getUrl", "()Landroid/net/Uri;");
+        jobject uri ← get ? (*env)->CallObjectMethod(env, request, get) : NULL;
+        jmethodID text ← lv_method(env, "android/net/Uri", "toString", "()Ljava/lang/String;");
+        jstring url ← uri && text ? (*env)->CallObjectMethod(env, uri, text) : NULL;
+        if (lv_attributed_document(env, web, url)) {
+            lv_event(env, 7, value, lv_elapsed(protected_view.document_at));
+            lv_status(env, "The main page did not load. Protected identity is retained; no remote action was automatically repeated.");
+        } else lv_event_epoch(env, 7, value, -1, 0);
     }
     if ((*env)->ExceptionCheck(env)) (*env)->ExceptionClear(env);
     (*env)->PopLocalFrame(env, NULL);
@@ -727,21 +773,24 @@ Java_org_isomorphisms_ib_LongViewTimingCallback_onReceiveValue(JNIEnv *env, jobj
     if (lv_current(env, self, NULL) && lv_document_epoch(env, self) == protected_view.document_epoch) {
         char payload[256];
         int64_t metrics[12];
+        int attributed ← protected_view.document_epoch == 1 && protected_view.started_url;
         if (lv_ascii(env, value, payload, sizeof(payload)) && lv_numbers(payload, metrics)) {
-            jint host ← lv_counter(env, protected_view.record, 0), activity ← lv_counter(env, protected_view.record, 1);
-            jint renderer ← lv_counter(env, protected_view.record, 2);
-            __android_log_print(ANDROID_LOG_INFO, "IBLongView",
-                "event=10 host_pid=%ld host_generation=%d activity_generation=%d renderer_generation=%d document_epoch=%d dns_ms=%" PRId64
-                " connect_ms=%" PRId64 " tls_ms=%" PRId64 " first_byte_ms=%" PRId64 " transfer_ms=%" PRId64
-                " dom_ms=%" PRId64 " load_ms=%" PRId64 " transfer_bytes=%" PRId64,
-                (long)getpid(), host, activity, renderer, protected_view.document_epoch,
-                metrics[0], metrics[1], metrics[2], metrics[3], metrics[4], metrics[5], metrics[6], metrics[7]);
-            __android_log_print(ANDROID_LOG_INFO, "IBLongView",
-                "event=11 host_pid=%ld host_generation=%d activity_generation=%d renderer_generation=%d document_epoch=%d first_paint_ms=%" PRId64
-                " first_contentful_paint_ms=%" PRId64 " observed_resource_count=%" PRId64 " observed_resource_transfer_bytes=%" PRId64,
-                (long)getpid(), host, activity, renderer, protected_view.document_epoch,
-                metrics[8], metrics[9], metrics[10], metrics[11]);
-        } else lv_event(env, 10, 1, -1);
+            if (attributed) {
+                jint host ← lv_counter(env, protected_view.record, 0), activity ← lv_counter(env, protected_view.record, 1);
+                jint renderer ← lv_counter(env, protected_view.record, 2);
+                __android_log_print(ANDROID_LOG_INFO, "IBLongView",
+                    "event=10 host_pid=%ld host_generation=%d activity_generation=%d renderer_generation=%d document_epoch=%d dns_ms=%" PRId64
+                    " connect_ms=%" PRId64 " tls_ms=%" PRId64 " first_byte_ms=%" PRId64 " transfer_ms=%" PRId64
+                    " dom_ms=%" PRId64 " load_ms=%" PRId64 " transfer_bytes=%" PRId64,
+                    (long)getpid(), host, activity, renderer, protected_view.document_epoch,
+                    metrics[0], metrics[1], metrics[2], metrics[3], metrics[4], metrics[5], metrics[6], metrics[7]);
+                __android_log_print(ANDROID_LOG_INFO, "IBLongView",
+                    "event=11 host_pid=%ld host_generation=%d activity_generation=%d renderer_generation=%d document_epoch=%d first_paint_ms=%" PRId64
+                    " first_contentful_paint_ms=%" PRId64 " observed_resource_count=%" PRId64 " observed_resource_transfer_bytes=%" PRId64,
+                    (long)getpid(), host, activity, renderer, protected_view.document_epoch,
+                    metrics[8], metrics[9], metrics[10], metrics[11]);
+            } else lv_event_epoch(env, 10, 2, -1, 0);
+        } else lv_event_epoch(env, 10, 1, -1, attributed ? protected_view.document_epoch : 0);
     }
     if ((*env)->ExceptionCheck(env)) (*env)->ExceptionClear(env);
     (*env)->PopLocalFrame(env, NULL);

@@ -45,6 +45,21 @@ renderer identities still match. This scalar is not a second browser navigation
 model and is not persisted. The Android field is a boxed `java.lang.Integer`,
 matching the pinned framework writer's supported instance-reference fields.
 
+Android's commit, finish, and error callbacks do not carry an immutable
+document identity. Attribution is therefore limited to the first start in a
+renderer attachment. Native code retains that start URL only in memory, bounded
+to 8192 UTF-16 units, and requires the callback URL to equal both that reference
+and the WebView's current URL. Destroy/reset releases the reference. Any later
+start or mismatch discards it and leaves lifecycle attribution unknown for the
+rest of that attachment. No URL is logged or added to a task record.
+
+Unknown commit/finish callbacks neither checkpoint the task nor declare a page
+visible, and they do not initiate timing sampling. Redirects, subsequent
+documents, repeated URLs, and callback URLs exceeding the transient bound
+therefore remain usable browsing paths with unavailable attributed lifecycle
+timing. The independent action observer can still establish a useful control
+or server-side effect; these callbacks cannot establish either result.
+
 ## Native boundary
 
 The kernel adapter is `native/android/ib_longview_store.c`, independently usable
@@ -79,7 +94,7 @@ other cleartext network traffic remains disallowed.
 | 7 | Main-frame loading or navigation refusal |
 | 8 | Renderer loss |
 | 9 | Returning to or explicitly reopening a protected attachment |
-| 10 | Navigation Timing numbers, or `code=1` for a refused payload |
+| 10 | Navigation Timing numbers, `code=1` for a refused payload, or `code=2` for unknown attribution |
 | 11 | Paint and observed subresource numbers |
 | 12 | Unavailable/incomplete protected state |
 
@@ -91,8 +106,18 @@ Event 10 contains `dns_ms`, `connect_ms`, `tls_ms`, `first_byte_ms`,
 extra values, and other structures are refused without logging their payload.
 The observer can copy `observationRecord` and `documentEpoch` from the current
 LongViewClient into a real LongViewTimingCallback to exercise that boundary.
+Epoch-matching payloads still reach the strict parser after attribution becomes
+unknown: invalid input emits the fixed refusal, while valid numbers emit an
+unknown event instead of measurements. A first-document positive and a later
+one-time-value refusal thus exercise the actual parser separately.
 
-Commit/finish/error elapsed values start at the current main-frame start;
+Unknown commit/finish observations use their normal event numbers with
+`code=2`, `document_epoch=0`, and `elapsed_ms=-1`. An unattributed main-frame
+error retains its observed numeric error code with the same unknown epoch/time
+and does not replace the current page status. These explicit unknown values do
+not temporarily alter the attachment's actual epoch.
+
+Attributed commit/finish/error elapsed values start at the first main-frame start;
 event 3 preserves initial request-to-start delay. Timing is sampled at visible
 commit and finish, so resource counts describe those observations rather than
 all later background activity. Page-controlled performance values remain
@@ -117,3 +142,8 @@ Those checks establish their named host/compilation boundaries. Installed
 Android, physical C67, and Google/YouTube acceptance remain separate. The
 independent fixture must exercise actual usable controls and server-side
 no-replay evidence through this same native application path.
+
+The `local-*` receipts preserve the first native integration checks. The later
+`callback-*` receipts bind the conservative lifecycle-attribution repair to its
+own C source and three-ABI outputs; they do not relabel the earlier build or
+claim installed callback execution.
