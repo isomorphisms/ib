@@ -48,6 +48,8 @@ for type in LongViewBridge LongViewClient LongViewTimingCallback LongViewRecover
 }
 rg -q -F '.method public native onRenderProcessGone(Landroid/webkit/WebView;Landroid/webkit/RenderProcessGoneDetail;)Z' \
   "$evidence/platform-decoded/org/isomorphisms/ib/LongViewClient.smali"
+rg -q -x -F '.method public native onReceivedHttpError(Landroid/webkit/WebView;Landroid/webkit/WebResourceRequest;Landroid/webkit/WebResourceResponse;)V' \
+  "$evidence/platform-decoded/org/isomorphisms/ib/LongViewClient.smali"
 for type in LongViewClient LongViewTimingCallback LongViewRecoveryTask {
   rg -q -x -F '.field private documentEpoch:Ljava/lang/Integer;' "$evidence/platform-decoded/org/isomorphisms/ib/$type.smali"
 }

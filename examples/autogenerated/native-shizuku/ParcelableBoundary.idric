@@ -215,6 +215,7 @@ longview_client_plan = do
       , Callback "onPageCommitVisible" "V" ["Landroid/webkit/WebView;", "Ljava/lang/String;"]
       , Callback "onPageFinished" "V" ["Landroid/webkit/WebView;", "Ljava/lang/String;"]
       , Callback "onReceivedError" "V" ["Landroid/webkit/WebView;", "Landroid/webkit/WebResourceRequest;", "Landroid/webkit/WebResourceError;"]
+      , Callback "onReceivedHttpError" "V" ["Landroid/webkit/WebView;", "Landroid/webkit/WebResourceRequest;", "Landroid/webkit/WebResourceResponse;"]
       , Callback "onRenderProcessGone" "Z" ["Landroid/webkit/WebView;", "Landroid/webkit/RenderProcessGoneDetail;"]
       ]) []
   Right ({ fields := [ MkFieldPlan "observationRecord" (ExistingValue TextValue) 2

@@ -17,6 +17,7 @@ static volatile sig_atomic_t running ← 1;
 static unsigned long usable_actions, verification_actions, value_attempts;
 static unsigned long value_deliveries, ambiguous_effects, page_requests;
 static unsigned long slow_assets, served_bytes;
+static unsigned long mainframe_503, subresource_page, subresource_404;
 
 static void stop_server(int ignored) { (void)ignored; running ← 0; }
 
@@ -158,6 +159,40 @@ static void handle(int listener, int connection, const char *root) {
             ambiguous_effects, page_requests, slow_assets, served_bytes);
         if (used > 0 && (size_t)used < sizeof counts)
             (void)response(connection, 200, "text/tab-separated-values", counts, (size_t)used, NULL);
+        return;
+    }
+    /* Diagnostic responses have their own counters and leave the original
+     * admin-action and byte-count observations unchanged. */
+    if (get && strcmp(path, "/http-error-counts") == 0) {
+        char counts[256];
+        int used ← snprintf(counts, sizeof counts,
+            "mainframe_503\t%lu\nsubresource_page\t%lu\nsubresource_404\t%lu\n",
+            mainframe_503, subresource_page, subresource_404);
+        if (used > 0 && (size_t)used < sizeof counts)
+            (void)response(connection, 200, "text/tab-separated-values", counts, (size_t)used, NULL);
+        return;
+    }
+    if (get && strcmp(path, "/mainframe-503") == 0) {
+        static const char body[] ←
+            "<!doctype html><meta charset=utf-8><title>HTTP error fixture</title>"
+            "<h1 id=mainframe-http-error>Main page HTTP 503</h1>";
+        if (response(connection, 503, "text/html; charset=utf-8", body, sizeof body - 1, NULL))
+            mainframe_503 ← mainframe_503 + 1;
+        return;
+    }
+    if (get && strcmp(path, "/subresource-404") == 0) {
+        static const char body[] ←
+            "<!doctype html><meta charset=utf-8><title>Subresource error fixture</title>"
+            "<link rel=stylesheet href=/missing-asset-404.css>"
+            "<h1 id=subresource-control>Main page HTTP 200</h1>";
+        if (response(connection, 200, "text/html; charset=utf-8", body, sizeof body - 1, NULL))
+            subresource_page ← subresource_page + 1;
+        return;
+    }
+    if (get && strcmp(path, "/missing-asset-404.css") == 0) {
+        static const char body[] ← "/* Missing fixture stylesheet. */\n";
+        if (response(connection, 404, "text/css; charset=utf-8", body, sizeof body - 1, NULL))
+            subresource_404 ← subresource_404 + 1;
         return;
     }
     if (get && strcmp(path, "/") == 0) {

@@ -91,7 +91,7 @@ other cleartext network traffic remains disallowed.
 | 4 | Committed task checkpoint cost, including its synchronous durability barrier |
 | 5 | Visible page commit; this does not establish usable controls |
 | 6 | Main-frame finish callback |
-| 7 | Main-frame loading or navigation refusal |
+| 7 | Main-frame transport/HTTP error or navigation refusal |
 | 8 | Renderer loss |
 | 9 | Returning to or explicitly reopening a protected attachment |
 | 10 | Navigation Timing numbers, `code=1` for a refused payload, or `code=2` for unknown attribution |
@@ -116,6 +116,15 @@ Unknown commit/finish observations use their normal event numbers with
 error retains its observed numeric error code with the same unknown epoch/time
 and does not replace the current page status. These explicit unknown values do
 not temporarily alter the attachment's actual epoch.
+
+HTTP error responses arrive through Android's separate `onReceivedHttpError`
+callback. The native bridge accepts only current-client, main-frame observations
+with status codes from 400 through 599, and records that positive code in event 7.
+It applies the same transient URL attribution check as transport errors; an
+unattributed HTTP response cannot replace the page status. Subresource errors
+produce no main-frame event and do not change attribution. The callback does not
+checkpoint or initiate timing samples, and it never reads or logs the response
+body, headers, or reason phrase.
 
 Attributed commit/finish/error elapsed values start at the first main-frame start;
 event 3 preserves initial request-to-start delay. Timing is sampled at visible
@@ -147,3 +156,11 @@ The `local-*` receipts preserve the first native integration checks. The later
 `callback-*` receipts bind the conservative lifecycle-attribution repair to its
 own C source and three-ABI outputs; they do not relabel the earlier build or
 claim installed callback execution.
+
+The `http-error-*` receipts bind the later missing-callback correction to its
+source, generated DEX, and native outputs. Absence of the callback in the prior
+source/DEX/native boundary is inspection evidence. The original fixture server
+also fails the new 503 assertion because it has no such route; that is a fixture
+regression control, not an observed Android failure. The independent installed
+observer must separately receive a real main-frame 503 and disregard a real
+404 stylesheet response through the same product WebView.

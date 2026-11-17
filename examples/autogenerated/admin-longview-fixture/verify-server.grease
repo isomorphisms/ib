@@ -44,6 +44,24 @@ counts initial
 for field in usable_actions verification_actions value_attempts value_deliveries ambiguous_effects page_requests slow_assets_requested parent_served_bytes {
   expect "$evidence/initial.tsv" "$field" 0
 }
+var mainframe_status = $(curl --silent --show-error --max-time 5 -o "$evidence/mainframe-503.html" \
+  -w '%{http_code}' http://127.0.0.1:18493/mainframe-503)
+if (mainframe_status !== '503') { echo 'FAIL main-frame fixture did not return HTTP 503' >&2; exit 1 }
+rg -q -F '<h1 id=mainframe-http-error>' "$evidence/mainframe-503.html"
+var subresource_status = $(curl --silent --show-error --max-time 5 -o "$evidence/subresource-404.html" \
+  -w '%{http_code}' http://127.0.0.1:18493/subresource-404)
+if (subresource_status !== '200') { echo 'FAIL subresource control main page did not return HTTP 200' >&2; exit 1 }
+rg -q -F '<h1 id=subresource-control>' "$evidence/subresource-404.html"
+rg -q -F '<link rel=stylesheet href=/missing-asset-404.css>' "$evidence/subresource-404.html"
+var missing_status = $(curl --silent --show-error --max-time 5 -o "$evidence/missing-asset-404.css" \
+  -w '%{http_code}' http://127.0.0.1:18493/missing-asset-404.css)
+if (missing_status !== '404') { echo 'FAIL missing stylesheet did not return HTTP 404' >&2; exit 1 }
+curl --fail --silent --show-error --max-time 5 http://127.0.0.1:18493/http-error-counts > "$evidence/http-errors.tsv"
+expect "$evidence/http-errors.tsv" mainframe_503 1
+expect "$evidence/http-errors.tsv" subresource_page 1
+expect "$evidence/http-errors.tsv" subresource_404 1
+counts after-http-errors
+cmp "$evidence/initial.tsv" "$evidence/after-http-errors.tsv"
 var status = $(curl --silent --show-error --max-time 5 -X POST -o /dev/null -w '%{http_code}' http://127.0.0.1:18493/action)
 if (status !== '403') { echo 'FAIL pre-verification action accepted' >&2; exit 1 }
 var impostor = $(curl --silent --show-error --max-time 5 -X POST -H 'Cookie: NotIBFixtureVerified=yes' \
@@ -100,11 +118,14 @@ counts fresh
 for field in usable_actions verification_actions value_attempts value_deliveries ambiguous_effects page_requests slow_assets_requested parent_served_bytes {
   expect "$evidence/fresh.tsv" "$field" 0
 }
+curl --fail --silent --show-error --max-time 5 http://127.0.0.1:18493/http-error-counts > "$evidence/fresh-http-errors.tsv"
+for field in mainframe_503 subresource_page subresource_404 { expect "$evidence/fresh-http-errors.tsv" "$field" 0 }
 kill -TERM "$fixture_pid"
 wait "$fixture_pid"
 setglobal fixture_pid = ''
 git -C "$repository" rev-parse HEAD > "$evidence/source-head.txt"
 sha256sum "$compiler" "$fixture/server.c" "$fixture/AdminFixture.idric" "$fixture/admin.html" \
-  "$fixture/ready.js" "$fixture/verify.html" "$fixture/fake-interactive.html" "$evidence/server" > "$evidence/digests.txt"
+  "$fixture/ready.js" "$fixture/verify.html" "$fixture/fake-interactive.html" "$fixture/verify-server.grease" "$evidence/server" > "$evidence/digests.txt"
 printf 'schema\tib-admin-fixture-host-v1\nfixture_toolchain\tick\nactual_http_server\tPASS\nunverified_action\tREJECTED\nfalse_cookie_prefix\tREJECTED\nusable_control_post\tPASS\none_time_result\tPASS\nrepeated_value\tREJECTED\nambiguous_remote_effect\tPASS\nread_only_reload_no_replay\tPASS\nsecret_free_server_output\tPASS\nfresh_process_zero_state\tPASS\nAndroid_action\tNOT_RUN\nphysical_C67\tNOT_RUN\n' > "$evidence/receipt.tsv"
+printf 'actual_mainframe_HTTP_503\tPASS\nactual_subresource_control_HTTP_200\tPASS\nactual_missing_stylesheet_HTTP_404\tPASS\nseparate_HTTP_error_counts\tPASS\noriginal_counts_unchanged_by_HTTP_controls\tPASS\nfresh_HTTP_error_counts_zero\tPASS\n' >> "$evidence/receipt.tsv"
 cat "$evidence/receipt.tsv"

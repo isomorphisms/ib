@@ -50,6 +50,16 @@ The independent observer must not save a screenshot while the one-time
 value is present. After checking it without emitting its bytes, erase it
 from the DOM before any screenshot or log collection.
 
+The HTTP diagnostic controls are separate from those remote actions.
+`/mainframe-503` returns an actual 503 HTML response with the fixed
+`mainframe-http-error` marker. `/subresource-404` returns 200 HTML with the
+`subresource-control` marker and requests `/missing-asset-404.css`, which returns
+404. `/http-error-counts` exposes only `mainframe_503`, `subresource_page`, and
+`subresource_404` counts of fully written responses. These routes leave the
+original `/counts` schema and values unchanged, including `parent_served_bytes`; that original
+byte counter excludes all new HTTP diagnostic responses. No verification,
+usable action, one-time delivery, or ambiguous-operation count is changed.
+
 ## Invocation and evidence boundary
 
 From any directory, supply absolute paths:
@@ -71,6 +81,14 @@ actual socket server. The Grease coordinator then exercised real HTTP requests,
 one-time-delivery counts, false cookie-prefix refusal, a truncated ambiguous
 response, read-only reload and a separate fresh process. All passed. The server
 emits no one-time value in its stdout/stderr or counter receipts.
+
+`http-error-qualification.tsv` and `http-error-source-digests.txt` preserve the
+later HTTP diagnostic fixture checks. The original server fails the new 503
+assertion at the intended missing-route boundary. The corrected server returns
+503/200/404 with the exact markers and stylesheet reference, produces separate
+1/1/1 counts, preserves the original counters byte for byte, and resets its new
+counters on a fresh process. Those are actual host HTTP checks; they do not
+establish that Android delivered either WebView callback.
 
 The independent observer is maintained in `isomorphisms/ai-ci/android-admin`.
 It drives actual pointer events, injects the actual synthetic result into the

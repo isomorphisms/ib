@@ -304,7 +304,7 @@ Raw exports remain private and are removed after decoding. Host controls
 exercise malformed transport and protected-value refusal. Data and cache
 growth now use separate own-UID byte counts from Android storage statistics.
 No application debugging setting or product payload is changed by this repair.
-The corrected observer is pinned at
+At `2121828`, the workflow pinned the private-I/O correction at
 `f6a6e4a240f45dd3fe515f8fc71619a9be8da6fa`. Its actual qualified Grease execution
 passes 31 record, 23 diagnostic and 22 transport negative controls, with
 positive complete phase exports and malformed-transcript privacy cleanup.
@@ -324,6 +324,140 @@ the observed guest values before applying those bounds. The official binary's
 option check and exact failed jobs are recorded in `emulator-target-repair.tsv`;
 a successful boot or installed admin pass is not inferred from that check.
 
+### Installed progress at `2121828`
+
+The native source job in run `44147700039` passed after 44 minutes 48 seconds.
+Both retained reader jobs also passed. The source-bound
+[reader receipt](installed-reader-2121828.tsv) binds both observation archives,
+all ten required observer exits and eleven runtime receipts per API, all eight
+actual installed APK copies, and the inspected native product screenshots.
+Those installed copies all match the candidate below. These reader results do
+not establish protected-admin completion or qualify the later HTTP overlay.
+All three admin lanes installed the exact 10,430,072-byte candidate, SHA-256
+`c7b5bda29257a801b0e7cb1757da7e8a70854bb1c239b0bba0c887dd2c8320da`.
+They passed the actual same-UID, non-debuggable and absent-namespace preflight.
+API29 reported two CPUs and 2,040,544 KiB; API34 reported two CPUs and
+2,021,528 KiB; the API34 one-GiB lane reported one CPU and 991,088 KiB.
+All had the required 480×800 viewport. This establishes that the earlier
+access and emulator-capacity blockers were cleared for these installed bytes.
+
+API29 then rejected both the fake interactive marker and existing protected
+namespace. Its exercise reported first-useful/action times of 5,497/10,062 ms
+before failing `FAIL app switch never paused the target Activity`. These are
+partial reported timings: the post-exercise server counts and complete
+journey oracle were not collected. Both API34 lanes stopped earlier at
+`FAIL independent page observation timeout` during the fake-control phase.
+Their WebView was 113.0.5672.136; API29 used 74.0.3729.185. Incomplete phase
+exports were removed as required. No retained screenshot or early native
+event log establishes the timeout's cause, and renderer death is not inferred.
+
+The [installed before-fix receipt](https://github.com/isomorphisms/ai-ci/blob/3344e50f3e8c6cee3bdbcd1dab410ddfcb7dc18b/android-admin/host-qualification/installed-2121828-before.tsv)
+retains each job, artifact ZIP digest, actual installed digest, target,
+preflight, bounded resource sample and first failure. Recovery, replacement
+retention and the public-page ladder remain unexecuted for this attempt.
+The HTTP correction below was not present in this published candidate.
+
+### Frozen main-frame HTTP response correction
+
+Inspection of the native source at
+`2121828a4a6b48883080b251f56969959068af4b` found that it handled transport errors
+through `onReceivedError` but did not override Android's separate
+`onReceivedHttpError` callback. The earlier `b02e678` generated DEX and native
+symbols also lacked that HTTP callback. This is a source/boundary finding,
+not a reproduced installed Android failure.
+
+The frozen correction accepts only current-client, main-frame HTTP statuses
+400 through 599 and emits their positive numeric code as event 7. It retains
+the first-document transient URL guard. Ambiguous observations use epoch 0
+and elapsed time -1 and cannot replace the page status. Subresource callbacks
+are ignored. The handler does not checkpoint, initiate a timing sample or read
+response bodies, headers or reason phrases. The
+[native verification receipt](../admin-longview-native/http-error-verification.tsv)
+binds the changed source to the executed platform DEX generator, independent
+descriptor inspection and ICK/NDK compile/link checks for all three ABIs.
+
+The independent fixture supplies `/mainframe-503`, an actual HTTP 503 document,
+and `/subresource-404`, an HTTP 200 document that requests
+`/missing-asset-404.css`, which returns HTTP 404. Its separate three counters
+count completed response writes. Actual host requests verified statuses
+503/200/404, the fixed document markers and stylesheet reference, counts
+1/1/1 and byte-identical original `/counts` before and after these controls.
+The original server fails the new 503 assertion. These are
+[host fixture results](../admin-longview-fixture/http-error-qualification.tsv),
+not Android callback delivery. The existing parent-byte metric excludes these
+diagnostic responses as well as delayed child responses; it is not total
+network transfer.
+
+The companion observer opens both paths through the actual native Open control
+in separate phases after the retained-task and replacement-installation
+assertions. Its oracle requires the selected main-frame 503 event and a
+completed subresource document without a main-frame error, bound to distinct
+observed host PIDs, matching lifetime generations and the separate server
+counter progression. These phases export no private artifacts.
+
+Review also found that the first HTTP oracle accepted an attributed error or
+document finish before its matching start because it checked the start only
+at end of input. Both reordered counterexamples actually returned zero.
+The corrected oracle requires a preceding start when each known event appears;
+both cases now return one. An explicitly unknown epoch-0/elapsed-minus-1 error
+before a later start remains accepted without a timing claim. The
+[ordering receipt](https://github.com/isomorphisms/ai-ci/blob/3344e50f3e8c6cee3bdbcd1dab410ddfcb7dc18b/android-admin/host-qualification/http-ordering.tsv)
+retains the before/after source hashes, commands, inputs and outcomes.
+
+The [observer qualification](https://github.com/isomorphisms/ai-ci/blob/3344e50f3e8c6cee3bdbcd1dab410ddfcb7dc18b/android-admin/host-qualification/receipt.tsv)
+binds the current observer at `3344e50f3e8c6cee3bdbcd1dab410ddfcb7dc18b` through
+eighteen source digests, seven package-source digests and three oracle digests:
+31 record, 23 lifecycle, 23 transport and 15 HTTP counterexamples are rejected
+by the actual Grease host invocation. The changed observer also assembled,
+disassembled, packaged and passed the established signer check. Those host
+HTTP logs are synthetic; ART and installed HTTP phases remain `NOT_RUN`.
+The complete product package recipe for the isolated `2121828` plus twelve
+frozen HTTP overlay files completed with exit 0. Its
+[source-bound package receipt](package-http-overlay.tsv) retains the exact
+nine-argument command, all overlay hashes and unchanged-input checks. The
+10,430,072-byte APK has SHA-256
+`c5fd13a7e3a53544088e6f46568278ea9534d13570b6546c3aaf85deac75e5c6`,
+the established package, version and signer. Managed DEX, all three application
+ELFs and independently repeated signed APK bytes match; payload and identity
+counterexamples reject. Native ICU was freshly built for this recipe; its
+reproduction step explicitly reuses unchanged hashed ICU and Grease inputs.
+This qualifies the frozen source's complete local package. Its ART and
+installed HTTP execution remain `NOT_RUN`; historical `b02e678` reader results
+do not qualify this overlay.
+
+### Observer runtime correction
+
+The workflow now pins [isomorphisms/ai-ci PR #355, "Independently exercise IB admin controls and protected-task recovery"](https://github.com/isomorphisms/ai-ci/pull/355)
+at `3344e50f3e8c6cee3bdbcd1dab410ddfcb7dc18b`. Each JavaScript evaluation owns a separate
+volatile result object. A late reply cannot satisfy a later expression.
+Read-only predicates may retry a missing reply, while side-effecting
+evaluations remain single-shot and timeout still fails. The 60-second fixture
+and 120-second public-page budgets bound acceptance of results; they do not
+guarantee whole-method return because synchronous UI dispatch can overrun or
+hang. The outer command timeouts remain 360 and 180 seconds respectively.
+
+The app-switch stimulus now uses the system HOME global action and requires
+its success result. The original actual pause, resume and same-Activity
+assertions remain unchanged. This does not establish why the earlier key
+injection failed to produce a pause. Likewise, the missing JavaScript reply's
+underlying cause remains unproved.
+
+An admin process timeout now retains original exit 124 as its primary reason,
+removes raw and incomplete private exports, and records a bounded attempt to
+force-stop the fixed target package. A failed phase may retain only a bounded
+tail that passes the existing closed numeric diagnostic validator; rejected
+raw output is deleted. Such a tail can contain earlier phases and is not
+automatically attributed to the failed host or renderer.
+
+The actual rebuilt observer DEX is
+`b76a19b657bbd809bcb324b3bbdda3d3b3008a2b30de551fedf71eeeb581aa7d`;
+the signed observer APK is
+`07e4cf705d656facceda391f20caebc1eafcb0c83f1d7c29a80eb6a8498b4dfc`.
+Assembly, independent decode, packaging, signer, coordinator parsing and all
+31/23/23/15 host refusal groups pass. Independent source/execution review is
+closed. Corrected polling, HOME, failure capture and HTTP discrimination
+remain `NOT_RUN` on Android at this publication boundary.
+
 ## Acceptance ledger
 
 Detailed source-bound receipts live beside the core, native and fixture
@@ -338,9 +472,11 @@ for those bytes; it is not relabelled as a later commit's hosted acceptance.
 | Trusted-root alias, strict descendant and atomic store behavior | PASS on host; 40 assertions execute the production store |
 | Complete native app DEX and three ABI native libraries | PASS at the declared compiler stages; independent DEX/ELF inspection |
 | Complete signed APK packaging and byte reproduction | PASS at `b02e678`, including the callback correction, complete maintained recipe and signed APK byte equality; installed evidence remains separate |
-| Installed API29 / API34 retained reader suites | PASS at hosted `b02e678`; actual hosted candidate identified above |
-| Installed API29 / API34 admin suites | First attempts FAIL before functional acceptance at observer access / emulator target guards; corrected observer and target configuration await installed execution |
-| Separate API34 / 1 CPU / 1 GiB / 480×800 lane | First attempt FAIL at actual guest memory guard before installation; required target and public acceptance predicates unchanged |
+| Frozen HTTP callback and independent 503/404 controls | PASS for the declared DEX/native boundaries, actual host fixture requests and synthetic observer controls/package; installed HTTP callback discrimination NOT_RUN |
+| Complete signed APK recipe for the frozen HTTP overlay | PASS: exact twelve-file overlay, complete maintained recipe, DEX/three-ABI ELF/signed APK repeat and payload/identity refusals; installed HTTP execution NOT_RUN |
+| Installed API29 / API34 retained reader suites | PASS at hosted `2121828`; both archives, ten observer exits and eleven runtime receipts per API, eight installed candidate copies and actual product screenshots inspected; later HTTP overlay remains separate |
+| Installed API29 / API34 admin suites | At `2121828`, exact candidate install and actual same-UID/non-debuggable preflight PASS; API29 later FAIL at app-switch pause, both API34 lanes FAIL at page observation; complete recovery acceptance remains unproved |
+| Separate API34 / 1 CPU / 1 GiB / 480×800 lane | Actual target, installation and preflight PASS at `2121828`; fake-control page observation FAIL; public ladder NOT_RUN |
 | Physical C67 startup and authenticated Google Cloud control | BLOCKED_EXTERNAL; no physical connection or signed-in interaction available |
 | Separate YouTube Studio / YouTube API workflow | BLOCKED_EXTERNAL; exact live screen and user-operated authorization required |
 

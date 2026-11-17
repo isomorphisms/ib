@@ -700,6 +700,29 @@ Java_org_isomorphisms_ib_LongViewClient_onReceivedError(JNIEnv *env, jobject sel
     (*env)->PopLocalFrame(env, NULL);
 }
 
+JNIEXPORT void JNICALL
+Java_org_isomorphisms_ib_LongViewClient_onReceivedHttpError(JNIEnv *env, jobject self, jobject web, jobject request, jobject response) {
+    if ((*env)->PushLocalFrame(env, 96) != 0) return;
+    jmethodID main ← lv_method(env, "android/webkit/WebResourceRequest", "isForMainFrame", "()Z");
+    if (lv_current(env, self, web) && request && response && main &&
+        (*env)->CallBooleanMethod(env, request, main) && !(*env)->ExceptionCheck(env)) {
+        jmethodID code ← lv_method(env, "android/webkit/WebResourceResponse", "getStatusCode", "()I");
+        jint value ← code ? (*env)->CallIntMethod(env, response, code) : 0;
+        if (value >= 400 && value <= 599 && !(*env)->ExceptionCheck(env)) {
+            jmethodID get ← lv_method(env, "android/webkit/WebResourceRequest", "getUrl", "()Landroid/net/Uri;");
+            jobject uri ← get ? (*env)->CallObjectMethod(env, request, get) : NULL;
+            jmethodID text ← lv_method(env, "android/net/Uri", "toString", "()Ljava/lang/String;");
+            jstring url ← uri && text ? (*env)->CallObjectMethod(env, uri, text) : NULL;
+            if (lv_attributed_document(env, web, url)) {
+                lv_event(env, 7, value, lv_elapsed(protected_view.document_at));
+                lv_status(env, "The main page returned an HTTP error. Protected identity is retained; no remote action was automatically repeated.");
+            } else lv_event_epoch(env, 7, value, -1, 0);
+        }
+    }
+    if ((*env)->ExceptionCheck(env)) (*env)->ExceptionClear(env);
+    (*env)->PopLocalFrame(env, NULL);
+}
+
 JNIEXPORT jboolean JNICALL
 Java_org_isomorphisms_ib_LongViewClient_onRenderProcessGone(JNIEnv *env, jobject self, jobject web, jobject detail) {
     (void)detail;
