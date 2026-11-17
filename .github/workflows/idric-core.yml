@@ -155,10 +155,11 @@ jobs:
         run: sh bin/ci_browser_foundation.grease exercise-live-arxiv
 
       - name: Exercise live arXiv progressive pre-paint
+        id: live_prepaint
         run: sh bin/ci_browser_foundation.grease exercise-live-arxiv-prepaint
 
       - name: Preserve failed live scientific input
-        if: failure() && steps.live_arxiv.conclusion == 'failure'
+        if: failure() && (steps.live_arxiv.conclusion == 'failure' || steps.live_prepaint.conclusion == 'failure')
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: scientific-media-failure-${{ github.run_id }}-${{ github.run_attempt }}

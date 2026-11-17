@@ -1,0 +1,54 @@
+#!/usr/bin/env grease
+# Capture-boundary controls; the real fresh-input renderer assertion stays failed.
+set -eu -o pipefail
+if (len(ARGV) !== 3) { echo 'usage: grease verify-capture.grease IB COMPLETE_CAPTURE NEW_EVIDENCE' >&2; exit 2 }
+var repository = ARGV[0]
+var captured = ARGV[1]
+var evidence = ARGV[2]
+for path in "$repository" "$captured" "$evidence" {
+  if (path[0] !== '/') { echo 'FAIL absolute path required' >&2; exit 2 }
+}
+if test -e "$evidence" { echo 'FAIL evidence already exists' >&2; exit 2 }
+mkdir -p "$evidence/cap-input/source"
+sha256sum "$repository/tests/live_arxiv_progressive_prepaint.grease" \
+  "$repository/.github/workflows/idric-core.yml" > "$evidence/source.sha256"
+sed '/^# Acquire once/,$d' "$repository/tests/live_arxiv_progressive_prepaint.grease" > "$evidence/prefix.sh"
+cp "$captured/document.html" "$evidence/cap-input/source/document.html"
+cp "$captured/source.tsv" "$evidence/cap-input/source/source.tsv"
+for name in prepaint.txt prepaint.stderr 4096.txt 16384.txt 32768.txt {
+  cp "$captured/$name" "$evidence/cap-input/$name"
+}
+truncate -s 33554433 "$evidence/cap-input/source/document.html"
+setglobal ENV.IB_SCIENTIFIC_FAILURE_DIRECTORY = "$evidence/oversize"
+try {
+  sh -c '. "$1"; rmdir "$work_directory"; work_directory=$2; source_directory="$work_directory/source"; output="$work_directory/prepaint.txt"; prepaint_assertion=oversize-control; prepaint_input_mode=control; exit 42' \
+    "$repository/tests/live_arxiv_progressive_prepaint.grease" "$evidence/prefix.sh" \
+    "$evidence/cap-input" > "$evidence/oversize.txt" 2>&1
+}
+var oversized_status = _error.code
+printf '%s\n' "$oversized_status" > "$evidence/oversize.exit"
+if (oversized_status !== 42) { echo 'FAIL original failure status changed' >&2; exit 1 }
+rg -x incomplete "$evidence/oversize/prepaint/capture.status"
+rg -x 'document[.]html\tomitted-over-limit\t33554433\t[0-9a-f]{64}' "$evidence/oversize/prepaint/files.tsv"
+if test -e "$evidence/oversize/prepaint/document.html" { echo 'FAIL oversized input copied' >&2; exit 1 }
+cmp "$captured/prepaint.txt" "$evidence/oversize/prepaint/prepaint.txt"
+setglobal ENV.IB_SCIENTIFIC_FAILURE_DIRECTORY = ''
+try {
+  sh -c '. "$1"; rmdir "$work_directory"; rm() { return 1; }; prepaint_assertion=cleanup-control; exit 43' \
+    "$repository/tests/live_arxiv_progressive_prepaint.grease" "$evidence/prefix.sh" \
+    > "$evidence/cleanup.txt" 2>&1
+}
+var cleanup_status = _error.code
+printf '%s\n' "$cleanup_status" > "$evidence/cleanup.exit"
+if (cleanup_status !== 43) { echo 'FAIL cleanup replaced original status' >&2; exit 1 }
+rg -x 'live arXiv prepaint cleanup failed' "$evidence/cleanup.txt"
+try {
+  sh -c '. "$1"; printf diagnostic > "$work_directory/prepaint.stderr"; head() { return 1; }; prepaint_assertion=diagnostic-control; exit 44' \
+    "$repository/tests/live_arxiv_progressive_prepaint.grease" "$evidence/prefix.sh" \
+    > "$evidence/diagnostic.txt" 2>&1
+}
+var diagnostic_status = _error.code
+printf '%s\n' "$diagnostic_status" > "$evidence/diagnostic.exit"
+if (diagnostic_status !== 44) { echo 'FAIL diagnostic output replaced original status' >&2; exit 1 }
+printf 'oversized_input_omitted\tPASS\nincomplete_capture_explicit\tPASS\nremaining_output_preserved\tPASS\noriginal_exit_42\tPASS\ncleanup_failure_retains_43\tPASS\ndiagnostic_failure_retains_44\tPASS\nrenderer_acceptance\tNOT_CLAIMED\n' > "$evidence/receipt.tsv"
+cat "$evidence/receipt.tsv"

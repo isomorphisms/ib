@@ -162,6 +162,17 @@ result are retained in `package-b02e678-command.tsv` and `package-b02e678.tsv`.
 These are package/build results; installed Android and physical acceptance
 remain distinct.
 
+The hosted `b02e678` pipeline also completed native packaging and its repeated
+DEX/ELF/signed-APK checks. Its 10,430,072-byte candidate has SHA-256
+`e7da1f237160ecc8965e881ce8e1d932eb4c7b2c66a5fd22ad155b43760e8ae0`.
+Package, version and certificate match the local build. Application and platform
+DEX, all three `libib_reader.so` libraries and the packaged Grease libraries are
+byte-identical between those two builds. The three ICU transport dependencies
+differ, so whole-APK equality across hosts is not claimed. Each build's own
+repeat check reuses its declared, hashed dependency inputs. Installed evidence
+must bind the hosted candidate actually installed. This comparison is retained
+in `hosted-package-b02e678.tsv`.
+
 ### Existing scientific-media CI failure
 
 The initial head's
@@ -228,6 +239,28 @@ components. The same local shell and `740bb` PDF bridge are explicitly recorded
 in `scientific-iconv-243.tsv`; this is not a complete Ubuntu runner replay.
 The old library still fails the unchanged expected strings with the new bounded
 diagnostic branch. The next hosted run remains the authoritative CI result.
+
+At `e436289`, the hosted core job, all three deterministic scientific tests
+and the four-paper live HTML-first harvest passed with pinned frontend
+`7050c1163`. The later live progressive-prepaint step failed without retaining
+its input or naming an assertion. A fresh acquisition of the fixed public paper
+has 134,967 bytes, SHA-256
+`9b5baedbd35099ade52a9f9d3e3940c7b567edf70f235c333afd2e640c60c106`.
+Its paper heading begins beyond the deliberately required 16,384-byte prefix.
+An actual local `740bb` renderer replay fails exactly that heading assertion;
+the 32 KiB stage includes the paper heading and opening abstract within the
+existing 48-item painting limit, and all three stages remain width-bounded.
+The fresh replay is distinct from the missing hosted inputs. The documented
+byte-stage requirement is preserved; its compatibility with current source
+layout remains a separate acceptance issue.
+The followup test acquires that fixed public paper once, feeds the exact bytes
+through the existing wrapper hook, names each unchanged assertion and retains
+bounded HTML, renderer output, stderr and stage files on failure. A complete
+capture means retained evidence, never a passing renderer result. The executed
+capture and original-exit controls are recorded in
+`scientific-prepaint-capture.tsv` with a repeatable Grease helper. Hosted
+execution must supply its own input and assertion before that failure is
+attributed to the same source-layout boundary.
 
 The observer repository's 46 checks passed at
 `81b9fe7b95446216c9626ef252255e26782008ab`. This includes the repaired

@@ -2,15 +2,114 @@
 set -eu
 
 repository_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+. "$repository_root/lib/scientific_media.grease"
 work_directory=$(mktemp -d)
-cleanup() {
-  rm -rf "$work_directory"
-}
-trap cleanup EXIT HUP INT TERM
-
+source_directory="$work_directory/source"
 output="$work_directory/prepaint.txt"
+prepaint_assertion=acquisition
+
+capture_file() {
+  capture_source=$1
+  capture_name=$2
+  capture_limit=$3
+  if ! test -f "$capture_source"; then
+    printf '%s\tmissing\t-\t-\n' "$capture_name" >> "$capture_directory/files.tsv" || return 1
+    capture_complete=no
+    return 0
+  fi
+  capture_bytes=$(stat -c %s "$capture_source") || return 1
+  capture_hash=$(sha256sum "$capture_source") || return 1
+  capture_hash=${capture_hash%% *}
+  capture_result=complete
+  if test "$capture_bytes" -gt "$capture_limit"; then
+    capture_result=omitted-over-limit
+  elif ! cp "$capture_source" "$capture_directory/$capture_name"; then
+    capture_result=copy-failed
+  elif ! cmp "$capture_source" "$capture_directory/$capture_name"; then
+    capture_result=compare-failed
+  fi
+  printf '%s\t%s\t%s\t%s\n' "$capture_name" "$capture_result" "$capture_bytes" "$capture_hash" \
+    >> "$capture_directory/files.tsv" || return 1
+  if test "$capture_result" != complete; then capture_complete=no; fi
+}
+
+retain_failure() (
+  capture_directory="$IB_SCIENTIFIC_FAILURE_DIRECTORY/prepaint"
+  mkdir -p "$capture_directory" || return 1
+  printf 'incomplete\n' > "$capture_directory/capture.status" || return 1
+  : > "$capture_directory/files.tsv" || return 1
+  {
+    printf 'test_exit=%s\nassertion=%s\ninput_mode=%s\n' \
+      "$prepaint_status" "$prepaint_assertion" "${prepaint_input_mode:-not-selected}"
+    printf 'html_limit_bytes=33554432\noutput_file_limit_bytes=262144\nsource_record_limit_bytes=65536\n'
+    printf 'declared_frontend_ref=%s\n' "${IDRIC_REF:-not-declared}"
+    git -C "$repository_root" rev-parse HEAD
+    sha256sum "$repository_root/src/ArxivPrepaint.idric" \
+      "$repository_root/src/IB/Information.idric" \
+      "$repository_root/lib/scientific_media.grease" \
+      "$repository_root/bin/prepaint_arxiv_progressively.grease" \
+      "$repository_root/tests/live_arxiv_progressive_prepaint.grease"
+    if test -f "${IB_INFORMATION_RENDERER:-}"; then
+      sha256sum "$IB_INFORMATION_RENDERER"
+      if test -d "${IB_INFORMATION_RENDERER}_app"; then
+        find "${IB_INFORMATION_RENDERER}_app" -maxdepth 1 -type f -exec sha256sum '{}' +
+      fi
+    fi
+  } 2>&1 | head -c 65536 > "$capture_directory/context.txt" || return 1
+  capture_complete=yes
+  capture_file "$source_directory/document.html" document.html 33554432 || return 1
+  capture_file "$source_directory/source.tsv" source.tsv 65536 || return 1
+  capture_file "$output" prepaint.txt 262144 || return 1
+  capture_file "$work_directory/prepaint.stderr" prepaint.stderr 262144 || return 1
+  capture_file "$work_directory/4096.txt" 4096.txt 262144 || return 1
+  capture_file "$work_directory/16384.txt" 16384.txt 262144 || return 1
+  capture_file "$work_directory/32768.txt" 32768.txt 262144 || return 1
+  if test "$capture_complete" = yes; then
+    printf 'complete\n' > "$capture_directory/capture.status"
+  fi
+)
+
+cleanup() {
+  prepaint_status=$?
+  trap - EXIT HUP INT TERM
+  if test "$prepaint_status" -ne 0; then
+    # Diagnostic output must not replace the already observed test result.
+    printf 'live arXiv prepaint failed: assertion=%s exit=%s\n' "$prepaint_assertion" "$prepaint_status" >&2 || :
+    if test -s "$work_directory/prepaint.stderr"; then
+      head -c 4096 "$work_directory/prepaint.stderr" >&2 || :
+    fi
+    if test -n "${IB_SCIENTIFIC_FAILURE_DIRECTORY:-}"; then
+      if ! retain_failure; then printf 'live arXiv prepaint capture incomplete\n' >&2 || :; fi
+    fi
+  fi
+  if ! rm -rf "$work_directory"; then printf 'live arXiv prepaint cleanup failed\n' >&2 || :; fi
+  exit "$prepaint_status"
+}
+trap cleanup EXIT
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
+# Acquire once and replay these exact bytes through the existing wrapper hook.
+if test -n "${IB_ARXIV_PREPAINT_HTML:-}"; then
+  prepaint_input_mode=provided
+  mkdir -p "$source_directory"
+  cp "$IB_ARXIV_PREPAINT_HTML" "$source_directory/document.html"
+  printf 'html\t2203.11355\t%s\t%s\n' \
+    "${IB_ARXIV_PREPAINT_RESOLVED_URL:-https://arxiv.org/html/2203.11355}" \
+    "$source_directory/document.html" > "$source_directory/source.tsv"
+else
+  prepaint_input_mode=live
+  fetch_preferred_arxiv_document 2203.11355 "$source_directory"
+fi
+test "$(source_kind_from_harvest_directory "$source_directory")" = html
+export IB_ARXIV_PREPAINT_HTML="$source_directory/document.html"
+export IB_ARXIV_PREPAINT_RESOLVED_URL=$(source_url_from_harvest_directory "$source_directory")
+export IB_INFORMATION_RENDERER=${IB_INFORMATION_RENDERER:-$repository_root/src/build/exec/ib-arxiv-prepaint}
 export IB_ARXIV_PREPAINT_PREFIXES='4096 16384 32768'
-sh "$repository_root/bin/prepaint_arxiv_progressively.grease" 2203.11355 > "$output"
+prepaint_assertion=render-prefixes
+sh "$repository_root/bin/prepaint_arxiv_progressively.grease" 2203.11355 \
+  > "$output" 2> "$work_directory/prepaint.stderr"
 
 stage_output() {
   requested_bytes=$1
@@ -22,22 +121,35 @@ stage_output() {
   ' "$output"
 }
 
+prepaint_assertion=split-stages
 stage_output 4096 > "$work_directory/4096.txt"
 stage_output 16384 > "$work_directory/16384.txt"
 stage_output 32768 > "$work_directory/32768.txt"
 
+prepaint_assertion=html-source
 grep -Fx 'source-kind=html' "$output" >/dev/null
+prepaint_assertion=no-heavyweight-renderer
 grep -Fx 'heavyweight-renderer-invocations=0' "$output" >/dev/null
+prepaint_assertion=input-bytes-4096
 grep -Fx 'stage-input-bytes=4096' "$output" >/dev/null
+prepaint_assertion=input-bytes-16384
 grep -Fx 'stage-input-bytes=16384' "$output" >/dev/null
+prepaint_assertion=input-bytes-32768
 grep -Fx 'stage-input-bytes=32768' "$output" >/dev/null
+prepaint_assertion=title-at-4096
 grep -F 'information-title=Origami in N dimensions' "$work_directory/4096.txt" >/dev/null
+prepaint_assertion=paper-heading-at-16384
 grep -F '# Origami in N dimensions' "$work_directory/16384.txt" >/dev/null
+prepaint_assertion=abstract-heading-at-32768
 grep -Fx '# Abstract' "$work_directory/32768.txt" >/dev/null
+prepaint_assertion=abstract-opening-at-32768
 grep -F 'Neural networks can implement arbitrary functions.' "$work_directory/32768.txt" >/dev/null
+prepaint_assertion=script-text-absent
 ! grep -F 'initializeReadingPreferences' "$output" >/dev/null
+prepaint_assertion=three-width-bounded-stages
 test "$(grep -c '^prepaint-width-bounded=True$' "$output")" -eq 3
 
+prepaint_assertion=document-larger-than-32768
 document_bytes=$(sed -n 's/^document-bytes=//p' "$output")
 test "$document_bytes" -gt 32768
 
