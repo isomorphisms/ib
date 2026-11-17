@@ -1,0 +1,79 @@
+name: IB #100 synthetic administrative acceptance (non-release)
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/ib-admin-acceptance.yml'
+      - 'native/android/ib_admin_transaction.*'
+      - 'android-native/Makefile'
+      - 'tests/admin/**'
+      - 'docs/issue100-admin-acceptance.md'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  host-native-and-http:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Qualify native action journal and real loopback HTTP fixture
+        shell: bash
+        run: |
+          set -euo pipefail
+          export IB_ADMIN_BUILD="$RUNNER_TEMP/ib-admin-host"
+          tests/admin/run-native.sh
+          python3 tests/admin/http_fixture_acceptance.py \
+            --driver "$IB_ADMIN_BUILD/journal_driver" \
+            --evidence "$RUNNER_TEMP/ib-admin-http.tsv"
+          sha256sum native/android/ib_admin_transaction.c \
+            native/android/ib_admin_transaction.h \
+            tests/admin/http_fixture_acceptance.py \
+            tests/admin/fixture_server.py \
+            tests/admin/hosted_browser_acceptance.py \
+            > "$RUNNER_TEMP/source-sha256.txt"
+          cp "$RUNNER_TEMP/ib-admin-http.tsv" "$RUNNER_TEMP/ib-admin-host-receipt.tsv"
+          printf 'candidate_commit\t%s\n' "$GITHUB_SHA" >> "$RUNNER_TEMP/ib-admin-host-receipt.tsv"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: ib-admin-host-only
+          path: |
+            ${{ runner.temp }}/ib-admin-host-receipt.tsv
+            ${{ runner.temp }}/source-sha256.txt
+          if-no-files-found: error
+  chromium-fixture:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.11'
+      - name: Install exact Playwright wrapper and its matching Chromium
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install 'playwright==1.56.0' 'psutil==7.1.0'
+          python -m playwright install --with-deps chromium
+          echo "IB_CHROMIUM=$(python -c 'from playwright.sync_api import sync_playwright; p=sync_playwright().start(); print(p.chromium.executable_path); p.stop()')" >> "$GITHUB_ENV"
+      - name: Run actual hosted DOM/HTTP browser and native journal observer
+        shell: bash
+        run: |
+          set -euo pipefail
+          export IB_ADMIN_BUILD="$RUNNER_TEMP/ib-admin-host"
+          tests/admin/run-native.sh
+          python tests/admin/hosted_browser_acceptance.py \
+            --driver "$IB_ADMIN_BUILD/journal_driver" \
+            --evidence "$RUNNER_TEMP/ib-admin-browser.tsv"
+          printf 'candidate_commit\t%s\n' "$GITHUB_SHA" >> "$RUNNER_TEMP/ib-admin-browser.tsv"
+          sha256sum native/android/ib_admin_transaction.c tests/admin/hosted_browser_acceptance.py > "$RUNNER_TEMP/ib-admin-source-sha256.txt"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: ib-admin-chromium-hosted-only
+          path: |
+            ${{ runner.temp }}/ib-admin-browser.tsv
+            ${{ runner.temp }}/ib-admin-source-sha256.txt
+          if-no-files-found: error
