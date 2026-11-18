@@ -405,7 +405,7 @@ before a later start remains accepted without a timing claim. The
 retains the before/after source hashes, commands, inputs and outcomes.
 
 The [observer qualification](https://github.com/isomorphisms/ai-ci/blob/3344e50f3e8c6cee3bdbcd1dab410ddfcb7dc18b/android-admin/host-qualification/receipt.tsv)
-binds the current observer at `3344e50f3e8c6cee3bdbcd1dab410ddfcb7dc18b` through
+binds the historical observer at `3344e50f3e8c6cee3bdbcd1dab410ddfcb7dc18b` through
 eighteen source digests, seven package-source digests and three oracle digests:
 31 record, 23 lifecycle, 23 transport and 15 HTTP counterexamples are rejected
 by the actual Grease host invocation. The changed observer also assembled,
@@ -427,7 +427,7 @@ do not qualify this overlay.
 
 ### Observer runtime correction
 
-The workflow now pins [isomorphisms/ai-ci PR #355, "Independently exercise IB admin controls and protected-task recovery"](https://github.com/isomorphisms/ai-ci/pull/355)
+At f342b09, the workflow pinned [isomorphisms/ai-ci PR #355, "Independently exercise IB admin controls and protected-task recovery"](https://github.com/isomorphisms/ai-ci/pull/355)
 at `3344e50f3e8c6cee3bdbcd1dab410ddfcb7dc18b`. Each JavaScript evaluation owns a separate
 volatile result object. A late reply cannot satisfy a later expression.
 Read-only predicates may retry a missing reply, while side-effecting
@@ -458,6 +458,91 @@ Assembly, independent decode, packaging, signer, coordinator parsing and all
 closed. Corrected polling, HOME, failure capture and HTTP discrimination
 remain `NOT_RUN` on Android at this publication boundary.
 
+## Completed f342b09 installed attempt and observer follow-up
+
+The [exact f342b09 run](https://github.com/isomorphisms/ib/actions/runs/44162424435)
+completed with source packaging and both retained reader suites passing, and
+all three admin lanes failing. The [candidate inspection](hosted-candidate-f342b09.tsv)
+binds actual APK `0d5e90489325a53a791972c055c1112325b227f3d0e80098ac928cd26b27d6ec`,
+the unchanged package/version/certificate, all eighteen source files and the
+three DEX/three application ELF payloads. The
+[reader receipt](installed-reader-f342b09.tsv) binds both API29/API34 archives,
+twenty successful observer invocations, twenty-two runtime receipts, eight
+installed copies of that candidate, and actual native-reader screenshots.
+These reader results do not establish protected-admin acceptance.
+
+| Admin lane | Actual target | First failure and retained partial evidence |
+| --- | --- | --- |
+| API29 | 2 CPUs / 2,040,544 KiB / 480×800 | HOME produced the required pause, but return did not produce the required resume. Useful/action observations were 5,697/7,385 ms; the complete journey and final server counters were not collected. |
+| API34 | 2 CPUs / 2,021,528 KiB / 480×800 | The fake-page negative failed outside the usability assertion. Its inner failure was hidden by the prior wrapper and remains UNKNOWN. |
+| API34 one GiB | 1 CPU / 991,088 KiB / 480×800 | Exercise, Activity/host recovery, replacement installation, task-generation/no-replay oracles and genuine 503/404 response phases completed; the HTTP diagnostic oracle then failed. Useful/action times were 40,732/41,964 ms. |
+
+All three lanes passed actual installation, target capacity, same-UID,
+non-debuggable and absent-namespace preflight. In the one-GiB lane, the five
+state-changing fixture counters each remained exactly one through exercise,
+host restart and replacement update. Actual screenshots show the confirmed
+control before the one-time value and the reconstructed page after Activity
+recreation. Authentication remained unproven and heap recovery unavailable.
+The prior observer could silently skip forced termination when its WebView
+was absent; therefore this run does not qualify that stimulus even though
+renderer generations advanced. The later raw HTTP diagnostic input was deleted
+on failure, so the source-proven checkpoint defect below is not established as
+the actual cause of this hosted failure. Its coupled public ladder did not run.
+
+The published companion subsequently advanced to `f3c40097102bf0b69fe5f184f3c6a9cc9d2a7a0c`
+in [isomorphisms/ai-ci PR #355, "Independently exercise IB admin controls and protected-task recovery"](https://github.com/isomorphisms/ai-ci/pull/355).
+That four-file correction refuses missing-view termination, permits explicitly
+unknown HTTP errors without inventing a preceding start, adds the corresponding
+positive control, and retains failed HTTP input only after closed numeric
+validation. The local follow-up preserves all four changes and adds:
+
+- A precise absent-WebView error and a real pre-open negative that accepts only
+  that error; a silent return or unrelated assertion cannot satisfy it.
+- A read-only availability observation with correlated missing-reply retries,
+  exact Boolean result checking, distinct invalid-coordinate rejection and
+  fixed safe error reporting. The scroll/coordinate evaluation and pointer
+  action remain single-shot. Sixty seconds bounds result acceptance, while
+  the existing outer command timeout bounds a hung synchronous UI call.
+- External return through the fixed system `am start` command after HOME.
+  The descriptor stays open until the unchanged pause/resume/same-Activity
+  assertions complete, then closes on success or failure. The hosted API29
+  failure's underlying cause remains UNKNOWN.
+- Acceptance of only the legal pre-attachment checkpoint with renderer
+  generation zero, event 4, code 0, document epoch 0 and elapsed time at least
+  minus one. Host/Activity bounds and positive generations for other selected
+  events remain required. This row supplies no HTTP attribution.
+- An independent public mode after shared identity/capacity/private-transport
+  preflight and before fixture compilation, server launch or reverse binding.
+  Three admin rows select admin mode; a fourth fresh API34 one-GiB AVD selects
+  the unchanged public classifier. Default combined behavior remains available.
+
+The rebuilt observer has DEX SHA-256
+`ee98ab9b0c7327c121872816b6ab515f8b9123fab468ba9a33f4af2d9154f3b7`
+and APK SHA-256
+`5f0ec22dd14d04b84f566617c9de83c60ff4d4c019b8b62d8a4ab3fed842089b`.
+Actual assembly, independent decode, resource packaging, signer verification
+and all seven package-source bindings pass. New actual Grease qualification
+rejects 31 record, 23 lifecycle, 23 transport and 23 HTTP counterexamples.
+Both legal checkpoint positives fail against published f3c4009 and pass after
+the correction, including an unavailable clock. Eight mode/prerequisite cases
+pass. These are host/package results for the local follow-up: corrected ART,
+installed Android and public-site behavior remain NOT_RUN. Publication requires
+the separate approval requested on November 18; no later hosted result is
+inferred from this local work. After the user's continuation approval, the
+reviewed observer tree from local commit `189aac5f0754187b89174ebf659610c7aae841e1`
+was published as `2904a2e5e05a899e51548af440847217ec941a3f`. The two Git trees
+are identical; the repository connection assigns the publication commit's
+metadata. The workflow pins that verified published commit. Tree equality,
+qualification bindings and publication order are retained in
+[followup-observer.tsv](followup-observer.tsv).
+
+The previous workspace disappeared before the combined build. On November 18
+the repositories were recovered from their published heads, the exact retained
+reader receipt was restored by checksum, and the genuine Grease runtime was
+recovered from the f342b09 replay artifact without rewriting its bytes. The
+current observer package and host controls were executed afresh. Earlier
+unpublished package/control results are not represented as current evidence.
+
 ## Acceptance ledger
 
 Detailed source-bound receipts live beside the core, native and fixture
@@ -474,9 +559,10 @@ for those bytes; it is not relabelled as a later commit's hosted acceptance.
 | Complete signed APK packaging and byte reproduction | PASS at `b02e678`, including the callback correction, complete maintained recipe and signed APK byte equality; installed evidence remains separate |
 | Frozen HTTP callback and independent 503/404 controls | PASS for the declared DEX/native boundaries, actual host fixture requests and synthetic observer controls/package; installed HTTP callback discrimination NOT_RUN |
 | Complete signed APK recipe for the frozen HTTP overlay | PASS: exact twelve-file overlay, complete maintained recipe, DEX/three-ABI ELF/signed APK repeat and payload/identity refusals; installed HTTP execution NOT_RUN |
-| Installed API29 / API34 retained reader suites | PASS at hosted `2121828`; both archives, ten observer exits and eleven runtime receipts per API, eight installed candidate copies and actual product screenshots inspected; later HTTP overlay remains separate |
-| Installed API29 / API34 admin suites | At `2121828`, exact candidate install and actual same-UID/non-debuggable preflight PASS; API29 later FAIL at app-switch pause, both API34 lanes FAIL at page observation; complete recovery acceptance remains unproved |
-| Separate API34 / 1 CPU / 1 GiB / 480×800 lane | Actual target, installation and preflight PASS at `2121828`; fake-control page observation FAIL; public ladder NOT_RUN |
+| Installed API29 / API34 retained reader suites | PASS at hosted `f342b09`; both archives, ten observer exits and eleven runtime receipts per API, eight installed candidate copies and actual product screenshots inspected |
+| Installed API29 / API34 admin suites | At `f342b09`, exact candidate install and actual same-UID/non-debuggable preflight PASS; API29 later FAIL at return/resume, API34 FAIL in fake-control observation; complete acceptance remains unproved |
+| API34 / 1 CPU / 1 GiB / 480×800 admin lane | At `f342b09`, confirmed action, lifecycle/host/update no-replay evidence retained; forced-termination stimulus NOT_QUALIFIED and later HTTP diagnostic FAIL; public ladder NOT_RUN |
+| Corrected observer and independent public lane | Local assembly/package, source-bound host controls and source review PASS; corrected ART, installed Android and public-site execution NOT_RUN |
 | Physical C67 startup and authenticated Google Cloud control | BLOCKED_EXTERNAL; no physical connection or signed-in interaction available |
 | Separate YouTube Studio / YouTube API workflow | BLOCKED_EXTERNAL; exact live screen and user-operated authorization required |
 

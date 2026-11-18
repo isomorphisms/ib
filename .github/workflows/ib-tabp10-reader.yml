@@ -434,22 +434,33 @@ jobs:
             target: default
             memory: 2048
             cores: 2
+            mode: admin
             public_ladder: '0'
           - lane: api34
             api: 34
             target: google_apis
             memory: 2048
             cores: 2
+            mode: admin
             public_ladder: '0'
           - lane: api34-1GiB
             api: 34
             target: google_apis
             memory: 1024
             cores: 1
+            mode: admin
+            public_ladder: '1'
+          - lane: public-api34-1GiB
+            api: 34
+            target: google_apis
+            memory: 1024
+            cores: 1
+            mode: public
             public_ladder: '1'
     env:
       IB_GREASE: ${{ github.workspace }}/.tools/runtime/.build/grease/bin/grease
       AICI_EXPECTED_ANDROID_API: '${{ matrix.api }}'
+      AICI_ADMIN_MODE: '${{ matrix.mode }}'
       AICI_ADMIN_PUBLIC_LADDER: '${{ matrix.public_ladder }}'
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
@@ -465,7 +476,7 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           repository: isomorphisms/ai-ci
-          ref: 3344e50f3e8c6cee3bdbcd1dab410ddfcb7dc18b
+          ref: 2904a2e5e05a899e51548af440847217ec941a3f
           path: .tools/admin-acceptance
           persist-credentials: false
       - id: ick
