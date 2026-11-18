@@ -11,7 +11,8 @@
     </queries>
     <application android:allowBackup="false" android:label="IB Prepaint"
         android:supportsRtl="true" android:theme="@style/Theme.IBNative"
-        android:usesCleartextTraffic="false" android:extractNativeLibs="true">
+        android:usesCleartextTraffic="false" android:extractNativeLibs="true"
+        android:networkSecurityConfig="@xml/network_security_config">
         <meta-data android:name="moe.shizuku.client.V3_SUPPORT" android:value="true" />
         <provider android:name="org.isomorphisms.ib.ShizukuProvider"
             android:authorities="org.isomorphisms.ib.prepaint.shizuku"

@@ -36,6 +36,7 @@
             android:text="Sources" android:textSize="18sp" android:textColor="#ECECEC" />
         <EditText android:id="@id/reader_input" android:layout_width="match_parent"
             android:layout_height="64dp" android:gravity="top" android:inputType="text"
+            android:saveEnabled="false" android:importantForAutofill="noExcludeDescendants"
             android:singleLine="true" android:hint="URL or search terms" android:textSize="16sp" android:textColor="#ECECEC"
             android:textColorHint="#ACACAC" android:padding="8dp" />
         <Button android:id="@id/read_button" android:layout_width="wrap_content"
@@ -44,12 +45,25 @@
         <Button android:id="@id/search_button" android:layout_width="wrap_content"
             android:layout_height="48dp" android:text="Search Google" android:onClick="onClick"
             android:textColor="#171717" android:backgroundTint="#B8C7DE" />
+        <Button android:id="@id/protected_open_button" android:layout_width="wrap_content"
+            android:layout_height="48dp" android:text="Open protected page" android:onClick="onClick"
+            android:textColor="#171717" android:backgroundTint="#B8C7DE" />
+        <Button android:id="@id/protected_resume_button" android:layout_width="wrap_content"
+            android:layout_height="48dp" android:text="Resume protected page" android:onClick="onClick"
+            android:textColor="#ECECEC" android:backgroundTint="#292929" />
         <Button android:id="@id/permission_button" android:layout_width="wrap_content"
             android:layout_height="48dp" android:text="Authorize Shizuku" android:onClick="onClick"
             android:textColor="#ECECEC" android:backgroundTint="#292929" />
     </LinearLayout>
     <FrameLayout android:id="@id/google_acquisition_panel" android:layout_width="match_parent"
         android:layout_height="0dp" android:layout_weight="1" android:visibility="gone" />
+    <TextView android:id="@id/protected_status" android:layout_width="match_parent"
+        android:layout_height="wrap_content" android:textSize="14sp" android:textColor="#ACACAC"
+        android:paddingHorizontal="16dp" android:paddingBottom="8dp" android:visibility="gone"
+        android:saveEnabled="false" />
+    <FrameLayout android:id="@id/protected_panel" android:layout_width="match_parent"
+        android:layout_height="0dp" android:layout_weight="1" android:visibility="gone"
+        android:saveEnabled="false" />
     <ScrollView android:id="@id/reader_scroll" android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1"
         android:fillViewport="true" android:padding="20dp">
         <org.isomorphisms.ib.NativeTextView android:id="@id/reader_body" android:layout_width="match_parent"

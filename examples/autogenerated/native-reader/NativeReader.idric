@@ -14,6 +14,7 @@ import IB.Reflow
 import IB.Reflow.SourceBreaks
 import IB.WebSearch
 import IB.WebSearch.Results
+import IB.LongViewNative
 
 -- These domains belong to the Android adapter; none represents a browser task.
 data ActivityReference : Type where [external]
@@ -98,6 +99,17 @@ attach_reader_host : ActivityReference → PrimIO Int32
 resume_reader_host : ActivityReference → PrimIO Int32
 %foreign "dex:static:Lorg/isomorphisms/ib/ReaderBridge;:detach:(Landroid/app/Activity;)V"
 detach_reader_host : ActivityReference → PrimIO ()
+
+%foreign "dex:static:Lorg/isomorphisms/ib/LongViewBridge;:open:(Landroid/app/Activity;Ljava/lang/String;)I"
+open_protected_page : ActivityReference → Text → PrimIO Int32
+%foreign "dex:static:Lorg/isomorphisms/ib/LongViewBridge;:reopen:(Landroid/app/Activity;)I"
+reopen_protected_page : ActivityReference → PrimIO Int32
+%foreign "dex:static:Lorg/isomorphisms/ib/LongViewBridge;:resume:(Landroid/app/Activity;)I"
+resume_protected_page : ActivityReference → PrimIO Int32
+%foreign "dex:static:Lorg/isomorphisms/ib/LongViewBridge;:hide:(Landroid/app/Activity;)V"
+hide_protected_page : ActivityReference → PrimIO ()
+%foreign "dex:static:Lorg/isomorphisms/ib/LongViewBridge;:detach:(Landroid/app/Activity;)V"
+detach_protected_page : ActivityReference → PrimIO ()
 %foreign "dex:static:Lorg/isomorphisms/ib/ReaderBridge;:navigate:(Ljava/lang/String;)I"
 acquire_navigation : Text → PrimIO Int32
 %foreign "dex:static:Lorg/isomorphisms/ib/ReaderBridge;:cancel:(Landroid/app/Activity;)I"
@@ -164,6 +176,37 @@ search_button : Int32
 search_button = 2130903051
 cancel_button : Int32
 cancel_button = 2130903053
+protected_open_button : Int32
+protected_open_button = 2130903055
+protected_resume_button : Int32
+protected_resume_button = 2130903056
+
+-- Native effects consume the existing checked Longview record. They do not
+-- reconstruct these lifecycle decisions in C or from page-controlled text.
+%export "dex:longview_start"
+longview_start : Text → Text → Text → Text → Text → Text
+longview_start task tab navigation host requested = IB.LongViewNative.start_record task tab navigation host requested
+
+%export "dex:longview_open"
+longview_open : Text → Text → Text
+longview_open encoded host = IB.LongViewNative.open_record encoded host
+
+%export "dex:longview_attach"
+longview_attach : Text → Text → Text
+longview_attach encoded renderer = IB.LongViewNative.attach_record encoded renderer
+
+%export "dex:longview_observe"
+longview_observe : Text → Int32 → Text → Text → Text → Text → Text → Int32 → Int32 → Int32 → Text
+longview_observe encoded kind task tab navigation host renderer host_generation activity_generation renderer_generation =
+  IB.LongViewNative.observe_record encoded kind task tab navigation host renderer host_generation activity_generation renderer_generation
+
+%export "dex:longview_field"
+longview_field : Text → Int32 → Text
+longview_field encoded selected = IB.LongViewNative.field encoded selected
+
+%export "dex:longview_counter"
+longview_counter : Text → Int32 → Int32
+longview_counter encoded selected = IB.LongViewNative.counter encoded selected
 
 read_view_text : ActivityReference → Int32 → IO Text
 read_view_text activity identity = do
@@ -660,10 +703,18 @@ resume_reader activity = do
       else if resumed ≟ 2
         then write_view_text activity reader_status "Reader ready. Enter an HTTP(S) URL."
         else reader_acquisition_failed activity "The native reader could not reclaim this Activity; committed documents are retained."
+  protected ← primIO (resume_protected_page activity)
+  if protected ≟ 1
+    then do
+      _ ← primIO (cancel_acquisition activity)
+      pure ()
+    else pure ()
 
 %export "dex:destroy_reader"
 destroy_reader : ActivityReference → IO ()
-destroy_reader activity = primIO (detach_reader_host activity)
+destroy_reader activity = do
+  primIO (detach_protected_page activity)
+  primIO (detach_reader_host activity)
 
 %export "dex:receive_reader_new_intent"
 receive_reader_new_intent : ActivityReference → IntentReference → IO ()
@@ -686,15 +737,28 @@ receive_reader_action activity clicked = do
       primIO (set_reader_view_visibility panel (if visibility ≟ 0 then 8 else 0))
     else if identity ≟ read_button
       then do
+        primIO (hide_protected_page activity)
         text ← read_view_text activity reader_input
         navigate_to activity text
       else if identity ≟ search_button
         then do
+          primIO (hide_protected_page activity)
           text ← read_view_text activity reader_input
           requested ← checked_query_address text
           case requested of
             Left reason ⇒ reader_acquisition_failed activity reason
             Right address ⇒ navigate_to activity address
+        else if identity ≟ protected_open_button
+          then do
+            text ← read_view_text activity reader_input
+            _ ← primIO (cancel_acquisition activity)
+            _ ← primIO (open_protected_page activity text)
+            write_view_text activity reader_input ""
+          else if identity ≟ protected_resume_button
+            then do
+              _ ← primIO (cancel_acquisition activity)
+              _ ← primIO (reopen_protected_page activity)
+              pure ()
         else if identity ≟ permission_button
           then do
             _ ← primIO request_acquisition_permission
@@ -712,6 +776,7 @@ receive_reader_action activity clicked = do
             else if identity ≟ back_button then move_history activity True
               else if identity ≟ forward_button then move_history activity False
                 else if identity ≟ cancel_button then do
+                  primIO (hide_protected_page activity)
                   cancelled ← primIO (cancel_acquisition activity)
                   write_view_text activity reader_status
                     (if cancelled ≟ 1 then "Search cancelled; the previous document is retained."

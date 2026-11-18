@@ -1,0 +1,32 @@
+schema	ib-hosted-package-comparison-v1
+source_commit	b02e67811acd43067eec2bc2f9d9a2042fd978bb
+source_tree	3f492722d03cb0f593e36546596497ec9f931322
+workflow_run	https://github.com/isomorphisms/ib/actions/runs/44132047628
+source_job	https://github.com/isomorphisms/ib/actions/runs/44132047628/job/134211494354
+candidate_artifact_id	14354596156
+candidate_archive_sha256	6adb6842cc8a26e766831568455f37303bf60617f2a2ca1d3ce73585ebadf8b3
+candidate_archive_bytes	10354645
+hosted_APK_sha256	e7da1f237160ecc8965e881ce8e1d932eb4c7b2c66a5fd22ad155b43760e8ae0
+hosted_APK_bytes	10430072
+package	org.isomorphisms.ib.prepaint
+versionCode	3
+versionName	0.3.0
+certificate_sha256	de9b1d47c5a65e6d46a204b79dd9ee566b9d3c9832ba81ebc4213d3392e92ff9
+frontend	740bbf2b1d9e811fd00c719c3473eede17ceea3b
+DEX_backend	153e7fc8053ba4072954a5e77d4efa3609d829e4
+hosted_receipt	checked Activity/ICU/platform PASS; independent DEX decode PASS; ICK/NDK all three ELF ABIs PASS; signer and payload controls PASS.
+hosted_reproduction	managed DEX repeat PASS; application ELF repeat PASS; signed APK byte repeat PASS within this build.
+hosted_dependency_boundary	Native ICU and Grease dependency inputs reused unchanged with hashes within the repeated build.
+local_comparison	full-app-04 at the same b02 source; package-b02e678.tsv retains its exact local invocation/result.
+local_APK_sha256	614c6e7da28a09571f71c03c9400e802a726877b6f9b8dfa9de805171fcbc7e8
+local_vs_hosted_APK	DIFFERENT; no cross-host whole-APK byte equality claim.
+local_vs_hosted_Activity_DEX	IDENTICAL; 309d3c5a8b3b179a3c20047d8ddc207b222a5572494a89a63bbb3c05330552b2
+local_vs_hosted_platform_DEX	IDENTICAL; f059648f0b8703d6a3afa977695e105397b4fdef5792c0eee48eccac831df730
+local_vs_hosted_libib_reader_x86_64	IDENTICAL; ebb176512c864d7f3f1a69dd71975ceb2d372803d14f824f6e595d04d78c46cb
+local_vs_hosted_libib_reader_ARM32	IDENTICAL; 9ef5da200e4427e0d4db7b2846302e57f3eb94e407cabd3d5fe1bf737ebe009e
+local_vs_hosted_libib_reader_ARM64	IDENTICAL; 12782620fb49a01c0860cc47d0866f2b5be6ebc65456c5a25ddf80be416b4e5f
+local_vs_hosted_Grease_libraries	IDENTICAL in all three packaged ABIs.
+local_vs_hosted_ICU_transport_libraries	DIFFERENT in all three packaged ABIs; cause not established by this comparison.
+installed_Android	NOT_RUN at this package receipt; subsequent installed results must name their actual hosted APK digest.
+physical_C67	NOT_RUN
+publication_boundary	CI candidate evidence; no release or physical installation.

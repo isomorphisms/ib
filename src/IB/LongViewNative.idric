@@ -1,0 +1,288 @@
+module IB.LongViewNative
+
+import Data.Text
+import Data.List
+import Data.List1
+import IB.LongViewTask
+import IB.LongViewLifecycle
+
+-- The native adapter transports canonical ordinary-state records. The checked
+-- task remains the owner; this codec never owns cookies, field values or keys.
+-- Its bounds match the small task manifest, not a page or JavaScript snapshot.
+maximum_record_bytes : Number
+maximum_record_bytes = 16384
+
+maximum_generation : Number
+maximum_generation = 2147483647
+
+admit : Bool → Maybe ()
+admit True = Just ()
+admit False = Nothing
+
+identity_character : Char → Bool
+identity_character character =
+  (character >= 'a' && character <= 'z') ||
+  (character >= 'A' && character <= 'Z') ||
+  (character >= '0' && character <= '9') || elem character ['-', '_', '.']
+
+-- Only app-minted identifiers cross this boundary. User URL/form text cannot
+-- become a filesystem component or an identity by being accepted as plain text.
+stored_identity : Text → Maybe DurableIdentity
+stored_identity value = do
+  admit (not (null (unpack value)) && length (unpack value) <= 64 &&
+    not (value ≟ ".") && not (value ≟ "..") && all identity_character (unpack value))
+  durable_identity value
+
+stored_renderer : Text → Maybe (Maybe DurableIdentity)
+stored_renderer "" = Just Nothing
+stored_renderer value = map Just (stored_identity value)
+
+ascii_digit : Char → Bool
+ascii_digit character = character >= '0' && character <= '9'
+
+generation : Bool → Text → Maybe Number
+generation allow_zero text =
+  if text ≟ "0" then if allow_zero then Just 0 else Nothing
+  else case unpack text of
+    [] ⇒ Nothing
+    '0' :: _ ⇒ Nothing
+    digits ⇒
+      if all ascii_digit digits &&
+          (length digits < 10 || (length digits ≟ 10 && text <= "2147483647"))
+        then Just (cast text) else Nothing
+
+stored_origin : Text → Maybe NeutralAddress
+stored_origin value = do
+  admit (length (unpack value) <= 2048)
+  (selected, recovery) ← neutral_origin_from_request value
+  admit (neutral_address_text selected ≟ value)
+  case recovery of
+    exact_neutral_address ⇒ Just selected
+    _ ⇒ Nothing
+
+read_address_recovery : Text → Maybe address_reconstruction
+read_address_recovery "exact-neutral" = Just exact_neutral_address
+read_address_recovery "path-query-or-fragment-redacted" = Just potentially_sensitive_url_material_redacted
+read_address_recovery _ = Nothing
+
+read_continuity : Text → Maybe continuity_kind
+read_continuity "live-renderer-survival" = Just live_renderer_survival
+read_continuity "activity-recreation" = Just activity_recreation
+read_continuity "renderer-replacement" = Just renderer_replacement
+read_continuity "host-process-restart" = Just host_process_restart
+read_continuity _ = Nothing
+
+read_form : Text → Maybe form_result
+read_form "none-permitted" = Just no_permitted_form_state
+read_form "repeat-required" = Just form_step_must_be_repeated
+read_form _ = Nothing
+
+read_reconstruction : Text → Maybe reconstruction_result
+read_reconstruction "pending" = Just reconstruction_pending
+read_reconstruction "page-not-confirmed" = Just reconstructed_page_not_yet_confirmed
+read_reconstruction _ = Nothing
+
+record_fields : List Text
+record_fields =
+  ["schema", "task_id", "tab_id", "navigation_id", "neutral_url", "origin",
+   "address_reconstruction", "continuity", "session_result", "form_result",
+   "heap_result", "reconstruction_result", "renderer_id", "host_process_id",
+   "host_generation", "activity_generation", "renderer_generation", "authorization_adapter"]
+
+row_value : Text → Text → Maybe Text
+row_value expected row = case forget (split (≟ '\t') row) of
+  [name, value] ⇒ if name ≟ expected then Just value else Nothing
+  _ ⇒ Nothing
+
+-- Fixed schema order plus the required final LF refuses omitted, repeated,
+-- unknown, appended and truncated rows without ignoring any record material.
+read_rows : List Text → List Text → Maybe (List Text)
+read_rows [] [""] = Just []
+read_rows (name :: names) (row :: rows) = do
+  value ← row_value name row
+  remaining ← read_rows names rows
+  pure (value :: remaining)
+read_rows _ _ = Nothing
+
+consistent_attachment : LongViewTask → Bool
+consistent_attachment task = case task.renderer_identity of
+  Nothing ⇒ case task.reconstruction of
+    reconstruction_pending ⇒ True
+    _ ⇒ False
+  Just _ ⇒ task.renderer_generation > 0
+
+consistent_continuity : LongViewTask → Bool
+consistent_continuity task =
+  task.activity_generation >= task.host_generation &&
+  case task.continuity of
+    live_renderer_survival ⇒ task.host_generation ≟ 1 && task.activity_generation ≟ 1
+    activity_recreation ⇒ task.activity_generation > 1
+    renderer_replacement ⇒ task.renderer_generation > 0
+    host_process_restart ⇒ task.host_generation > 1
+    remote_site_blocked ⇒ False
+
+read_values : List Text → Maybe LongViewTask
+read_values [schema, task_text, tab_text, navigation_text, neutral_text, origin_text,
+             recovery_text, continuity_text, session_text, form_text, heap_text,
+             reconstruction_text, renderer_text, host_text, host_generation_text,
+             activity_generation_text, renderer_generation_text, authorization_text] = do
+  admit (schema ≟ "ib-long-view-task-v1" && session_text ≟ "not-proven" &&
+    heap_text ≟ "not-available" && authorization_text ≟ "none" && neutral_text ≟ origin_text)
+  task ← stored_identity task_text
+  tab ← stored_identity tab_text
+  navigation ← stored_identity navigation_text
+  origin ← stored_origin origin_text
+  recovery ← read_address_recovery recovery_text
+  continuity ← read_continuity continuity_text
+  form ← read_form form_text
+  reconstruction ← read_reconstruction reconstruction_text
+  renderer ← stored_renderer renderer_text
+  host ← stored_identity host_text
+  host_generation ← generation False host_generation_text
+  activity_generation ← generation False activity_generation_text
+  renderer_generation ← generation True renderer_generation_text
+  let restored = ProtectedLongView task tab navigation (Just origin) (Just origin)
+        recovery continuity session_not_proven form heap_not_available reconstruction
+        renderer host host_generation activity_generation renderer_generation Nothing
+  admit (consistent_attachment restored && consistent_continuity restored)
+  pure restored
+read_values _ = Nothing
+
+unicode_scalar : Char → Bool
+unicode_scalar character =
+  ord character >= 0 && ord character <= 0x10FFFF &&
+  not (ord character >= 0xD800 && ord character <= 0xDFFF)
+
+utf8_width : Char → Number
+utf8_width character =
+  if ord character < 0x80 then 1
+  else if ord character < 0x800 then 2
+  else if ord character < 0x10000 then 3 else 4
+
+within_manifest_limit : Text → Bool
+within_manifest_limit value =
+  let characters = unpack value in
+  length characters <= maximum_record_bytes && all unicode_scalar characters &&
+  foldl (\count, character ⇒ count + utf8_width character) 0 characters <= maximum_record_bytes
+
+read_record : Text → Maybe LongViewTask
+read_record encoded = do
+  admit (within_manifest_limit encoded)
+  values ← read_rows record_fields (forget (split (≟ '\n') encoded))
+  restored ← read_values values
+  -- The existing serializer is canonical. This also refuses alternative
+  -- numeric spellings, CRLF or material a permissive line reader might erase.
+  admit (serialize_long_view_task restored ≟ encoded)
+  pure restored
+
+write_result : Maybe LongViewTask → Text
+write_result Nothing = ""
+write_result (Just task) =
+  let encoded = serialize_long_view_task task in
+  if within_manifest_limit encoded then encoded else ""
+
+start_task : Text → Text → Text → Text → Text → Maybe LongViewTask
+start_task task_text tab_text navigation_text host_text requested = do
+  task ← stored_identity task_text
+  tab ← stored_identity tab_text
+  navigation ← stored_identity navigation_text
+  host ← stored_identity host_text
+  (origin, recovery) ← neutral_origin_from_request requested
+  admit (length (unpack (neutral_address_text origin)) <= 2048)
+  pure (start_protected_task task tab navigation (Just origin) (Just origin) recovery host)
+
+export
+start_record : Text → Text → Text → Text → Text → Text
+start_record task tab navigation host requested =
+  write_result (start_task task tab navigation host requested)
+
+reopen_task : Text → Text → Maybe LongViewTask
+reopen_task encoded host_text = do
+  task ← read_record encoded
+  host ← stored_identity host_text
+  admit (task.activity_generation < maximum_generation &&
+    (identity_text host ≟ identity_text task.host_process_identity || task.host_generation < maximum_generation))
+  -- No ordinary form values are persisted by this adapter. Any new attachment
+  -- must describe that repetition honestly, including a whole-host restart.
+  pure ({ form := form_step_must_be_repeated } (open_in_host host task))
+
+export
+open_record : Text → Text → Text
+open_record encoded host = write_result (reopen_task encoded host)
+
+attach_task : Text → Text → Maybe LongViewTask
+attach_task encoded renderer_text = do
+  task ← read_record encoded
+  renderer ← stored_identity renderer_text
+  admit (task.renderer_generation < maximum_generation)
+  case task.renderer_identity of
+    Just _ ⇒ Nothing
+    Nothing ⇒
+      let attached = if task.renderer_generation ≟ 0
+            then attach_initial_renderer renderer task else attach_renderer renderer task in
+      -- Attachment is not a page commit. Preserve the host/Activity reason for
+      -- recovery while the existing reducer advances renderer generation.
+      pure ({ continuity := task.continuity, reconstruction := reconstruction_pending } attached)
+
+export
+attach_record : Text → Text → Text
+attach_record encoded renderer = write_result (attach_task encoded renderer)
+
+observe_task : Text → Int32 → Text → Text → Text → Text → Text → Int32 → Int32 → Int32 → Maybe LongViewTask
+observe_task encoded kind task_text tab_text navigation_text host_text renderer_text
+             host_generation activity_generation renderer_generation = do
+  task ← read_record encoded
+  observed_task ← stored_identity task_text
+  observed_tab ← stored_identity tab_text
+  observed_navigation ← stored_identity navigation_text
+  observed_host ← stored_identity host_text
+  observed_renderer ← stored_identity renderer_text
+  admit (host_generation > 0 && activity_generation > 0 && renderer_generation > 0 &&
+    cast activity_generation ≟ task.activity_generation)
+  let observation = ObservedRenderer observed_task observed_tab observed_navigation
+        observed_host (cast host_generation) observed_renderer (cast renderer_generation)
+  case kind of
+    0 ⇒ record_renderer_loss observation task
+    1 ⇒ record_page_commit observation task
+    _ ⇒ Nothing
+
+export
+observe_record : Text → Int32 → Text → Text → Text → Text → Text → Int32 → Int32 → Int32 → Text
+observe_record encoded kind task tab navigation host renderer host_generation activity_generation renderer_generation =
+  write_result (observe_task encoded kind task tab navigation host renderer
+    host_generation activity_generation renderer_generation)
+
+field_value : LongViewTask → Int32 → Text
+field_value task 0 = identity_text task.task_identity
+field_value task 1 = identity_text task.tab_identity
+field_value task 2 = identity_text task.navigation_identity
+field_value task 3 = case task.neutral_url of
+  Just origin ⇒ neutral_address_text origin
+  Nothing ⇒ ""
+field_value task 4 = identity_text task.host_process_identity
+field_value task 5 = case task.renderer_identity of
+  Just renderer ⇒ identity_text renderer
+  Nothing ⇒ ""
+field_value task 6 = continuity_text task.continuity
+field_value task 7 = session_text task.session
+field_value task 8 = form_text task.form
+field_value task 9 = reconstruction_text task.reconstruction
+field_value _ _ = ""
+
+export
+field : Text → Int32 → Text
+field encoded selected = case read_record encoded of
+  Nothing ⇒ ""
+  Just task ⇒ field_value task selected
+
+counter_value : LongViewTask → Int32 → Int32
+counter_value task 0 = cast task.host_generation
+counter_value task 1 = cast task.activity_generation
+counter_value task 2 = cast task.renderer_generation
+counter_value _ _ = -1
+
+export
+counter : Text → Int32 → Int32
+counter encoded selected = case read_record encoded of
+  Nothing ⇒ -1
+  Just task ⇒ counter_value task selected

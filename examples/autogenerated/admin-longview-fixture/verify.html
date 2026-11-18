@@ -1,0 +1,6 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Mock verification step</title>
+<style>html{background:#202124;color:#eee;font:18px sans-serif}body{margin:12px}button{font:inherit;padding:12px;min-height:48px}</style></head><body>
+<h1>Mock verification step</h1><p>This verifies only the local test session.</p>
+<button id="approve-verification">Approve fixture verification</button><p id="verification-state" role="status">Waiting</p>
+<script>"use strict";document.getElementById("approve-verification").addEventListener("click",async function(){this.disabled=true;try{const response=await fetch("/verification-complete",{method:"POST",cache:"no-store"});if(!response.ok)throw new Error("unconfirmed");location.assign("/");}catch(_){document.getElementById("verification-state").textContent="Verification unconfirmed";}});</script>
+</body></html>

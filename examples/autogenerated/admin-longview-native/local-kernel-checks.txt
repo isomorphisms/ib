@@ -1,0 +1,41 @@
+PASS Android-like trusted ancestor fixture
+PASS trusted ancestor alias accepted
+PASS empty selected-task discovery
+PASS task tab history before durable selector
+PASS selected bytes and three identities survive
+PASS atomic selected task checkpoint
+PASS selected bytes and three identities survive
+PASS fresh descriptor reconstruction
+PASS selected bytes and three identities survive
+PASS outside sentinel fixture
+PASS linked task fixture
+PASS linked task read refused
+PASS linked task write refused without touching target
+PASS restore owned task after refusal
+PASS selected bytes and three identities survive
+PASS hard-linked task fixture
+PASS multiply linked record refused
+PASS remove owned hard-link fixture
+PASS nonprivate task fixture
+PASS nonprivate task refused
+PASS restore private mode
+PASS torn selector refused
+PASS invalid selection cannot overwrite prior task
+PASS new selection cannot hide torn existing selection
+PASS selector traversal refused
+PASS selected bytes and three identities survive
+PASS interrupted selection fixture
+PASS existing task without selector is incomplete rather than empty
+PASS incomplete selection cannot be silently replaced
+PASS restore prior selection after incomplete refusal
+PASS partial history refused
+PASS new selected-tab escape fixture
+PASS failed new publication preserves prior selector and outside sentinel
+PASS selected bytes and three identities survive
+PASS caller identity traversal refused before mutation
+PASS IB-owned ancestor escape fixture
+PASS IB-owned descendant alias refused at open
+PASS restore owned descendant fixture
+PASS recovery after descendant refusal
+PASS selected bytes and three identities survive
+PASS 40 kernel store checks; checked record semantics and Android remain separate

@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Protected admin fixture</title>
+<style>html{background:#202124;color:#eee;font:18px sans-serif}body{margin:12px}button,a{display:block;font:inherit;padding:12px;margin:10px 0;min-height:48px}button{width:100%}table{width:100%;border-collapse:collapse}td,th{padding:6px;text-align:left;border-bottom:1px solid #555}#one-time{overflow-wrap:anywhere}#pressure{display:none}</style>
+</head><body>
+<h1>Protected admin fixture</h1>
+<p id="state" role="status">Waiting for the useful control</p>
+<button id="confirm-control" disabled>Confirm usable action</button>
+<table><tr><th>Setting</th><th>Value</th></tr><tr><td>Fixture project</td><td>Local only</td></tr></table>
+<a id="verify" href="/verify">Verify in the mock device step</a>
+<button id="create-value" disabled>Create one-time fixture value</button>
+<output id="one-time" aria-label="One-time fixture value"></output>
+<button id="forget-value" hidden>Forget displayed fixture value</button>
+<button id="ambiguous" disabled>Submit uncertain fixture operation</button>
+<p id="mutation-state" role="status">No operation requested</p>
+<label>Unapproved form field<input id="unapproved" autocomplete="off"></label>
+<div id="pressure"></div>
+<script src="/ready.js" defer></script>
+</body></html>

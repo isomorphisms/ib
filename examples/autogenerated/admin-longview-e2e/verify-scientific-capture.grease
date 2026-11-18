@@ -1,0 +1,121 @@
+#!/usr/bin/env grease
+# Qualification of the existing sh test's cleanup boundary; no live CI claim.
+set -eu -o pipefail
+if (len(ARGV) !== 3) { echo 'usage: grease verify-retention.grease IB CAPTURED_ARTICLE EVIDENCE' >&2; exit 2 }
+var repository = ARGV[0]
+var article = ARGV[1]
+var evidence = ARGV[2]
+for path in "$repository" "$article" "$evidence" {
+  if (path[0] !== '/') { echo 'FAIL absolute path required' >&2; exit 2 }
+}
+if test -e "$evidence" { echo 'FAIL evidence directory already exists' >&2; exit 2 }
+mkdir -p "$evidence"
+setglobal ENV.TAR_OPTIONS = ''
+git -C "$repository" rev-parse HEAD > "$evidence/base.txt"
+sha256sum "$repository/lib/scientific_media.grease" \
+  "$repository/tests/test_scientific_image_harvest.grease" \
+  "$repository/tests/live_arxiv_image_harvest.grease" \
+  "$repository/.github/workflows/idric-core.yml" > "$evidence/working-source.sha256"
+# Extract the production declarations without executing the network loop.
+# $0 remains the real test path so its original repository resolution runs.
+sed '/^html_count=0/,$d' "$repository/tests/live_arxiv_image_harvest.grease" > "$evidence/capture-prefix.sh"
+cp -a "$article" "$evidence/complete-input"
+var unusual_name = $(printf 'two\nline.png')
+touch "$evidence/complete-input/images/$unusual_name"
+setglobal ENV.IB_SCIENTIFIC_FAILURE_DIRECTORY = "$evidence/complete"
+try {
+  sh -c '. "$1"; output_directory=$2; identifier=1901.09021; exit 42' \
+    "$repository/tests/live_arxiv_image_harvest.grease" "$evidence/capture-prefix.sh" \
+    "$evidence/complete-input" > "$evidence/complete-run.txt" 2>&1
+}
+var complete_status = _error.code
+printf '%s\n' "$complete_status" > "$evidence/complete.exit"
+if (complete_status !== 42) { echo 'FAIL original failure status changed' >&2; exit 1 }
+rg -x complete "$evidence/complete/archive.status"
+rg -x 'test_exit=42' "$evidence/complete/environment.txt"
+tar -tf "$evidence/complete/inputs.tar" > "$evidence/complete-members.txt"
+if rg -q '^images/' "$evidence/complete-members.txt" { echo 'FAIL image binaries included' >&2; exit 1 }
+mkdir -p "$evidence/extracted"
+tar -xf "$evidence/complete/inputs.tar" -C "$evidence/extracted"
+for name in document.html source.tsv images.tsv unresolved_images.tsv {
+  cmp "$article/$name" "$evidence/extracted/$name"
+}
+diff -r "$article/image_tags" "$evidence/extracted/image_tags"
+find "$evidence/complete-input/images" -type f -printf '%P\0' > "$evidence/expected-filenames.nul"
+cmp "$evidence/expected-filenames.nul" "$evidence/extracted/image_filenames.nul"
+rg -x 0 "$evidence/extracted/regenerated_rows.exit"
+cd "$evidence/extracted"
+sha256sum -c "$evidence/complete/input.sha256" > "$evidence/captured-hashes.txt"
+sha256sum -c "$evidence/complete/source.sha256" > "$evidence/source-hashes.txt"
+mkdir -p "$evidence/capped-input/images"
+for name in document.html source.tsv images.tsv unresolved_images.tsv image_tags {
+  cp -a "$article/$name" "$evidence/capped-input/$name"
+}
+truncate -s 40000000 "$evidence/capped-input/image_tags/image_tag_cap.html"
+setglobal ENV.IB_SCIENTIFIC_FAILURE_DIRECTORY = "$evidence/capped"
+try {
+  sh -c '. "$1"; output_directory=$2; identifier=1901.09021; exit 43' \
+    "$repository/tests/live_arxiv_image_harvest.grease" "$evidence/capture-prefix.sh" \
+    "$evidence/capped-input" > "$evidence/capped-run.txt" 2>&1
+}
+var capped_status = _error.code
+printf '%s\n' "$capped_status" > "$evidence/capped.exit"
+if (capped_status !== 43) { echo 'FAIL capped capture changed failure status' >&2; exit 1 }
+rg -x 'incomplete: archive limit reached or capture failed' "$evidence/capped/archive.status"
+var archive_bytes = $(stat -c %s "$evidence/capped/inputs.tar")
+if (archive_bytes !== '33554432') { echo 'FAIL archive size bound not exercised' >&2; exit 1 }
+# The actual GNU tar supports one-block records. This makes the exact 32MiB
+# boundary and one 512-byte block above it representable without a fake writer.
+setglobal ENV.TAR_OPTIONS = '--blocking-factor=1'
+printf '%s\n' '--blocking-factor=1' > "$evidence/boundary-tar-options.txt"
+truncate -s 0 "$evidence/capped-input/image_tags/image_tag_cap.html"
+setglobal ENV.IB_SCIENTIFIC_FAILURE_DIRECTORY = "$evidence/size-baseline"
+try {
+  sh -c '. "$1"; output_directory=$2; identifier=1901.09021; exit 44' \
+    "$repository/tests/live_arxiv_image_harvest.grease" "$evidence/capture-prefix.sh" \
+    "$evidence/capped-input" > "$evidence/size-baseline-run.txt" 2>&1
+}
+var baseline_status = _error.code
+printf '%s\n' "$baseline_status" > "$evidence/size-baseline.exit"
+if (baseline_status !== 44) { echo 'FAIL baseline capture changed failure status' >&2; exit 1 }
+rg -x complete "$evidence/size-baseline/archive.status"
+var baseline_bytes = $(stat -c %s "$evidence/size-baseline/inputs.tar")
+var boundary_payload = $(expr 33554432 - "$baseline_bytes")
+truncate -s "$boundary_payload" "$evidence/capped-input/image_tags/image_tag_cap.html"
+setglobal ENV.IB_SCIENTIFIC_FAILURE_DIRECTORY = "$evidence/exact-boundary"
+try {
+  sh -c '. "$1"; output_directory=$2; identifier=1901.09021; exit 45' \
+    "$repository/tests/live_arxiv_image_harvest.grease" "$evidence/capture-prefix.sh" \
+    "$evidence/capped-input" > "$evidence/exact-boundary-run.txt" 2>&1
+}
+var exact_status = _error.code
+printf '%s\n' "$exact_status" > "$evidence/exact-boundary.exit"
+if (exact_status !== 45) { echo 'FAIL exact boundary changed failure status' >&2; exit 1 }
+rg -x complete "$evidence/exact-boundary/archive.status"
+var exact_bytes = $(stat -c %s "$evidence/exact-boundary/inputs.tar")
+if (exact_bytes !== '33554432') { echo 'FAIL exact boundary not exercised' >&2; exit 1 }
+truncate -s +512 "$evidence/capped-input/image_tags/image_tag_cap.html"
+setglobal ENV.IB_SCIENTIFIC_FAILURE_DIRECTORY = "$evidence/over-one-block"
+try {
+  sh -c '. "$1"; output_directory=$2; identifier=1901.09021; exit 46' \
+    "$repository/tests/live_arxiv_image_harvest.grease" "$evidence/capture-prefix.sh" \
+    "$evidence/capped-input" > "$evidence/over-one-block-run.txt" 2>&1
+}
+var over_status = _error.code
+printf '%s\n' "$over_status" > "$evidence/over-one-block.exit"
+if (over_status !== 46) { echo 'FAIL one-block excess changed failure status' >&2; exit 1 }
+rg -x 'incomplete: archive limit reached or capture failed' "$evidence/over-one-block/archive.status"
+var over_bytes = $(stat -c %s "$evidence/over-one-block/inputs.tar")
+if (over_bytes !== '33554432') { echo 'FAIL one-block excess was not capped' >&2; exit 1 }
+setglobal ENV.IB_SCIENTIFIC_FAILURE_DIRECTORY = ''
+try {
+  sh -c '. "$1"; rm() { return 1; }; exit 47' \
+    "$repository/tests/live_arxiv_image_harvest.grease" "$evidence/capture-prefix.sh" \
+    > "$evidence/cleanup-failure-run.txt" 2>&1
+}
+var cleanup_status = _error.code
+printf '%s\n' "$cleanup_status" > "$evidence/cleanup-failure.exit"
+if (cleanup_status !== 47) { echo 'FAIL cleanup error changed original status' >&2; exit 1 }
+rg -x 'scientific-media: temporary cleanup failed' "$evidence/cleanup-failure-run.txt"
+printf 'complete_capture\tPASS\noriginal_exit\tPASS\nsource_and_input_hashes\tPASS\nraw_filename_newline\tPASS\nimage_binaries_excluded\tPASS\ncapped_archive_marked_incomplete\tPASS\nexact_archive_limit\tPASS\none_tar_block_over_limit\tPASS\ncleanup_failure_retains_exit\tPASS\narchive_bound\t33554432\nhosted_CI\tNOT_RUN\n' > "$evidence/receipt.tsv"
+cat "$evidence/receipt.tsv"

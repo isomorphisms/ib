@@ -5,7 +5,7 @@
 pdf_layout_image_rows() {
   layout_xml=$1
   separator=$(printf '\037')
-  xmlstarlet sel -t \
+  xmlstarlet sel -T -t \
     -m '//*[local-name()="page"]/*[local-name()="image"][@src]' \
     -v 'ancestor::*[local-name()="page"][1]/@number' -o "$separator" \
     -v '@src' -o "$separator" \
@@ -19,7 +19,7 @@ pdf_layout_image_rows() {
 pdf_layout_text_rows() {
   layout_xml=$1
   separator=$(printf '\037')
-  xmlstarlet sel -t \
+  xmlstarlet sel -T -t \
     -m '//*[local-name()="page"]/*[local-name()="text"]' \
     -v 'ancestor::*[local-name()="page"][1]/@number' -o "$separator" \
     -v 'round(@left)' -o "$separator" \

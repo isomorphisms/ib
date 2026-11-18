@@ -141,13 +141,29 @@ html_image_rows() {
   html_path=$1
   ib_media_require_command xmlstarlet || return 1
   separator=$(printf '\037')
-  xmlstarlet fo --html --recover --dropdtd "$html_path" 2>/dev/null |\
-    xmlstarlet sel -t \
+  image_rows_work=$(mktemp -d) || return 1
+  # Text fields need text output: XML serialization replaces the U+001F
+  # separator and escapes URL characters. Keep copied tags as XML, then join
+  # the two ordered streams outside the XML serializer.
+  if ! xmlstarlet fo --html --recover --dropdtd "$html_path" \
+      > "$image_rows_work/document.xml" 2>/dev/null ||
+     ! xmlstarlet sel -T -t \
       -m '//*[local-name()="img"][@src]' \
       -v '@src' -o "$separator" \
       -v 'normalize-space(string((ancestor::*[local-name()="figure"][1]//*[local-name()="figcaption"])[1]))' -o "$separator" \
-      -v 'normalize-space(@alt)' -o "$separator" \
-      -c '.' -n -
+      -v 'normalize-space(@alt)' -n \
+      "$image_rows_work/document.xml" > "$image_rows_work/fields" ||
+     ! xmlstarlet sel -t \
+      -m '//*[local-name()="img"][@src]' -c '.' -n \
+      "$image_rows_work/document.xml" > "$image_rows_work/tags"
+  then
+    rm -rf "$image_rows_work"
+    return 1
+  fi
+  image_rows_result=0
+  paste -d "$separator" "$image_rows_work/fields" "$image_rows_work/tags" || image_rows_result=$?
+  rm -rf "$image_rows_work"
+  return "$image_rows_result"
 }
 
 resolve_image_url() {
@@ -242,7 +258,7 @@ caption_without_figure_label() {
 conceptual_name_slug() {
   text=$1
   if command -v iconv >/dev/null 2>&1; then
-    ascii=$(printf '%s\n' "$text" | iconv -c -t ASCII//TRANSLIT 2>/dev/null || printf '%s\n' "$text")
+    ascii=$(printf '%s\n' "$text" | iconv -c -f UTF-8 -t ASCII//TRANSLIT 2>/dev/null) || ascii=$text
   else
     ascii=$text
   fi

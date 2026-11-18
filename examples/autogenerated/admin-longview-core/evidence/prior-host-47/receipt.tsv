@@ -1,0 +1,7 @@
+checked_host_semantics	PASS
+compiled_wrong_host	PASS
+compiled_stale_renderer	PASS
+compiled_false_session	PASS
+Android_ART	NOT_RUN
+physical_C67	NOT_RUN
+live_Google_YouTube	NOT_RUN
