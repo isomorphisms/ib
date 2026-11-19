@@ -139,11 +139,11 @@ source_document_from_harvest_directory() {
 
 html_image_records() (
   source_html=$1
-  fields_file=$2
-  tags_file=$3
+  records_dir=$2
+  recovered_xml="$records_dir/recovered.xml"
+  fields_file="$records_dir/fields.tsv"
+  tags_file="$records_dir/tags"
   ib_media_require_command xmlstarlet || return 1
-  recovered_xml=$(mktemp) || return 1
-  trap 'rm -f "$recovered_xml"' EXIT
   xmlstarlet fo --html --recover --dropdtd "$source_html" > "$recovered_xml" 2>/dev/null || return 1
 
   selection='//*[local-name()="img"][@src != ""]'
@@ -306,18 +306,18 @@ unique_image_file_name() {
   printf '%s\n' "$candidate"
 }
 
-download_html_images_in_order() {
+download_html_images_in_order() (
   html_path=$1
   document_url=$2
   output_directory=$3
   images_directory="$output_directory/images"
   image_tags_directory="$output_directory/image_tags"
-  rows_path="$output_directory/.html_image_rows.tsv"
-  tags_path="$output_directory/.html_image_tags"
   manifest_path="$output_directory/images.tsv"
   unresolved_path="$output_directory/unresolved_images.tsv"
   mkdir -p "$images_directory" "$image_tags_directory"
-  html_image_records "$html_path" "$rows_path" "$tags_path" || return 1
+  records_dir=$(mktemp -d "$output_directory/.html-records.XXXXXX") || return 1
+  trap 'rm -rf -- "$records_dir"' EXIT
+  html_image_records "$html_path" "$records_dir" || return 1
   : > "$manifest_path"
   : > "$unresolved_path"
 
@@ -390,9 +390,8 @@ download_html_images_in_order() {
       printf '%s\t%s\t%s\t%s\n' \
         "$order" "$final_file_name" "$caption_text" "$alt_text" >> "$unresolved_path"
     fi
-  done < "$rows_path" 3< "$tags_path"
-  rm -f "$rows_path" "$tags_path"
-}
+  done < "$records_dir/fields.tsv" 3< "$records_dir/tags"
+)
 
 record_pdf_images_in_order() {
   pdf_path=$1
