@@ -137,18 +137,43 @@ source_document_from_harvest_directory() {
   awk -F '\t' 'NR == 1 { print $4 }' "$1/source.tsv"
 }
 
-html_image_rows() {
-  html_path=$1
+html_image_records() (
+  source_html=$1
+  records_dir=$2
+  recovered_xml="$records_dir/recovered.xml"
+  fields_file="$records_dir/fields.tsv"
+  tags_file="$records_dir/tags"
   ib_media_require_command xmlstarlet || return 1
+  xmlstarlet fo --html --recover --dropdtd "$source_html" > "$recovered_xml" 2>/dev/null || return 1
+
+  selection='//*[local-name()="img"][@src != ""]'
+  controls=$(printf '\t\n\r')
+  counts=$(xmlstarlet sel -T -t -v "count($selection)" -o : \
+    -v "count($selection[translate(@src, '$controls', '') != @src])" "$recovered_xml") || return 1
+  image_count=${counts%:*}
+  if test "${counts#*:}" != 0; then
+    ib_media_fail 'image source contains a tab or line break'
+    return 1
+  fi
+  if test "$image_count" -eq 0; then
+    : > "$fields_file" && : > "$tags_file"
+    return
+  fi
+
+  # Text serialization keeps the unit separators and decoded field values.
+  # A separate XML serialization preserves each complete recovered tag.
   separator=$(printf '\037')
-  xmlstarlet fo --html --recover --dropdtd "$html_path" 2>/dev/null |\
-    xmlstarlet sel -t \
-      -m '//*[local-name()="img"][@src]' \
-      -v '@src' -o "$separator" \
-      -v 'normalize-space(string((ancestor::*[local-name()="figure"][1]//*[local-name()="figcaption"])[1]))' -o "$separator" \
-      -v 'normalize-space(@alt)' -o "$separator" \
-      -c '.' -n -
-}
+  xmlstarlet sel -T -t -m "$selection" \
+    -v '@src' -o "$separator" \
+    -v 'normalize-space(string((ancestor::*[local-name()="figure"][1]//*[local-name()="figcaption"])[1]))' -o "$separator" \
+    -v 'normalize-space(@alt)' -n "$recovered_xml" > "$fields_file" || return 1
+  xmlstarlet sel -t -m "$selection" -c '.' -n "$recovered_xml" > "$tags_file" || return 1
+  if test "$(wc -l < "$fields_file")" -ne "$image_count" ||
+     test "$(wc -l < "$tags_file")" -ne "$image_count"
+  then
+    ib_media_fail 'image metadata and tag counts differ'
+  fi
+)
 
 resolve_image_url() {
   document_url=$1
@@ -240,14 +265,16 @@ caption_without_figure_label() {
 }
 
 conceptual_name_slug() {
-  text=$1
-  if command -v iconv >/dev/null 2>&1; then
-    ascii=$(printf '%s\n' "$text" | iconv -c -t ASCII//TRANSLIT 2>/dev/null || printf '%s\n' "$text")
-  else
-    ascii=$text
+  label=$1
+  # iconv can emit a translation before returning an error. Only use it on success.
+  if command -v iconv >/dev/null 2>&1 &&
+     transliterated=$(printf '%s\n' "$label" | iconv -c -f UTF-8 -t ASCII//TRANSLIT 2>/dev/null)
+  then
+    label=$transliterated
   fi
 
-  printf '%s\n' "$ascii" |
+  printf '%s' "$label" |
+    tr '\n' ' ' |
     awk '{ for (i = 1; i <= NF && i <= 20; i++) printf "%s%s", (i == 1 ? "" : " "), $i; printf "\n" }' |
     tr '[:upper:]' '[:lower:]' |
     sed -E 's/[^a-z0-9]+/_/g; s/^_+//; s/_+$//; s/_+/_/g' |
@@ -281,28 +308,29 @@ unique_image_file_name() {
   printf '%s\n' "$candidate"
 }
 
-download_html_images_in_order() {
+download_html_images_in_order() (
   html_path=$1
   document_url=$2
   output_directory=$3
   images_directory="$output_directory/images"
   image_tags_directory="$output_directory/image_tags"
-  rows_path="$output_directory/.html_image_rows.tsv"
   manifest_path="$output_directory/images.tsv"
   unresolved_path="$output_directory/unresolved_images.tsv"
-  mkdir -p "$images_directory" "$image_tags_directory"
-  : > "$manifest_path"
-  : > "$unresolved_path"
+  mkdir -p "$images_directory" "$image_tags_directory" || return 1
+  records_dir=$(mktemp -d "$output_directory/.html-records.XXXXXX") || return 1
+  trap 'rm -rf -- "$records_dir"' EXIT
+  html_image_records "$html_path" "$records_dir" || return 1
+  : > "$manifest_path" || return 1
+  : > "$unresolved_path" || return 1
 
-  html_image_rows "$html_path" > "$rows_path"
   order=0
   separator=$(printf '\037')
-  while IFS="$separator" read -r image_source caption_text alt_text image_tag; do
-    test -n "$image_source" || continue
+  while IFS="$separator" read -r image_source caption_text alt_text; do
+    IFS= read -r image_tag <&3 || return 1
     order=$(expr "$order" + 1)
 
     image_tag_file_name=$(printf 'image_tag_%04d.html' "$order")
-    printf '%s\n' "$image_tag" > "$image_tags_directory/$image_tag_file_name"
+    printf '%s\n' "$image_tag" > "$image_tags_directory/$image_tag_file_name" || return 1
 
     case "$image_source" in
       data:image/*)
@@ -349,7 +377,7 @@ download_html_images_in_order() {
       stem=$(conceptual_name_slug "$conceptual_text")
       if test -n "$stem"; then
         final_file_name=$(unique_image_file_name "$images_directory" "$stem" "$extension")
-        mv "$temporary_path" "$images_directory/$final_file_name"
+        mv "$temporary_path" "$images_directory/$final_file_name" || return 1
       else
         naming_source=temporary
         final_file_name=$temporary_file_name
@@ -358,15 +386,14 @@ download_html_images_in_order() {
 
     printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
       "$order" "$image_url" "$final_file_name" "$naming_source" "$caption_text" "$alt_text" \
-      "image_tags/$image_tag_file_name" >> "$manifest_path"
+      "image_tags/$image_tag_file_name" >> "$manifest_path" || return 1
 
     if test "$naming_source" = temporary; then
       printf '%s\t%s\t%s\t%s\n' \
-        "$order" "$final_file_name" "$caption_text" "$alt_text" >> "$unresolved_path"
+        "$order" "$final_file_name" "$caption_text" "$alt_text" >> "$unresolved_path" || return 1
     fi
-  done < "$rows_path"
-  rm -f "$rows_path"
-}
+  done < "$records_dir/fields.tsv" 3< "$records_dir/tags"
+)
 
 record_pdf_images_in_order() {
   pdf_path=$1
@@ -443,7 +470,7 @@ apply_language_model_image_names() {
 harvest_arxiv_images() {
   input=$1
   output_directory=$2
-  fetch_preferred_arxiv_document "$input" "$output_directory"
+  fetch_preferred_arxiv_document "$input" "$output_directory" || return 1
 
   source_kind=$(source_kind_from_harvest_directory "$output_directory")
   source_url=$(source_url_from_harvest_directory "$output_directory")
@@ -451,10 +478,10 @@ harvest_arxiv_images() {
 
   case "$source_kind" in
     html)
-      download_html_images_in_order "$document_path" "$source_url" "$output_directory"
+      download_html_images_in_order "$document_path" "$source_url" "$output_directory" || return 1
       ;;
     pdf)
-      record_pdf_images_in_order "$document_path" "$output_directory"
+      record_pdf_images_in_order "$document_path" "$output_directory" || return 1
       ;;
     *)
       ib_media_fail "unknown source kind: $source_kind"
