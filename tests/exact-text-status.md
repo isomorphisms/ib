@@ -26,18 +26,10 @@ case. Restoring the old workflow must fail this regression on both exit-7 cases.
 
 ## Evidence boundary
 
-These tests prove the status handling of the maintained workflow steps on a
-Linux host. They do not prove Idriç compilation, exact-text semantics, Android,
-or physical-device behavior. They add no compile/link stage. The existing Chez
-compiler/bootstrap path has no declared ICK/NDK build-toolchain contract;
-qualification or migration of that path is separate unfinished work.
+These process fixtures prove status handling on the Linux host.
 
-The regression currently requires an available qualified Grease runtime. The
-workflow still runs the real pinned compiler/oracle; it does not provision
-Grease or run this process-injection harness automatically. Fixture changes are
-included in the workflow path filter so they still trigger semantic acceptance.
-
-The automatic-provisioning prerequisite has now been checked against actual
-maintained Grease/Cat Food sources, published assets and live IB checks. See
-[the provisioning receipt](exact-text-status-provisioning.md). An expiring
-Actions artifact or a stock Oils executable is not a silent fallback.
+The workflow builds the scoped native Grease runtime through ai-ci's pinned
+source action and runs the four process controls first. It retains the Grease
+producer receipt. The real Idriç compiler and twelve semantic comparisons
+run in the separate `oracle` job after the controls pass. Fixture changes still
+trigger both jobs. See [the provisioning record](exact-text-status-provisioning.md).

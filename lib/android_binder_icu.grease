@@ -1,0 +1,5 @@
+# Selected Binder capability: ICU acquisition. Shizuku currently supplies this
+# capability, but a browser/reader never invokes rish or opens network sockets.
+ib_binder_icu_get() {
+  ib_shizuku_icu_get "$@"
+}

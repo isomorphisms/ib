@@ -1,0 +1,129 @@
+# Shizuku-specific ICU Android app_process lowering.
+# PR dilapidated-shed/icu#35: one checked request captures binary body and
+# observed HTTP metadata together. Both originate under the shell UID; this
+# adapter transports one bounded, explicitly framed stream back to the owner.
+# IB never treats unverified rish stdout as a page or metadata as a guess.
+
+ib_shizuku_icu_atom_path() {
+  case "$1" in
+    /data/local/tmp/ib-icu/*) ;;
+    *) return 2 ;;
+  esac
+  case "$1" in
+    *..*|*[!abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._/-]*) return 2 ;;
+  esac
+}
+
+ib_shizuku_icu_sha256() {
+  test "${#1}" -eq 64 || return 2
+  case "$1" in ''|*[!0123456789abcdef]*) return 2 ;; esac
+}
+
+ib_shizuku_icu_url() {
+  test "${#1}" -gt 8 && test "${#1}" -le 2048 || return 2
+  case "$1" in http://*|https://*) ;; *) return 2 ;; esac
+  case "$1" in *"'"*) return 2 ;; esac
+  printf '%s' "$1" | LC_ALL=C grep -Eq '^[!-&(-~]+$'
+}
+
+# The frame is "IBICU01 %08d %08d\n" followed by exact metadata bytes and
+# exact body bytes. A single rish invocation owns ICU's temporary output files.
+# No consumer is allowed to parse raw body bytes as lines or infer HTTP fields.
+ib_shizuku_icu_get() {
+  if test "$#" -ne 3; then
+    printf 'ib_shizuku_icu_get requires URL BODY_OUTPUT METADATA_OUTPUT\n' >&2
+    return 2
+  fi
+  icu_url=$1
+  icu_output=$2
+  icu_metadata=$3
+  icu_dex=${IB_C67_ICU_DEX:-}
+  icu_so=${IB_C67_ICU_SO:-}
+  icu_dex_sha=${IB_C67_ICU_DEX_SHA256:-}
+  icu_so_sha=${IB_C67_ICU_SO_SHA256:-}
+  ib_shizuku_icu_url "$icu_url" || { printf 'unsupported or unsafe ICU URL\n' >&2; return 2; }
+  ib_shizuku_icu_atom_path "$icu_dex" || { printf 'unapproved ICU DEX path\n' >&2; return 2; }
+  ib_shizuku_icu_atom_path "$icu_so" || { printf 'unapproved ICU native path\n' >&2; return 2; }
+  ib_shizuku_icu_sha256 "$icu_dex_sha" || { printf 'missing pinned ICU DEX hash\n' >&2; return 2; }
+  ib_shizuku_icu_sha256 "$icu_so_sha" || { printf 'missing pinned ICU native hash\n' >&2; return 2; }
+  test "$icu_output" != "$icu_metadata" || return 2
+  test ! -e "$icu_output" && test ! -L "$icu_output" || { printf 'reused ICU body path\n' >&2; return 2; }
+  test ! -e "$icu_metadata" && test ! -L "$icu_metadata" || { printf 'reused ICU metadata path\n' >&2; return 2; }
+
+  # Validate all interpolated atoms before assembling a shell command. The
+  # response URL is the only untrusted interpolation and cannot contain '.
+  command_text="set -eu
+  umask 077
+  test -d /data/local/tmp/ib-icu && test ! -L /data/local/tmp/ib-icu || exit 78
+  test \"\$(sha256sum '$icu_dex' | cut -d ' ' -f 1)\" = '$icu_dex_sha' || exit 78
+  test \"\$(sha256sum '$icu_so' | cut -d ' ' -f 1)\" = '$icu_so_sha' || exit 78
+  icu_work=\$(mktemp -d /data/local/tmp/ib-icu/capture.XXXXXXXX) || exit 79
+  trap 'rm -rf \"\$icu_work\"' EXIT HUP INT TERM
+  export ICU_CAPTURE_BODY_PATH=\"\$icu_work/body\"
+  export ICU_CAPTURE_METADATA_PATH=\"\$icu_work/metadata\"
+  export CLASSPATH='$icu_dex'
+  app_process -Dicu.library='$icu_so' /system/bin Idric.Generated get '$icu_url' >/dev/null
+  test -f \"\$ICU_CAPTURE_BODY_PATH\" && test ! -L \"\$ICU_CAPTURE_BODY_PATH\" || exit 80
+  test -f \"\$ICU_CAPTURE_METADATA_PATH\" && test ! -L \"\$ICU_CAPTURE_METADATA_PATH\" || exit 80
+  metadata_bytes=\$(wc -c < \"\$ICU_CAPTURE_METADATA_PATH\" | tr -d '[:space:]')
+  body_bytes=\$(wc -c < \"\$ICU_CAPTURE_BODY_PATH\" | tr -d '[:space:]')
+  test \"\$metadata_bytes\" -gt 0 && test \"\$metadata_bytes\" -le 8192 || exit 81
+  test \"\$body_bytes\" -gt 0 && test \"\$body_bytes\" -le 4194304 || exit 81
+  printf 'IBICU01 %08d %08d\n' \"\$metadata_bytes\" \"\$body_bytes\"
+  cat \"\$ICU_CAPTURE_METADATA_PATH\"
+  cat \"\$ICU_CAPTURE_BODY_PATH\""
+
+  # Staged packet never enters Arena. App stdout cannot be used as metadata;
+  # it is discarded by the remote command. A failed rish exits before publish.
+  local_packet_directory=$(mktemp -d "$icu_output.packet.XXXXXXXX") || return 1
+  local_packet="$local_packet_directory/packet"
+  if ! (umask 077; ulimit -f 8192; ib_shizuku_run_bounded 30 "$command_text" > "$local_packet"); then
+    rm -rf "$local_packet_directory"
+    return 1
+  fi
+  packet_header=$(head -c 26 "$local_packet") || {
+    rm -rf "$local_packet_directory"
+    return 1
+  }
+  case "$packet_header" in
+    'IBICU01 '????????' '????????) ;;
+    *) rm -rf "$local_packet_directory"; return 1 ;;
+  esac
+  packet_sizes=${packet_header#IBICU01 }
+  metadata_padded=${packet_sizes%% *}
+  body_padded=${packet_sizes#* }
+  case "$metadata_padded$body_padded" in *[!0123456789]*) rm -rf "$local_packet_directory"; return 1 ;; esac
+  metadata_bytes=$(printf '%s' "$metadata_padded" | sed 's/^0*//')
+  body_bytes=$(printf '%s' "$body_padded" | sed 's/^0*//')
+  test -n "$metadata_bytes" || metadata_bytes=0
+  test -n "$body_bytes" || body_bytes=0
+  if test "$metadata_bytes" -le 0 || test "$metadata_bytes" -gt 8192 ||
+     test "$body_bytes" -le 0 || test "$body_bytes" -gt 4194304 ||
+     test "$(wc -c < "$local_packet" | tr -d '[:space:]')" -ne "$((26 + metadata_bytes + body_bytes))"; then
+    rm -rf "$local_packet_directory"
+    return 1
+  fi
+
+  # Use byte offsets, not line splitting: ICU's body can contain arbitrary
+  # binary data, including NUL, CRLF and non-UTF-8 bytes.
+  tail -c +27 "$local_packet" | head -c "$metadata_bytes" > "$local_packet_directory/metadata" || {
+    rm -rf "$local_packet_directory"; return 1;
+  }
+  tail -c +"$((27 + metadata_bytes))" "$local_packet" > "$local_packet_directory/body" || {
+    rm -rf "$local_packet_directory"; return 1;
+  }
+  if test "$(wc -c < "$local_packet_directory/metadata" | tr -d '[:space:]')" -ne "$metadata_bytes" ||
+     test "$(wc -c < "$local_packet_directory/body" | tr -d '[:space:]')" -ne "$body_bytes"; then
+    rm -rf "$local_packet_directory"
+    return 1
+  fi
+  mv "$local_packet_directory/metadata" "$icu_metadata" || {
+    rm -rf "$local_packet_directory"; return 1;
+  }
+  mv "$local_packet_directory/body" "$icu_output" || {
+    rm -f "$icu_metadata"
+    rm -rf "$local_packet_directory"
+    return 1
+  }
+  rm -rf "$local_packet_directory"
+}

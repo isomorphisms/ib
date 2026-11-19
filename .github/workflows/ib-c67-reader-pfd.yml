@@ -1,0 +1,144 @@
+name: IB checked reader Binder PFD admission
+
+on:
+  pull_request:
+    paths:
+      - 'native/android/ib_reader_pfd.c'
+      - 'native/android/ib_reader_pfd.h'
+      - 'native/android/ib_arena_pfd_provider.c'
+      - 'native/android/ib_arena_pfd_provider.h'
+      - 'native/android/ib_arena_source_owner.c'
+      - 'native/android/ib_arena_source_owner.h'
+      - 'native/android/ib_reader_host_assembly.c'
+      - 'native/android/ib_reader_host_assembly.h'
+      - 'tests/test_android_arena_source_owner.c'
+      - 'tests/test_android_arena_source_owner.sh'
+      - 'tests/test_android_arena_source_owner_synthetic.sh'
+      - 'tests/test_android_reader_pfd.c'
+      - '.github/workflows/ib-c67-reader-pfd.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  pfd-host-fast:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout candidate source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Check out pinned independent AI-CI admitted-source verifier
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: isomorphisms/ai-ci
+          ref: 634626a14834e14b776616440e0a9071708f81b7
+          path: .deps/ai-ci
+          persist-credentials: false
+      - name: Compile native receiver and fake-boundary source owner
+        run: |
+          set -eu
+          test "$(git -C .deps/ai-ci rev-parse HEAD)" = 634626a14834e14b776616440e0a9071708f81b7
+          sh .deps/ai-ci/ib-source/self-test.sh > build-source-self-test.txt
+          grep -F 'PASS: independent IB v2 oracle' build-source-self-test.txt
+          export IB_AICI_SOURCE_VERIFY="$GITHUB_WORKSPACE/.deps/ai-ci/ib-source/verify.sh"
+          mkdir -p build/c67-pfd/fast
+          cc -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror -pthread \
+            native/android/ib_reader_pfd.c native/android/ib_arena_source_owner.c \
+            tests/test_android_arena_source_owner.c \
+            -o build/c67-pfd/fast/test-arena-pfd
+          env IB_TEST_VERIFIED_ARENA_PIPE="$GITHUB_WORKSPACE/build/c67-pfd/fast/test-arena-pfd" \
+            sh tests/test_android_arena_source_owner_synthetic.sh \
+            | tee build/c67-pfd/fast/receipt.txt
+          grep -F 'fixture' build/c67-pfd/fast/receipt.txt | grep -F 'synthetic-pointer-not-canonical-appendfat'
+          sha256sum build/c67-pfd/fast/test-arena-pfd > build/c67-pfd/fast/sha256.txt
+
+  pfd-source-admission:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout pinned PR source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Check out pinned independent AI-CI admitted-source verifier
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: isomorphisms/ai-ci
+          ref: 634626a14834e14b776616440e0a9071708f81b7
+          path: .deps/ai-ci
+          persist-credentials: false
+      - name: Checkout immutable canonical appendfat Arena
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: isomorphisms/sd-card-append-fat
+          ref: 05a0cb7246c5a9f46abfbe92925812e7b607f454
+          path: .deps/appendfat
+          persist-credentials: false
+      - name: Verify canonical Arena source pin
+        run: |
+          test "$(git -C .deps/appendfat rev-parse HEAD)" = 05a0cb7246c5a9f46abfbe92925812e7b607f454
+      - name: Host C11 two-process descriptor tests
+        run: |
+          set -eu
+          mkdir -p build/c67-pfd/host
+          cc -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror \
+            native/android/ib_reader_pfd.c tests/test_android_reader_pfd.c \
+            -o build/c67-pfd/host/test-reader-pfd
+          ./build/c67-pfd/host/test-reader-pfd | tee build/c67-pfd/host/receipt.txt
+          grep -F 'NOT_RUN: Android Binder service' build/c67-pfd/host/receipt.txt
+          sha256sum build/c67-pfd/host/test-reader-pfd \
+            > build/c67-pfd/host/sha256.txt
+      - id: ick
+        uses: isomorphisms/ai-ci/ick-host@015cc7901ae0b3ad262b476f24e129b53c56db95
+      - name: Read and serve actual canonical Arena bytes as a scoped pipe
+        env:
+          ICK: ${{ steps.ick.outputs.compiler }}
+        run: |
+          set -eu
+          test -x "$ICK"
+          test "$(git -C .deps/ai-ci rev-parse HEAD)" = 634626a14834e14b776616440e0a9071708f81b7
+          export IB_AICI_SOURCE_VERIFY="$GITHUB_WORKSPACE/.deps/ai-ci/ib-source/verify.sh"
+          "$ICK" -fno-link-libatomic -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror \
+            .deps/appendfat/lib/appendfat_arena.c \
+            .deps/appendfat/tools/appendfat_arena.c -o build/c67-pfd/host/appendfat_arena
+          cc -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror \
+            native/android/ib_arena_slice.c -o build/c67-pfd/host/ib-arena-slice
+          cc -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror -pthread \
+            native/android/ib_reader_pfd.c native/android/ib_arena_source_owner.c \
+            tests/test_android_arena_source_owner.c \
+            -o build/c67-pfd/host/test-arena-pfd
+          env IB_APPEND_ARENA="$GITHUB_WORKSPACE/build/c67-pfd/host/appendfat_arena" \
+            IB_ARENA_SLICE="$GITHUB_WORKSPACE/build/c67-pfd/host/ib-arena-slice" \
+            IB_TEST_VERIFIED_ARENA_PIPE="$GITHUB_WORKSPACE/build/c67-pfd/host/test-arena-pfd" \
+            sh tests/test_android_arena_source_owner.sh \
+            | tee build/c67-pfd/host/arena-source-receipt.txt
+          grep -F 'checked_arena=actual_appends' build/c67-pfd/host/arena-source-receipt.txt
+          sha256sum build/c67-pfd/host/test-arena-pfd \
+            > build/c67-pfd/host/arena-test-sha256.txt
+      - name: Cross-build real Android libbinder_ndk PFD reader on both ABIs
+        run: |
+          set -eu
+          ndk_version=27.3.13750724
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "ndk;$ndk_version" >/dev/null
+          toolchain="$ANDROID_HOME/ndk/$ndk_version/toolchains/llvm/prebuilt/linux-x86_64/bin"
+          for entry in 'armeabi-v7a armv7a-linux-androideabi29 ARM' 'arm64-v8a aarch64-linux-android29 AArch64'; do
+            set -- $entry
+            abi=$1 target=$2 machine=$3
+            mkdir -p "build/c67-pfd/$abi"
+            "$toolchain/$target-clang" -std=c11 -O2 -Wall -Wextra \
+              -Wpedantic -Werror -fPIC -shared native/android/ib_reader_pfd.c \
+              native/android/ib_arena_pfd_provider.c \
+              native/android/ib_arena_source_owner.c \
+              native/android/ib_reader_host_assembly.c \
+              -pthread -lbinder_ndk -o "build/c67-pfd/$abi/libib_reader_pfd.so"
+            "$toolchain/llvm-readelf" -h "build/c67-pfd/$abi/libib_reader_pfd.so" \
+              > "build/c67-pfd/$abi/elf.txt"
+            grep -F "Machine:" "build/c67-pfd/$abi/elf.txt" | grep -F "$machine"
+            sha256sum "build/c67-pfd/$abi/libib_reader_pfd.so" \
+              > "build/c67-pfd/$abi/sha256.txt"
+            printf 'abi\t%s\nandroid_link\tlibbinder_ndk\nphysical_device\tNOT_RUN\nidric_screen\tNOT_CONNECTED\n' \
+              "$abi" > "build/c67-pfd/$abi/receipt.tsv"
+          done
+      - name: Publish ABI artifacts, not an APK
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: ib-c67-reader-pfd-native
+          path: build/c67-pfd/
+          if-no-files-found: error

@@ -1,4 +1,15 @@
-# Exact-text regression provisioning receipt
+# Exact-text regression provisioning record
+
+## Scoped source build
+
+The workflow pins ai-ci's `grease-fixtures` action at
+`e44ea1ade6a3130da35e751c65155c1b274c649c`. The action builds the partial native
+D Grease runtime from immutable sources through the owning Icky DMD recipe.
+The host process controls run with that executable and retain its build receipt.
+Managed-runtime eligibility and the inherited Chez bootstrap remain separate
+campaign obligations.
+
+## Historical provisioning investigation
 
 **BLOCKED_DURABLE_GREASE_PROVISIONING**, 2026-10-08. This is the remaining
 automatic process-injection regression prerequisite for SUN IB-Q01 and
