@@ -1,0 +1,21 @@
+#!/usr/bin/env grease
+# Process-boundary test double only; never Idriç/compiler acceptance.
+set -eu -o pipefail
+
+if (len(ARGV) !== 0) {
+  test "$1" = ExactTextSmoke.idric
+  test "$2" = -o
+  test "$3" = ib-exact-text
+  mkdir -p build/exec
+  cp "$[ENV.IB_TEST_FIXTURE]" build/exec/ib-exact-text
+  chmod +x build/exec/ib-exact-text
+  echo 'ExactTextSmoke compiled; executable written'
+  exit "$[ENV.IB_TEST_COMPILER_EXIT]"
+}
+
+if (ENV.IB_TEST_OUTPUT === 'wrong') {
+  sed 's/absent-contains=False/absent-contains=True/' "$[ENV.IB_TEST_EXPECTED]"
+} else {
+  cat "$[ENV.IB_TEST_EXPECTED]"
+}
+exit "$[ENV.IB_TEST_PRODUCER_EXIT]"

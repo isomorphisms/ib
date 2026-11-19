@@ -1,0 +1,4 @@
+success	compile=0	oracle=0	expected=true
+wrong-output	compile=0	oracle=1	expected=true
+producer-exit-7	compile=0	oracle=0	expected=false
+compiler-exit-7	compile=0	oracle=0	expected=false

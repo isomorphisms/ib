@@ -8,13 +8,45 @@ on:
       - 'docs/exact-text-search.md'
       - '.github/workflows/exact-text.yml'
       - 'bin/ci_browser_foundation.grease'
+      - 'tests/exact-text-status.grease'
+      - 'tests/exact-text-status.md'
+      - 'tests/exact-text-status-provisioning.md'
+      - 'tests/fixtures/exact-text-producer.grease'
+      - 'tests/fixtures/exact-text.expected'
   workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
+  producer-status:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      - name: Build the pinned Grease fixture runtime
+        id: grease
+        uses: isomorphisms/ai-ci/grease-fixtures@e44ea1ade6a3130da35e751c65155c1b274c649c
+
+      - name: Check producer failures through the maintained workflow steps
+        env:
+          IB_TEST_GREASE: ${{ steps.grease.outputs.executable }}
+        run: |
+          export PATH="${IB_TEST_GREASE%/*}:$PATH"
+          exec "$IB_TEST_GREASE" tests/exact-text-status.grease
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always() && steps.grease.outputs.receipt != ''
+        with:
+          name: exact-text-grease-build
+          path: ${{ steps.grease.outputs.receipt }}
+          if-no-files-found: error
+
   oracle:
+    needs: producer-status
     runs-on: ubuntu-latest
     env:
       IDRIS2_CG: chez
@@ -42,13 +74,15 @@ jobs:
       - name: Compile exact text oracle
         run: |
           cd src
-          /tmp/idric/bin/idris2 ExactTextSmoke.idric -o ib-exact-text 2>&1 | tee /tmp/exact-text-compile.txt
+          /tmp/idric/bin/idris2 ExactTextSmoke.idric -o ib-exact-text > /tmp/exact-text-compile.txt 2>&1
+          cat /tmp/exact-text-compile.txt
           test -x ./build/exec/ib-exact-text
           ! grep -q '^Error:' /tmp/exact-text-compile.txt
 
       - name: Check exact positions and counts
         run: |
-          src/build/exec/ib-exact-text | tee /tmp/exact-text.txt
+          src/build/exec/ib-exact-text > /tmp/exact-text.txt
+          cat /tmp/exact-text.txt
           grep -Fx 'absent-contains=False' /tmp/exact-text.txt
           grep -Fx 'absent-positions=[]' /tmp/exact-text.txt
           grep -Fx 'absent-count=0' /tmp/exact-text.txt
