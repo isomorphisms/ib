@@ -1,0 +1,13 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="org.isomorphisms.ib.material3" android:versionCode="1" android:versionName="0.1.0">
+  <uses-sdk android:minSdkVersion="28" android:targetSdkVersion="34" />
+  <application android:label="IB" android:theme="@style/Theme.IB.Material3"
+      android:allowBackup="false" android:hasCode="true">
+    <activity android:name="Idric.Generated" android:exported="true">
+      <intent-filter>
+        <action android:name="android.intent.action.MAIN" />
+        <category android:name="android.intent.category.LAUNCHER" />
+      </intent-filter>
+    </activity>
+  </application>
+</manifest>
