@@ -78,6 +78,8 @@ cat > "$records_html" <<'EOF'
 <figure><img src="/assets/linear_regions.svg?scale=1&amp;name=a%20b" alt="Alt &amp; witness" data-note="one&#10;two">
 <figcaption> Caption &amp; label </figcaption></figure>
 <img src="/assets/activation_folding.svg" alt="">
+<figure><img src="/assets/linear_regions.svg?variant=minus">
+<figcaption> Tail &#8722; label </figcaption></figure>
 </body></html>
 EOF
 records_output="$work_directory/records"
@@ -85,7 +87,9 @@ download_html_images_in_order "$records_html" "$IB_ARXIV_HTML_BASE/2203.11355" "
 records_url="http://127.0.0.1:$port/assets/linear_regions.svg?scale=1&name=a%20b"
 grep -Fx "$(printf '1\t%s\tcaption_label.svg\tcaption\tCaption & label\tAlt & witness\timage_tags/image_tag_0001.html' "$records_url")" \
   "$records_output/images.tsv"
-test "$(wc -l < "$records_output/images.tsv")" -eq 2
+grep -Fx "$(printf '3\thttp://127.0.0.1:%s/assets/linear_regions.svg?variant=minus\ttail_label.svg\tcaption\tTail − label\t\timage_tags/image_tag_0003.html' "$port")" \
+  "$records_output/images.tsv"
+test "$(wc -l < "$records_output/images.tsv")" -eq 3
 grep -F 'name=a%20b"' "$records_output/image_tags/image_tag_0001.html"
 grep -F 'data-note="one&#10;two"' "$records_output/image_tags/image_tag_0001.html"
 grep -F 'src="/assets/activation_folding.svg"' "$records_output/image_tags/image_tag_0002.html"
@@ -98,7 +102,7 @@ then
   exit 1
 fi
 grep -Fx 'image source contains a tab or line break' "$work_directory/malformed-record.err"
-test "$(wc -l < "$records_output/images.tsv")" -eq 2
+test "$(wc -l < "$records_output/images.tsv")" -eq 3
 test -z "$(find "$records_output" -name '.html-records.*' -print)"
 
 pdf_output="$work_directory/pdf"

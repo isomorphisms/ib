@@ -265,14 +265,16 @@ caption_without_figure_label() {
 }
 
 conceptual_name_slug() {
-  text=$1
-  if command -v iconv >/dev/null 2>&1; then
-    ascii=$(printf '%s\n' "$text" | iconv -c -t ASCII//TRANSLIT 2>/dev/null || printf '%s\n' "$text")
-  else
-    ascii=$text
+  label=$1
+  # iconv can emit a translation before returning an error. Only use it on success.
+  if command -v iconv >/dev/null 2>&1 &&
+     transliterated=$(printf '%s\n' "$label" | iconv -c -f UTF-8 -t ASCII//TRANSLIT 2>/dev/null)
+  then
+    label=$transliterated
   fi
 
-  printf '%s\n' "$ascii" |
+  printf '%s' "$label" |
+    tr '\n' ' ' |
     awk '{ for (i = 1; i <= NF && i <= 20; i++) printf "%s%s", (i == 1 ? "" : " "), $i; printf "\n" }' |
     tr '[:upper:]' '[:lower:]' |
     sed -E 's/[^a-z0-9]+/_/g; s/^_+//; s/_+$//; s/_+/_/g' |
