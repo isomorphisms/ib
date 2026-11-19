@@ -1,0 +1,75 @@
+module IB.ExactSurface
+
+-- Browser-owned typed policy for the first verified mathematical-paper slice.
+-- Parsing is performed by the exact pinned SURFER native source, not by a
+-- guessed text normalization or a substituted picture.
+
+%default total
+
+public export
+choice equation_domain one_of
+  real_zero_set
+  complex_zero_set
+  unspecified_domain
+
+public export
+choice equation_chart one_of
+  affine_w_equals_one
+  unspecified_chart
+  unsupported_chart
+
+public export
+choice polynomial_proof one_of
+  signed_quartic_terms_confirmed
+  changed_or_unsupported_terms
+
+public export
+choice mathematical_renderer one_of
+  surfer_real_implicit_surface
+  no_matching_renderer
+
+public export
+renderer_for :
+  equation_domain → equation_chart → polynomial_proof → mathematical_renderer
+renderer_for real_zero_set affine_w_equals_one signed_quartic_terms_confirmed =
+  surfer_real_implicit_surface
+renderer_for _ _ _ = no_matching_renderer
+
+public export
+renderer_text : mathematical_renderer → String
+renderer_text surfer_real_implicit_surface = "surfer-real-implicit"
+renderer_text no_matching_renderer = "unsupported"
+
+-- The two outputs below are independent of parser and renderer selection.
+-- No Android open-with-equation restore proof exists at SURFER PR #33.
+-- No finished still/movie or physical-device witness is in this slice.
+public export
+media_status : mathematical_renderer → String
+media_status _ = "NOT_VERIFIED"
+
+public export
+interactive_status : mathematical_renderer → String
+interactive_status _ = "BLOCKED_NO_EXACT_RESTORE"
+
+public export
+quartic_signature : String
+quartic_signature = "+1:4,0,0;-1:1,3,0;-1:0,0,4;+1:0,0,1"
+
+public export
+proof_from_signature : String → polynomial_proof
+proof_from_signature value =
+  if value == quartic_signature
+    then signed_quartic_terms_confirmed
+    else changed_or_unsupported_terms
+
+public export
+domain_from_text : String → equation_domain
+domain_from_text "real" = real_zero_set
+domain_from_text "complex" = complex_zero_set
+domain_from_text _ = unspecified_domain
+
+public export
+chart_from_text : String → equation_chart
+chart_from_text "W=1" = affine_w_equals_one
+chart_from_text "" = unspecified_chart
+chart_from_text _ = unsupported_chart
