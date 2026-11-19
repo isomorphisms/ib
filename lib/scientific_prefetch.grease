@@ -9,12 +9,12 @@ prefetch_html_images_to_reading() (
   image_tags_directory="$output_directory/image_tags"
   manifest_path="$output_directory/images.tsv"
   unresolved_path="$output_directory/unresolved_images.tsv"
-  mkdir -p "$images_directory" "$image_tags_directory"
+  mkdir -p "$images_directory" "$image_tags_directory" || return 1
   records_dir=$(mktemp -d "$output_directory/.html-records.XXXXXX") || return 1
   trap 'rm -rf -- "$records_dir"' EXIT
   html_image_records "$html_path" "$records_dir" || return 1
-  : > "$manifest_path"
-  : > "$unresolved_path"
+  : > "$manifest_path" || return 1
+  : > "$unresolved_path" || return 1
 
   order=0
   separator=$(printf '\037')
@@ -23,7 +23,7 @@ prefetch_html_images_to_reading() (
     order=$((order + 1))
 
     image_tag_file_name=$(printf 'image_tag_%04d.html' "$order")
-    printf '%s\n' "$image_tag" > "$image_tags_directory/$image_tag_file_name"
+    printf '%s\n' "$image_tag" > "$image_tags_directory/$image_tag_file_name" || return 1
 
     case "$image_source" in
       data:image/*)
@@ -70,7 +70,7 @@ prefetch_html_images_to_reading() (
       stem=$(conceptual_name_slug "$conceptual_text")
       if test -n "$stem"; then
         final_file_name=$(unique_image_file_name "$images_directory" "$stem" "$extension")
-        mv "$temporary_path" "$images_directory/$final_file_name"
+        mv "$temporary_path" "$images_directory/$final_file_name" || return 1
       else
         naming_source=temporary
         final_file_name=$temporary_file_name
@@ -79,11 +79,11 @@ prefetch_html_images_to_reading() (
 
     printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
       "$order" "$image_url" "$final_file_name" "$naming_source" "$caption_text" "$alt_text" \
-      "image_tags/$image_tag_file_name" >> "$manifest_path"
+      "image_tags/$image_tag_file_name" >> "$manifest_path" || return 1
 
     if test "$naming_source" = temporary; then
       printf '%s\t%s\t%s\t%s\n' \
-        "$order" "$final_file_name" "$caption_text" "$alt_text" >> "$unresolved_path"
+        "$order" "$final_file_name" "$caption_text" "$alt_text" >> "$unresolved_path" || return 1
     fi
   done < "$records_dir/fields.tsv" 3< "$records_dir/tags"
 )
@@ -104,13 +104,13 @@ prefetch_arxiv_to_reading() {
   then
     printf 'html\t%s\t%s\t%s\n' \
       "$identifier" "$html_source_url" "$document_path" > "$output_directory/source.tsv"
-    prefetch_html_images_to_reading "$document_path" "$html_source_url" "$output_directory"
-    apply_language_model_image_names "$document_path" "$output_directory"
+    prefetch_html_images_to_reading "$document_path" "$html_source_url" "$output_directory" || return 1
+    apply_language_model_image_names "$document_path" "$output_directory" || return 1
     printf '%s\n' "$output_directory"
     return 0
   fi
 
   rm -f "$document_path"
-  harvest_arxiv_images "$input" "$output_directory"
+  harvest_arxiv_images "$input" "$output_directory" || return 1
   printf '%s\n' "$output_directory"
 }

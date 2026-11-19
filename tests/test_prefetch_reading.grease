@@ -53,6 +53,15 @@ materialized=$(ib_prefetch_materialize_reading "$html_url" 'generic/prefetched-d
 test "$materialized" = "$IB_READING_DIR/generic/prefetched-document.html"
 cmp "$materialized" "$reading_directory/document.html"
 
+if prefetch_arxiv_to_reading fixture-invalid-image-source > "$work_directory/invalid-reading.out" \
+    2> "$work_directory/invalid-reading.err"
+then
+  printf '%s\n' 'reading prefetch accepted a malformed image source' >&2
+  exit 1
+fi
+grep -Fx 'image source contains a tab or line break' "$work_directory/invalid-reading.err"
+test ! -s "$work_directory/invalid-reading.out"
+
 if ib_prefetch_reading_destination '../escape' >/dev/null 2>&1; then
   printf 'unsafe reading path was accepted\n' >&2
   exit 1

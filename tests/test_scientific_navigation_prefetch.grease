@@ -100,6 +100,18 @@ grep -F 'Linear regions along a one dimensional input' "$cache_directory/images.
 grep -Fx "navigation_committed${tab}transient_cache${tab}$navigation_url" "$cache_directory/trigger.tsv" >/dev/null
 test ! -e "$IB_READING_DIR"
 
+invalid_url='https://arxiv.org/abs/fixture-invalid-image-source'
+invalid_cache_directory=$(scientific_navigation_cache_directory "$invalid_url")
+if sh "$repository_root/bin/navigation_committed.grease" --scientific-prefetch-worker "$invalid_url" \
+    2> "$work_directory/invalid-navigation.err"
+then
+  printf '%s\n' 'navigation worker accepted a malformed image source' >&2
+  exit 1
+fi
+grep -Fx 'image source contains a tab or line break' "$work_directory/invalid-navigation.err"
+test ! -e "$invalid_cache_directory"
+test -z "$(find "$(dirname "$invalid_cache_directory")" -name '*.partial.*' -print)"
+
 rm -rf "$IB_PREFETCH_DIR"
 test ! -e "$cache_directory"
 test ! -e "$IB_READING_DIR"
