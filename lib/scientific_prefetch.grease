@@ -8,17 +8,18 @@ prefetch_html_images_to_reading() {
   images_directory="$output_directory/images"
   image_tags_directory="$output_directory/image_tags"
   rows_path="$output_directory/.html_prefetch_rows.tsv"
+  tags_path="$output_directory/.html_prefetch_tags"
   manifest_path="$output_directory/images.tsv"
   unresolved_path="$output_directory/unresolved_images.tsv"
   mkdir -p "$images_directory" "$image_tags_directory"
+  html_image_records "$html_path" "$rows_path" "$tags_path" || return 1
   : > "$manifest_path"
   : > "$unresolved_path"
 
-  html_image_rows "$html_path" > "$rows_path"
   order=0
   separator=$(printf '\037')
-  while IFS="$separator" read -r image_source caption_text alt_text image_tag; do
-    test -n "$image_source" || continue
+  while IFS="$separator" read -r image_source caption_text alt_text; do
+    IFS= read -r image_tag <&3 || return 1
     order=$((order + 1))
 
     image_tag_file_name=$(printf 'image_tag_%04d.html' "$order")
@@ -84,8 +85,8 @@ prefetch_html_images_to_reading() {
       printf '%s\t%s\t%s\t%s\n' \
         "$order" "$final_file_name" "$caption_text" "$alt_text" >> "$unresolved_path"
     fi
-  done < "$rows_path"
-  rm -f "$rows_path"
+  done < "$rows_path" 3< "$tags_path"
+  rm -f "$rows_path" "$tags_path"
 }
 
 prefetch_arxiv_to_reading() {

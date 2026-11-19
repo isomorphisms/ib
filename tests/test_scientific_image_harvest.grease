@@ -71,6 +71,35 @@ test ! -e "$html_output/images/temporary_image_0003.png"
 grep -F 'language_model' "$html_output/images.tsv" >/dev/null
 test ! -s "$html_output/unresolved_images.tsv"
 
+records_html="$work_directory/records.html"
+cat > "$records_html" <<'EOF'
+<html><body>
+<img src="" alt="Skipped">
+<figure><img src="/assets/linear_regions.svg?scale=1&amp;name=a%20b" alt="Alt &amp; witness" data-note="one&#10;two">
+<figcaption> Caption &amp; label </figcaption></figure>
+<img src="/assets/activation_folding.svg" alt="">
+</body></html>
+EOF
+records_output="$work_directory/records"
+download_html_images_in_order "$records_html" "$IB_ARXIV_HTML_BASE/2203.11355" "$records_output"
+records_url="http://127.0.0.1:$port/assets/linear_regions.svg?scale=1&name=a%20b"
+grep -Fx "$(printf '1\t%s\tcaption_label.svg\tcaption\tCaption & label\tAlt & witness\timage_tags/image_tag_0001.html' "$records_url")" \
+  "$records_output/images.tsv"
+test "$(wc -l < "$records_output/images.tsv")" -eq 2
+grep -F 'name=a%20b"' "$records_output/image_tags/image_tag_0001.html"
+grep -F 'data-note="one&#10;two"' "$records_output/image_tags/image_tag_0001.html"
+grep -F 'src="/assets/activation_folding.svg"' "$records_output/image_tags/image_tag_0002.html"
+
+printf '%s\n' '<html><img src="/assets/linear&#9;regions.svg"></html>' > "$records_html"
+if download_html_images_in_order "$records_html" "$IB_ARXIV_HTML_BASE/2203.11355" "$records_output" \
+    2> "$work_directory/malformed-record.err"
+then
+  printf '%s\n' 'accepted a tab inside an image source' >&2
+  exit 1
+fi
+grep -Fx 'image source contains a tab or line break' "$work_directory/malformed-record.err"
+test "$(wc -l < "$records_output/images.tsv")" -eq 2
+
 pdf_output="$work_directory/pdf"
 sh "$repository_root/bin/harvest_arxiv_images.grease" \
   'https://arxiv.org/abs/1901.09021' "$pdf_output"

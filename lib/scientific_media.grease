@@ -137,18 +137,43 @@ source_document_from_harvest_directory() {
   awk -F '\t' 'NR == 1 { print $4 }' "$1/source.tsv"
 }
 
-html_image_rows() {
-  html_path=$1
+html_image_records() (
+  source_html=$1
+  fields_file=$2
+  tags_file=$3
   ib_media_require_command xmlstarlet || return 1
+  recovered_xml=$(mktemp) || return 1
+  trap 'rm -f "$recovered_xml"' EXIT
+  xmlstarlet fo --html --recover --dropdtd "$source_html" > "$recovered_xml" 2>/dev/null || return 1
+
+  selection='//*[local-name()="img"][@src != ""]'
+  controls=$(printf '\t\n\r')
+  counts=$(xmlstarlet sel -T -t -v "count($selection)" -o : \
+    -v "count($selection[translate(@src, '$controls', '') != @src])" "$recovered_xml") || return 1
+  image_count=${counts%:*}
+  if test "${counts#*:}" != 0; then
+    ib_media_fail 'image source contains a tab or line break'
+    return 1
+  fi
+  if test "$image_count" -eq 0; then
+    : > "$fields_file" && : > "$tags_file"
+    return
+  fi
+
+  # Text serialization keeps the unit separators and decoded field values.
+  # A separate XML serialization preserves each complete recovered tag.
   separator=$(printf '\037')
-  xmlstarlet fo --html --recover --dropdtd "$html_path" 2>/dev/null |\
-    xmlstarlet sel -t \
-      -m '//*[local-name()="img"][@src]' \
-      -v '@src' -o "$separator" \
-      -v 'normalize-space(string((ancestor::*[local-name()="figure"][1]//*[local-name()="figcaption"])[1]))' -o "$separator" \
-      -v 'normalize-space(@alt)' -o "$separator" \
-      -c '.' -n -
-}
+  xmlstarlet sel -T -t -m "$selection" \
+    -v '@src' -o "$separator" \
+    -v 'normalize-space(string((ancestor::*[local-name()="figure"][1]//*[local-name()="figcaption"])[1]))' -o "$separator" \
+    -v 'normalize-space(@alt)' -n "$recovered_xml" > "$fields_file" || return 1
+  xmlstarlet sel -t -m "$selection" -c '.' -n "$recovered_xml" > "$tags_file" || return 1
+  if test "$(wc -l < "$fields_file")" -ne "$image_count" ||
+     test "$(wc -l < "$tags_file")" -ne "$image_count"
+  then
+    ib_media_fail 'image metadata and tag counts differ'
+  fi
+)
 
 resolve_image_url() {
   document_url=$1
@@ -288,17 +313,18 @@ download_html_images_in_order() {
   images_directory="$output_directory/images"
   image_tags_directory="$output_directory/image_tags"
   rows_path="$output_directory/.html_image_rows.tsv"
+  tags_path="$output_directory/.html_image_tags"
   manifest_path="$output_directory/images.tsv"
   unresolved_path="$output_directory/unresolved_images.tsv"
   mkdir -p "$images_directory" "$image_tags_directory"
+  html_image_records "$html_path" "$rows_path" "$tags_path" || return 1
   : > "$manifest_path"
   : > "$unresolved_path"
 
-  html_image_rows "$html_path" > "$rows_path"
   order=0
   separator=$(printf '\037')
-  while IFS="$separator" read -r image_source caption_text alt_text image_tag; do
-    test -n "$image_source" || continue
+  while IFS="$separator" read -r image_source caption_text alt_text; do
+    IFS= read -r image_tag <&3 || return 1
     order=$(expr "$order" + 1)
 
     image_tag_file_name=$(printf 'image_tag_%04d.html' "$order")
@@ -364,8 +390,8 @@ download_html_images_in_order() {
       printf '%s\t%s\t%s\t%s\n' \
         "$order" "$final_file_name" "$caption_text" "$alt_text" >> "$unresolved_path"
     fi
-  done < "$rows_path"
-  rm -f "$rows_path"
+  done < "$rows_path" 3< "$tags_path"
+  rm -f "$rows_path" "$tags_path"
 }
 
 record_pdf_images_in_order() {
