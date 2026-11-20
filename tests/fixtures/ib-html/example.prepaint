@@ -1,0 +1,9 @@
+ib-prepaint	1
+revision	0	complete
+requested-url	https://example.com/
+resolved-url	https://example.com/
+title	Example Domain
+heading	1	Example Domain
+text	This domain is for use in illustrative examples.
+link	Learn more	https://www.iana.org/domains/example
+end

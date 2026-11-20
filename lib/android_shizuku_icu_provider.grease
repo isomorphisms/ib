@@ -50,6 +50,24 @@ ib_shizuku_icu_get() {
   test ! -e "$icu_output" && test ! -L "$icu_output" || { printf 'reused ICU body path\n' >&2; return 2; }
   test ! -e "$icu_metadata" && test ! -L "$icu_metadata" || { printf 'reused ICU metadata path\n' >&2; return 2; }
 
+  ib_shizuku_icu_prepare_capture "$icu_url" || return $?
+
+  # Staged packet never enters Arena. App stdout cannot be used as metadata;
+  # it is discarded by the remote command. A failed rish exits before publish.
+  local_packet_directory=$(mktemp -d "$icu_output.packet.XXXXXXXX") || return 1
+  local_packet="$local_packet_directory/packet"
+  if ! (umask 077; ulimit -f 8192; ib_shizuku_run_bounded 30 "$command_text" > "$local_packet"); then
+    rm -rf "$local_packet_directory"
+    return 1
+  fi
+  ib_shizuku_icu_split_capture
+}
+
+# Shared paired-capture command. Private Binder ingress forwards this exact
+# frame; the existing file adapter splits the same frame into two outputs.
+ib_shizuku_icu_prepare_capture() {
+  test "$#" -eq 1 || return 2
+  ib_shizuku_icu_prepare "$1" || return $?
   # Validate all interpolated atoms before assembling a shell command. The
   # response URL is the only untrusted interpolation and cannot contain '.
   command_text="set -eu
@@ -62,7 +80,7 @@ ib_shizuku_icu_get() {
   export ICU_CAPTURE_BODY_PATH=\"\$icu_work/body\"
   export ICU_CAPTURE_METADATA_PATH=\"\$icu_work/metadata\"
   export CLASSPATH='$icu_dex'
-  app_process -Dicu.library='$icu_so' /system/bin Idric.Generated get '$icu_url' >/dev/null
+  app_process -Dicu.library='$icu_so' /system/bin Idric.Generated --http1.1 get '$icu_url' >/dev/null
   test -f \"\$ICU_CAPTURE_BODY_PATH\" && test ! -L \"\$ICU_CAPTURE_BODY_PATH\" || exit 80
   test -f \"\$ICU_CAPTURE_METADATA_PATH\" && test ! -L \"\$ICU_CAPTURE_METADATA_PATH\" || exit 80
   metadata_bytes=\$(wc -c < \"\$ICU_CAPTURE_METADATA_PATH\" | tr -d '[:space:]')
@@ -73,14 +91,9 @@ ib_shizuku_icu_get() {
   cat \"\$ICU_CAPTURE_METADATA_PATH\"
   cat \"\$ICU_CAPTURE_BODY_PATH\""
 
-  # Staged packet never enters Arena. App stdout cannot be used as metadata;
-  # it is discarded by the remote command. A failed rish exits before publish.
-  local_packet_directory=$(mktemp -d "$icu_output.packet.XXXXXXXX") || return 1
-  local_packet="$local_packet_directory/packet"
-  if ! (umask 077; ulimit -f 8192; ib_shizuku_run_bounded 30 "$command_text" > "$local_packet"); then
-    rm -rf "$local_packet_directory"
-    return 1
-  fi
+}
+
+ib_shizuku_icu_split_capture() {
   packet_header=$(head -c 26 "$local_packet") || {
     rm -rf "$local_packet_directory"
     return 1
@@ -126,4 +139,41 @@ ib_shizuku_icu_get() {
     return 1
   }
   rm -rf "$local_packet_directory"
+}
+
+ib_shizuku_icu_frame() {
+  test "$#" -eq 1 || return 2
+  ib_shizuku_icu_prepare_capture "$1" || return $?
+  authority=$(ib_shizuku_authority) || return 1
+  case "$authority" in shell|root) ;; *) return 1 ;; esac
+  (umask 077; ib_shizuku_run_bounded 30 "$command_text")
+}
+
+# Body-only ingress is a separate capability from the paired metadata capture
+# above. Its publisher emits v1/NO, which the admitted HTML reader must refuse.
+ib_shizuku_icu_prepare() {
+  test "$#" -eq 1 || return 2
+  icu_url=$1
+  icu_dex=${IB_C67_ICU_DEX:-}
+  icu_so=${IB_C67_ICU_SO:-}
+  icu_dex_sha=${IB_C67_ICU_DEX_SHA256:-}
+  icu_so_sha=${IB_C67_ICU_SO_SHA256:-}
+  ib_shizuku_icu_url "$icu_url" || return 2
+  ib_shizuku_icu_atom_path "$icu_dex" || return 2
+  ib_shizuku_icu_atom_path "$icu_so" || return 2
+  ib_shizuku_icu_sha256 "$icu_dex_sha" || return 2
+  ib_shizuku_icu_sha256 "$icu_so_sha" || return 2
+  command_text="set -eu
+  test \"\$(sha256sum '$icu_dex' | cut -d ' ' -f 1)\" = '$icu_dex_sha' || exit 78
+  test \"\$(sha256sum '$icu_so' | cut -d ' ' -f 1)\" = '$icu_so_sha' || exit 78
+  export CLASSPATH='$icu_dex'
+  exec app_process -Dicu.library='$icu_so' /system/bin Idric.Generated --http1.1 get '$icu_url'"
+}
+
+ib_shizuku_icu_stream() {
+  test "$#" -eq 1 || return 2
+  ib_shizuku_icu_prepare "$1" || return $?
+  authority=$(ib_shizuku_authority) || return 1
+  case "$authority" in shell|root) ;; *) return 1 ;; esac
+  (umask 077; ib_shizuku_run_bounded 30 "$command_text")
 }

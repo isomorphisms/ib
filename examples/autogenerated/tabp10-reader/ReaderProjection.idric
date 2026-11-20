@@ -1,0 +1,77 @@
+module ReaderProjection
+
+import Data.Text
+import Data.List1
+import IB.HtmlPrepaint
+import IB.Reader.Document
+import IB.Prepaint.Reflow
+import IB.Reflow
+import IB.Reflow.SourceBreaks
+import IB.Reader.Selection
+import IB.SourceDecoding
+import IB.Strand
+import System
+
+-- Every observation comes from the trusted committed-source owner. Neither
+-- receipt-shaped Intent text nor document content may supply this boundary.
+read_evidence : Text → Either Text HtmlEvidence
+read_evidence = read_committed_evidence
+
+line_coordinates : SourceLine → Text
+line_coordinates line =
+  show line.first_codepoint ++ ":" ++ show line.after_last_codepoint ++ ";"
+
+block_coordinates : BlockReflow → Text
+block_coordinates block =
+  show block.block_position ++ "=" ++ concat (map line_coordinates block.text_lines) ++ "\n"
+
+%export "dex:project_committed_html"
+project_committed_html : Text → Text → Int32 → Int32 → Text
+project_committed_html fields html width algorithm =
+  if width <= 0 then "refused:invalid-viewport-width"
+  else if algorithm < 0 || algorithm > 1 then "refused:unsupported-reflow"
+  else case read_evidence fields of
+    Left reason ⇒ "refused:" ++ reason
+    Right evidence ⇒
+      case prepare_committed_document_advances evidence html
+             (Requirements (cast width) (if algorithm ≟ 0 then promptly else evenly))
+             "decoded-codepoint-advances-v1" (\_ ⇒ 1) of
+        Left reason ⇒ "refused:" ++ reason
+        Right prepared ⇒ prepared.source_result.wire ++
+          "\nsource-codepoint-ranges\n" ++
+          concat (map block_coordinates prepared.revision_layout.block_plans)
+
+-- Observation of the maintained admission/decoder/selection result. No
+-- fixture-local decoder or replacement source evidence is constructed.
+%export "dex:project_committed_representation"
+project_committed_representation : Text → Text → Text
+project_committed_representation fields carrier =
+  case read_evidence fields of
+    Left reason ⇒ "refused:" ++ reason
+    Right evidence ⇒
+      case prepare_committed_document_advances evidence carrier (Requirements 128 promptly)
+          "decoded-codepoint-advances-v1" (\_ ⇒ 1) of
+        Left reason ⇒ "refused:" ++ reason
+        Right prepared ⇒
+          case selection_projection prepared.revision_layout of
+            Left reason ⇒ "refused:" ++ reason
+            Right projection ⇒
+              let original = prepared.source_result.evidence in
+              let decoding = case prepared.source_result.decoding of
+                    Nothing ⇒ "original-utf-8"
+                    Just decoded ⇒ decoder_identity ++ ":" ++ decoded.selected_encoding in
+              original.source_key ++ "\n" ++ original.source_generation ++ "\n" ++
+              original.claimed_sha256 ++ "\n" ++ evidence.charset ++ "\n" ++
+              (if evidence.utf8_decoded then "original-valid-utf8" else "original-invalid-utf8") ++ "\n" ++
+              decoding ++ "\n" ++
+              nonempty_text_value prepared.source_result.strand.source.reference ++ "\n" ++
+              projected_source projection
+
+main : IO ()
+main = do
+  arguments ← getArgs
+  case arguments of
+    [_, fields, carrier] ⇒ putStrLn (project_committed_representation fields carrier)
+    _ ⇒ do
+      putStrLn "usage: committed-representation OBSERVATIONS ORIGINAL_OCTET_CARRIER"
+      exitFailure

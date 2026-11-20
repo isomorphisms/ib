@@ -1,0 +1,45 @@
+#!/usr/bin/env grease
+# Reference-source process checks. This is not ART or Android acceptance.
+if (len(ARGV) !== 2) { echo 'usage: grease verify-command.grease HOST_COMMAND FRESH_EVIDENCE' >&2; exit 2 }
+var command = ARGV[0]
+var evidence = ARGV[1]
+for path in "$command" "$evidence" {
+  if (path[0] !== '/') { echo 'FAIL absolute path required' >&2; exit 2 }
+}
+test -x "$command"
+if test -e "$evidence" { echo 'FAIL evidence already exists' >&2; exit 1 }
+mkdir -p "$evidence"
+printf '%s\n' 'REFUSED expected exactly one HTML source argument' > "$evidence/refusal.expected"
+
+try { "$command" > "$evidence/zero.actual" 2> "$evidence/zero.stderr" }
+var zero_status = _error.code
+printf '%s\n' "$zero_status" > "$evidence/zero.exit"
+test "$zero_status" -eq 1
+cmp "$evidence/refusal.expected" "$evidence/zero.actual"
+test ! -s "$evidence/zero.stderr"
+
+try { "$command" '<html><head><title>One document</title></head><body>ignored</body></html>' > "$evidence/one.actual" 2> "$evidence/one.stderr" }
+var one_status = _error.code
+printf '%s\n' "$one_status" > "$evidence/one.exit"
+test "$one_status" -eq 0
+printf '%s\n' 'One document' > "$evidence/one.expected"
+cmp "$evidence/one.expected" "$evidence/one.actual"
+test ! -s "$evidence/one.stderr"
+
+try { "$command" '<title>First</title>' '<title>Second</title>' > "$evidence/two.actual" 2> "$evidence/two.stderr" }
+var two_status = _error.code
+printf '%s\n' "$two_status" > "$evidence/two.exit"
+test "$two_status" -eq 1
+cmp "$evidence/refusal.expected" "$evidence/two.actual"
+test ! -s "$evidence/two.stderr"
+
+try { "$command" '<title>café 🦉</title>' > "$evidence/unicode.actual" 2> "$evidence/unicode.stderr" }
+var unicode_status = _error.code
+printf '%s\n' "$unicode_status" > "$evidence/unicode.exit"
+test "$unicode_status" -eq 0
+printf '%s\n' 'café 🦉' > "$evidence/unicode.expected"
+cmp "$evidence/unicode.expected" "$evidence/unicode.actual"
+test ! -s "$evidence/unicode.stderr"
+
+printf 'source_host_arity\tPASS\nzero\tREFUSED_EXIT_1\none\tPASS\ntwo\tREFUSED_EXIT_1\nunicode\tPASS\nDEX_execution\tNOT_RUN\nART\tNOT_RUN\nphysical_A1\tNOT_RUN\nphysical_C67\tNOT_RUN\n' > "$evidence/status.tsv"
+printf '\033[32mPASS\033[0m host command arity, refusal and exact Unicode title; ART NOT_RUN\n'

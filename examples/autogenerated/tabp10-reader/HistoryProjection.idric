@@ -1,0 +1,28 @@
+module HistoryProjection
+
+import Data.Text
+import IB.Reader.Navigation
+
+selected_text : Maybe BrowserHistory → Text
+selected_text Nothing = "unavailable"
+selected_text (Just history) = history_text history
+
+-- Primitive export only for independent ART observation of the maintained
+-- browser history. No source admission, network or alternative reader exists
+-- in this adapter.
+%export "dex:history_step"
+history_step : Text → Int32 → Text → Text → Text
+history_step input operation identity generation =
+  case read_history input of
+    Left reason ⇒ "refused:" ++ reason
+    Right history ⇒
+      if operation ≟ 0 then history_text history
+      else if operation ≟ 1 then case retained_source identity generation of
+        Left reason ⇒ "refused:" ++ reason
+        Right source ⇒ history_text (history_arrive source history)
+      else if operation ≟ 2 then selected_text (history_back history)
+      else if operation ≟ 3 then selected_text (history_forward history)
+      else "refused:Unknown history operation"
+
+main : IO ()
+main = pure ()

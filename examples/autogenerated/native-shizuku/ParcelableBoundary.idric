@@ -1,0 +1,309 @@
+module ParcelableBoundary
+
+import Backend.DEX.Encode
+import Backend.DEX.FrameworkClasses
+import Backend.DEX.IR
+import Data.Text
+import System
+
+%default covering
+
+object : Text → FrameworkValueType
+object = ReferenceValue . MkTypeReference
+
+container_name : Text
+container_name = "Lmoe/shizuku/api/BinderContainer;"
+
+native_method : Text → List FrameworkValueType → FrameworkValueType → MethodPlan
+native_method name arguments result =
+  MkBoundMethodPlan "Shizuku Parcelable JNI boundary" name (cast (length arguments))
+    arguments result 0 [] NativeInstanceMethod
+
+container_plan : Either Text FilePlan
+container_plan = do
+  base ← framework_class_plan
+    (Subclass container_name "Ljava/lang/Object;" Nothing []) []
+  let initialize = MkBoundMethodPlan "initialize Parcelable Creator" "initializeCreator"
+        0 [] VoidValue 0 [] NativeStaticMethod
+  let startup = MkBoundMethodPlan "load native Parcelable adapter" "<clinit>" 0 [] VoidValue 1
+        [ TextConstant (MkRegister 0) "ib_reader"
+        , InvokeMethod (Invoke InvokeStatic
+            (MkMethodReference (MkTypeReference "Ljava/lang/System;") "loadLibrary"
+              [ExistingValue TextValue] VoidValue) [MkRegister 0] Nothing)
+        , InvokeMethod (Invoke InvokeStatic
+            (MkMethodReference (MkTypeReference container_name) "initializeCreator" [] VoidValue) [] Nothing)
+        , ReturnVoid ] ClassInitializerMethod
+  Right ({ interfaces := [MkTypeReference "Landroid/os/Parcelable;"], fields :=
+    [ MkFieldPlan "binder" (object "Landroid/os/IBinder;") 1
+    , MkFieldPlan "CREATOR" (object "Landroid/os/Parcelable$Creator;") 9
+    ], methods := base.methods ++ [initialize, startup,
+      native_method "describeContents" [] (ExistingValue IntegerValue),
+      native_method "writeToParcel" [object "Landroid/os/Parcel;", ExistingValue IntegerValue] VoidValue]
+    } base)
+
+creator_plan : Either Text FilePlan
+creator_plan = do
+  base ← framework_class_plan
+    (Subclass "Lorg/isomorphisms/ib/BinderContainerCreator;" "Ljava/lang/Object;" Nothing [])
+    ["Landroid/os/Parcelable$Creator;"]
+  Right ({ methods := base.methods ++
+    [ native_method "createFromParcel" [object "Landroid/os/Parcel;"] (object "Ljava/lang/Object;")
+    , native_method "newArray" [ExistingValue IntegerValue] (object "[Ljava/lang/Object;")
+    ] } base)
+
+provider_plan : Either Text FilePlan
+provider_plan = do
+  base ← framework_class_plan
+    (Subclass "Lorg/isomorphisms/ib/ShizukuProvider;" "Landroid/content/ContentProvider;"
+      (Just "ib_reader")
+      [ Callback "onCreate" "Z" []
+      , Callback "call" "Landroid/os/Bundle;"
+          ["Ljava/lang/String;", "Ljava/lang/String;", "Landroid/os/Bundle;"]
+      , Callback "getType" "Ljava/lang/String;" ["Landroid/net/Uri;"]
+      , Callback "insert" "Landroid/net/Uri;" ["Landroid/net/Uri;", "Landroid/content/ContentValues;"]
+      ]) []
+  -- Array-bearing SDK methods use the writer's typed reference plans. They
+  -- do not add array operations to the checked source foreign-call grammar.
+  Right ({ methods := base.methods ++
+    [ native_method "query"
+        [object "Landroid/net/Uri;", object "[Ljava/lang/String;", ExistingValue TextValue,
+         object "[Ljava/lang/String;", ExistingValue TextValue] (object "Landroid/database/Cursor;")
+    , native_method "delete"
+        [object "Landroid/net/Uri;", ExistingValue TextValue, object "[Ljava/lang/String;"]
+        (ExistingValue IntegerValue)
+    , native_method "update"
+        [object "Landroid/net/Uri;", object "Landroid/content/ContentValues;",
+         ExistingValue TextValue, object "[Ljava/lang/String;"] (ExistingValue IntegerValue)
+    ] } base)
+
+application_plan : Either Text FilePlan
+application_plan = framework_class_plan
+  (Subclass "Lorg/isomorphisms/ib/ShizukuApplicationCallback;" "Landroid/os/Binder;"
+    (Just "ib_reader")
+    [Callback "onTransact" "Z" ["I", "Landroid/os/Parcel;", "Landroid/os/Parcel;", "I"]]) []
+
+death_plan : Either Text FilePlan
+death_plan = framework_class_plan
+  (Subclass "Lorg/isomorphisms/ib/ShizukuDeathRecipient;" "Ljava/lang/Object;"
+    (Just "ib_reader") [Callback "binderDied" "V" []]) ["Landroid/os/IBinder$DeathRecipient;"]
+
+client_plan : Either Text FilePlan
+client_plan = do
+  base ← framework_class_plan
+    (Subclass "Lorg/isomorphisms/ib/ShizukuClient;" "Ljava/lang/Object;"
+      (Just "ib_reader") []) []
+  Right ({ methods := base.methods ++
+    [ MkBoundMethodPlan "observe current SDK authority" "state" 0 []
+        (ExistingValue IntegerValue) 0 [] NativeStaticMethod
+    , MkBoundMethodPlan "request SDK permission" "requestPermission" 0 []
+        (ExistingValue IntegerValue) 0 [] NativeStaticMethod
+    ] } base)
+
+private_ingress_plan : Either Text FilePlan
+private_ingress_plan = do
+  base ← framework_class_plan
+    (Subclass "Lorg/isomorphisms/ib/PrivateIngress;" "Landroid/os/Binder;"
+      (Just "ib_reader")
+      [Callback "onTransact" "Z" ["I", "Landroid/os/Parcel;", "Landroid/os/Parcel;", "I"]]) []
+  Right ({ fields := [MkFieldPlan "storageAnchor" (object "Landroid/os/IBinder;") 2] } base)
+
+connection_plan : Either Text FilePlan
+connection_plan = framework_class_plan
+  (Subclass "Lorg/isomorphisms/ib/ShizukuWorkerConnection;" "Landroid/os/Binder;"
+    (Just "ib_reader")
+    [Callback "onTransact" "Z" ["I", "Landroid/os/Parcel;", "Landroid/os/Parcel;", "I"]]) []
+
+worker_plan : Either Text FilePlan
+worker_plan = do
+  base ← framework_class_plan
+    (Subclass "Lorg/isomorphisms/ib/ShizukuWorker;" "Landroid/os/Binder;"
+      (Just "ib_reader")
+      [ Callback "onTransact" "Z" ["I", "Landroid/os/Parcel;", "Landroid/os/Parcel;", "I"]
+      , Callback "binderDied" "V" []
+      ]) ["Landroid/os/IBinder$DeathRecipient;"]
+  let initialize = native_method "initialize" [object "Landroid/content/Context;"] VoidValue
+  let contextual = MkBoundMethodPlan "Shizuku user-service Context constructor" "<init>" 1
+        [object "Landroid/content/Context;"] VoidValue 2
+        [ InvokeMethod (Invoke InvokeDirect
+            (MkMethodReference (MkTypeReference "Landroid/os/Binder;") "<init>" [] VoidValue)
+            [MkRegister 0] Nothing)
+        , InvokeMethod (Invoke InvokeVirtual
+            (MkMethodReference (MkTypeReference "Lorg/isomorphisms/ib/ShizukuWorker;")
+              "initialize" [object "Landroid/content/Context;"] VoidValue)
+            [MkRegister 0, MkRegister 1] Nothing)
+        , ReturnVoid ] ConstructorMethod
+  Right ({ methods := base.methods ++ [initialize, contextual] } base)
+
+reader_bridge_plan : Either Text FilePlan
+reader_bridge_plan = do
+  base ← framework_class_plan
+    (Subclass "Lorg/isomorphisms/ib/ReaderBridge;" "Ljava/lang/Object;" (Just "ib_reader") []) []
+  let native = \name, args, result => MkBoundMethodPlan "app-owned reader platform adapter" name
+        (cast (length args)) args result 0 [] NativeStaticMethod
+  Right ({ methods := base.methods ++
+    [ native "attach" [object "Landroid/app/Activity;"] (ExistingValue IntegerValue)
+    , native "resume" [object "Landroid/app/Activity;"] (ExistingValue IntegerValue)
+    , native "detach" [object "Landroid/app/Activity;"] VoidValue
+    , native "navigate" [ExistingValue TextValue] (ExistingValue IntegerValue)
+    , native "cancel" [object "Landroid/app/Activity;"] (ExistingValue IntegerValue)
+    , native "googleTargetCount" [ExistingValue TextValue, ExistingValue IntegerValue] (ExistingValue IntegerValue)
+    , native "googleTargetReference" [ExistingValue TextValue, ExistingValue IntegerValue, ExistingValue IntegerValue] (ExistingValue TextValue)
+    , native "googleTargetEvidence" [ExistingValue TextValue, ExistingValue IntegerValue, ExistingValue IntegerValue] (ExistingValue TextValue)
+    , native "googleTargetBody" [ExistingValue TextValue, ExistingValue IntegerValue, ExistingValue IntegerValue] (ExistingValue TextValue)
+    , native "restore" [] (ExistingValue IntegerValue)
+    , native "history" [] (ExistingValue TextValue)
+    , native "openRetained" [ExistingValue TextValue, ExistingValue IntegerValue, ExistingValue TextValue]
+        (ExistingValue IntegerValue)
+    , native "acknowledge" [ExistingValue TextValue, ExistingValue IntegerValue, ExistingValue TextValue]
+        (ExistingValue IntegerValue)
+    , native "metrics" [object "Landroid/app/Activity;"] (object "Lorg/isomorphisms/ib/ReaderMetrics;")
+    , native "presentText" [object "Landroid/app/Activity;", ExistingValue TextValue,
+        ExistingValue TextValue, ExistingValue TextValue] (ExistingValue IntegerValue)
+    , native "scrollAnchor" [object "Landroid/app/Activity;", ExistingValue IntegerValue]
+        (ExistingValue IntegerValue)
+    , native "markText" [object "Landroid/app/Activity;", ExistingValue IntegerValue,
+        ExistingValue IntegerValue, ExistingValue IntegerValue] (ExistingValue IntegerValue)
+    ] } base)
+
+reader_task_plan : Text → Either Text FilePlan
+reader_task_plan name = do
+  base ← framework_class_plan
+    (Subclass name "Ljava/lang/Object;" (Just "ib_reader") [Callback "run" "V" []])
+    ["Ljava/lang/Runnable;"]
+  Right ({ fields := [MkFieldPlan "storageAnchor" (object "Landroid/os/IBinder;") 2] } base)
+
+google_client_plan : Either Text FilePlan
+google_client_plan = do
+  base ← framework_class_plan
+    (Subclass "Lorg/isomorphisms/ib/GoogleAcquisitionClient;" "Landroid/webkit/WebViewClient;"
+      (Just "ib_reader")
+      [ Callback "onPageStarted" "V" ["Landroid/webkit/WebView;", "Ljava/lang/String;", "Landroid/graphics/Bitmap;"]
+      , Callback "shouldOverrideUrlLoading" "Z" ["Landroid/webkit/WebView;", "Landroid/webkit/WebResourceRequest;"]
+      , Callback "onReceivedError" "V" ["Landroid/webkit/WebView;", "Landroid/webkit/WebResourceRequest;", "Landroid/webkit/WebResourceError;"]
+      , Callback "onRenderProcessGone" "Z" ["Landroid/webkit/WebView;", "Landroid/webkit/RenderProcessGoneDetail;"]
+      ]) []
+  Right ({ fields := [MkFieldPlan "storageAnchor" (object "Landroid/os/IBinder;") 2] } base)
+
+google_dom_plan : Either Text FilePlan
+google_dom_plan = do
+  base ← framework_class_plan
+    (Subclass "Lorg/isomorphisms/ib/GoogleDomCallback;" "Ljava/lang/Object;"
+      (Just "ib_reader") [Callback "onReceiveValue" "V" ["Ljava/lang/Object;"]])
+    ["Landroid/webkit/ValueCallback;"]
+  Right ({ fields := [MkFieldPlan "storageAnchor" (object "Landroid/os/IBinder;") 2] } base)
+
+reader_metrics_plan : Either Text FilePlan
+reader_metrics_plan = do
+  base ← framework_class_plan
+    (Subclass "Lorg/isomorphisms/ib/ReaderMetrics;" "Ljava/lang/Object;" (Just "ib_reader") []) []
+  Right ({ fields :=
+      [ MkFieldPlan "paint" (object "Landroid/graphics/Paint;") 2
+      , MkFieldPlan "widthValue" (object "Ljava/lang/Integer;") 2
+      ], methods := base.methods ++
+      [ native_method "width" [] (ExistingValue IntegerValue)
+      , native_method "measure" [ExistingValue TextValue] (ExistingValue IntegerValue)
+      ] } base)
+
+reader_layout_plan : Either Text FilePlan
+reader_layout_plan = framework_class_plan
+  (Subclass "Lorg/isomorphisms/ib/ReaderLayoutListener;" "Ljava/lang/Object;" (Just "ib_reader")
+    [Callback "onLayoutChange" "V" ["Landroid/view/View;", "I", "I", "I", "I", "I", "I", "I", "I"]])
+  ["Landroid/view/View$OnLayoutChangeListener;"]
+
+reader_anchor_plan : Either Text FilePlan
+reader_anchor_plan = do
+  base ← framework_class_plan
+    (Subclass "Lorg/isomorphisms/ib/ReaderAnchorListener;" "Ljava/lang/Object;" (Just "ib_reader")
+      [Callback "onPreDraw" "Z" []])
+    ["Landroid/view/ViewTreeObserver$OnPreDrawListener;"]
+  Right ({ fields :=
+    [ MkFieldPlan "targetView" (object "Lorg/isomorphisms/ib/NativeTextView;") 2
+    , MkFieldPlan "projection" (object "Lorg/isomorphisms/ib/NativeTextProjection;") 2
+    , MkFieldPlan "offsetValue" (object "Ljava/lang/Integer;") 2
+    ] } base)
+
+reader_projection_plan : Either Text FilePlan
+reader_projection_plan = do
+  base ← framework_class_plan
+    (Subclass "Lorg/isomorphisms/ib/NativeTextProjection;" "Ljava/lang/Object;" Nothing []) []
+  Right ({ fields :=
+    [ MkFieldPlan "sourceText" (ExistingValue TextValue) 2
+    , MkFieldPlan "displayText" (ExistingValue TextValue) 2
+    , MkFieldPlan "coordinatesText" (ExistingValue TextValue) 2
+    ] } base)
+
+reader_text_plan : Either Text FilePlan
+reader_text_plan = do
+  base ← framework_class_plan
+    (Subclass "Lorg/isomorphisms/ib/NativeTextView;" "Landroid/widget/TextView;" (Just "ib_reader")
+      [ Callback "onTextContextMenuItem" "Z" ["I"]
+      , Callback "onTouchEvent" "Z" ["Landroid/view/MotionEvent;"]
+      ]) []
+  let contextual = MkBoundMethodPlan "native selectable text Context constructor" "<init>" 1
+        [object "Landroid/content/Context;"] VoidValue 2
+        [ InvokeMethod (Invoke InvokeDirect
+            (MkMethodReference (MkTypeReference "Landroid/widget/TextView;") "<init>"
+              [object "Landroid/content/Context;"] VoidValue) [MkRegister 0, MkRegister 1] Nothing)
+        , ReturnVoid ] ConstructorMethod
+  let inflated = MkBoundMethodPlan "native selectable text XML constructor" "<init>" 2
+        [object "Landroid/content/Context;", object "Landroid/util/AttributeSet;"] VoidValue 3
+        [ InvokeMethod (Invoke InvokeDirect
+            (MkMethodReference (MkTypeReference "Landroid/widget/TextView;") "<init>"
+              [object "Landroid/content/Context;", object "Landroid/util/AttributeSet;"] VoidValue)
+            [MkRegister 0, MkRegister 1, MkRegister 2] Nothing)
+        , ReturnVoid ] ConstructorMethod
+  Right ({ fields :=
+      [ MkFieldPlan "projection" (object "Lorg/isomorphisms/ib/NativeTextProjection;") 2
+      , MkFieldPlan "gestureStart" (object "Landroid/view/MotionEvent;") 2
+      ], methods := filter (\method => method.method_name /= "<init>") base.methods ++
+        [contextual, inflated] } base)
+
+client_bytes : Either Text (List Int)
+client_bytes = do
+  container ← container_plan
+  creator ← creator_plan
+  provider ← provider_plan
+  application ← application_plan
+  death ← death_plan
+  client ← client_plan
+  ingress ← private_ingress_plan
+  connection ← connection_plan
+  worker ← worker_plan
+  reader ← reader_bridge_plan
+  acquire ← reader_task_plan "Lorg/isomorphisms/ib/ReaderAcquireTask;"
+  complete ← reader_task_plan "Lorg/isomorphisms/ib/ReaderCompletionTask;"
+  google_client ← google_client_plan
+  google_dom ← google_dom_plan
+  google_poll ← reader_task_plan "Lorg/isomorphisms/ib/GooglePollTask;"
+  metrics ← reader_metrics_plan
+  layout ← reader_layout_plan
+  anchor ← reader_anchor_plan
+  projection ← reader_projection_plan
+  text_view ← reader_text_plan
+  encode_dex_classes [container, creator, provider, application, death, client, ingress, connection,
+    worker, reader, acquire, complete, google_client, google_dom, google_poll,
+    metrics, layout, anchor, projection, text_view]
+
+parcelable_bytes : Either Text (List Int)
+parcelable_bytes = do
+  container ← container_plan
+  creator ← creator_plan
+  encode_dex_classes [container, creator]
+
+main : IO ()
+main = do
+  args ← getArgs
+  let request : Maybe (Text, Either Text (List Int)) = case args of
+        [_, destination] ⇒ Just (destination, parcelable_bytes)
+        [_, "--client", destination] ⇒ Just (destination, client_bytes)
+        _ ⇒ Nothing
+  case request of
+    Just (destination, generated) ⇒
+      case generated of
+          Left problem ⇒ do putStrLn problem; exitFailure
+          Right bytes ⇒ do
+            written ← write_dex destination bytes
+            case written of
+              Left problem ⇒ do putStrLn problem; exitFailure
+              Right () ⇒ putStrLn "PASS maintained Shizuku Parcelable declarations through the shared DEX writer"
+    _ ⇒ do putStrLn "usage: parcelable-boundary [--client] NEW_DEX"; exitFailure

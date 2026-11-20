@@ -1,0 +1,406 @@
+name: IB integrated checked tablet reader
+on:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  source-to-dex:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    outputs:
+      artifact_id: ${{ steps.candidate_archive.outputs.artifact-id }}
+      artifact_digest: ${{ steps.candidate_archive.outputs.artifact-digest }}
+    env:
+      ASAN_OPTIONS: detect_leaks=0
+      IB_GREASE: ${{ github.workspace }}/.tools/runtime/.build/grease/bin/grease
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: isomorphisms/android-NDK
+          ref: 153e7fc8053ba4072954a5e77d4efa3609d829e4
+          path: .tools/android-NDK
+          persist-credentials: false
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: isomorphisms/Idric
+          ref: 740bbf2b1d9e811fd00c719c3473eede17ceea3b
+          path: .tools/Idric
+          persist-credentials: false
+      - id: ick
+        uses: isomorphisms/ai-ci/ick-host@2383379394a7af5a8808abbe2d7b159a55328a83
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: dilapidated-shed/icu
+          ref: 4f36574be653eba6a603c4d0d79b02a7250d5154
+          path: .tools/icu
+          persist-credentials: false
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: isomorphisms/ai-ci
+          ref: 39ba6eb1218c7883fa1f1c98b07bf0dceabbf6d5
+          path: .tools/reader-acceptance
+          persist-credentials: false
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: isomorphisms/ai-ci
+          ref: 39ba6eb1218c7883fa1f1c98b07bf0dceabbf6d5
+          path: .tools/google-result-acceptance
+          persist-credentials: false
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: isomorphisms/sd-card-append-fat
+          ref: 05a0cb7246c5a9f46abfbe92925812e7b607f454
+          path: .tools/appendfat
+          persist-credentials: false
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: dilapidated-shed/Idric-Net
+          ref: b21801b72acb8ab835c297bbe298af8599550134
+          path: .tools/Idric-Net
+          persist-credentials: false
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: openssl/openssl
+          ref: f4dc4d58b48d346a8270183f89acf826d459b0ca
+          path: .tools/OpenSSL
+          persist-credentials: false
+      - name: Recover the qualified compiler's canonical runtime key
+        id: qualified_ick_cache
+        shell: sh
+        run: make -f .tools/reader-acceptance/ick-host/Makefile cache-key ICK_BUILD="$RUNNER_TEMP/ick-host-build" >> "$GITHUB_OUTPUT"
+      - name: Preserve qualified ICK before dependent bootstrap stages
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: ${{ runner.temp }}/ick-host-stage
+          key: ick-host-v1-${{ runner.os }}-${{ runner.arch }}-fbe86e23d55cfec2000c08e61deea2a407fd7175-${{ steps.qualified_ick_cache.outputs.runtime_key }}
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: isomorphisms/catfood
+          ref: 609a9628d5a52860f956bf62e0914a0cd03292ae
+          path: .tools/catfood
+          persist-credentials: false
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: dilapidated-shed/grease
+          ref: f19c94c6df18cddbdc1e81463e5bd689533e3c13
+          path: .tools/runtime/grease
+          submodules: true
+          persist-credentials: false
+      - name: Provision the exact host orchestration runtime
+        shell: sh
+        env:
+          CATFOOD_ROOT: ${{ github.workspace }}/.tools/runtime
+          CATFOOD_JOBS: '2'
+          # Foreign CPython 2 uses false/true enum names predating C23.
+          CC: ${{ steps.ick.outputs.compiler }} -fno-link-libatomic -std=gnu11
+        run: sh .tools/catfood/build-tools.sh
+      - name: Restore pinned frontend bootstrap
+        id: frontend
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          key: idric-740bbf2b1d9e811fd00c719c3473eede17ceea3b-ick-32cb45b3a3a257aeb07881c75f3b846495cfb2c9-ubuntu24-x86_64-v1
+          path: |
+            .tools/Idric/_/.tools
+            .tools/Idric/_/bootstrap-build
+            .tools/Idric/_/build
+      - name: Bootstrap the checked frontend with ICK
+        if: steps.frontend.outputs.cache-hit != 'true'
+        shell: sh
+        env:
+          CC: ${{ steps.ick.outputs.compiler }} -fno-link-libatomic
+        run: .tools/Idric/edric bootstrap
+      - name: Retain exact frontend bootstrap
+        if: steps.frontend.outputs.cache-hit != 'true'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          key: ${{ steps.frontend.outputs.cache-primary-key }}
+          path: |
+            .tools/Idric/_/.tools
+            .tools/Idric/_/bootstrap-build
+            .tools/Idric/_/build
+      - name: Prepare the merged compiler
+        shell: sh
+        run: .tools/runtime/.build/grease/bin/grease examples/autogenerated/tabp10-reader/prepare.grease "$GITHUB_WORKSPACE" "$GITHUB_WORKSPACE/.tools/android-NDK" "$GITHUB_WORKSPACE/.tools/Idric" "$RUNNER_TEMP/ib-reader"
+      - name: Qualify the maintained ICU path repair against its original source
+        shell: sh
+        run: |
+          make -f .tools/reader-acceptance/ick-host/Makefile extra-packages ICK_BUILD="$RUNNER_TEMP/ick-host-build" PACKAGES='ripgrep libssl-dev'
+          .tools/runtime/.build/grease/bin/grease .tools/icu/tests/verify-search-path.grease "$GITHUB_WORKSPACE/.tools/icu" "${{ steps.ick.outputs.compiler }}" "$RUNNER_TEMP/ib-reader/icu-native"
+      - name: Independently reject compiled Google result semantic counterexamples
+        shell: sh
+        run: .tools/runtime/.build/grease/bin/grease .tools/google-result-acceptance/examples/autogenerated/google-result-classification/verify-ib.grease "$GITHUB_WORKSPACE/.tools/google-result-acceptance" "$GITHUB_WORKSPACE" "$GITHUB_WORKSPACE/.tools/Idric" "$RUNNER_TEMP/ib-reader/independent-google-semantics"
+      - name: Independently reject compiled browser source and destination mismatches
+        shell: sh
+        run: .tools/runtime/.build/grease/bin/grease .tools/google-result-acceptance/examples/autogenerated/google-browser-integration/verify-model.grease "$GITHUB_WORKSPACE/.tools/google-result-acceptance" "$GITHUB_WORKSPACE" "$GITHUB_WORKSPACE/.tools/Idric" "$RUNNER_TEMP/ib-reader/independent-browser-model"
+      - name: Execute the actual observer-pin guard and both mismatch controls
+        shell: sh
+        run: .tools/runtime/.build/grease/bin/grease examples/autogenerated/tabp10-reader/verify-observer-pin-controls.grease "$GITHUB_WORKSPACE" "$GITHUB_WORKSPACE/.tools/reader-acceptance" "$RUNNER_TEMP/ib-reader/observer-pin-controls"
+      - name: Exercise the maintained native ingress boundary
+        shell: sh
+        run: .tools/runtime/.build/grease/bin/grease examples/autogenerated/tabp10-reader/verify-native.grease "$GITHUB_WORKSPACE" "${{ steps.ick.outputs.compiler }}" "$RUNNER_TEMP/ib-reader/native"
+      - name: Execute the actual worker's argument guards before Android packaging
+        shell: sh
+        run: .tools/runtime/.build/grease/bin/grease examples/autogenerated/native-shizuku/verify-worker-arguments.grease "$GITHUB_WORKSPACE" "$IB_GREASE" "$RUNNER_TEMP/ib-reader/worker-arguments"
+      - name: Verify retained identity through actual canonical userspace appends
+        shell: sh
+        run: .tools/runtime/.build/grease/bin/grease examples/autogenerated/tabp10-reader/verify-native-canonical.grease "$GITHUB_WORKSPACE" "$GITHUB_WORKSPACE/.tools/appendfat" "${{ steps.ick.outputs.compiler }}" "$RUNNER_TEMP/ib-reader/native" "$RUNNER_TEMP/ib-reader/native-canonical"
+      - name: Independently qualify distinct browser DOM source ownership and compiled controls
+        shell: sh
+        run: .tools/runtime/.build/grease/bin/grease .tools/google-result-acceptance/ib-source/reader/verify-browser-dom.grease "$GITHUB_WORKSPACE/.tools/google-result-acceptance" "$GITHUB_WORKSPACE" "$GITHUB_WORKSPACE/.tools/appendfat" "${{ steps.ick.outputs.compiler }}" "$RUNNER_TEMP/ib-reader/independent-browser-dom"
+      - name: Compile maintained IB consumers and integrated Prepaint
+        shell: sh
+        run: .tools/runtime/.build/grease/bin/grease examples/autogenerated/tabp10-reader/verify.grease "$GITHUB_WORKSPACE" "$GITHUB_WORKSPACE/.tools/android-NDK" "$GITHUB_WORKSPACE/.tools/Idric" "$RUNNER_TEMP/ib-reader"
+      - name: Require source-backed Google result semantics
+        shell: sh
+        run: .tools/runtime/.build/grease/bin/grease examples/autogenerated/google-results/verify.grease "$GITHUB_WORKSPACE" "$GITHUB_WORKSPACE/.tools/Idric" "$RUNNER_TEMP/ib-reader/google-results"
+      - name: Run the independent index oracle and corruption controls before Android
+        shell: sh
+        run: .tools/runtime/.build/grease/bin/grease .tools/reader-acceptance/ib-source/reader/test-example-index.grease "$GITHUB_WORKSPACE/.tools/reader-acceptance" "$RUNNER_TEMP/ib-reader/index-oracle-smoke"
+      - name: Provide the Android SDK's required JDK
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd
+        with:
+          packages: 'ndk;27.2.12479018 build-tools;35.0.0 platforms;android-34'
+      - name: Verify the upstream Shizuku build and existing public test signer
+        shell: sh
+        run: .tools/runtime/.build/grease/bin/grease examples/autogenerated/native-shizuku/fetch-platform-inputs.grease "$ANDROID_HOME" "$RUNNER_TEMP/ib-reader/platform-inputs"
+      - name: Build the native Shizuku Parcelable boundary and Binder-loss control
+        shell: sh
+        run: .tools/runtime/.build/grease/bin/grease examples/autogenerated/native-shizuku/prepare-parcelable.grease "$GITHUB_WORKSPACE" "$GITHUB_WORKSPACE/.tools/android-NDK" "$GITHUB_WORKSPACE/.tools/Idric" "$ANDROID_HOME/ndk/27.2.12479018" "$RUNNER_TEMP/ib-reader/oracles/baksmali.jar" "$RUNNER_TEMP/ib-reader/parcelable"
+      - name: Build the installed native provider and compiled caller/death controls
+        id: native_candidate
+        shell: sh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          .tools/runtime/.build/grease/bin/grease examples/autogenerated/native-shizuku/fetch-worker-toolchains.grease "$RUNNER_TEMP/ib-worker-toolchains"
+          .tools/runtime/.build/grease/bin/grease examples/autogenerated/native-shizuku/prepare-client.grease "$GITHUB_WORKSPACE" "$GITHUB_WORKSPACE/.tools/android-NDK" "$GITHUB_WORKSPACE/.tools/Idric" "$ANDROID_HOME/ndk/27.2.12479018" "$ANDROID_HOME" "$RUNNER_TEMP/ib-reader/platform-inputs/public-test-keystore" "$RUNNER_TEMP/ib-reader/oracles/baksmali.jar" "$RUNNER_TEMP/ib-worker-toolchains" "$RUNNER_TEMP/ib-reader/native-client"
+      - name: Retain the signed candidate and reproduction receipts separately
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: ib-signed-candidate-${{ github.event.pull_request.head.sha || github.sha }}
+          path: |
+            ${{ runner.temp }}/ib-reader/native-client/ib-native-boundary.apk
+            ${{ runner.temp }}/ib-reader/native-client/reproduction.tsv
+            ${{ runner.temp }}/ib-reader/native-client/reproduction.sha256
+            ${{ runner.temp }}/ib-reader/native-client/sha256.txt
+            ${{ runner.temp }}/ib-reader/native-client/receipt.tsv
+            ${{ runner.temp }}/ib-reader/ib-commit.txt
+            ${{ runner.temp }}/ib-reader/backend-commit.txt
+            ${{ runner.temp }}/ib-reader/frontend-commit.txt
+          if-no-files-found: error
+      - name: Preserve exact compiler for independent replay
+        if: always()
+        shell: sh
+        run: .tools/runtime/.build/grease/bin/grease examples/autogenerated/tabp10-reader/bundle.grease "$GITHUB_WORKSPACE/.tools/android-NDK" "$GITHUB_WORKSPACE/.tools/Idric" "$RUNNER_TEMP/ib-reader"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: ib-frontend-aa-${{ github.event.pull_request.head.sha || github.sha }}
+          path: ${{ runner.temp }}/ib-reader/frontend-parts/part-aa
+          if-no-files-found: warn
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: ib-frontend-ab-${{ github.event.pull_request.head.sha || github.sha }}
+          path: ${{ runner.temp }}/ib-reader/frontend-parts/part-ab
+          if-no-files-found: warn
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: ib-frontend-ac-${{ github.event.pull_request.head.sha || github.sha }}
+          path: ${{ runner.temp }}/ib-reader/frontend-parts/part-ac
+          if-no-files-found: warn
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: ib-frontend-ad-${{ github.event.pull_request.head.sha || github.sha }}
+          path: ${{ runner.temp }}/ib-reader/frontend-parts/part-ad
+          if-no-files-found: warn
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: ib-frontend-ae-${{ github.event.pull_request.head.sha || github.sha }}
+          path: ${{ runner.temp }}/ib-reader/frontend-parts/part-ae
+          if-no-files-found: warn
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: ib-compiler-replay-${{ github.event.pull_request.head.sha || github.sha }}
+          path: |
+            ${{ runner.temp }}/ib-reader/backend-replay.tar.gz
+            ${{ runner.temp }}/ib-reader/replay-bundles.sha256
+            ${{ runner.temp }}/ib-reader/compiler.sha256
+            ${{ runner.temp }}/ib-reader/frontend-parts/parts.sha256
+          if-no-files-found: warn
+      - name: Preserve source-bound evidence even on failure
+        id: candidate_archive
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: ib-tabp10-reader-${{ github.event.pull_request.head.sha || github.sha }}
+          path: ${{ runner.temp }}/ib-reader
+          if-no-files-found: warn
+      - name: Retain source and qualified compiler checkpoints
+        if: always() && steps.native_candidate.outcome == 'success'
+        shell: sh
+        run: .tools/runtime/.build/grease/bin/grease examples/autogenerated/tabp10-reader/checkpoint.grease "$GITHUB_WORKSPACE" "$RUNNER_TEMP/ib-checkpoint"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: ib-source-checkpoint-${{ github.event.pull_request.head.sha || github.sha }}
+          path: |
+            ${{ runner.temp }}/ib-checkpoint/sources
+            ${{ runner.temp }}/ib-checkpoint/checkpoint.sha256
+          if-no-files-found: warn
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: ib-replay-checkpoint-${{ github.event.pull_request.head.sha || github.sha }}
+          path: ${{ runner.temp }}/ib-checkpoint/replay
+          if-no-files-found: warn
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: ib-ick-host-checkpoint-aa-${{ github.event.pull_request.head.sha || github.sha }}
+          path: |
+            ${{ runner.temp }}/ib-checkpoint/ick-host/part-aa
+            ${{ runner.temp }}/ib-checkpoint/ick-host/compiler.sha256
+            ${{ runner.temp }}/ib-checkpoint/ick-host/parts.sha256
+          if-no-files-found: warn
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: ib-ick-host-checkpoint-ab-${{ github.event.pull_request.head.sha || github.sha }}
+          path: |
+            ${{ runner.temp }}/ib-checkpoint/ick-host/part-ab
+            ${{ runner.temp }}/ib-checkpoint/ick-host/compiler.sha256
+            ${{ runner.temp }}/ib-checkpoint/ick-host/parts.sha256
+          if-no-files-found: warn
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: ib-ick-host-checkpoint-ac-${{ github.event.pull_request.head.sha || github.sha }}
+          path: |
+            ${{ runner.temp }}/ib-checkpoint/ick-host/part-ac
+            ${{ runner.temp }}/ib-checkpoint/ick-host/compiler.sha256
+            ${{ runner.temp }}/ib-checkpoint/ick-host/parts.sha256
+          if-no-files-found: warn
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: ib-android-ick-checkpoint-${{ github.event.pull_request.head.sha || github.sha }}
+          path: ${{ runner.temp }}/ib-checkpoint/android-ick
+          if-no-files-found: warn
+
+  android-acceptance:
+    name: Required reader ART API ${{ matrix.api }}
+    needs: source-to-dex
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - api: 29
+            target: default
+          - api: 34
+            target: google_apis
+    env:
+      IB_GREASE: ${{ github.workspace }}/.tools/runtime/.build/grease/bin/grease
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: isomorphisms/ai-ci
+          ref: 39ba6eb1218c7883fa1f1c98b07bf0dceabbf6d5
+          path: .tools/reader-acceptance
+          persist-credentials: false
+      - id: ick
+        uses: isomorphisms/ai-ci/ick-host@2383379394a7af5a8808abbe2d7b159a55328a83
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: isomorphisms/catfood
+          ref: 609a9628d5a52860f956bf62e0914a0cd03292ae
+          path: .tools/catfood
+          persist-credentials: false
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: dilapidated-shed/grease
+          ref: f19c94c6df18cddbdc1e81463e5bd689533e3c13
+          path: .tools/runtime/grease
+          submodules: true
+          persist-credentials: false
+      - name: Build the declared independent observation runtime
+        shell: sh
+        env:
+          CATFOOD_ROOT: ${{ github.workspace }}/.tools/runtime
+          CATFOOD_JOBS: '2'
+          CC: ${{ steps.ick.outputs.compiler }} -fno-link-libatomic -std=gnu11
+        run: sh .tools/catfood/build-tools.sh
+      - name: Install the declared text verifier
+        shell: sh
+        run: |
+          .tools/runtime/.build/grease/bin/grease -c 'sudo apt-get update
+          sudo apt-get install --no-install-recommends -y ripgrep'
+      - name: Verify the exact archive published by this source job
+        shell: sh
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: .tools/runtime/.build/grease/bin/grease examples/autogenerated/tabp10-reader/verify-observation-input.grease "$GITHUB_WORKSPACE" "${{ github.event.pull_request.head.sha || github.sha }}" "${{ needs.source-to-dex.outputs.artifact_id }}" "${{ needs.source-to-dex.outputs.artifact_digest }}" "$RUNNER_TEMP/ib-reader" "$RUNNER_TEMP/ib-input"
+      - name: Parse required independent coordinators before Android
+        shell: sh
+        run: |
+          .tools/runtime/.build/grease/bin/grease -n examples/autogenerated/tabp10-reader/observe-all.grease > "$RUNNER_TEMP/ib-input/observe-all.syntax.txt"
+          .tools/runtime/.build/grease/bin/grease .tools/reader-acceptance/examples/autogenerated/ib-google-continuation/parse-orchestration.grease "$GITHUB_WORKSPACE/.tools/reader-acceptance" "$RUNNER_TEMP/ib-orchestration"
+      - name: Preserve qualified ICK and reclaim only job-owned compiler intermediates
+        shell: sh
+        run: .tools/runtime/.build/grease/bin/grease .tools/reader-acceptance/examples/autogenerated/ib-native-network/prepare-emulator-host.grease "$GITHUB_WORKSPACE/.tools/reader-acceptance" "${{ steps.ick.outputs.compiler }}" "$RUNNER_TEMP/ib-host-capacity"
+      - name: Prepare emulator KVM access
+        shell: sh
+        run: .tools/runtime/.build/grease/bin/grease -c 'sudo chmod 666 /dev/kvm'
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd
+        with:
+          packages: 'build-tools;35.0.0 platforms;android-34'
+      - name: Execute unchanged candidate bytes and compiled controls on actual ART
+        uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d
+        env:
+          AICI_EXPECTED_ANDROID_API: '${{ matrix.api }}'
+          AICI_FIXTURE_ICK: ${{ steps.ick.outputs.compiler }}
+        with:
+          api-level: ${{ matrix.api }}
+          target: ${{ matrix.target }}
+          arch: x86_64
+          disk-size: 2048M
+          avd-name: ib-reader-api${{ matrix.api }}
+          emulator-options: -no-window -no-audio -no-snapshot -no-boot-anim -memory 2048 -gpu swiftshader_indirect
+          disable-animations: true
+          script: .tools/runtime/.build/grease/bin/grease examples/autogenerated/tabp10-reader/observe-all.grease "$GITHUB_WORKSPACE" "$RUNNER_TEMP/ib-reader" "$ANDROID_HOME" "${{ matrix.api }}" "$RUNNER_TEMP/ib-observed"
+      - name: Retain independent source-bound Android evidence even on failure
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: ib-Android-api${{ matrix.api }}-${{ github.event.pull_request.head.sha || github.sha }}
+          path: |
+            ${{ runner.temp }}/ib-input/*.txt
+            ${{ runner.temp }}/ib-input/*.tsv
+            ${{ runner.temp }}/ib-input/*.sha256
+            ${{ runner.temp }}/ib-orchestration
+            ${{ runner.temp }}/ib-observed
+          if-no-files-found: warn

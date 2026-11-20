@@ -1,0 +1,309 @@
+module GoogleBrowserProbe
+
+import Data.Text
+import Data.List
+
+-- Bounded first-party framework qualification. This grants no ICU identity,
+-- original HTTP offsets, canonical admission or production browser history.
+data ActivityReference : Type where [external]
+data ContextReference : Type where [external]
+data SavedStateReference : Type where [external]
+data ObjectReference : Type where [external]
+data WebViewReference : Type where [external]
+data ViewReference : Type where [external]
+data SettingsReference : Type where [external]
+data ClientReference : Type where [external]
+data WebClientReference : Type where [external]
+data SnapshotReference : Type where [external]
+data ValueCallbackReference : Type where [external]
+data TickReference : Type where [external]
+data RunnableReference : Type where [external]
+data RequestReference : Type where [external]
+data UriReference : Type where [external]
+data FileReference : Type where [external]
+data StreamReference : Type where [external]
+data OutputReference : Type where [external]
+data WriterReference : Type where [external]
+data CounterReference : Type where [external]
+data JsonReference : Type where [external]
+data CharsetReference : Type where [external]
+data EncoderReference : Type where [external]
+data CharactersReference : Type where [external]
+data EncodedReference : Type where [external]
+
+%foreign "dex:cast:Landroid/os/Bundle;:Ljava/lang/Object;"
+saved_state_object : SavedStateReference → PrimIO ObjectReference
+%foreign "dex:cast:Landroid/app/Activity;:Landroid/content/Context;"
+activity_context : ActivityReference → PrimIO ContextReference
+%foreign "dex:construct:Landroid/webkit/WebView;:<init>:(Landroid/content/Context;)V"
+new_browser : ContextReference → PrimIO WebViewReference
+%foreign "dex:cast:Landroid/webkit/WebView;:Landroid/view/View;"
+browser_view : WebViewReference → PrimIO ViewReference
+%foreign "dex:cast:Landroid/webkit/WebView;:Ljava/lang/Object;"
+browser_object : WebViewReference → PrimIO ObjectReference
+%foreign "dex:static:Ljava/util/Objects;:isNull:(Ljava/lang/Object;)Z"
+is_null : ObjectReference → PrimIO Int32
+%foreign "dex:virtual:Landroid/app/Activity;:setContentView:(Landroid/view/View;)V"
+show_browser : ActivityReference → ViewReference → PrimIO ()
+%foreign "dex:virtual:Landroid/webkit/WebView;:getSettings:()Landroid/webkit/WebSettings;"
+browser_settings : WebViewReference → PrimIO SettingsReference
+%foreign "dex:virtual:Landroid/webkit/WebSettings;:setJavaScriptEnabled:(Z)V"
+enable_javascript : SettingsReference → Int32 → PrimIO ()
+%foreign "dex:virtual:Landroid/webkit/WebSettings;:setDomStorageEnabled:(Z)V"
+enable_dom_storage : SettingsReference → Int32 → PrimIO ()
+%foreign "dex:virtual:Landroid/webkit/WebSettings;:setAllowFileAccess:(Z)V"
+allow_files : SettingsReference → Int32 → PrimIO ()
+%foreign "dex:virtual:Landroid/webkit/WebSettings;:setAllowContentAccess:(Z)V"
+allow_content : SettingsReference → Int32 → PrimIO ()
+%foreign "dex:virtual:Landroid/webkit/WebSettings;:setSupportMultipleWindows:(Z)V"
+allow_windows : SettingsReference → Int32 → PrimIO ()
+%foreign "dex:virtual:Landroid/webkit/WebSettings;:setMixedContentMode:(I)V"
+mixed_content : SettingsReference → Int32 → PrimIO ()
+%foreign "dex:construct:Lorg/isomorphisms/ib/googleprobe/Client;:<init>:()V"
+new_client : PrimIO ClientReference
+%foreign "dex:cast:Lorg/isomorphisms/ib/googleprobe/Client;:Landroid/webkit/WebViewClient;"
+client_interface : ClientReference → PrimIO WebClientReference
+%foreign "dex:virtual:Landroid/webkit/WebView;:setWebViewClient:(Landroid/webkit/WebViewClient;)V"
+set_client : WebViewReference → WebClientReference → PrimIO ()
+%foreign "dex:virtual:Landroid/webkit/WebView;:loadUrl:(Ljava/lang/String;)V"
+load_search : WebViewReference → Text → PrimIO ()
+%foreign "dex:virtual:Landroid/webkit/WebView;:stopLoading:()V"
+stop_loading : WebViewReference → PrimIO ()
+%foreign "dex:virtual:Landroid/webkit/WebView;:destroy:()V"
+destroy_browser : WebViewReference → PrimIO ()
+%foreign "dex:construct:Lorg/isomorphisms/ib/googleprobe/Snapshot;:<init>:()V"
+new_snapshot : PrimIO SnapshotReference
+%foreign "dex:cast:Lorg/isomorphisms/ib/googleprobe/Snapshot;:Landroid/webkit/ValueCallback;"
+snapshot_interface : SnapshotReference → PrimIO ValueCallbackReference
+%foreign "dex:virtual:Landroid/webkit/WebView;:evaluateJavascript:(Ljava/lang/String;Landroid/webkit/ValueCallback;)V"
+read_dom : WebViewReference → Text → ValueCallbackReference → PrimIO ()
+%foreign "dex:construct:Lorg/isomorphisms/ib/googleprobe/Tick;:<init>:()V"
+new_tick : PrimIO TickReference
+%foreign "dex:cast:Lorg/isomorphisms/ib/googleprobe/Tick;:Ljava/lang/Runnable;"
+tick_interface : TickReference → PrimIO RunnableReference
+%foreign "dex:virtual:Landroid/view/View;:postDelayed:(Ljava/lang/Runnable;J)Z"
+post_tick : ViewReference → RunnableReference → Int64 → PrimIO Int32
+%foreign "dex:interface:Landroid/webkit/WebResourceRequest;:isForMainFrame:()Z"
+is_main_frame : RequestReference → PrimIO Int32
+%foreign "dex:interface:Landroid/webkit/WebResourceRequest;:getUrl:()Landroid/net/Uri;"
+request_uri : RequestReference → PrimIO UriReference
+%foreign "dex:virtual:Landroid/net/Uri;:toString:()Ljava/lang/String;"
+uri_text : UriReference → PrimIO Text
+
+%foreign "dex:virtual:Landroid/content/Context;:getFilesDir:()Ljava/io/File;"
+private_files : ContextReference → PrimIO FileReference
+%foreign "dex:construct:Ljava/io/File;:<init>:(Ljava/io/File;Ljava/lang/String;)V"
+child_file : FileReference → Text → PrimIO FileReference
+%foreign "dex:virtual:Ljava/io/File;:mkdir:()Z"
+make_directory : FileReference → PrimIO Int32
+%foreign "dex:virtual:Ljava/io/File;:createNewFile:()Z"
+claim_file : FileReference → PrimIO Int32
+%foreign "dex:construct:Ljava/io/FileOutputStream;:<init>:(Ljava/io/File;)V"
+open_output : FileReference → PrimIO StreamReference
+%foreign "dex:cast:Ljava/io/FileOutputStream;:Ljava/io/OutputStream;"
+output_stream : StreamReference → PrimIO OutputReference
+%foreign "dex:construct:Ljava/io/OutputStreamWriter;:<init>:(Ljava/io/OutputStream;Ljava/lang/String;)V"
+new_writer : OutputReference → Text → PrimIO WriterReference
+%foreign "dex:virtual:Ljava/io/OutputStreamWriter;:write:(Ljava/lang/String;)V"
+write_text : WriterReference → Text → PrimIO ()
+%foreign "dex:virtual:Ljava/io/OutputStreamWriter;:close:()V"
+close_writer : WriterReference → PrimIO ()
+%foreign "dex:interface:Ljava/lang/CharSequence;:length:()I"
+utf16_units : Text → PrimIO Int32
+%foreign "dex:virtual:Ljava/lang/String;:startsWith:(Ljava/lang/String;)Z"
+sdk_text_starts : Text → Text → PrimIO Int32
+%foreign "dex:static:Ljava/nio/charset/Charset;:forName:(Ljava/lang/String;)Ljava/nio/charset/Charset;"
+standard_charset : Text → PrimIO CharsetReference
+%foreign "dex:virtual:Ljava/nio/charset/Charset;:newEncoder:()Ljava/nio/charset/CharsetEncoder;"
+new_encoder : CharsetReference → PrimIO EncoderReference
+%foreign "dex:virtual:Ljava/nio/charset/CharsetEncoder;:canEncode:(Ljava/lang/CharSequence;)Z"
+valid_unicode : EncoderReference → Text → PrimIO Int32
+%foreign "dex:static:Ljava/nio/CharBuffer;:wrap:(Ljava/lang/CharSequence;)Ljava/nio/CharBuffer;"
+character_buffer : Text → PrimIO CharactersReference
+%foreign "dex:virtual:Ljava/nio/charset/CharsetEncoder;:encode:(Ljava/nio/CharBuffer;)Ljava/nio/ByteBuffer;"
+encoded_buffer : EncoderReference → CharactersReference → PrimIO EncodedReference
+%foreign "dex:virtual:Ljava/nio/ByteBuffer;:remaining:()I"
+encoded_size : EncodedReference → PrimIO Int32
+%foreign "dex:construct:Ljava/util/concurrent/atomic/AtomicInteger;:<init>:(I)V"
+new_counter : Int32 → PrimIO CounterReference
+%foreign "dex:virtual:Ljava/util/concurrent/atomic/AtomicInteger;:get:()I"
+counter_value : CounterReference → PrimIO Int32
+%foreign "dex:virtual:Ljava/util/concurrent/atomic/AtomicInteger;:set:(I)V"
+set_counter : CounterReference → Int32 → PrimIO ()
+%foreign "dex:static:Lorg/isomorphisms/ib/googleprobe/Bridge;:store:(Landroid/webkit/WebView;Ljava/io/File;Ljava/util/concurrent/atomic/AtomicInteger;Ljava/util/concurrent/atomic/AtomicInteger;)V"
+store_state : WebViewReference → FileReference → CounterReference → CounterReference → PrimIO ()
+%foreign "dex:static:Lorg/isomorphisms/ib/googleprobe/Bridge;:view:()Landroid/webkit/WebView;"
+retained_view : PrimIO WebViewReference
+%foreign "dex:static:Lorg/isomorphisms/ib/googleprobe/Bridge;:directory:()Ljava/io/File;"
+retained_directory : PrimIO FileReference
+%foreign "dex:static:Lorg/isomorphisms/ib/googleprobe/Bridge;:polls:()Ljava/util/concurrent/atomic/AtomicInteger;"
+retained_polls : PrimIO CounterReference
+%foreign "dex:static:Lorg/isomorphisms/ib/googleprobe/Bridge;:snapshots:()Ljava/util/concurrent/atomic/AtomicInteger;"
+retained_snapshots : PrimIO CounterReference
+%foreign "dex:virtual:Ljava/lang/Object;:toString:()Ljava/lang/String;"
+object_text : ObjectReference → PrimIO Text
+%foreign "dex:construct:Lorg/json/JSONArray;:<init>:(Ljava/lang/String;)V"
+json_array : Text → PrimIO JsonReference
+%foreign "dex:virtual:Lorg/json/JSONArray;:getString:(I)Ljava/lang/String;"
+json_text : JsonReference → Int32 → PrimIO Text
+
+starts : Text → Text → Bool
+starts prefix value = take (length (unpack prefix)) (unpack value) ≟ unpack prefix
+
+%export "dex:probe_google_url"
+probe_google_url : Text → Int32
+probe_google_url address =
+  if length (unpack address) <= 4096 &&
+     all (\character ⇒ ord character >= 33 && ord character <= 126) (unpack address) &&
+     any (\prefix ⇒ starts prefix address)
+       [ "https://google.com/search?", "https://www.google.com/search?"
+       , "https://google.com/httpservice/retry/enablejs?"
+       , "https://www.google.com/httpservice/retry/enablejs?" ]
+    then 1 else 0
+
+write_probe_file : Text → Text → IO ()
+write_probe_file name text = do
+  units ← primIO (utf16_units text)
+  charset ← primIO (standard_charset "UTF-8")
+  encoder ← primIO (new_encoder charset)
+  valid ← primIO (valid_unicode encoder text)
+  if units <= 0 || units > 2097152 || valid ≟ 0 then pure () else do
+    characters ← primIO (character_buffer text)
+    encoded ← primIO (encoded_buffer encoder characters)
+    bytes ← primIO (encoded_size encoded)
+    if bytes <= 0 || bytes > 2097152 then pure () else do
+      directory ← primIO retained_directory
+      file ← primIO (child_file directory name)
+      created ← primIO (claim_file file)
+      if created ≟ 0 then pure () else do
+        stream ← primIO (open_output file)
+        output ← primIO (output_stream stream)
+        writer ← primIO (new_writer output "UTF-8")
+        primIO (write_text writer text)
+        primIO (close_writer writer)
+
+browser_present : WebViewReference → IO Bool
+browser_present view = do
+  object ← primIO (browser_object view)
+  absent ← primIO (is_null object)
+  pure (absent ≟ 0)
+
+stop_probe : Text → IO ()
+stop_probe reason = do
+  view ← primIO retained_view
+  present ← browser_present view
+  if not present then pure () else do
+    polls ← primIO retained_polls
+    primIO (set_counter polls 1000)
+    primIO (stop_loading view)
+    write_probe_file "terminal.txt" reason
+
+%export "dex:probe_started"
+probe_started : Text → IO ()
+probe_started url = if probe_google_url url ≟ 1 then pure ()
+  else stop_probe "REFUSED_MAIN_FRAME_OR_CONSENT_OR_VERIFICATION"
+
+%export "dex:probe_override"
+probe_override : RequestReference → IO Bool
+probe_override request = do
+  main ← primIO (is_main_frame request)
+  if main ≟ 0 then pure False else do
+    uri ← primIO (request_uri request)
+    url ← primIO (uri_text uri)
+    if probe_google_url url ≟ 1 then pure False else do
+      stop_probe "REFUSED_MAIN_FRAME_OR_CONSENT_OR_VERIFICATION"
+      pure True
+
+%export "dex:probe_snapshot"
+probe_snapshot : ObjectReference → IO ()
+probe_snapshot supplied = do
+  view ← primIO retained_view
+  present ← browser_present view
+  if not present then pure () else do
+    polls ← primIO retained_polls
+    position ← primIO (counter_value polls)
+    if position >= 1000 then pure () else do
+      raw ← primIO (object_text supplied)
+      units ← primIO (utf16_units raw)
+      array_start ← primIO (sdk_text_starts raw "[")
+      if units <= 0 || units > 4194304 || array_start ≟ 0 then pure () else do
+        values ← primIO (json_array raw)
+        url ← primIO (json_text values 0)
+        if probe_google_url url /= 1 then pure () else do
+          dom ← primIO (json_text values 1)
+          snapshots ← primIO retained_snapshots
+          number ← primIO (counter_value snapshots)
+          if number >= 30 then pure () else do
+            let next = number + 1
+            let label = (if next < 10 then "0" else "") ++ cast next
+            primIO (set_counter snapshots next)
+            write_probe_file ("snapshot-" ++ label ++ ".dom.html") dom
+            write_probe_file ("snapshot-" ++ label ++ ".url.txt") url
+
+%export "dex:probe_tick"
+probe_tick : IO ()
+probe_tick = do
+  view ← primIO retained_view
+  present ← browser_present view
+  if not present then pure () else do
+    polls ← primIO retained_polls
+    number ← primIO (counter_value polls)
+    if number >= 1000 then pure ()
+      else if number >= 30 then stop_probe "BOUNDED_OBSERVATION_COMPLETE"
+      else do
+        primIO (set_counter polls (number + 1))
+        snapshot ← primIO new_snapshot
+        callback ← primIO (snapshot_interface snapshot)
+        primIO (read_dom view "(()=>{const root=document.documentElement;if(!root)return [location.href,''];const copy=root.cloneNode(true);copy.querySelectorAll('script,style,template,svg,canvas').forEach(node=>node.remove());return [location.href,copy.outerHTML]})()" callback)
+        tick ← primIO new_tick
+        runnable ← primIO (tick_interface tick)
+        target ← primIO (browser_view view)
+        _ ← primIO (post_tick target runnable 1000)
+        pure ()
+
+%export "dex:create_probe"
+create_probe : ActivityReference → SavedStateReference → IO ()
+create_probe activity saved = do
+  _ ← primIO (saved_state_object saved)
+  context ← primIO (activity_context activity)
+  files ← primIO (private_files context)
+  directory ← primIO (child_file files "browser-probe")
+  created ← primIO (make_directory directory)
+  if created ≟ 0 then pure () else do
+    view ← primIO (new_browser context)
+    polls ← primIO (new_counter 0)
+    snapshots ← primIO (new_counter 0)
+    primIO (store_state view directory polls snapshots)
+    write_probe_file "provenance.tsv" "representation\tbrowser-rendered-content-dom\nserialization\twebview-content-outerHTML-utf8-v1\nDOM_projection\tclone_remove_script_style_template_svg_canvas\noriginal_network_bytes\tNOT_CAPTURED\nICU_body_identity\tNOT_APPLICABLE\nsource_offsets\tUTF8_DERIVATIVE_ONLY\ncookie_policy\tordinary_private_WebView_profile_no_cookie_copy\nTLS_policy\tdefault_strict_no_SSL_override\n"
+    let requested = "https://google.com/search?q=open+source+guitar+chord+transposition"
+    write_probe_file "requested-url.txt" requested
+    settings ← primIO (browser_settings view)
+    primIO (enable_javascript settings 1)
+    primIO (enable_dom_storage settings 1)
+    primIO (allow_files settings 0)
+    primIO (allow_content settings 0)
+    primIO (allow_windows settings 0)
+    primIO (mixed_content settings 1)
+    client ← primIO new_client
+    browser_client ← primIO (client_interface client)
+    primIO (set_client view browser_client)
+    target ← primIO (browser_view view)
+    primIO (show_browser activity target)
+    primIO (load_search view requested)
+    probe_tick
+
+%export "dex:destroy_probe"
+destroy_probe : ActivityReference → IO ()
+destroy_probe activity = do
+  view ← primIO retained_view
+  present ← browser_present view
+  if not present then pure () else do
+    stop_probe "ACTIVITY_DESTROYED"
+    primIO (destroy_browser view)
+
+%cg dex extends Landroid/app/Activity;
+%cg dex override onCreate (Landroid/os/Bundle;)V create_probe
+%cg dex override onDestroy ()V destroy_probe
+
+main : IO ()
+main = pure ()

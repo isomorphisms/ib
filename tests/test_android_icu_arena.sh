@@ -29,7 +29,7 @@ ib_shizuku_run_bounded() {
   test "$1" = 30 || return 99
   printf '%s\n' "$2" >> "$IB_TEST_REMOTE_COMMANDS"
   case "$2" in
-    *ICU_CAPTURE_BODY_PATH*ICU_CAPTURE_METADATA_PATH*Idric.Generated\ get*) ;;
+    *ICU_CAPTURE_BODY_PATH*ICU_CAPTURE_METADATA_PATH*Idric.Generated\ --http1.1\ get*) ;;
     *) return 91 ;;
   esac
   case "$2" in *sha256sum*'IBICU01 %08d %08d'*) ;; *) return 92 ;; esac
@@ -38,13 +38,16 @@ ib_shizuku_run_bounded() {
   stub_meta="$stub_work/meta"
   mode=${IB_TEST_MODE:-ok}
   status=200
-  resolved=https://example.com/final
-  redirect_count=2
+  resolved=$icu_url
+  redirect_count=0
+  redirect_chain=
   content_type='text/html; charset=utf-8'
   content_encoding=identity
+  content_range=absent
+  transfer_decoding=identity
   utf8=valid
   case "$mode" in
-    ok|wrong_length|wrong_declared|duplicate|bad_status|bad_resolved|missing) printf '<html><body>C67 π ☼</body></html>\n' > "$stub_body" ;;
+    ok|legacy_eight|chunked|redirected|legacy_redirect|chain_*|range|partial_extensions|unknown_transfer|duplicate_extension|wrong_length|wrong_declared|duplicate|bad_status|bad_resolved|missing) printf '<html><body>Reader π ☼</body></html>\n' > "$stub_body" ;;
     binary) printf 'bin\000ary\377\n' > "$stub_body"; content_type=application/octet-stream; utf8=invalid ;;
     utf8_invalid) printf 'bad\377' > "$stub_body"; utf8=invalid ;;
     no_charset) printf '<p>no charset</p>' > "$stub_body"; content_type=text/html ;;
@@ -57,6 +60,25 @@ ib_shizuku_run_bounded() {
   case "$mode" in
     bad_status) status=404 ;;
     bad_resolved) resolved='javascript:alert(1)' ;;
+    range) content_range='bytes 0-4/10' ;;
+    chunked) transfer_decoding=chunked ;;
+    unknown_transfer) transfer_decoding=gzip ;;
+  esac
+  case "$mode" in
+    redirected|legacy_redirect|chain_*)
+      resolved='https://other.example/final?separator=302;next'
+      redirect_count=1
+      redirect_chain="R1 ${#icu_url} ${icu_url}302 ${#resolved} $resolved"
+      case "$mode" in
+        legacy_redirect) redirect_chain= ;;
+        chain_origin) redirect_chain="R1 20 https://example.net/302 ${#resolved} $resolved" ;;
+        chain_final) resolved=https://other.example/wrong ;;
+        chain_count) redirect_count=0 ;;
+        chain_status) redirect_chain="R1 ${#icu_url} ${icu_url}200 ${#resolved} $resolved" ;;
+        chain_length) redirect_chain="R1 1 ${icu_url}302 ${#resolved} $resolved" ;;
+        chain_trailing) redirect_chain="$redirect_chain trailing" ;;
+      esac
+      ;;
   esac
   body_bytes=$(wc -c < "$stub_body" | tr -d '[:space:]')
   declared=$body_bytes
@@ -74,6 +96,15 @@ ib_shizuku_run_bounded() {
     printf 'utf8\t%s\n' "$utf8"
     printf 'resolved_url\t%s\n' "$resolved"
     printf 'redirect_count\t%s\n' "$redirect_count"
+    if test "$mode" != legacy_eight; then
+      printf 'content_range\t%s\n' "$content_range"
+      if test "$mode" != partial_extensions; then
+        printf 'transfer_decoding\t%s\n' "$transfer_decoding"
+      fi
+    fi
+    if test "$mode" = duplicate_extension; then printf 'content_range\tabsent\n'; fi
+    if test -n "$redirect_chain"; then printf 'redirect_chain\t%s\n' "$redirect_chain"; fi
+    if test "$mode" = chain_duplicate; then printf 'redirect_chain\t%s\n' "$redirect_chain"; fi
     if test "$mode" = duplicate; then printf 'http_status\t200\n'; fi
   } > "$stub_meta"
   if test "$mode" = missing; then
@@ -105,8 +136,8 @@ field() { awk -F '\t' -v name="$2" '$1==name {print $2}' "$work/private/receipts
 run first https://example.com/start 17 > "$work/output1"
 test "$(field first schema)" = ib-icu-arena-v2
 test "$(field first http_status)" = 200
-test "$(field first resolved_url)" = https://example.com/final
-test "$(field first redirect_count)" = 2
+test "$(field first resolved_url)" = https://example.com/start
+test "$(field first redirect_count)" = 0
 test "$(field first mime_type)" = text/html
 test "$(field first charset)" = utf-8
 test "$(field first source_generation)" = 17
@@ -116,9 +147,38 @@ test "$(field first navigation_admitted)" = YES
 first_bytes=$(field first byte_count)
 test "$(field first arena_offset)" = 0
 test "$(cat "$work/private/responses.arena.used")" -gt 0
-printf '<html><body>C67 π ☼</body></html>\n' > "$work/expected"
+printf '<html><body>Reader π ☼</body></html>\n' > "$work/expected"
 readback first > "$work/first-body"
 cmp -s "$work/expected" "$work/first-body"
+
+for mode in legacy_eight chunked; do
+  export IB_TEST_MODE="$mode"
+  run "$mode" https://example.com/start 17 > "$work/output_$mode"
+  test "$(field "$mode" navigation_admitted)" = YES
+  readback "$mode" > "$work/read_$mode"
+  cmp -s "$work/expected" "$work/read_$mode"
+done
+
+export IB_TEST_MODE=redirected
+run redirected https://example.com/start 19 > "$work/redirected"
+test "$(field redirected navigation_admitted)" = YES
+test "$(field redirected redirect_count)" = 1
+test -n "$(field redirected redirect_chain)"
+readback redirected > "$work/redirected-body"
+cmp -s "$work/expected" "$work/redirected-body"
+cp "$work/private/receipts/redirected.tsv" "$work/redirected.original.tsv"
+sed -i 's/^redirect_chain.*/redirect_chain\tR1 1 x/' "$work/private/receipts/redirected.tsv"
+if readback redirected > "$work/chain-corrupt" 2>/dev/null; then exit 1; fi
+test ! -s "$work/chain-corrupt"
+cp "$work/redirected.original.tsv" "$work/private/receipts/redirected.tsv"
+
+# Older captures retain bytes. They cannot authorize a newly redirected source
+# without response-owner observations connecting the requested and final URLs.
+export IB_TEST_MODE=legacy_redirect
+run legacy_redirect https://example.com/start 20 > "$work/legacy-redirect"
+test "$(field legacy_redirect navigation_admitted)" = NO
+readback legacy_redirect > "$work/legacy-redirect-body"
+cmp -s "$work/expected" "$work/legacy-redirect-body"
 
 export IB_TEST_MODE=binary
 run second https://example.com/binary 18 > "$work/output2"
@@ -180,7 +240,7 @@ expect_refusal() {
   test ! -e "$work/private/receipts/reject_$mode.tsv"
   test "$(cat "$work/private/responses.arena.used")" = "$used"
 }
-for mode in fail bad_frame oversized wrong_length wrong_declared duplicate bad_status bad_resolved missing; do
+for mode in fail bad_frame oversized wrong_length wrong_declared duplicate bad_status bad_resolved missing range partial_extensions unknown_transfer duplicate_extension chain_origin chain_final chain_count chain_status chain_length chain_trailing chain_duplicate; do
   expect_refusal "$mode"
 done
 export IB_TEST_MODE=ok
@@ -211,5 +271,5 @@ cp "$work/used.bak" "$work/private/responses.arena.used"
 cmp -s "$work/expected" "$work/restored"
 
 printf '%s\n' \
-  'PASS: framed ICU #35 metadata/body contract, observed redirect, canonical range/digest, v1 refusal, conditional navigation, binary fidelity and negative admission checks' \
-  'NOT_RUN: real ICU HTTPS, Android DEX/ARM32, physical Shizuku, C67 UI, private PFD or durable navigation'
+  'PASS: framed ICU metadata/body contract, ordered redirects, canonical range/digest, legacy retention, conditional navigation, binary fidelity and negative admission checks' \
+  'NOT_RUN: real ICU HTTPS, Android DEX/ARM, physical Shizuku, TAB_P10 UI, private PFD or durable navigation'

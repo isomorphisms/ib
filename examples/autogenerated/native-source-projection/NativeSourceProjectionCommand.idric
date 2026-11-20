@@ -1,0 +1,20 @@
+module NativeSourceProjectionCommand
+
+import Data.Text
+import System
+import IB.Information
+import IB.RecoveredInformation
+
+source_title : Text → Text
+source_title source = view_title
+  (information_from_log "source" "source" (recover_document_log "source" source))
+
+%export "dex:source_projection_command"
+main : IO ()
+main = do
+  arguments ← getArgs
+  case arguments of
+    [program_name, source] ⇒ putStrLn (source_title source)
+    _ ⇒ do
+      putStrLn "REFUSED expected exactly one HTML source argument"
+      exitFailure

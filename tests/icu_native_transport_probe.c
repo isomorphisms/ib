@@ -20,7 +20,7 @@ int main(int argc, char **argv) {
     } else return 2;
     const char *colon = strchr(url, ':');
     const char *slash = strchr(url, '/');
-    if (!colon || !slash || colon >= slash || colon == url) return 2;
+    if (!colon || (slash && colon >= slash) || colon == url) return 2;
     if ((size_t)(colon - url) >= 128U) return 2;
     char host[128];
     memcpy(host, url, (size_t)(colon - url));
@@ -30,9 +30,10 @@ int main(int argc, char **argv) {
     errno = 0;
     char *end = NULL;
     long port_long = strtol(colon + 1, &end, 10);
-    if (errno || end != slash || port_long < 1 || port_long > 65535)
+    if (errno || end != (slash ? slash : url + strlen(url)) || port_long < 1 || port_long > 65535)
         return 2;
     int port = (int)port_long;
+    if (!slash) slash = "/";
     for (const unsigned char *p = (const unsigned char *)slash; *p; ++p)
         if (*p <= 32U || *p >= 127U) return 2;
     char request[4096];

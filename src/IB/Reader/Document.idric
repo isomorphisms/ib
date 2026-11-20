@@ -1,0 +1,79 @@
+module IB.Reader.Document
+
+import Data.Text
+import Data.List1
+import IB.HtmlPrepaint
+import IB.Prepaint.Reflow
+import IB.Reflow
+import IB.SourceDecoding
+import IB.WebSearch.Results
+
+-- Only the trusted source owner may supply these observations. Incoming
+-- Intents, HTML and search text never enter this constructor path.
+export
+read_committed_evidence : Text → Either Text HtmlEvidence
+read_committed_evidence fields =
+  case forget (split (≟ '\t') fields) of
+    [source, generation, claimed, reopened, byte_count, reopened_count,
+     requested, resolved, mime, charset, status, utf8, complete] ⇒
+      if (utf8 ≟ "verified-utf8" || utf8 ≟ "invalid-utf8") &&
+         (complete ≟ "complete" || complete ≟ "incomplete")
+        then Right (HtmlSourceEvidence source generation claimed reopened
+          (cast byte_count) (cast reopened_count) requested resolved mime
+          charset status (utf8 ≟ "verified-utf8") (complete ≟ "complete"))
+        else Left "unknown-readback-observation"
+    _ ⇒ Left "malformed-readback-observations"
+
+-- Decoding/extraction retains the original HTTP receipt unchanged. Callers
+-- must still apply search semantics before presenting a Google response.
+export
+decode_committed_html_source : HtmlEvidence → Text → Either Text HtmlPrepaintResult
+decode_committed_html_source evidence html =
+  do
+    admitted ← if evidence.charset ≟ "utf-8" || evidence.charset ≟ "UTF-8"
+      then convert_admitted_html evidence html
+      else if not (windows_1252_label evidence.charset) then Left "unsupported-charset"
+      else do
+        octets ← source_octet_carrier html
+        convert_committed_html_octets evidence octets
+    Right admitted
+
+-- Admission remains the maintained HtmlEvidence gate. Layout retains the
+-- admitted source, original blocks and exact source-linked code-point spans.
+-- This function performs neither network acquisition nor durable publication.
+admit_committed_document : HtmlEvidence → Text → Either Text HtmlPrepaintResult
+admit_committed_document evidence html = do
+  admitted ← decode_committed_html_source evidence html
+  google_result_projection admitted
+
+export
+read_committed_dom_evidence : Text → Either Text BrowserDomEvidence
+read_committed_dom_evidence fields = case forget (split (≟ '\t') fields) of
+  ["IBDOM1", source, generation, claimed, reopened, byte_count, reopened_count,
+   requested, resolved, parent, parent_generation, parent_sha, provider, version,
+   serialization, "verified-utf8", "complete"] ⇒
+    Right (BrowserDomSourceEvidence source generation claimed reopened
+      (cast byte_count) (cast reopened_count) requested resolved parent parent_generation
+      parent_sha provider version serialization True True)
+  _ ⇒ Left "malformed-rendered-DOM-observations"
+
+export
+prepare_committed_document : HtmlEvidence → Text → ReflowRequirements → Text →
+  (Text → Number) → Either Text HtmlPrepaintLayout
+prepare_committed_document evidence html request metric measure = do
+  admitted ← admit_committed_document evidence html
+  reflow_html_prepaint request metric measure admitted
+
+export
+prepare_committed_document_advances : HtmlEvidence → Text → ReflowRequirements → Text →
+  (Char → Number) → Either Text HtmlPrepaintLayout
+prepare_committed_document_advances evidence html request metric advance = do
+  admitted ← admit_committed_document evidence html
+  reflow_html_prepaint_advances request metric advance admitted
+
+export
+prepare_committed_dom_advances : HtmlPrepaintResult → List GoogleVerifiedDestination →
+  ReflowRequirements → Text → (Char → Number) → Either Text HtmlPrepaintLayout
+prepare_committed_dom_advances admitted destinations request metric advance = do
+  projected ← google_result_projection_with_destinations admitted destinations
+  reflow_html_prepaint_advances request metric advance projected

@@ -1,0 +1,50 @@
+#!/usr/bin/env grease
+# Exact official r27c archive, bounded transport pieces, full independent hash
+# before any extracted compiler is selected. This is SDK provisioning only.
+set -eu -o pipefail
+if (len(ARGV) !== 2) { echo 'usage: grease fetch-ndk.grease SDK NEW_EVIDENCE' >&2; exit 2 }
+var sdk = ARGV[0]
+var evidence = ARGV[1]
+if (sdk[0] !== '/' or evidence[0] !== '/') { exit 2 }
+if test -e "$evidence" { echo 'FAIL reused NDK evidence' >&2; exit 2 }
+mkdir -p "$evidence"
+var ndk = "$sdk/ndk/27.2.12479018"
+if test -e "$ndk" {
+  rg -x -F 'Pkg.Revision = 27.2.12479018' "$ndk/source.properties"
+  test -x "$ndk/toolchains/llvm/prebuilt/linux-x86_64/bin/x86_64-linux-android29-clang"
+  printf 'exact_SDK_managed_NDK\tPRESENT\n' > "$evidence/receipt.tsv"
+  exit 0
+}
+var start = 0
+var index = 0
+var total = 663987688
+var span = 33554432
+printf '' > "$evidence/ndk.zip"
+while (start < total) {
+  var finish = start + span - 1
+  if (finish >= total) { setvar finish = total - 1 }
+  var number = $(printf '%03d' "$index")
+  var part = "$evidence/part-$number"
+  wget -q --server-response --timeout=60 --tries=2 \
+    --header="Range: bytes=$start-$finish" -O "$part" \
+    https://dl.google.com/android/repository/android-ndk-r27c-linux.zip \
+    2> "$part.headers"
+  var observed = $(stat -c %s "$part")
+  if (int(observed) !== finish - start + 1) { echo 'FAIL incomplete or ignored official NDK range' >&2; exit 1 }
+  rg -q -F "content-range: bytes $start-$finish/$total" "$part.headers"
+  sha256sum "$part" >> "$evidence/parts.sha256"
+  cat "$part" >> "$evidence/ndk.zip"
+  setvar start = finish + 1
+  setvar index += 1
+}
+# Official android/ndk release table, r27c Linux,663987688 bytes and SHA1.
+printf '%s  %s\n' 090e8083a715fdb1a3e402d0763c388abb03fb4e "$evidence/ndk.zip" | sha1sum -c -
+sha256sum "$evidence/ndk.zip" > "$evidence/archive.sha256"
+unzip -tq "$evidence/ndk.zip" > "$evidence/zip-integrity.txt"
+mkdir -p "$evidence/extracted" "$sdk/ndk"
+unzip -q "$evidence/ndk.zip" -d "$evidence/extracted"
+rg -x -F 'Pkg.Revision = 27.2.12479018' "$evidence/extracted/android-ndk-r27c/source.properties"
+test ! -e "$ndk"
+mv "$evidence/extracted/android-ndk-r27c" "$ndk"
+printf 'official_NDK\t27.2.12479018\narchive_length\t663987688\nofficial_SHA1\tMATCH\nzip_integrity\tPASS\n' > "$evidence/receipt.tsv"
+cat "$evidence/receipt.tsv"

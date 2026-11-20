@@ -87,6 +87,21 @@ int main(int argc, char **argv) {
     ib_reader_source_want(&reader, 1);
     accept(&owner, &reader, request_id, 1);
     int fd = -1;
+    ib_arena_source_observations observations;
+    ib_reader_source_ticket observed_ticket;
+    assert(ib_arena_source_owner_open_observed(&owner, request_id, 1, 1,
+        &observed_ticket, &observations, &fd) == 0);
+    assert(observations.source_generation == 1);
+    assert(strcmp(observations.source_key, "arena:verified") == 0);
+    assert(strcmp(observations.requested_url, "https://example.com/start") == 0);
+    assert(strcmp(observations.resolved_url, "https://example.com/final") == 0);
+    assert(strcmp(observations.mime_type, "text/html") == 0);
+    assert(strcmp(observations.charset, "utf-8") == 0);
+    assert(strcmp(observations.http_status, "200") == 0);
+    assert(observations.redirect_chain[0] == 0); /* Legacy v2 did not observe it. */
+    assert(ib_reader_source_accept_fd(&reader, &observed_ticket, fd) == IB_READER_PFD_ACCEPTED);
+    close(fd);
+    fd = -1;
     /* A legacy v1 receipt has matching bytes but no observed admission. */
     assert(ib_arena_source_owner_open(&owner, "legacy", 1, NULL, &fd) != 0);
     assert(fd == -1);
@@ -108,6 +123,11 @@ int main(int argc, char **argv) {
     digest += strlen("sha256\t");
     *digest = *digest == '0' ? '1' : '0';
     overwrite(receipt, damaged, count);
+    memset(&observations, 'X', sizeof(observations));
+    assert(ib_arena_source_owner_open_observed(&owner, request_id, 1, 1,
+        &observed_ticket, &observations, &fd) != 0);
+    ib_arena_source_observations empty_observations = {0};
+    assert(memcmp(&observations, &empty_observations, sizeof(observations)) == 0);
     assert(ib_arena_source_owner_open(&owner, request_id, 1, NULL, &fd) != 0);
     assert(fd == -1);
     preserved(&reader, request_id, 1);
@@ -187,10 +207,56 @@ int main(int argc, char **argv) {
     preserved(&reader, request_id, 1);
     accept(&owner, &reader, "verified2", 2);
     preserved(&reader, "verified2", 2);
+
+    /* Back selects immutable source generation 1 while advancing the reader's
+     * navigation epoch to 3. It must not relabel or refetch those source bytes. */
+    ib_arena_source_owner_want(&owner, 3);
+    ib_reader_source_want(&reader, 3);
+    assert(ib_arena_source_owner_open(&owner, request_id, 3, NULL, &fd) != 0);
+    assert(fd == -1);
+    assert(ib_arena_source_owner_open_retained(&owner, request_id, 2, 3, NULL, &fd) != 0);
+    assert(fd == -1);
+    assert(ib_arena_source_owner_open_retained(&owner, request_id, 1, 2, NULL, &fd) != 0);
+    assert(fd == -1);
+    assert(ib_arena_source_owner_open_retained(&owner, request_id, 0, 3, NULL, &fd) != 0);
+    assert(fd == -1);
+    preserved(&reader, "verified2", 2);
+    ib_reader_source_ticket retained_ticket = {0};
+    puts("STAGE retained source generation 1 at navigation generation 3");
+    fflush(stdout);
+    assert(ib_arena_source_owner_open_retained(&owner, request_id, 1, 3,
+                                               &retained_ticket, &fd) == 0);
+    assert(retained_ticket.navigation_generation == 3);
+    assert(strcmp(retained_ticket.request_id, request_id) == 0);
+    assert(ib_reader_source_accept_fd(&reader, &retained_ticket, fd)
+           == IB_READER_PFD_ACCEPTED);
+    close(fd);
+    preserved(&reader, request_id, 3);
+
+    /* A newer navigation invalidates an in-flight retained read as before. */
+    ib_arena_source_owner_want(&owner, 4);
+    ib_reader_source_want(&reader, 4);
+    assert(ib_arena_source_owner_open_retained(&owner, request_id, 1, 3, NULL, &fd) != 0);
+    assert(fd == -1);
+    assert(ib_arena_source_owner_open_retained(&owner, request_id, 1, 4,
+                                               &retained_ticket, &fd) == 0);
+    ib_arena_source_owner_want(&owner, 5);
+    ib_reader_source_want(&reader, 5);
+    assert(ib_reader_source_accept_fd(&reader, &retained_ticket, fd)
+           == IB_READER_PFD_STALE);
+    close(fd);
+    preserved(&reader, request_id, 3);
+
+    unsigned char *retained_receipt = NULL;
+    size_t retained_count = 0;
+    full_file(receipt, &retained_receipt, &retained_count);
+    assert(retained_count == count && memcmp(retained_receipt, original, count) == 0);
+    free(retained_receipt);
     ib_reader_source_clear(&reader);
     free(original);
     free(damaged);
-    puts("PASS: canonical appendfat v2 HTML admission, matching navigation generation, pipe/double SHA, v1/stale/forged-metadata/byte/permission/symlink/corrupt-pointer refusal and recovery");
-    puts("NOT_RUN: Android private Binder transaction, actual Shizuku/ICU network, Idric reader screen or physical C67");
+    puts("PASS: v2 HTML receipt admission, matching navigation generation, pipe/double SHA, v1/stale/forged-metadata/byte/permission/symlink/corrupt-pointer refusal and recovery");
+    puts("PASS: retained source generation stays immutable across a newer navigation; stale retained reads preserve the last good document");
+    puts("NOT_RUN: Android private Binder transaction, actual Shizuku/ICU network, Idric reader screen or physical TAB_P10");
     return 0;
 }

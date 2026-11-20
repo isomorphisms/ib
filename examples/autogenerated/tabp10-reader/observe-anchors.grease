@@ -1,0 +1,36 @@
+#!/usr/bin/env grease
+set -eu -o pipefail
+if (len(ARGV) !== 4) { echo 'usage: grease observe-anchors.grease ADB SERIAL INPUT NEW_EVIDENCE' >&2; exit 2 }
+var adb = ARGV[0]
+var serial = ARGV[1]
+var input = ARGV[2]
+var evidence = ARGV[3]
+if test -e "$evidence" { echo 'FAIL reused fragment evidence' >&2; exit 2 }
+mkdir -p "$evidence"
+var api = $("$adb" -s "$serial" shell getprop ro.build.version.sdk | tr -d '\r')
+if (api !== ENV.AICI_EXPECTED_ANDROID_API) { exit 1 }
+var digest = $(sha256sum "$input/html-anchors/reader.dex" | cut -d ' ' -f 1)
+var remote = "/data/local/tmp/ib-anchors-$digest"
+"$adb" -s "$serial" shell test ! -e "$remote"
+"$adb" -s "$serial" shell mkdir "$remote"
+for lane in html-anchors html-anchors-offset-mutant html-anchors-percent-mutant {
+  "$adb" -s "$serial" push "$input/$lane/reader.dex" "$remote/$lane.dex"
+  "$adb" -s "$serial" shell chmod 444 "$remote/$lane.dex"
+  "$adb" -s "$serial" pull "$remote/$lane.dex" "$evidence/$lane.received.dex"
+  cmp "$input/$lane/reader.dex" "$evidence/$lane.received.dex"
+  try { timeout 180 "$adb" -s "$serial" shell -T "dalvikvm -cp $remote/$lane.dex Idric.Generated" > "$evidence/$lane.actual" 2> "$evidence/$lane.stderr" }
+  var status = _error.code
+  printf '%s\n' "$status" > "$evidence/$lane.exit"
+  cat "$evidence/$lane.actual"
+  cat "$evidence/$lane.stderr"
+  if (lane === 'html-anchors') {
+    if (status !== 0) { echo 'FAIL actual fragment regression' >&2; exit 1 }
+    printf '%s\n' True > "$evidence/expected.txt"
+  } else {
+    if (status !== 1) { echo 'FAIL fragment mutation did not fail by its semantic result' >&2; exit 1 }
+    printf '%s\n' False > "$evidence/expected.txt"
+  }
+  cmp "$evidence/expected.txt" "$evidence/$lane.actual"
+}
+printf 'schema\tib-html-anchors-v1\napi\t%s\nstrict_once_UTF8_and_source_positions\tPASS\ntwo_compiled_mutants\tREJECTED\nphysical_TAB_P10\tNOT_RUN\n' "$api" > "$evidence/receipt.tsv"
+cat "$evidence/receipt.tsv"

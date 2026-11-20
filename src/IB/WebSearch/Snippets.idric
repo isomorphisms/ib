@@ -1,0 +1,130 @@
+module IB.WebSearch.Snippets
+
+import Data.Text
+import IB.Information
+import IB.RecoveredInformation
+
+-- The observed Google content DOM marks result groups with MjjYud and snippet
+-- divs with data-sncf. These are source associations, not arbitrary nearby
+-- paragraphs. A group must contain exactly one eligible titled result.
+export
+record GoogleSnippet where
+  constructor RetainedGoogleSnippet
+  source_key : Text
+  group_occurrence : Number
+  anchor_occurrences : List Number
+  text : Text
+
+record PendingGroup where
+  constructor Group
+  occurrence : Number
+  div_depth : Number
+  anchors : List Number
+  snippet_depth : Maybe Number
+  snippet_count : Number
+  characters : List Char
+  character_count : Number
+
+is_result_group : Text → Bool
+is_result_group tag = case attribute_value "class" tag of
+  Nothing ⇒ False
+  Just classes ⇒ elem "MjjYud" (words (decode_html_entities classes))
+
+enter_div : Bool → PendingGroup → PendingGroup
+enter_div snippet group =
+  let next : Number = S group.div_depth in
+  let starts : Bool = snippet && group.snippet_depth ≟ Nothing in
+  let count : Number = if starts then S group.snippet_count else group.snippet_count in
+  { div_depth := next, snippet_count := count,
+    snippet_depth := if starts then Just next else group.snippet_depth } group
+
+add_text : Text → PendingGroup → PendingGroup
+add_text text group = case group.snippet_depth of
+  Nothing ⇒ group
+  Just _ ⇒
+    let count = group.character_count + length (unpack text) in
+    { character_count := count,
+      characters := if count > 1024 then [] else reverse (unpack text) ++ group.characters } group
+
+finish_group : Text → PendingGroup → Maybe GoogleSnippet
+finish_group source group =
+  let text = unwords (words (decode_html_entities (pack (reverse group.characters)))) in
+  if group.snippet_count /= 1 || group.character_count > 1024 || text ≟ "" ||
+     length (unpack text) > 1024 then Nothing
+    else Just (RetainedGoogleSnippet source group.occurrence (reverse group.anchors) text)
+
+complete_group : Text → PendingGroup → List GoogleSnippet → List GoogleSnippet
+complete_group source group finished = case finish_group source group of
+  Nothing ⇒ finished
+  Just snippet ⇒ snippet :: finished
+
+leave_div : Text → List PendingGroup → List GoogleSnippet →
+  (List PendingGroup, List GoogleSnippet)
+leave_div source [] finished = ([], finished)
+leave_div source (group :: rest) finished =
+  let completed = if group.div_depth ≟ 1 then complete_group source group finished else finished
+      (remaining, snippets) = leave_div source rest completed in
+  if group.div_depth ≟ 1 then (remaining, snippets)
+    else let updated = { div_depth := group.div_depth `minus` 1,
+               snippet_depth := if group.snippet_depth ≟ Just group.div_depth
+                 then Nothing else group.snippet_depth } group in
+      (updated :: remaining, snippets)
+
+scan_groups : Text → Number → Maybe (Text, Number) → List PendingGroup → List GoogleSnippet →
+  List DocumentEvent → List GoogleSnippet
+scan_groups source position skipped active finished [] = reverse finished
+scan_groups source position (Just (name, depth)) active finished (StartTag next _ :: rest) =
+  scan_groups source (S position) (Just (name, if next ≟ name then S depth else depth)) active finished rest
+scan_groups source position (Just (name, depth)) active finished (EndTag next :: rest) =
+  let skipped = if next /= name then Just (name, depth) else case depth of
+        0 ⇒ Nothing
+        S remaining ⇒ Just (name, remaining) in
+  scan_groups source (S position) skipped active finished rest
+scan_groups source position (Just skipped) active finished (_ :: rest) =
+  scan_groups source (S position) (Just skipped) active finished rest
+scan_groups source position Nothing active finished (StartTag "div" tag :: rest) =
+  let snippet = case attribute_value "data-sncf" tag of
+        Nothing ⇒ False
+        Just _ ⇒ True
+      entered = map (enter_div snippet) active
+      groups = if is_result_group tag && length active < 32
+        then Group position 1 [] (if snippet then Just 1 else Nothing)
+          (if snippet then 1 else 0) [] 0 :: entered else entered in
+  scan_groups source (S position) Nothing groups finished rest
+scan_groups source position Nothing active finished (StartTag "a" _ :: rest) =
+  scan_groups source (S position) Nothing
+    (map (\group ⇒ { anchors := position :: group.anchors } group) active) finished rest
+scan_groups source position Nothing active finished (EndTag "div" :: rest) =
+  let (remaining, snippets) = leave_div source active finished in
+  scan_groups source (S position) Nothing remaining snippets rest
+scan_groups source position Nothing active finished (ImpliedEndTag "div" :: rest) =
+  let (remaining, snippets) = leave_div source active finished in
+  scan_groups source (S position) Nothing remaining snippets rest
+scan_groups source position Nothing active finished (TextEvent text :: rest) =
+  scan_groups source (S position) Nothing (map (add_text text) active) finished rest
+scan_groups source position Nothing active finished (StartTag name _ :: rest) =
+  scan_groups source (S position)
+    (if elem name ["script", "style", "template", "svg", "canvas", "nav", "header", "footer"]
+      then Just (name, 0) else Nothing) active finished rest
+scan_groups source position Nothing active finished (_ :: rest) =
+  scan_groups source (S position) Nothing active finished rest
+
+export
+google_dom_snippets : RecoveredDocumentLog → List GoogleSnippet
+google_dom_snippets source = scan_groups (document_log_source source) 0 Nothing [] [] (document_log_events source)
+
+nearest : Text → List Number → Number → List GoogleSnippet → Maybe GoogleSnippet → Maybe GoogleSnippet
+nearest source eligible occurrence [] retained = retained
+nearest source eligible occurrence (snippet :: rest) retained =
+  let matches = snippet.source_key ≟ source && elem occurrence snippet.anchor_occurrences &&
+        filter (\position ⇒ elem position snippet.anchor_occurrences) eligible ≟ [occurrence]
+      preferred = case retained of
+        Nothing ⇒ True
+        Just previous ⇒ snippet.group_occurrence > previous.group_occurrence
+      updated = if matches && preferred then Just snippet else retained in
+  nearest source eligible occurrence rest updated
+
+export
+google_result_snippet : Text → List Number → Number → List GoogleSnippet → Maybe Text
+google_result_snippet source eligible occurrence snippets = map (\snippet ⇒ snippet.text)
+  (nearest source eligible occurrence snippets Nothing)

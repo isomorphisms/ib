@@ -1,0 +1,72 @@
+module IB.Reflow.Emergency
+
+import Data.Text
+import Data.List
+import IB.Reflow
+import IB.Reflow.Source
+import IB.Reflow.SourceBreaks
+
+-- Add source cuts only inside printable ASCII runs whose measured advance
+-- exceeds the viewport. Normal words retain their existing break policy.
+-- Non-ASCII clusters, CRLF, joiners and combining marks are not segmented by
+-- this bounded provider. The common source-cut validator remains mandatory.
+ascii_character : Char → Bool
+ascii_character value = ord value >= 33 && ord value <= 126
+
+hexadecimal : Char → Bool
+hexadecimal value = (value >= '0' && value <= '9') ||
+  (value >= 'a' && value <= 'f') || (value >= 'A' && value <= 'F')
+
+cut_before_remaining : Number → List Char → List SourceBreak → List SourceBreak
+cut_before_remaining position [] later = later
+cut_before_remaining position (_ :: _) later = At position PossibleBreak :: later
+
+interior_cuts : Number → List Char → List SourceBreak
+interior_cuts position [] = []
+interior_cuts position ('%' :: first :: second :: rest) =
+  if hexadecimal first && hexadecimal second then
+    cut_before_remaining (position + 3) rest (interior_cuts (position + 3) rest)
+  else cut_before_remaining (S position) (first :: second :: rest)
+    (interior_cuts (S position) (first :: second :: rest))
+interior_cuts position (_ :: rest) =
+  cut_before_remaining (S position) rest (interior_cuts (S position) rest)
+
+run_advance : (Char → Number) → List Char → Number
+run_advance advance = foldl (\accumulated, character ⇒ accumulated + advance character) 0
+
+scan_runs : Number → Number → (Char → Number) → Number → List Char →
+  Either Text (List SourceBreak)
+scan_runs fuel width advance position [] = Right []
+scan_runs 0 width advance position (_ :: _) = Left "ASCII run scan budget exhausted"
+scan_runs (S fuel) width advance position characters@(first :: rest) =
+  if ascii_character first then
+    let (run, remaining) = span ascii_character characters
+        count = length run in do
+      later ← scan_runs fuel width advance (position + count) remaining
+      Right ((if run_advance advance run > width then interior_cuts position run else []) ++ later)
+  else scan_runs fuel width advance (S position) rest
+
+merge_cuts : List SourceBreak → List SourceBreak → List SourceBreak
+merge_cuts [] extra = extra
+merge_cuts normal [] = normal
+merge_cuts normal@(first :: rest) extra@(next :: later) =
+  if first.source_offset < next.source_offset then first :: merge_cuts rest extra
+  else if first.source_offset > next.source_offset then next :: merge_cuts normal later
+  else first :: merge_cuts rest later
+
+export
+emergency_source_breaks : Number → (Char → Number) → Text → Either Text (List SourceBreak)
+emergency_source_breaks width advance text = do
+  let characters = unpack text
+  extra ← scan_runs (length characters) width advance 0 characters
+  Right (merge_cuts (source_breaks text) extra)
+
+export
+reflow_emergency_advances : ReflowRequirements → (Char → Number) → Text → Either Text (List SourceLine)
+reflow_emergency_advances request@(Requirements width _) advance text = do
+  normal ← reflow_source_advances request advance text
+  if all (\line ⇒ run_advance advance (unpack line.visible_text) <= width) normal
+    then Right normal
+    else do
+      cuts ← emergency_source_breaks width advance text
+      reflow_at_breaks_advances request advance text cuts

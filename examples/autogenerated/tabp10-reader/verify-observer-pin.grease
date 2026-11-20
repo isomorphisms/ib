@@ -1,0 +1,20 @@
+#!/usr/bin/env grease
+set -eu -o pipefail
+if (len(ARGV) !== 3) { echo 'requires BUILD_OBSERVER_FILE OBSERVER_CHECKOUT EXPECTED_SHA' >&2; exit 2 }
+var metadata = ARGV[0]
+var checkout = ARGV[1]
+var expected = ARGV[2]
+printf '%s\n' "$expected" | rg -q -x '[0-9a-f]{40}'
+# Assign command results outside a conditional so strict_errexit observes
+# failure of cat/git before comparing the immutable identities.
+var built = $(cat "$metadata")
+if (built !== expected) {
+  echo 'FAIL candidate build observer differs from the immutable qualification pin' >&2
+  exit 1
+}
+var observed = $(git -C "$checkout" rev-parse HEAD)
+if (observed !== expected) {
+  echo 'FAIL independent Android observer checkout differs from the immutable qualification pin' >&2
+  exit 1
+}
+echo 'PASS build metadata and actual observer checkout match the immutable pin'

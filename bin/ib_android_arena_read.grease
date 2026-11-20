@@ -22,7 +22,7 @@ test -f "$manifest" && test ! -L "$manifest" || fail 'receipt absent'
 for entry in "$arena" "$arena.used" "$arena.lock"; do
   test -f "$entry" && test ! -L "$entry" || fail 'invalid canonical Arena file'
 done
-test "$(wc -c < "$manifest" | tr -d '[:space:]')" -le 8192 || fail 'oversized receipt'
+test "$(wc -c < "$manifest" | tr -d '[:space:]')" -le 16384 || fail 'oversized receipt'
 tr -cd '\011\012\040-\176' < "$manifest" | cmp -s - "$manifest" ||
   fail 'receipt contains nonprintable bytes'
 field() { awk -F '\t' -v key="$1" '$1==key {print $2}' "$manifest"; }
@@ -34,16 +34,17 @@ case "$schema" in
     names='schema request_id source_key source_generation requested_url resolved_url http_status mime_type charset content_encoding utf8 redirect_count declared_length received_length transport arena_name arena_offset arena_end byte_count sha256 reopen_check acquisition_complete navigation_admitted' ;;
   *) fail 'unsupported receipt schema' ;;
 esac
-awk -F '\t' -v expected="$count" -v names="$names" '
+awk -F '\t' -v expected="$count" -v names="$names" -v schema="$schema" '
   BEGIN {
     count=split(names, elements, " ")
     for (i=1; i<=count; i++) allowed[elements[i]]=1
+    if (schema=="ib-icu-arena-v2") allowed["redirect_chain"]=1
   }
   NF!=2 || !allowed[$1] || $2=="" { bad=1 }
   { seen[$1]++ }
   END {
-    for (key in allowed) if (seen[key]!=1) bad=1
-    if (bad || NR!=expected) exit 1
+    for (i=1;i<=count;i++) if (seen[elements[i]]!=1) bad=1
+    if (seen["redirect_chain"]>1 || bad || NR!=expected+seen["redirect_chain"]) exit 1
   }
 ' "$manifest" || fail 'invalid receipt structure'
 test "$(field request_id)" = "$request_id" || fail 'receipt identity mismatch'
@@ -89,6 +90,11 @@ else
   case "$redirects" in ''|*[!0123456789]*) fail 'invalid redirect count' ;; esac
   test "${#redirects}" -le 2 && test "$redirects" -le 8 ||
     fail 'invalid redirect observation'
+  chain=$(field redirect_chain)
+  if test -n "$chain"; then
+    "$reader" redirects "$requested" "$resolved" "$redirects" "$chain" ||
+      fail 'corrupt response-owner redirect observations'
+  fi
   reported=$(field received_length)
   declared=$(field declared_length)
   case "$reported" in ''|*[!0123456789]*) fail 'invalid received length' ;; esac
