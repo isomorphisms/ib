@@ -476,7 +476,7 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           repository: isomorphisms/ai-ci
-          ref: 2904a2e5e05a899e51548af440847217ec941a3f
+          ref: 338fef26e367364c77ac3d8cd45a570ae6cbc3b0
           path: .tools/admin-acceptance
           persist-credentials: false
       - id: ick
