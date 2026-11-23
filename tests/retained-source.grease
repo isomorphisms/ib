@@ -1,0 +1,69 @@
+#!/usr/bin/env grease
+set -eu
+root=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)
+runner=${GREASE:?set GREASE to the verified runtime}
+temporary=$(mktemp -d)
+trap 'rm -rf -- "$temporary"' EXIT HUP INT TERM
+export IB_HOME=$temporary/state
+run_source() { "$runner" "$root/bin/ib-source.grease" "$@"; }
+cat > "$temporary/provenance.tsv" <<'EOF'
+source	synthetic-decoder-test
+corpus	storage-fixture
+provider	local
+object	explicit-fixture
+version	1
+member	-
+acquired_at	2026-10-06T00:00:00Z
+privacy	private
+model	deny
+EOF
+# Synthetic parser fixture: this must never be relabeled live OpenAI evidence.
+cat > "$temporary/conversations.json" <<'EOF'
+[{"id":"conversation-1","create_time":123,"current_node":"branch-b","unknown":{"keep":true},"mapping":{"root":{"parent":null,"children":["branch-a","branch-b"],"message":{"id":"message-1","create_time":124,"author":{"role":"user"},"content":{"content_type":"text","parts":["searchable source text"]},"metadata":{"citations":[{"url":"https://example.invalid/reference"}]}}},"branch-a":{"parent":"root","children":[],"message":{"id":"message-2","content":{"content_type":"multimodal_text","parts":[{"asset_pointer":"file-service://asset"}]}}},"branch-b":{"parent":"root","children":[],"message":{"id":"message-3","create_time":125,"content":{"content_type":"text","parts":["alternative answer"]}}}}}]
+EOF
+identifier=$(run_source retain chatgpt-export "$temporary/conversations.json" "$temporary/provenance.tsv")
+test "$(run_source retain chatgpt-export "$temporary/conversations.json" "$temporary/provenance.tsv")" = "$identifier"
+run_source verify "$identifier"
+view=$(run_source distill "$identifier")
+test "$(jq -s 'length' "$view/records.ndjson")" = 4
+jq -s -e 'any(.[]; .kind == "message-node" and .original_id == "message-2" and .value.message.content.parts[0].asset_pointer == "file-service://asset")' "$view/records.ndjson" >/dev/null
+jq -s -e 'any(.[]; .node_key == "root" and .value.children == ["branch-a","branch-b"] and .value.message.create_time == 124)' "$view/records.ndjson" >/dev/null
+jq -s -e 'any(.[]; .kind == "conversation" and .value.current_node == "branch-b" and .value.unknown.keep == true)' "$view/records.ndjson" >/dev/null
+if "$runner" "$root/bin/ib" search 'searchable source text' | grep -F 'messages.txt' >/dev/null; then exit 1; fi
+before=$(sha256sum "$view/records.ndjson")
+rm -rf -- "$view" "$IB_HOME/pensieve/indexes"
+view=$(run_source distill "$identifier")
+test "$(sha256sum "$view/records.ndjson")" = "$before"
+cmp -s "$temporary/conversations.json" "$IB_HOME/cauldron/sources/$identifier/raw"
+# Same bytes from a different origin must not collapse source identity.
+sed 's/explicit-fixture/another-origin/' "$temporary/provenance.tsv" > "$temporary/other.tsv"
+other=$(run_source retain chatgpt-export "$temporary/conversations.json" "$temporary/other.tsv")
+test "$other" != "$identifier"
+# Ordinary material is admitted independently from private material.
+sed 's/private/ordinary/;s/model\tdeny/model\tallow/' "$temporary/provenance.tsv" > "$temporary/ordinary.tsv"
+printf '# comment\nhttps://example.invalid/a\n\nhttps://example.invalid/a\n' > "$temporary/urls"
+history=$(run_source retain raw-urls "$temporary/urls" "$temporary/ordinary.tsv")
+history_view=$(run_source distill "$history")
+printf 'order\tsource_line\ttimestamp\n0\t2\tunknown\n1\t4\tunknown\n' > "$temporary/coordinates"
+cmp "$temporary/coordinates" "$history_view/coordinates.tsv"
+ordinary_chat=$(run_source retain chatgpt-export "$temporary/conversations.json" "$temporary/ordinary.tsv")
+run_source distill "$ordinary_chat" >/dev/null
+"$runner" "$root/bin/ib" search 'searchable source text' | grep -F 'messages.txt' >/dev/null
+sed '/^privacy/d' "$temporary/provenance.tsv" > "$temporary/bad.tsv"
+if run_source retain raw-urls "$temporary/urls" "$temporary/bad.tsv" 2> "$temporary/error"; then exit 1; fi
+grep -F 'nine distinct' "$temporary/error" >/dev/null
+printf 'changed' >> "$IB_HOME/cauldron/sources/$other/raw"
+if run_source verify "$other" 2> "$temporary/error"; then exit 1; fi
+grep -F 'bytes changed' "$temporary/error" >/dev/null
+printf '[{"mapping":[]}]' > "$temporary/malformed.json"
+bad=$(run_source retain chatgpt-export "$temporary/malformed.json" "$temporary/provenance.tsv")
+if run_source distill "$bad" 2> "$temporary/error"; then exit 1; fi
+grep -F 'mapping object' "$temporary/error" >/dev/null
+run_source verify "$bad"
+if run_source verify '../../elsewhere' 2> "$temporary/error"; then exit 1; fi
+grep -F 'invalid retained source identity' "$temporary/error" >/dev/null
+mkdir "$temporary/outside"
+ln -s "$temporary/outside" "$IB_HOME/cauldron/sources/$(printf 'a%.0s' $(seq 1 64))"
+if run_source verify "$(printf 'a%.0s' $(seq 1 64))" 2> "$temporary/error"; then exit 1; fi
+grep -F 'incomplete' "$temporary/error" >/dev/null
+printf 'PASS Grease retained-source, graph/reference, history, rebuild and refusal fixtures; live source NOT_RUN\n'

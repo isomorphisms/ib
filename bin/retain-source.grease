@@ -1,0 +1,68 @@
+#!/usr/bin/env grease
+# OS/file orchestration for the existing shell-first Cauldron/Pensieve line.
+set -eu
+umask 077
+root=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)
+. "$root/lib/ib/pensieve.grease"
+
+fail() { printf 'retain-source: %s\n' "$*" >&2; exit 2; }
+field() { awk -F '\t' -v key="$1" '$1==key {print $2}' "$manifest"; }
+test "$#" = 2 || fail 'usage: retain-source SOURCE_BYTES SOURCE_TSV'
+input=$1
+manifest=$2
+test -f "$input" && test ! -L "$input" || fail 'source must be a regular non-symlink file'
+test -f "$manifest" && test ! -L "$manifest" || fail 'manifest must be a regular non-symlink file'
+test "$(wc -c < "$manifest")" -le 65536 || fail 'manifest exceeds 64 KiB'
+awk -F '\t' '
+  NF!=2 || $1 !~ /^[a-z][a-z0-9_]*$/ || $2=="" || /\r/ {exit 1}
+  seen[$1]++ {exit 1}
+' "$manifest" || fail 'manifest must contain unique nonempty TSV fields'
+for key in source_kind source_identity source_generation acquired_at privacy exposure sha256 byte_count; do
+  test -n "$(field "$key")" || fail "missing provenance field: $key"
+done
+privacy=$(field privacy)
+case $privacy in ordinary|private) ;; *) fail 'privacy must be ordinary or private' ;; esac
+case $(field exposure) in local-only|selected-export) ;; *) fail 'unsupported exposure policy' ;; esac
+digest=$(field sha256)
+case $digest in *[!0-9a-f]*|'') fail 'invalid SHA-256' ;; esac
+test "${#digest}" = 64 || fail 'invalid SHA-256 length'
+count=$(field byte_count)
+case $count in *[!0-9]*|'') fail 'invalid byte count' ;; esac
+# This first intake admits selected shards only, not whole Takeouts/mailboxes.
+test "${#count}" -le 8 && test "$count" -le 16777216 || fail 'selected source exceeds 16 MiB'
+test "$(dd if="$input" bs=65536 count=257 2>/dev/null | sha256sum | awk '{print $1}')" = "$digest" || fail 'source SHA-256 mismatch'
+
+home=$(ib_home)
+mkdir -p "$home"
+home=$(CDPATH='' cd -P -- "$home" && pwd -P)
+# An approved root may itself be deliberately mounted/selected. Descendant
+# roots must not redirect intake through symlinks.
+for directory in "$home/cauldron" "$home/cauldron/sources"; do
+  test ! -L "$directory" || fail 'symlink in retained source root'
+  mkdir -p "$directory"
+done
+source_id=$({ cat "$manifest"; printf '\n%s\n' "$digest"; } | sha256sum | awk '{print $1}')
+destination=$home/cauldron/sources/$source_id
+test ! -L "$destination" || fail 'symlink at retained source identity'
+if test -d "$destination"; then
+  test ! -L "$destination/raw" && test ! -L "$destination/provenance.tsv" || fail 'symlink in retained source'
+  cmp "$manifest" "$destination/provenance.tsv" >/dev/null || fail 'retained provenance conflict'
+  test "$(sha256sum "$destination/raw" | awk '{print $1}')" = "$digest" || fail 'retained bytes are corrupt'
+  printf '%s\n' "$source_id"
+  exit 0
+fi
+lock=$destination.lock
+mkdir "$lock" || fail 'source publication is already in progress; inspect its lock'
+stage=$lock/staged
+cleanup() { rm -rf "$lock"; }
+trap cleanup EXIT HUP INT TERM
+mkdir "$stage"
+# Bound the copy itself, including a source that grows after its size check.
+dd if="$manifest" of="$stage/provenance.tsv" bs=65536 count=2 2>/dev/null
+dd if="$input" of="$stage/raw" bs=65536 count=257 2>/dev/null
+chmod 600 "$stage/raw" "$stage/provenance.tsv"
+cmp "$manifest" "$stage/provenance.tsv" >/dev/null || fail 'provenance changed during intake'
+test "$(sha256sum "$stage/raw" | awk '{print $1}')" = "$digest" || fail 'source changed during intake'
+test "$(wc -c < "$stage/raw" | tr -d '[:space:]')" = "$count" || fail 'source length changed during intake'
+mv "$stage" "$destination"
+printf '%s\n' "$source_id"

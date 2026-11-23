@@ -1,0 +1,54 @@
+#!/bin/sh
+set -eu
+
+repository_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+. "$repository_root/lib/ib/pensieve.grease"
+
+rebuild() {
+  pensieve=$(ib_pensieve)
+  derived="$pensieve/indexes/hyperplanes"
+  mkdir -p "$derived"
+
+  temporary="$derived/.body-inputs.$$"
+  trap 'rm -rf "$temporary"' EXIT HUP INT TERM
+  mkdir -p "$temporary"
+
+  python3 "$repository_root/experiments/pensieve-hyperplanes/build_pensieve_inputs.py" \
+    --pensieve "$pensieve" \
+    --output "$temporary/body-inputs.tsv" \
+    --manifest "$temporary/body-inputs.manifest.json" \
+    >/dev/null
+
+  mv "$temporary/body-inputs.tsv" "$derived/body-inputs.tsv"
+  mv "$temporary/body-inputs.manifest.json" "$derived/body-inputs.manifest.json"
+  rmdir "$temporary"
+  trap - EXIT HUP INT TERM
+  printf '%s\n' "$derived/body-inputs.tsv"
+}
+
+case "$#" in
+  1)
+    test "$1" = rebuild || {
+      printf 'usage: %s rebuild | %s PENSIEVE-ITEM CAULDRON-ITEM\n' "$0" "$0" >&2
+      exit 2
+    }
+    rebuild
+    ;;
+  2)
+    pensieve_item=$1
+    cauldron_item=$2
+    test -d "$pensieve_item" || {
+      printf 'pensieve hyperplane input: missing item %s\n' "$pensieve_item" >&2
+      exit 1
+    }
+    test -d "$cauldron_item" || {
+      printf 'pensieve hyperplane input: missing source %s\n' "$cauldron_item" >&2
+      exit 1
+    }
+    rebuild
+    ;;
+  *)
+    printf 'usage: %s rebuild | %s PENSIEVE-ITEM CAULDRON-ITEM\n' "$0" "$0" >&2
+    exit 2
+    ;;
+esac
