@@ -42,6 +42,14 @@ information prepaint. It uses native Android views rather than `WebView`, applie
 a fixed dark presentation to extracted text, preserves fetched image colors, and
 replaces partial projections with later complete revisions.
 
+`android-material-reader/` now holds the application resources for a native
+Material 3 reading qualification. Checked Idriç constructs the Activity and
+framework views through the reusable direct-DEX backend; the screen reads a
+pinned IB-owned document and offers an explicit source chooser. It remains a
+source-snapshot qualification, with live retained-source/store wiring and
+physical acceptance tracked separately. See its README and the native view
+qualification receipts.
+
 The current Idriç core covers ordered history values, rebuildable indexes,
 storage classification and read policy, the renderer-independent inspector
 model, and the first protected long-view task transitions. Scientific-media

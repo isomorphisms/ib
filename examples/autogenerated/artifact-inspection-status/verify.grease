@@ -1,0 +1,64 @@
+#!/usr/bin/env grease
+# Exercise the real inspector with controlled artifact inputs, not UI mocks.
+set -eu -o pipefail
+
+if (len(ARGV) !== 3) {
+  echo 'usage: grease verify.grease ABSOLUTE_INSPECTOR ABSOLUTE_GREASE FRESH_ABSOLUTE_DIRECTORY' >&2
+  exit 2
+}
+var inspector = ARGV[0]
+var grease = ARGV[1]
+var directory = ARGV[2]
+if (not inspector.startsWith('/') or not grease.startsWith('/') or not directory.startsWith('/')) {
+  echo 'FAIL: all fixture paths must be absolute' >&2
+  exit 2
+}
+test -f "$inspector"
+test -x "$grease"
+if test -e "$directory" {
+  echo 'FAIL: fixture directory must be fresh' >&2
+  exit 2
+}
+mkdir -p "$directory/fixture" "$directory/cache"
+cp -- "$inspector" "$directory/fixture/inspect-artifacts.grease"
+printf '<project>controlled inspection bytes</project>\n' > "$directory/input.pom"
+var digest = $(sha256sum "$directory/input.pom" | cut -d ' ' -f 1)
+printf 'input.pom\t%s\tfile://%s/input.pom\n' "$digest" "$directory" > "$directory/fixture/artifacts.tsv"
+
+"$grease" "$directory/fixture/inspect-artifacts.grease" "$directory/cache" > "$directory/positive.log" 2>&1
+test -s "$directory/cache/inspection.tsv"
+grep -F "$digest" "$directory/cache/inspection.tsv" > /dev/null
+echo 'PASS: successful input publishes current inspection'
+
+printf 'corrupted bytes\n' > "$directory/cache/input.pom"
+try { "$grease" "$directory/fixture/inspect-artifacts.grease" "$directory/cache" > "$directory/corrupt.log" 2>&1 }
+var corrupt_status = _error.code
+if (corrupt_status === 0) {
+  echo 'FAIL: corrupt input accepted' >&2
+  exit 1
+}
+if test -e "$directory/cache/inspection.tsv" {
+  echo 'FAIL: corrupt input retained stale success' >&2
+  exit 1
+}
+echo 'PASS: corrupt input refuses and removes stale success'
+
+cp -- "$directory/input.pom" "$directory/cache/input.pom"
+"$grease" "$directory/fixture/inspect-artifacts.grease" "$directory/cache" > "$directory/recovery.log" 2>&1
+cmp -- "$directory/positive.log" "$directory/recovery.log"
+test -s "$directory/cache/inspection.tsv"
+echo 'PASS: corrected cached input recovers identical inspection'
+
+rm -- "$directory/cache/input.pom" "$directory/input.pom"
+try { "$grease" "$directory/fixture/inspect-artifacts.grease" "$directory/cache" > "$directory/unavailable.log" 2>&1 }
+var unavailable_status = _error.code
+if (unavailable_status === 0) {
+  echo 'FAIL: unavailable input accepted' >&2
+  exit 1
+}
+if test -e "$directory/cache/inspection.tsv" {
+  echo 'FAIL: unavailable input retained stale success' >&2
+  exit 1
+}
+echo 'PASS: unavailable input refuses and removes stale success'
+printf 'check\tstatus\npositive\t0\ncorrupt\t%s\nrecovery\t0\nunavailable\t%s\n' "$corrupt_status" "$unavailable_status" > "$directory/status.tsv"

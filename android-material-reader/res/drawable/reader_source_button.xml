@@ -1,0 +1,5 @@
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+  <solid android:color="@color/reader_primary" />
+  <corners android:radius="24dp" />
+  <padding android:left="24dp" android:right="24dp" android:top="8dp" android:bottom="8dp" />
+</shape>

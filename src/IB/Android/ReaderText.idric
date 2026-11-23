@@ -1,0 +1,50 @@
+module IB.Android.ReaderText
+
+import Data.Text
+
+-- Disposable Android handles; browser and retained-source identity stay outside.
+export
+data ReaderTextView : Type where [external]
+data PlatformCharacters : Type where [external]
+
+%foreign "dex:virtual:Ljava/lang/String;:length:()I"
+platform_text_length : Text → PrimIO Int32
+
+%foreign "dex:virtual:Ljava/lang/String;:subSequence:(II)Ljava/lang/CharSequence;"
+platform_characters : Text → Int32 → Int32 → PrimIO PlatformCharacters
+
+%foreign "dex:virtual:Landroid/widget/TextView;:setText:(Ljava/lang/CharSequence;)V"
+set_reader_text : ReaderTextView → PlatformCharacters → PrimIO ()
+
+%foreign "dex:virtual:Landroid/widget/TextView;:getText:()Ljava/lang/CharSequence;"
+get_reader_characters : ReaderTextView → PrimIO PlatformCharacters
+
+%foreign "dex:interface:Ljava/lang/CharSequence;:toString:()Ljava/lang/String;"
+decoded_platform_text : PlatformCharacters → PrimIO Text
+
+%foreign "dex:virtual:Landroid/widget/TextView;:setSingleLine:(Z)V"
+set_reader_single_line : ReaderTextView → Int32 → PrimIO ()
+
+%foreign "dex:virtual:Landroid/widget/TextView;:setHorizontallyScrolling:(Z)V"
+set_reader_horizontal_scrolling : ReaderTextView → Int32 → PrimIO ()
+
+%foreign "dex:virtual:Landroid/widget/TextView;:setTextIsSelectable:(Z)V"
+set_reader_selection : ReaderTextView → Int32 → PrimIO ()
+
+export
+present_reader_text : ReaderTextView → Text → IO ()
+present_reader_text view text = do
+  -- The backend's Boolean ABI uses the checked Int32 values 0 and 1.
+  primIO (set_reader_single_line view 0)
+  primIO (set_reader_horizontal_scrolling view 0)
+  primIO (set_reader_selection view 1)
+  character_units ← primIO (platform_text_length text)
+  characters ← primIO (platform_characters text 0 character_units)
+  primIO (set_reader_text view characters)
+
+-- Qualification readback only; never reparse this as durable browser input.
+export
+observed_reader_text : ReaderTextView → IO Text
+observed_reader_text view = do
+  characters ← primIO (get_reader_characters view)
+  primIO (decoded_platform_text characters)
