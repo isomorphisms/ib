@@ -1,0 +1,21 @@
+module IB.Reflow.Greedy
+
+import Data.Text
+
+-- Single forward pass through the supplied segments. This can be adapted to
+-- streaming input and retains only one unfinished line. A greedy line may
+-- leave the following lines ragged, and width measurement may itself be costly.
+-- Never discard or split a segment just to satisfy the line width.
+fill_line : (Text → Number) → Number → Text → List Text → List Text
+fill_line measure width current [] = [current]
+fill_line measure width current (next :: rest) =
+  let extended = current ++ " " ++ next in
+  if measure extended <= width
+    then fill_line measure width extended rest
+    else current :: fill_line measure width next rest
+
+public export
+reflow_greedily : (Text → Number) → Number → List Text → List Text
+reflow_greedily measure width [] = []
+reflow_greedily measure width (first :: rest) =
+  fill_line measure width first rest
