@@ -1,0 +1,30 @@
+PASS initial record exactly excludes path query fragment and one-time value
+PASS initial task has no renderer or authentication evidence
+PASS exact ordinary origin remains distinguishable
+PASS HTTP loopback port can be a deterministic live fixture origin
+PASS origin retains bracketed IPv6 without path material
+PASS userinfo and non-HTTP schemes refuse
+PASS authority ambiguity refuses before redaction
+PASS filesystem identities refuse traversal and separators
+PASS missing field refuses
+PASS repeated field refuses
+PASS unknown secret-bearing diagnostic refuses
+PASS wrong schema refuses
+PASS unclassified authorization adapter refuses
+PASS persisted authentication claim refuses
+PASS persisted heap claim refuses
+PASS unapproved form checkpoint refuses
+PASS path-bearing durable target refuses
+PASS mismatched durable origins refuse
+PASS noncanonical and negative generations refuse
+PASS truncated final line refuses
+PASS record beyond metadata bound refuses
+PASS attachment preserves identity and advances renderer only
+PASS attachment alone has no committed page
+PASS second attachment requires a loss or reopen
+PASS page commit remains unconfirmed without a usable action
+PASS unsupported action kind cannot assert authentication
+PASS wrong task callback refuses
+PASS wrong tab callback refuses
+PASS wrong navigation callback refuses
+FAIL wrong host callback refuses

@@ -1,0 +1,51 @@
+module AdminFixture
+
+import Data.Text
+
+data Action = Observe | UseControl | Verify | RequestValue | AmbiguousMutation
+
+data Outcome = Unchanged | OrdinaryConfirmed | Verified | Denied | ValueDelivered | AlreadyDelivered | ResponseIncomplete
+
+record State where
+  constructor MkState
+  verified : Bool
+  usable_actions : Number
+  value_attempts : Number
+  value_deliveries : Number
+  ambiguous_effects : Number
+
+initial : State
+initial = MkState False 0 0 0 0
+
+step : Action → State → (State, Outcome)
+step Observe state = (state, Unchanged)
+step UseControl state = ({ usable_actions $= S } state, OrdinaryConfirmed)
+step Verify state = ({ verified := True } state, Verified)
+step RequestValue state =
+  let counted = { value_attempts $= S } state in
+  if not state.verified then (counted, Denied)
+  else if state.value_deliveries ≟ 0
+    then ({ value_deliveries := 1 } counted, ValueDelivered)
+    else (counted, AlreadyDelivered)
+step AmbiguousMutation state =
+  if not state.verified then (state, Denied)
+  else ({ ambiguous_effects $= S } state, ResponseIncomplete)
+
+checks : Bool
+checks =
+  let (used, _) = step UseControl initial
+      (denied, _) = step RequestValue used
+      (verified, _) = step Verify denied
+      (delivered, _) = step RequestValue verified
+      (repeated, _) = step RequestValue delivered
+      (uncertain, _) = step AmbiguousMutation repeated
+      (reloaded, _) = step Observe uncertain in
+  used.usable_actions ≟ 1 &&
+  denied.value_attempts ≟ 1 && denied.value_deliveries ≟ 0 &&
+  delivered.value_deliveries ≟ 1 &&
+  repeated.value_attempts ≟ 3 && repeated.value_deliveries ≟ 1 &&
+  uncertain.ambiguous_effects ≟ 1 &&
+  reloaded.ambiguous_effects ≟ 1 && reloaded.value_attempts ≟ 3
+
+main : IO ()
+main = putStrLn (show checks)

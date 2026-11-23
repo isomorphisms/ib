@@ -10,6 +10,7 @@
 #include "ib_browser_dom_source.h"
 #include "appendfat_arena.h"
 #include "ib_reader_index.h"
+#include "ib_longview.h"
 
 #include <android/binder_ibinder_jni.h>
 #include <android/binder_status.h>
@@ -575,7 +576,8 @@ Java_org_isomorphisms_ib_ReaderLayoutListener_onLayoutChange(JNIEnv *e, jobject 
     pthread_mutex_lock(&application.mutex);
     int current = activity && application.activity && (*e)->IsSameObject(e, activity, application.activity) && !application.active;
     pthread_mutex_unlock(&application.mutex);
-    if (current) (void)enqueue(e, NULL, 1, NULL, 0, NULL);
+    if (current && !ib_longview_surface_visible(e, activity))
+        (void)enqueue(e, NULL, 1, NULL, 0, NULL);
 }
 
 static int acquire_network_source(JNIEnv *e, reader_job *job, const char *id, const char *url) {
@@ -960,7 +962,8 @@ static void browser_cleanup(JNIEnv *e, reader_job *job) {
     jmethodID remove = method(e, "android/view/ViewGroup", "removeAllViews", "()V");
     if (panel && remove) (*e)->CallVoidMethod(e, panel, remove);
     browser_visibility(e, panel, 8);
-    browser_visibility(e, browser_view(e, activity, READER_SCROLL_VIEW), 0);
+    if (!ib_longview_surface_visible(e, activity))
+        browser_visibility(e, browser_view(e, activity, READER_SCROLL_VIEW), 0);
     jmethodID stop = method(e, "android/webkit/WebView", "stopLoading", "()V");
     if (browser && stop) (*e)->CallVoidMethod(e, browser, stop);
     jmethodID destroy = method(e, "android/webkit/WebView", "destroy", "()V");

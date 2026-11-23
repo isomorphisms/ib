@@ -5,7 +5,88 @@ repository_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 . "$repository_root/lib/scientific_media.grease"
 
 work_directory=$(mktemp -d)
-trap 'rm -rf "$work_directory"' EXIT HUP INT TERM
+
+# Retain only this public test's failed paper. This is the existing sh test
+# boundary; it does not assert that the capture was executed through Grease.
+retain_failure() (
+  # Allow the extra byte used to distinguish a full archive from truncation.
+  ulimit -f 65538 || return 1
+  mkdir -p "$IB_SCIENTIFIC_FAILURE_DIRECTORY" || return 1
+  failure_directory=$(CDPATH= cd -- "$IB_SCIENTIFIC_FAILURE_DIRECTORY" && pwd) || return 1
+  {
+    printf 'test_exit=%s\nidentifier=%s\narchive_limit_bytes=33554432\n' "$failure_status" "${identifier:-unknown}"
+    git -C "$repository_root" rev-parse HEAD
+    locale
+    xmlstarlet --version
+    iconv --version
+  } 2>&1 | head -c 65536 > "$failure_directory/environment.txt"
+  sha256sum "$repository_root/lib/scientific_media.grease" \
+    "$repository_root/lib/pdf_figure_captions.grease" \
+    "$repository_root/tests/live_arxiv_image_harvest.grease" \
+    "$repository_root/.github/workflows/idric-core.yml" \
+    > "$failure_directory/source.sha256"
+  test -d "${output_directory:-}" || return 1
+  cd "$output_directory" || return 1
+  if test -f document.html; then
+    if html_image_rows document.html > regenerated_rows.tsv 2> regenerated_rows.stderr; then
+      printf '0\n' > regenerated_rows.exit
+    else
+      printf '%s\n' "$?" > regenerated_rows.exit
+    fi
+  fi
+  if test -d images; then
+    find images -type f -printf '%P\0' > image_filenames.nul
+  fi
+  : > capture.list
+  for capture_name in document.html source.tsv images.tsv unresolved_images.tsv image_tags \
+    regenerated_rows.tsv regenerated_rows.stderr regenerated_rows.exit image_filenames.nul; do
+    if test -e "$capture_name"; then
+      printf '%s\n' "$capture_name" >> capture.list
+    fi
+  done
+  while IFS= read -r capture_name; do
+    find "$capture_name" -type f -exec sha256sum '{}' +
+  done < capture.list | head -c 262144 > "$failure_directory/input.sha256"
+  # Preserve complete bytes below the limit. A capped archive is explicitly
+  # incomplete; it is never presented as an exact copy of the failed input.
+  printf 'incomplete: archive limit reached or capture failed\n' > "$failure_directory/archive.status" || return 1
+  if (
+    if tar -cf - -T capture.list; then
+      printf '0\n' > "$failure_directory/archive-producer.exit"
+    else
+      printf '%s\n' "$?" > "$failure_directory/archive-producer.exit"
+    fi
+  ) | head -c 33554433 > "$failure_directory/inputs.tar"; then
+    archive_bytes=$(stat -c %s "$failure_directory/inputs.tar") || return 1
+    if test "$archive_bytes" -gt 33554432; then
+      truncate -s 33554432 "$failure_directory/inputs.tar" || return 1
+    elif test "$(cat "$failure_directory/archive-producer.exit")" = 0; then
+      printf 'complete\n' > "$failure_directory/archive.status"
+    else
+      return 1
+    fi
+  else
+    return 1
+  fi
+)
+
+cleanup() {
+  failure_status=$?
+  trap - EXIT HUP INT TERM
+  if test "$failure_status" -ne 0 && test -n "${IB_SCIENTIFIC_FAILURE_DIRECTORY:-}"; then
+    if ! retain_failure; then
+      printf 'scientific-media: failure capture incomplete\n' >&2
+    fi
+  fi
+  if ! rm -rf "$work_directory"; then
+    printf 'scientific-media: temporary cleanup failed\n' >&2
+  fi
+  exit "$failure_status"
+}
+trap cleanup EXIT
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 html_count=0
 processed_count=0

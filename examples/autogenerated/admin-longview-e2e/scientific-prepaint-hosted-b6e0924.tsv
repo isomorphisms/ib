@@ -1,0 +1,37 @@
+schema	ib-hosted-prepaint-contract-blocker-v1
+source_commit	b6e092459577f985f96f1b7f740208d0ade1ab1a
+source_tree	8f3be4edd1d7c4eb63ecc6e4518f1c38ee0b711d
+run	https://github.com/isomorphisms/ib/actions/runs/44142239574
+core_job	https://github.com/isomorphisms/ib/actions/runs/44142239574/job/134247820262
+core_result	PASS including deterministic progressive-prepaint fixture.
+scientific_job	https://github.com/isomorphisms/ib/actions/runs/44142239574/job/134247819635
+deterministic_scientific_checks	PASS image harvesting, reading prefetch and navigation prefetch.
+live_image_harvest	PASS all four papers; 22 caption-derived names.
+live_prepaint	FAIL; assertion=paper-heading-at-16384; exit=1.
+acceptance_classification	BLOCKED by the unchanged shared byte-stage contract; no threshold, renderer or assertion alteration.
+declared_hosted_frontend	7050c116326c9c8e8d0a56c2db7baf2119cbae19
+hosted_renderer_payload_sha256	7d99f0df1202f1f8a2b233a8c02ea9d4c005b83c501af8550311481668b78d26
+artifact_url	https://github.com/isomorphisms/ib/actions/runs/44142239574/artifacts/14354617976
+artifact_name	scientific-media-failure-44142239574-1
+artifact_zip_bytes	37335
+artifact_zip_sha256	418970ab5de3bf88286ad2c43ba17a99cdd570cbb0eb2b970fb6425132ccb156
+capture_status	complete; all seven indexed payload sizes/hashes verified; ten expected evidence files total; no image binaries.
+input_mode	live
+input_url	https://arxiv.org/html/2203.11355
+input_bytes	134967
+input_sha256	9b5baedbd35099ade52a9f9d3e3940c7b567edf70f235c333afd2e640c60c106
+first_h1_zero_based_byte_offset	17136
+required_heading_prefix	16384 bytes, containing offsets 0 through 16383.
+stage_4096	Metadata title present; zero semantic information items; width bounded.
+stage_16384	20 semantic information items; required paper heading absent; width bounded.
+stage_32768	103 semantic information items; heading and opening abstract included within 48 painted items; width bounded.
+heavyweight_renderer_invocations	0
+prepaint_output_sha256	51c8a0dd290c84172bf7683ce6c7b00021a598d614e1997e5687cbee027ce2b7
+stage_16384_sha256	32374709d22f5d63b0614c445e089214f2a46cd4791bd21f0138e2f676b93edf
+context_sha256	db121f17e4a20cb85fb829ef2e812157baf88408e76d0f0ef1c91c5da218c415
+source_binding	Captured context contains exact head, renderer/information/library/wrapper/test source digests, declared compiler ref and actual renderer payload hashes.
+literal_assertion_recheck	Original grep predicate on retained hosted 16384.txt exits 1.
+earlier_local_replay	Hosted HTML and output now independently compare byte-identical to the earlier fresh-input 740 replay; hosted result rests on its own captured input and declared705 execution.
+contract_owner	docs/resource-constrained-rendering.md and tests/live_arxiv_progressive_prepaint.grease; deliberate 16KiB heading stage introduced in c06dea7d18fa804f36e6fbe7e3b46a05347368ac.
+repair_boundary	Changing the admitted prefix or synthesizing a semantic heading from metadata would change the maintained contract; neither was done.
+native_admin_acceptance	Separate obligation; this scientific failure is not an Android runtime result.

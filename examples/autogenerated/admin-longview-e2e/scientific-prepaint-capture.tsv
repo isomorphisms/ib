@@ -1,0 +1,58 @@
+schema	ib-scientific-prepaint-capture-v1
+date_utc	2026-11-17
+base_commit	e43628901faa855822125f1e2abb7308657f7191
+qualification	Local source replay with declared frontend 740bb, followed by capture instrumentation over the base; not a replay of the hosted 705 job or its deleted input.
+contract_status	BLOCKED: the documented paper heading at 16 KiB is unsatisfied by this freshly acquired input; threshold and predicate remain unchanged.
+hosted_scientific_job	https://github.com/isomorphisms/ib/actions/runs/44139203649/job/134237013868
+hosted_gates	At exact base: all three deterministic scientific tests and four-paper live HTML-first harvest PASS; later live progressive prepaint FAIL without assertion/input retention.
+hosted_core_job	https://github.com/isomorphisms/ib/actions/runs/44139203649/job/134237014640
+hosted_core_result	PASS at exact base, including deterministic progressive-prepaint fixture.
+contract_owner	docs/resource-constrained-rendering.md; deliberate stage-specific assertion introduced by c06dea7d18fa804f36e6fbe7e3b46a05347368ac.
+unchanged.document.sha256	8cb0a1a2d59f735201b56ea4105c22ec238c7325675c4635561cc2a54ab6975f docs/resource-constrained-rendering.md
+unchanged.program.sha256	d89ca79d20ebc89e1afd3054cdb1019eb30e423d336157198640254c2fb552f6 src/ArxivPrepaint.idric
+unchanged.information.sha256	1f8d410f6d379d90eb77636762a8a8d8338b00872ebf1d8d7f30a31a0704ed93 src/IB/Information.idric
+unchanged.wrapper.sha256	0935658809f69885f134bbf641882e7662994d7fe91fc45e7992dc2815fd2187 bin/prepaint_arxiv_progressively.grease
+instrumented.test.sha256	005f2652f0f9912f7afe6e2cd259da7a49c0ae60c3612002bf59f6072c0df2a7 tests/live_arxiv_progressive_prepaint.grease
+instrumented.workflow.sha256	4086a4a382a173f390ab31a720c125e5e973ac7c6bc7dc1daa4a8990a946e6b2 .github/workflows/idric-core.yml
+evidence_root	/workspace/scratch/c37bb9f8dd86/scientific-media-repro/prepaint-e436-01
+fresh_input.url	https://arxiv.org/html/2203.11355
+fresh_input.acquisition	Existing fetch_preferred_arxiv_document 2203.11355 source-directory; completed before local replay; source/source.tsv retained.
+fresh_input.sha256	9b5baedbd35099ade52a9f9d3e3940c7b567edf70f235c333afd2e640c60c106
+fresh_input.bytes	134967
+fresh_input.first_h1_zero_based_byte_offset	17136; measured by rg -bo; the 16384-byte prefix contains only zero-based byte offsets 0 through 16383.
+fresh_input.heading_title_zero_based_byte_offset	17177
+fresh_input.relationship_to_hosted	Freshly acquired local bytes; not asserted to be the bytes consumed or deleted by hosted job 134237013868.
+frontend	740bbf2b1d9e811fd00c719c3473eede17ceea3b; executable reports Idris 2, version 0.8.0-740bbf2b1.
+compile.cwd	/workspace/scratch/c37bb9f8dd86/ib/src
+compile.command	/workspace/scratch/c37bb9f8dd86/toolchain/Idric/_/build/exec/idris2 ArxivPrepaint.idric -o ib-arxiv-prepaint
+compile.environment	IDRIS2_PREFIX=/workspace/scratch/c37bb9f8dd86/toolchain/Idric/_/bootstrap-build; IDRIS2_PACKAGE_PATH=/workspace/scratch/c37bb9f8dd86/toolchain/Idric/_/bootstrap-build/idris2-0.8.0; CHEZ=/workspace/scratch/c37bb9f8dd86/toolchain/Idric/_/.tools/bin/scheme; PATH=/workspace/scratch/c37bb9f8dd86/toolchain/Idric/_/.tools/bin:/usr/bin:/bin
+compile.result	exit=0; compiler-740.txt empty.
+renderer.launcher.sha256	714203fef08052e05c2c5f3bdb7f2f9c80263c6a69592413e91d4f85caf1b301 src/build/exec/ib-arxiv-prepaint
+renderer.payload.sha256	c9f15263825af43d2432d7df2b5aa12dc603eb4daf3064570b940b891ff91f42 src/build/exec/ib-arxiv-prepaint_app/ib-arxiv-prepaint.so
+replay.cwd	/workspace/scratch/c37bb9f8dd86/ib
+replay.environment	IB_ARXIV_PREPAINT_HTML=/workspace/scratch/c37bb9f8dd86/scientific-media-repro/prepaint-e436-01/source/document.html; IB_ARXIV_PREPAINT_RESOLVED_URL=https://arxiv.org/html/2203.11355; IB_INFORMATION_RENDERER=/workspace/scratch/c37bb9f8dd86/ib/src/build/exec/ib-arxiv-prepaint
+replay.command	sh bin/prepaint_arxiv_progressively.grease 2203.11355
+replay.result	exit=0; prefixes exactly 4096,16384,32768 bytes; prepaint-740.txt retained, stderr empty.
+replay.output.sha256	51c8a0dd290c84172bf7683ce6c7b00021a598d614e1997e5687cbee027ce2b7
+replay.semantic_counts	At 4096/16384/32768 bytes: 0/20/103 information items; all three outputs width-bounded.
+replay.viewport	48 information items plus title/URL lines; at 32768 bytes paper heading is painted item 25, abstract heading item 45, opening text item 46 (one-based item positions).
+replay.clipping_finding	Required 32 KiB content is present within the unchanged item limit; no additional required-content clipping failure observed.
+before_live_test.command	sh -x tests/live_arxiv_progressive_prepaint.grease with replay.environment
+before_live_test.result	exit=1 at exact grep predicate '# Origami in N dimensions' in 16384.txt; trace live-test-740-before.txt SHA256=5132e9f269caac1e62906a819bbc65093c5ba5f0d8501337ee2233a1a51cfa84
+capture_live_test.command	sh tests/live_arxiv_progressive_prepaint.grease with replay.environment and IB_SCIENTIFIC_FAILURE_DIRECTORY=/workspace/scratch/c37bb9f8dd86/scientific-media-repro/prepaint-e436-01/capture-reviewed-02
+capture_live_test.result	exit=1; assertion=paper-heading-at-16384; capture-reviewed-02/prepaint/capture.status=complete describes evidence retention, not prepaint acceptance.
+capture_live_test.log.sha256	253b7c04b3d4f23453f783aac87a04522cd5866ba730e4abf634a96077bab9f8 live-test-740-reviewed-02.txt
+capture.structure	One fixed-public acquisition through the existing scientific-media function, then the existing HTML/RESOLVED_URL replay hook; same input used for all stages. Provided local input is explicitly labelled provided.
+capture.bounds	HTML<=33554432 bytes; source.tsv<=65536; output/stderr/each of three stage files<=262144; context output<=65536; fixed seven-file index. No image downloads or renderer binaries in the capture.
+capture.completeness	Initial status incomplete; required files record missing/omitted-over-limit/copy-failed/compare-failed distinctly. Complete requires all required exact copies and metadata writes. Original test exit is retained.
+helper.path	examples/autogenerated/admin-longview-e2e/verify-prepaint-capture.grease
+helper.sha256	a3474efc2092000ab3e112e6fbbcfef9ee459d1adc4578e97c9f4f02a9fcdf98
+helper.copy	Byte-identical copy of executed scratch verify-capture.grease; no new renderer acceptance claimed.
+controls.command	/workspace/scratch/c37bb9f8dd86/toolchain/runtime/.build/grease/bin/grease /workspace/scratch/c37bb9f8dd86/scientific-media-repro/prepaint-e436-01/verify-capture.grease /workspace/scratch/c37bb9f8dd86/ib /workspace/scratch/c37bb9f8dd86/scientific-media-repro/prepaint-e436-01/capture-reviewed-02/prepaint /workspace/scratch/c37bb9f8dd86/scientific-media-repro/prepaint-e436-01/capture-controls-reviewed-02
+controls.environment	PATH=/usr/local/bin:/usr/bin:/bin; genuine qualified Grease launcher; existing sh capture boundary invoked explicitly.
+controls.result	exit=0; a 33554433-byte input is omitted and capture remains incomplete while output is retained; original exit 42 retained; cleanup failure retains 43; diagnostic-output failure retains 44.
+controls.receipt.sha256	7a849809a0bc7f2240ff402e43e898cbbdc4407f442a8fd85e67775d2b8dad60 capture-controls-reviewed-02/receipt.tsv
+review	Independent read-only source/control review closed required metadata-write and cleanup-diagnostic exit-preservation findings on the hashes above.
+validation	sh -n tests/live_arxiv_progressive_prepaint.grease and git diff --check exit=0.
+hosted_capture	NOT_RUN on the instrumented head; next hosted failure must establish its own exact source, outputs and assertion.
+acceptance_boundary	No threshold, assertion expectation, renderer, wrapper, document contract or compiler pin changed; no claim of hosted 705 replay or physical Android acceptance.

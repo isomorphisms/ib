@@ -1,0 +1,47 @@
+PASS initial record exactly excludes path query fragment and one-time value
+PASS initial task has no renderer or authentication evidence
+PASS exact ordinary origin remains distinguishable
+PASS HTTP loopback port can be a deterministic live fixture origin
+PASS origin retains bracketed IPv6 without path material
+PASS userinfo and non-HTTP schemes refuse
+PASS authority ambiguity refuses before redaction
+PASS filesystem identities refuse traversal and separators
+PASS missing field refuses
+PASS repeated field refuses
+PASS unknown secret-bearing diagnostic refuses
+PASS wrong schema refuses
+PASS unclassified authorization adapter refuses
+PASS persisted authentication claim refuses
+PASS persisted heap claim refuses
+PASS unapproved form checkpoint refuses
+PASS path-bearing durable target refuses
+PASS mismatched durable origins refuse
+PASS noncanonical and negative generations refuse
+PASS truncated final line refuses
+PASS record beyond metadata bound refuses
+PASS attachment preserves identity and advances renderer only
+PASS attachment alone has no committed page
+PASS second attachment requires a loss or reopen
+PASS page commit remains unconfirmed without a usable action
+PASS unsupported action kind cannot assert authentication
+PASS wrong task callback refuses
+PASS wrong tab callback refuses
+PASS wrong navigation callback refuses
+PASS wrong host callback refuses
+PASS wrong renderer callback refuses
+PASS wrong host generation refuses
+PASS wrong Activity generation refuses
+PASS wrong renderer generation refuses
+PASS renderer loss preserves task and requires ordinary-form repetition
+PASS late commit after loss refuses
+PASS replacement advances renderer while preserving task and uncertainty
+PASS old renderer cannot commit replacement
+PASS replacement renderer commit uses exact current observation
+PASS same host reopens as Activity recreation
+PASS Activity reconstruction keeps its cause after renderer attachment
+PASS new host preserves task and advances host and Activity generations
+PASS host reconstruction keeps cause and never replays a one-time action
+PASS old host observations cannot complete reopened task
+PASS generation exhaustion refuses without wrapping
+PASS renderer exhaustion refuses without wrapping
+PASS invalid projection selectors fail closed

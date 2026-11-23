@@ -1,0 +1,35 @@
+schema	ib-longview-local-verification-v1
+date_utc	2026-11-17
+base_commit	9f468f9b6dfba8f3895f4ab5cd7a316dc08c562e
+source_binding	local-source.sha256; working-tree additions, not exact-commit CI acceptance
+host	Debian GNU/Linux 13.6 x86_64; Linux 6.18.57
+frontend	740bbf2b1d9e811fd00c719c3473eede17ceea3b
+backend	153e7fc8053ba4072954a5e77d4efa3609d829e4
+ICK_declared_source	fbe86e23d55cfec2000c08e61deea2a407fd7175
+NDK	27.2.12479018
+appendfat	05a0cb7246c5a9f46abfbe92925812e7b607f454
+kernel_command	verify-store.grease; production ib_longview_store.c plus store_test.c
+kernel_stage	ICK compile and host execution
+kernel_checks	PASS 40; local-kernel-checks.txt
+literal_Icky_assignment_source	PASS consumed by actual ICK frontend
+trusted_Android_root_alias	PASS host kernel fixture
+IB_owned_descendant_escape	REFUSED host kernel fixture
+linked_nonprivate_records	REFUSED host kernel fixtures
+corrupt_selector_new_selection	REFUSED; previous record retained
+interrupted_selection	REFUSED; never relabelled empty
+atomic_publication_failure	PASS prior selection and outside sentinel preserved
+native_x86_64	PASS ICK C frontend; NDK assembly/link; ELF class/machine/no-copy-relocation checks
+native_armeabi_v7a	PASS ICK C frontend; NDK assembly/link; ELF class/machine/no-copy-relocation checks
+native_arm64_v8a	PASS ICK C frontend; NDK assembly/link; ELF class/machine/no-copy-relocation checks
+actual_NativeReader_DEX	PASS verify-dex.grease; six checked Longview exports and real bridge calls independently disassembled
+actual_platform_generation	PASS checked generator execution and independent DEX disassembly
+boxed_document_epoch	PASS private java.lang.Integer fields in Client, TimingCallback, RecoveryTask
+earlier_primitive_field_attempt	FAILED platform generator execution: DEX field declaration must be public/private static or instance reference
+earlier_primitive_field_source_sha256	61680f8f6d2c07205dea3813de60d62c35faa0f9165da7d7d4da7c1a9b4222cb
+primitive_field_repair	Supported boxed Integer boundary; no compiler/backend substitution
+public_Idric_vocabulary	PASS maintained repository check
+diff_whitespace	PASS
+APK_packaging	SEPARATE
+installed_Android	NOT_RUN in these receipts
+Google_YouTube_usability	NOT_RUN
+physical_C67	NOT_RUN
