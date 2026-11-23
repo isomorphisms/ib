@@ -1,0 +1,24 @@
+module Main
+
+import IB.ExactSurface
+import System
+
+-- Classifies verified SURFER sparse terms under an explicit domain and chart.
+-- Does not manufacture a still/movie or an Android deep link.
+covering
+main : IO ()
+main = do
+  arguments ← getArgs
+  case arguments of
+    _ :: requested_domain :: requested_chart :: checked_terms :: [] => do
+      let selected_renderer =
+        renderer_for
+          (domain_from_text requested_domain)
+          (chart_from_text requested_chart)
+          (proof_from_signature checked_terms)
+      putStrLn (renderer_text selected_renderer)
+      putStrLn (media_status selected_renderer)
+      putStrLn (interactive_status selected_renderer)
+    _ => do
+      putStrLn "usage: ib-exact-surface DOMAIN CHART VERIFIED_SPARSE_SIGNATURE"
+      exitFailure
