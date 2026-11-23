@@ -1,0 +1,145 @@
+module CartRepairSmoke
+
+import IB.CartRepair
+import System
+
+%default total
+
+origin : String
+origin = "https://www.abebooks.com"
+
+wanted : BookRequirement
+wanted = RequireBook origin "9780691001245" "first" "paperback" 2 "USD"
+
+sold : CartLine
+sold = CartEntry "sold-row" "sold-listing" "seller-old"
+  origin "9780691001245" "first" "paperback" 2 "USD" 1 Nothing False
+
+new_row : CartLine
+new_row = CartEntry "new-row" "low-delivered" "seller-two"
+  origin "9780691001245" "first" "paperback" 3 "USD" 1 (Just 900) True
+
+overpriced_row : CartLine
+overpriced_row = CartEntry "new-row" "low-delivered" "seller-two"
+  origin "9780691001245" "first" "paperback" 3 "USD" 1 (Just 1000) True
+
+high_item_low_shipping : BookOffer
+high_item_low_shipping = QuotedBook origin "low-delivered" "seller-two"
+  "9780691001245" "first" "paperback" 3 "USD"
+  700 (Just 200) (Just 0) (Just 0) True
+
+low_item_high_shipping : BookOffer
+low_item_high_shipping = QuotedBook origin "high-delivered" "seller-one"
+  "9780691001245" "first" "paperback" 3 "USD"
+  500 (Just 700) (Just 0) (Just 0) True
+
+unknown_shipping : BookOffer
+unknown_shipping = QuotedBook origin "unknown-shipping" "seller-three"
+  "9780691001245" "first" "paperback" 3 "USD"
+  100 Nothing (Just 0) (Just 0) True
+
+wrong_edition : BookOffer
+wrong_edition = QuotedBook origin "wrong-edition" "seller-four"
+  "9780691001245" "second" "paperback" 3 "USD"
+  100 (Just 0) (Just 0) (Just 0) True
+
+candidates : List BookOffer
+candidates = [low_item_high_shipping, unknown_shipping, wrong_edition, high_item_low_shipping]
+
+observed : Number → List CartLine → CartObservation
+observed sequence rows = CartRead origin True True sequence rows
+
+chosen_is_lowest_delivered : Bool
+chosen_is_lowest_delivered =
+  case cheapest_offer wanted candidates of
+    Just selected ⇒ selected.listing_id == "low-delivered"
+    Nothing ⇒ False
+
+no_replacement_is_no_action : Bool
+no_replacement_is_no_action =
+  let task = start_repair wanted sold [] (observed 1 [sold]) in
+  not (can_mutate task) &&
+  (case prepare_add task (observed 2 [sold]) of
+     Nothing ⇒ True
+     Just _ ⇒ False)
+
+add_is_exact : CartMutation → Bool
+add_is_exact (AddListing listing seller) =
+  listing == "low-delivered" && seller == "seller-two"
+add_is_exact _ = False
+
+remove_is_exact : CartMutation → Bool
+remove_is_exact (RemoveCartRow row) = row == "sold-row"
+remove_is_exact _ = False
+
+happy_path : Bool
+happy_path =
+  let task = start_repair wanted sold candidates (observed 1 [sold]) in
+  case prepare_add task (observed 2 [sold]) of
+    Nothing ⇒ False
+    Just (adding, add_action) ⇒
+      let verified = verify_add adding (observed 3 [sold, new_row]) in
+      case prepare_remove verified (observed 4 [sold, new_row]) of
+        Nothing ⇒ False
+        Just (removing, remove_action) ⇒
+          let done = verify_remove removing (observed 5 [new_row]) in
+          add_is_exact add_action &&
+          remove_is_exact remove_action &&
+          completed done
+
+missing_add_cannot_remove : Bool
+missing_add_cannot_remove =
+  let task = start_repair wanted sold candidates (observed 1 [sold]) in
+  case prepare_add task (observed 2 [sold]) of
+    Nothing ⇒ False
+    Just (adding, _) ⇒
+      let uncertain = verify_add adding (observed 3 [sold]) in
+      not (can_mutate uncertain) &&
+      (case prepare_remove uncertain (observed 4 [sold]) of
+         Nothing ⇒ True
+         Just _ ⇒ False)
+
+wrong_price_cannot_remove : Bool
+wrong_price_cannot_remove =
+  let task = start_repair wanted sold candidates (observed 1 [sold]) in
+  case prepare_add task (observed 2 [sold]) of
+    Nothing ⇒ False
+    Just (adding, _) ⇒
+      let uncertain = verify_add adding (observed 3 [sold, overpriced_row]) in
+      not (can_mutate uncertain)
+
+same_observation_cannot_verify : Bool
+same_observation_cannot_verify =
+  let task = start_repair wanted sold candidates (observed 1 [sold]) in
+  case prepare_add task (observed 2 [sold]) of
+    Nothing ⇒ False
+    Just (adding, _) ⇒
+      let stale = verify_add adding (observed 2 [sold, new_row]) in
+      not (can_mutate stale)
+
+untrusted_observation_refused : Bool
+untrusted_observation_refused =
+  let task = start_repair wanted sold candidates (observed 1 [sold]) in
+  let untrusted = CartRead origin False True 2 [sold] in
+  case prepare_add task untrusted of
+    Nothing ⇒ True
+    Just _ ⇒ False
+
+main : IO ()
+main = do
+  putStrLn ("cart-repair-delivered-cheapest=" ++ show chosen_is_lowest_delivered)
+  putStrLn ("cart-repair-no-candidate-no-action=" ++ show no_replacement_is_no_action)
+  putStrLn ("cart-repair-verified-transaction=" ++ show happy_path)
+  putStrLn ("cart-repair-missing-add-protected=" ++ show missing_add_cannot_remove)
+  putStrLn ("cart-repair-price-change-protected=" ++ show wrong_price_cannot_remove)
+  putStrLn ("cart-repair-stale-evidence-protected=" ++ show same_observation_cannot_verify)
+  putStrLn ("cart-repair-untrusted-evidence-protected=" ++ show untrusted_observation_refused)
+  if chosen_is_lowest_delivered &&
+     no_replacement_is_no_action &&
+     happy_path &&
+     missing_add_cannot_remove &&
+     wrong_price_cannot_remove &&
+     same_observation_cannot_verify &&
+     untrusted_observation_refused
+    then pure ()
+    else exitFailure
