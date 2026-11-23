@@ -1,0 +1,36 @@
+field	value
+scope	HOST_ICU_CAPTURE_AND_CANONICAL_ARENA_REPLAY
+query	Björk & C# chords
+requested_url	https://google.com/search?q=Bj%C3%B6rk+%26+C%23+chords
+resolved_url	https://www.google.com/search?q=Bj%C3%B6rk+%26+C%23+chords
+icu_source	b1c19dc281e5e7d3d326c9275093fb379bafd4bd
+network_source	b21801b72acb8ab835c297bbe298af8599550134
+frontend_source	740bbf2b1d9e811fd00c719c3473eede17ceea3b
+http_1_0_status	426
+http_1_0_body	Upgrade Required
+http_1_0_process_exit	10
+http_1_1_status	200
+http_1_1_process_exit	0
+declared_charset	ISO-8859-1
+body_bytes	93166
+body_sha256	f71e991ab87271e77255fe2d2454cb4cb401fe47cdf953ea550c6e0fcd8afeb4
+metadata_sha256	5ec84abb836e460f2ac4ec3c99acb13fbbdbb12a47dbd4a47b16bb2f56977666
+transfer_decoding	chunked
+redirect_count	1
+observed_metadata_fields	10
+canonical_source	05a0cb7246c5a9f46abfbe92925812e7b607f454
+canonical_object_sha256	da6f5ac730526505dc838937d7c057858d76b0e8243c256e0195a79bb7611c0f
+canonical_tool_sha256	a573f5093f512630159b54af0ea029a8dbf7c9baccfac81ac4ca6c0b2a9f71f4
+canonical_source_retention	PASS_EXACT_BODY_REOPENED
+reader_admission	NO
+independent_ai_ci_original_admitted_source	PASS
+independent_ai_ci_live_google	REFUSED_charset_not_observed_UTF-8
+search_receiver_typecheck	PASS
+search_receiver_dex	BLOCKED_No_checked_helper_body_for_DEX_call_Prelude.Types.fastUnpack
+search_results_usability	NOT_RUN
+app_owned_Binder_lifecycle	INCOMPLETE
+installed_C67_package_and_certificate	UNKNOWN
+emulator	NOT_RUN
+physical_C67	NOT_RUN
+physical_A1	NOT_VERIFIED
+overall_search	INCOMPLETE
